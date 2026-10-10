@@ -1,12 +1,15 @@
+import { readFileSync } from 'node:fs';
 import { select } from '@inquirer/prompts';
 import pc from 'picocolors';
 import { runSteps } from './progress.js';
 import { frontends } from './frontends/index.js';
 
+const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+
 export async function main() {
   const projectDir = process.cwd();
 
-  console.log(pc.bold('\nDafkeDD_CLI') + pc.dim('  (alles wordt lokaal in dit project geïnstalleerd, nooit globaal)'));
+  console.log(pc.bold('\nDafkeDD_CLI') + pc.dim(` v${version}`) + pc.dim('  (alles wordt lokaal in dit project geïnstalleerd, nooit globaal)'));
   console.log(pc.dim(`Projectmap: ${projectDir}\n`));
 
   const choice = await select({

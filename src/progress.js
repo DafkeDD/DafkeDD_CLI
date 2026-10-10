@@ -2,11 +2,14 @@ import cliProgress from 'cli-progress';
 import pc from 'picocolors';
 
 /**
- * Eén progressbar voor ALLE stappen.
+ * Eén progressbar voor ALLE stappen. Tijdens een stap loopt de balk geleidelijk
+ * door (nooit voorbij het einde van die stap), zodat hij nooit "vastzit".
  * steps: [{ title, weight?, run: async () => void }]
  */
 export async function runSteps(steps) {
-  const total = steps.reduce((s, st) => s + (st.weight ?? 1), 0);
+  const weightOf = (s) => s.weight ?? 1;
+  const total = steps.reduce((sum, s) => sum + weightOf(s), 0);
+
   const bar = new cliProgress.SingleBar(
     {
       format: `${pc.cyan('{bar}')} {percentage}% | {task}`,
@@ -16,6 +19,7 @@ export async function runSteps(steps) {
       hideCursor: true,
       clearOnComplete: false,
       stopOnComplete: false,
+      forceRedraw: true,
     },
     cliProgress.Presets.shades_classic,
   );
@@ -23,17 +27,37 @@ export async function runSteps(steps) {
 
   let done = 0;
   let current = steps[0];
+  let value = 0;
+  let timer;
+
   try {
-    for (const step of steps) {
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
       current = step;
-      bar.update(done, { task: step.title });
-      await step.run();
-      done += step.weight ?? 1;
-      bar.update(done, { task: step.title });
+      const label = `${step.title} (${i + 1}/${steps.length})`;
+      const ceiling = done + weightOf(step) * 0.95;
+
+      value = done;
+      bar.update(value, { task: label });
+      // Loopt langzaam richting het einde van de stap, maar nooit erover.
+      timer = setInterval(() => {
+        value += (ceiling - value) * 0.04;
+        bar.update(value, { task: label });
+      }, 200);
+
+      try {
+        await step.run();
+      } finally {
+        clearInterval(timer);
+      }
+
+      done += weightOf(step);
+      bar.update(done, { task: label });
     }
     bar.update(total, { task: pc.green('Klaar!') });
     bar.stop();
   } catch (err) {
+    clearInterval(timer);
     bar.stop();
     console.error(`\n${pc.red('✖ Mislukt bij:')} ${pc.bold(current.title)}`);
     throw err;
