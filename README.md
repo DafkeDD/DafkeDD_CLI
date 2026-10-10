@@ -18,10 +18,10 @@ Vereist: [Node.js](https://nodejs.org) 20 of hoger en Git.
 
 ### Zonder installatie (aanbevolen)
 
-Ga naar de map van je project en voer uit:
+Ga naar de map van je project en voer uit (haalt de branch `developer` op, de standaardbranch):
 
 ```
-npx --allow-git=all github:DafkeDD/DafkeDD_CLI#main
+npx --allow-git=all github:DafkeDD/DafkeDD_CLI
 ```
 
 > **npm 12 of nieuwer:** npm blokkeert standaard het ophalen van pakketten via git (`allow-git=none`), waardoor je de fout `EALLOWGIT` krijgt. Daarom staat `--allow-git=all` in de commando's hieronder. Op npm 11 of ouder mag je die vlag weglaten. Permanent aanzetten kan met `npm config set allow-git all`.
@@ -29,7 +29,7 @@ npx --allow-git=all github:DafkeDD/DafkeDD_CLI#main
 ### Eenmalig installeren (commando `DafkeDD_CLI`)
 
 ```
-npm install -g --allow-git=all github:DafkeDD/DafkeDD_CLI#main
+npm install -g --allow-git=all github:DafkeDD/DafkeDD_CLI
 ```
 
 Daarna in elke projectmap:
@@ -46,11 +46,11 @@ Updaten kan met hetzelfde installatiecommando.
 
 | Doel | Commando |
 | --- | --- |
+| Ontwikkelversie (`developer`, standaard) | `npx --allow-git=all github:DafkeDD/DafkeDD_CLI` |
 | Laatste release (`main`) | `npx --allow-git=all github:DafkeDD/DafkeDD_CLI#main` |
 | Vaste versie | `npx --allow-git=all github:DafkeDD/DafkeDD_CLI#v0.2.0` |
-| Ontwikkelversie (`developer`) | `npx --allow-git=all github:DafkeDD/DafkeDD_CLI` |
 
-Is de repo privé, dan moet je op die machine ingelogd zijn bij GitHub (`gh auth login` of een SSH-sleutel). Gebruik dan eventueel `git+ssh://git@github.com/DafkeDD/DafkeDD_CLI.git#main`.
+Is de repo privé, dan moet je op die machine ingelogd zijn bij GitHub (`gh auth login` of een SSH-sleutel). Gebruik dan eventueel `git+ssh://git@github.com/DafkeDD/DafkeDD_CLI.git`.
 
 ## Gebruik
 
@@ -108,5 +108,5 @@ git switch developer
 
 ## Changelog
 
-- **0.2.0**: één progressbar die continu doorloopt over alle stappen, geen Node-waarschuwingen (DEP0190) meer op Windows, `.npmignore` toegevoegd (geen `gitignore-fallback`-waarschuwing meer).
+- **0.2.0**: versienummer bij het opstarten, één progressbar die continu doorloopt over alle stappen, geen Node-waarschuwingen (DEP0190) meer op Windows, `.npmignore` toegevoegd (geen `gitignore-fallback`-waarschuwing meer).
 - **0.1.0**: eerste versie, Next.js + Tailwind CSS + next-intl in `./frontend`.
