@@ -6,11 +6,34 @@ Interactieve CLI die per project een frontend installeert. Alles wordt **lokaal 
 
 | Frontend | Inhoud |
 | --- | --- |
-| Next.js | Next.js (laatste versie) + Tailwind CSS (laatste versie) + next-intl (laatste versie), in `./frontend` |
+| Next.js | Next.js (laatste versie) + Tailwind CSS (laatste versie) + next-intl (laatste versie) + Prettier, in `./frontend`. Optioneel met [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI) |
 
-De CLI stelt vragen, daarna volgt één progressbar voor alle stappen: aanmaken, dependencies installeren, next-intl installeren en configureren, en een build-controle.
+De CLI stelt vragen, daarna volgt één progressbar voor alle stappen: aanmaken, dependencies installeren, next-intl en Prettier installeren, DafkeDD UI ophalen en installeren, Prettier configureren en een build-controle.
 
-Standaard worden de talen `nl` (standaard) en `en` ingesteld, met routing via `/nl` en `/en`.
+### DafkeDD UI
+
+De CLI vraagt of je [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI) wilt installeren:
+
+- **Alle componenten**: voert `dafke-ui init` en `dafke-ui add --all` uit in `./frontend`.
+- **Enkel de basis (init)**: alleen config, tokens en helpers. Daarna voeg je zelf componenten toe.
+- **Nee**: niets.
+
+De componenten komen in `frontend/src/components/ui` (`dafke-ui.json` en `dafke-ui.lock.json` staan in `frontend`) en `ui.css` wordt geladen in `src/app/globals.css`. De UI-repo (branch `main`) wordt tijdelijk opgehaald met `git clone` en daarna opgeruimd; er wordt niets globaal geïnstalleerd (geen `npm link`). Vereist daarom Git.
+
+### Taal en thema
+
+Rechtsboven staan twee dropdowns (componenten in `src/components`):
+
+- **Taal** (`locale-switcher.tsx`): wisselt tussen de ingestelde talen zonder dat de URL verandert. De keuze blijft bewaard.
+- **Thema** (`theme-switcher.tsx`): **Licht**, **Donker** of **Systeem** (volgt het besturingssysteem). De keuze blijft bewaard in `localStorage` en wordt gezet vóór het schilderen, dus zonder flits.
+
+Het thema staat als `data-theme="light|dark"` op `<html>`. Dat is dezelfde schakelaar als die van DafkeDD UI, en Tailwind's `dark:`-klassen volgen hem ook. Talen toevoegen kan in `src/i18n/routing.ts` en `messages/<taal>.json`.
+
+### Prettier
+
+Prettier en `prettier-plugin-tailwindcss` worden als devDependency geïnstalleerd, met `.prettierrc` (4 spaties, geen puntkomma's, enkele quotes, `printWidth` 120, `proseWrap: always`) en `.prettierignore`. De scripts `npm run format` en `npm run format:check` zijn toegevoegd en het project wordt meteen geformatteerd. De map `src/components/ui` wordt bewust niet geformatteerd, zodat `dafke-ui update` je bestanden niet als "zelf aangepast" ziet.
+
+Standaard worden de talen `nl` (standaard) en `en` ingesteld. De taal staat niet in de URL: je surft naar `http://localhost:3000/`, de taal komt uit de keuze van de gebruiker (cookie) of anders uit de browsertaal.
 
 ## Installeren
 
@@ -86,7 +109,7 @@ src/index.js             # vragen en flow
 src/progress.js          # één progressbar voor alle stappen
 src/runner.js            # commando's stil uitvoeren
 src/frontends/index.js   # lijst van beschikbare frontends
-src/frontends/nextjs.js  # Next.js + Tailwind + next-intl
+src/frontends/nextjs.js  # Next.js + Tailwind + next-intl + Prettier + DafkeDD UI
 ```
 
 Een nieuwe frontend toevoegen: maak een bestand in `src/frontends/` (naar het voorbeeld van `nextjs.js`) en registreer het in `src/frontends/index.js`.
@@ -108,5 +131,7 @@ git switch developer
 
 ## Changelog
 
+- **0.4.0**: geen taalprefix meer in de URL (`/nl` weg), dropdowns voor taal en thema (licht, donker, systeem), en de Tailwind-koppeling van Next.js blijft behouden (de `@theme`-fout in `globals.css` is opgelost: `next.config.ts` wordt niet meer overschreven maar aangevuld).
+- **0.3.0**: optionele installatie van DafkeDD UI (vraag in de CLI), Prettier met eigen `.prettierrc` en scripts `format` / `format:check`.
 - **0.2.0**: versienummer bij het opstarten, één progressbar die continu doorloopt over alle stappen, geen Node-waarschuwingen (DEP0190) meer op Windows, `.npmignore` toegevoegd (geen `gitignore-fallback`-waarschuwing meer).
 - **0.1.0**: eerste versie, Next.js + Tailwind CSS + next-intl in `./frontend`.
