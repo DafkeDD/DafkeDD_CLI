@@ -6,9 +6,9 @@ Interactieve CLI die per project een frontend installeert. Alles wordt **lokaal 
 
 | Frontend | Inhoud |
 | --- | --- |
-| Next.js | Next.js (laatste versie) + Tailwind CSS (laatste versie) + next-intl (laatste versie) + Prettier, in `./frontend`. Optioneel met [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI) |
+| Next.js | Next.js (laatste versie) + Tailwind CSS (laatste versie) + next-intl (laatste versie) + react-icons + Prettier, in `./frontend`. Optioneel met [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI) |
 
-De CLI stelt vragen, daarna volgt één progressbar voor alle stappen: aanmaken, dependencies installeren, next-intl en Prettier installeren, DafkeDD UI ophalen en installeren, Prettier configureren en een build-controle.
+De CLI stelt vragen, daarna volgt één progressbar voor alle stappen: aanmaken, dependencies installeren, next-intl, react-icons en Prettier installeren, DafkeDD UI ophalen en installeren, Prettier configureren en een build-controle.
 
 ### DafkeDD UI
 
@@ -19,6 +19,10 @@ De CLI vraagt of je [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI) wilt ins
 - **Nee**: niets.
 
 De componenten komen in `frontend/src/components/ui` (`dafke-ui.json` en `dafke-ui.lock.json` staan in `frontend`) en `ui.css` wordt geladen in `src/app/globals.css`. De UI-repo (branch `main`) wordt tijdelijk opgehaald met `git clone` en daarna opgeruimd; er wordt niets globaal geïnstalleerd (geen `npm link`). Vereist daarom Git.
+
+### react-icons
+
+[react-icons](https://react-icons.github.io/react-icons/) staat als dependency in `frontend`. Gebruik: `import { FaReact } from 'react-icons/fa'` en dan `<FaReact />`. Importeer altijd uit de submap van de set (`react-icons/fa`, `react-icons/lu`, ...), dan bundelt Next enkel de iconen die je gebruikt.
 
 ### Taal en thema
 
@@ -79,9 +83,10 @@ Is de repo privé, dan moet je op die machine ingelogd zijn bij GitHub (`gh auth
 
 1. Ga naar de map van je project.
 2. Start de CLI (zie hierboven).
-3. Kies de frontend (voorlopig alleen Next.js).
-4. Wacht tot de progressbar klaar is.
-5. Start de frontend:
+3. Geef de naam van de repo (eerste vraag), kies het platform (voorlopig alleen GitHub) en of de repo private of public wordt.
+4. Kies de frontend (voorlopig alleen Next.js).
+5. Wacht tot de progressbar klaar is. Daarna staat je project (met `./frontend`) als eerste commit op GitHub.
+6. Start de frontend:
 
 ```
 cd frontend
@@ -89,6 +94,10 @@ npm run dev
 ```
 
 Bestaat `./frontend` al, dan stopt de CLI zonder iets te verwijderen.
+
+### Repo pushen (GitHub)
+
+De CLI doet `git init` in de projectmap, maakt een eerste commit en maakt met de [GitHub CLI](https://cli.github.com) (`gh`) de repo aan en pusht. Daarvoor moet `gh` geïnstalleerd zijn en moet je ingelogd zijn (`gh auth login`).
 
 ## Lokaal ontwikkelen
 
@@ -131,6 +140,8 @@ git switch developer
 
 ## Changelog
 
+- **0.7.0**: eerste vraag is nu de repo-naam, daarna het platform (alleen GitHub) en private/public; na de installatie wordt het project gepusht naar GitHub.
+- **0.6.0**: react-icons wordt mee geïnstalleerd in de frontend.
 - **0.5.0**: vier talen (Engels standaard, Nederlands, Frans, Duits), het thema springt niet meer terug bij een taalwissel, en het voorbeeld gebruikt thema en componenten van DafkeDD UI (bij "alle componenten"). `AGENTS.md` en `next-env.d.ts` worden niet meer door Prettier gecontroleerd.
 - **0.4.0**: geen taalprefix meer in de URL (`/nl` weg), dropdowns voor taal en thema (licht, donker, systeem), en de Tailwind-koppeling van Next.js blijft behouden (de `@theme`-fout in `globals.css` is opgelost: `next.config.ts` wordt niet meer overschreven maar aangevuld).
 - **0.3.0**: optionele installatie van DafkeDD UI (vraag in de CLI), Prettier met eigen `.prettierrc` en scripts `format` / `format:check`.

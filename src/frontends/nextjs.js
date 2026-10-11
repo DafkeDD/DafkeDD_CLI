@@ -607,7 +607,7 @@ async function write(root, rel, content) {
 export const nextjs = {
   id: 'nextjs',
   label: 'Next.js',
-  description: 'Next.js (laatste) + Tailwind CSS (laatste) + next-intl (laatste) + Prettier, in ./frontend',
+  description: 'Next.js (laatste) + Tailwind CSS (laatste) + next-intl (laatste) + react-icons + Prettier, in ./frontend',
   dir: DIR,
   next: [`cd ${DIR}`, 'npm run dev'],
 
@@ -655,6 +655,11 @@ export const nextjs = {
         title: 'next-intl installeren',
         weight: 2,
         run: () => run('npm', ['install', 'next-intl@latest'], { cwd: root }),
+      },
+      {
+        title: 'react-icons installeren',
+        weight: 2,
+        run: () => run('npm', ['install', 'react-icons@latest'], { cwd: root }),
       },
       {
         title: 'Prettier installeren',
