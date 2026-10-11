@@ -1,22 +1,22 @@
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { select } from '@inquirer/prompts';
-import { run } from '../runner.js';
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { select } from '@inquirer/prompts'
+import { run } from '../runner.js'
 
-const DIR = 'frontend';
-const LOCALES = ['en', 'nl', 'fr', 'de'];
-const DEFAULT_LOCALE = 'en';
+const DIR = 'frontend'
+const LOCALES = ['en', 'nl', 'fr', 'de']
+const DEFAULT_LOCALE = 'en'
 
 // DafkeDD UI: componentenbibliotheek met een eigen CLI (dafke-ui). De CLI staat nog niet op npm,
 // dus halen we de repo tijdelijk op, draaien de CLI in ./frontend en ruimen de kloon weer op.
-const UI_REPO = 'https://github.com/DafkeDD/DafkeDD_UI.git';
-const UI_BRANCH = 'main';
+const UI_REPO = 'https://github.com/DafkeDD/DafkeDD_UI.git'
+const UI_BRANCH = 'developer'
 const UI_CONFIG = {
-  componentsDir: 'src/components/ui',
-  cssEntry: 'src/components/ui/ui.css',
-  importAlias: '@/components/ui',
-};
+    componentsDir: 'src/components/ui',
+    cssEntry: 'src/components/ui/ui.css',
+    importAlias: '@/components/ui'
+}
 
 // Prettier-instellingen (exact zoals opgegeven)
 const PRETTIERRC = `{
@@ -40,7 +40,7 @@ const PRETTIERRC = `{
         }
     ]
 }
-`;
+`
 
 // De DafkeDD UI-bestanden blijven ongemoeid, anders ziet 'dafke-ui update' ze als "zelf aangepast".
 // AGENTS.md en next-env.d.ts worden door Next.js zelf herschreven (ook bij 'next dev').
@@ -53,66 +53,66 @@ AGENTS.md
 next-env.d.ts
 dafke-ui.lock.json
 src/components/ui
-`;
+`
 
 // Alle teksten bestaan in elke taal. Voeg je een taal toe aan LOCALES, voeg dan ook hier een vertaling toe.
 const MESSAGES = {
-  en: {
-    HomePage: {
-      title: 'Welcome',
-      description: 'Next.js, Tailwind CSS and next-intl are ready to use.',
-      start: 'Get started',
-      docs: 'Documentation',
-      stackNext: 'App Router, TypeScript',
-      stackTailwind: 'Utility-first styling',
-      stackIntl: 'NL, FR, EN, DE',
-      stackIcons: 'Thousands of icons',
+    en: {
+        HomePage: {
+            title: 'Welcome',
+            description: 'Next.js, Tailwind CSS and next-intl are ready to use.',
+            start: 'Get started',
+            docs: 'Documentation',
+            stackNext: 'App Router, TypeScript',
+            stackTailwind: 'Utility-first styling',
+            stackIntl: 'NL, FR, EN, DE',
+            stackIcons: 'Thousands of icons'
+        },
+        Settings: { language: 'Language', theme: 'Theme', light: 'Light', dark: 'Dark', system: 'System' }
     },
-    Settings: { language: 'Language', theme: 'Theme', light: 'Light', dark: 'Dark', system: 'System' },
-  },
-  nl: {
-    HomePage: {
-      title: 'Welkom',
-      description: 'Next.js, Tailwind CSS en next-intl zijn klaar voor gebruik.',
-      start: 'Aan de slag',
-      docs: 'Documentatie',
-      stackNext: 'App Router, TypeScript',
-      stackTailwind: 'Utility-first styling',
-      stackIntl: 'NL, FR, EN, DE',
-      stackIcons: 'Duizenden iconen',
+    nl: {
+        HomePage: {
+            title: 'Welkom',
+            description: 'Next.js, Tailwind CSS en next-intl zijn klaar voor gebruik.',
+            start: 'Aan de slag',
+            docs: 'Documentatie',
+            stackNext: 'App Router, TypeScript',
+            stackTailwind: 'Utility-first styling',
+            stackIntl: 'NL, FR, EN, DE',
+            stackIcons: 'Duizenden iconen'
+        },
+        Settings: { language: 'Taal', theme: 'Thema', light: 'Licht', dark: 'Donker', system: 'Systeem' }
     },
-    Settings: { language: 'Taal', theme: 'Thema', light: 'Licht', dark: 'Donker', system: 'Systeem' },
-  },
-  fr: {
-    HomePage: {
-      title: 'Bienvenue',
-      description: "Next.js, Tailwind CSS et next-intl sont prêts à l'emploi.",
-      start: 'Commencer',
-      docs: 'Documentation',
-      stackNext: 'App Router, TypeScript',
-      stackTailwind: 'Style utilitaire',
-      stackIntl: 'NL, FR, EN, DE',
-      stackIcons: "Des milliers d'icônes",
+    fr: {
+        HomePage: {
+            title: 'Bienvenue',
+            description: "Next.js, Tailwind CSS et next-intl sont prêts à l'emploi.",
+            start: 'Commencer',
+            docs: 'Documentation',
+            stackNext: 'App Router, TypeScript',
+            stackTailwind: 'Style utilitaire',
+            stackIntl: 'NL, FR, EN, DE',
+            stackIcons: "Des milliers d'icônes"
+        },
+        Settings: { language: 'Langue', theme: 'Thème', light: 'Clair', dark: 'Sombre', system: 'Système' }
     },
-    Settings: { language: 'Langue', theme: 'Thème', light: 'Clair', dark: 'Sombre', system: 'Système' },
-  },
-  de: {
-    HomePage: {
-      title: 'Willkommen',
-      description: 'Next.js, Tailwind CSS und next-intl sind einsatzbereit.',
-      start: "Los geht's",
-      docs: 'Dokumentation',
-      stackNext: 'App Router, TypeScript',
-      stackTailwind: 'Utility-first-Styling',
-      stackIntl: 'NL, FR, EN, DE',
-      stackIcons: 'Tausende Icons',
-    },
-    Settings: { language: 'Sprache', theme: 'Design', light: 'Hell', dark: 'Dunkel', system: 'System' },
-  },
-};
+    de: {
+        HomePage: {
+            title: 'Willkommen',
+            description: 'Next.js, Tailwind CSS und next-intl sind einsatzbereit.',
+            start: "Los geht's",
+            docs: 'Dokumentation',
+            stackNext: 'App Router, TypeScript',
+            stackTailwind: 'Utility-first-Styling',
+            stackIntl: 'NL, FR, EN, DE',
+            stackIcons: 'Tausende Icons'
+        },
+        Settings: { language: 'Sprache', theme: 'Design', light: 'Hell', dark: 'Dunkel', system: 'System' }
+    }
+}
 
 const files = {
-  'src/i18n/routing.ts': `import { defineRouting } from 'next-intl/routing';
+    'src/i18n/routing.ts': `import { defineRouting } from 'next-intl/routing';
 
 export const routing = defineRouting({
   locales: ${JSON.stringify(LOCALES)},
@@ -122,14 +122,14 @@ export const routing = defineRouting({
 });
 `,
 
-  'src/i18n/navigation.ts': `import { createNavigation } from 'next-intl/navigation';
+    'src/i18n/navigation.ts': `import { createNavigation } from 'next-intl/navigation';
 import { routing } from './routing';
 
 export const { Link, redirect, usePathname, useRouter, getPathname } =
   createNavigation(routing);
 `,
 
-  'src/i18n/request.ts': `import { hasLocale } from 'next-intl';
+    'src/i18n/request.ts': `import { hasLocale } from 'next-intl';
 import { getRequestConfig } from 'next-intl/server';
 import { routing } from './routing';
 
@@ -146,8 +146,8 @@ export default getRequestConfig(async ({ requestLocale }) => {
 });
 `,
 
-  // Next.js 16 gebruikt proxy.ts (voorheen middleware.ts)
-  'src/proxy.ts': `import createMiddleware from 'next-intl/middleware';
+    // Next.js 16 gebruikt proxy.ts (voorheen middleware.ts)
+    'src/proxy.ts': `import createMiddleware from 'next-intl/middleware';
 import { routing } from './i18n/routing';
 
 export default createMiddleware(routing);
@@ -157,12 +157,12 @@ export const config = {
 };
 `,
 
-  // Vertalingen: altijd in alle talen (en, nl, fr, de)
-  ...Object.fromEntries(
-    LOCALES.map((locale) => [`messages/${locale}.json`, JSON.stringify(MESSAGES[locale], null, 2) + '\n']),
-  ),
+    // Vertalingen: altijd in alle talen (en, nl, fr, de)
+    ...Object.fromEntries(
+        LOCALES.map(locale => [`messages/${locale}.json`, JSON.stringify(MESSAGES[locale], null, 2) + '\n'])
+    ),
 
-  'src/app/[locale]/layout.tsx': `import type { ReactNode } from 'react';
+    'src/app/[locale]/layout.tsx': `import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
 import { hasLocale, NextIntlClientProvider } from 'next-intl';
 import { setRequestLocale } from 'next-intl/server';
@@ -204,7 +204,7 @@ export default async function LocaleLayout({
 }
 `,
 
-  'src/app/[locale]/page.tsx': `import { use } from 'react';
+    'src/app/[locale]/page.tsx': `import { use } from 'react';
 import { useTranslations } from 'next-intl';
 import { setRequestLocale } from 'next-intl/server';
 
@@ -222,10 +222,10 @@ export default function HomePage({ params }: { params: Promise<{ locale: string 
 }
 `,
 
-  // Thema: wordt vóór het schilderen gezet (geen flits). DafkeDD UI en Tailwind lezen data-theme.
-  // useServerInsertedHTML voegt het script enkel tijdens de serverweergave in, zodat React in de browser geen waarschuwing geeft.
-  // Bij een taalwissel zet Next de attributen van <html> terug: de observer past het opgeslagen thema dan opnieuw toe.
-  'src/components/theme-script.tsx': `'use client';
+    // Thema: wordt vóór het schilderen gezet (geen flits). DafkeDD UI en Tailwind lezen data-theme.
+    // useServerInsertedHTML voegt het script enkel tijdens de serverweergave in, zodat React in de browser geen waarschuwing geeft.
+    // Bij een taalwissel zet Next de attributen van <html> terug: de observer past het opgeslagen thema dan opnieuw toe.
+    'src/components/theme-script.tsx': `'use client';
 
 import { useEffect } from 'react';
 import { useServerInsertedHTML } from 'next/navigation';
@@ -258,7 +258,7 @@ export function ThemeScript() {
 }
 `,
 
-  'src/components/theme-switcher.tsx': `'use client';
+    'src/components/theme-switcher.tsx': `'use client';
 
 import { useSyncExternalStore } from 'react';
 import { useTranslations } from 'next-intl';
@@ -330,7 +330,7 @@ export function ThemeSwitcher() {
 }
 `,
 
-  'src/components/locale-switcher.tsx': `'use client';
+    'src/components/locale-switcher.tsx': `'use client';
 
 import { useTransition } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
@@ -371,12 +371,12 @@ export function LocaleSwitcher() {
     </select>
   );
 }
-`,
-};
+`
+}
 
 // Voorbeeld mét DafkeDD UI (enkel bij "alle componenten"): gebruikt het thema en de componenten van de bibliotheek.
 const uiFiles = {
-  'src/app/[locale]/layout.tsx': `import type { ReactNode } from 'react';
+    'src/app/[locale]/layout.tsx': `import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
 import { hasLocale, NextIntlClientProvider } from 'next-intl';
 import { setRequestLocale } from 'next-intl/server';
@@ -430,7 +430,7 @@ export default async function LocaleLayout({
 }
 `,
 
-  'src/app/[locale]/page.tsx': `import { use } from 'react';
+    'src/app/[locale]/page.tsx': `import { use } from 'react';
 import { useTranslations } from 'next-intl';
 import { setRequestLocale } from 'next-intl/server';
 import { LuArrowRight, LuGlobe, LuLayers, LuPalette, LuSparkles } from 'react-icons/lu';
@@ -487,9 +487,9 @@ export default function HomePage({ params }: { params: Promise<{ locale: string 
 }
 `,
 
-  // Zelfde opslagsleutels als de ThemeProvider van DafkeDD UI ('lui-theme'), zodat het script en de provider overeenkomen.
-  // Bij een taalwissel zet Next de attributen van <html> terug: thema en dichtheid worden dan opnieuw toegepast.
-  'src/components/theme-script.tsx': `'use client';
+    // Zelfde opslagsleutels als de ThemeProvider van DafkeDD UI ('lui-theme'), zodat het script en de provider overeenkomen.
+    // Bij een taalwissel zet Next de attributen van <html> terug: thema en dichtheid worden dan opnieuw toegepast.
+    'src/components/theme-script.tsx': `'use client';
 
 import { useEffect } from 'react';
 import { useServerInsertedHTML } from 'next/navigation';
@@ -523,7 +523,7 @@ export function ThemeScript() {
 }
 `,
 
-  'src/components/theme-switcher.tsx': `'use client';
+    'src/components/theme-switcher.tsx': `'use client';
 
 import { useTranslations } from 'next-intl';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, useTheme } from '@/components/ui';
@@ -550,7 +550,7 @@ export function ThemeSwitcher() {
 }
 `,
 
-  'src/components/locale-switcher.tsx': `'use client';
+    'src/components/locale-switcher.tsx': `'use client';
 
 import { useTransition } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
@@ -593,8 +593,8 @@ export function LocaleSwitcher() {
     </div>
   );
 }
-`,
-};
+`
+}
 
 // Met DafkeDD UI komen kleuren en lettertype uit de tokens van de bibliotheek (base.css stijlt de body).
 const UI_GLOBALS_CSS = `@import 'tailwindcss';
@@ -608,196 +608,233 @@ const UI_GLOBALS_CSS = `@import 'tailwindcss';
   --font-sans: var(--font);
   --font-mono: var(--mono);
 }
-`;
+`
 
 // next.config.ts van create-next-app bevat o.a. de Tailwind-koppeling: nooit overschrijven, enkel next-intl toevoegen.
 async function patchNextConfig(root) {
-  const file = path.join(root, 'next.config.ts');
-  let content = await fs.readFile(file, 'utf8');
-  if (content.includes('next-intl/plugin')) return;
+    const file = path.join(root, 'next.config.ts')
+    let content = await fs.readFile(file, 'utf8')
+    if (content.includes('next-intl/plugin')) return
 
-  content = content.replace(/^(import[^\n]*\n)/m, `$1import createNextIntlPlugin from 'next-intl/plugin';\n`);
-  content = content.replace(
-    /export default nextConfig;?/,
-    'const withNextIntl = createNextIntlPlugin();\n\nexport default withNextIntl(nextConfig);',
-  );
-  if (!content.includes('withNextIntl(nextConfig)') || !content.includes('next-intl/plugin')) {
-    throw new Error('Kon next.config.ts niet automatisch aanpassen voor next-intl.');
-  }
-  await fs.writeFile(file, content);
+    content = content.replace(/^(import[^\n]*\n)/m, `$1import createNextIntlPlugin from 'next-intl/plugin';\n`)
+    content = content.replace(
+        /export default nextConfig;?/,
+        'const withNextIntl = createNextIntlPlugin();\n\nexport default withNextIntl(nextConfig);'
+    )
+    if (!content.includes('withNextIntl(nextConfig)') || !content.includes('next-intl/plugin')) {
+        throw new Error('Kon next.config.ts niet automatisch aanpassen voor next-intl.')
+    }
+    await fs.writeFile(file, content)
 }
 
 // Dark mode via data-theme (zoals DafkeDD UI) in plaats van enkel prefers-color-scheme.
 async function patchGlobalsCss(root) {
-  const file = path.join(root, 'src/app/globals.css');
-  let content = await fs.readFile(file, 'utf8');
-  if (content.includes('data-theme')) return;
+    const file = path.join(root, 'src/app/globals.css')
+    let content = await fs.readFile(file, 'utf8')
+    if (content.includes('data-theme')) return
 
-  const variant = "@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));";
-  content = content.replace(/(@import\s+["']tailwindcss["'];?[ \t]*\r?\n)/, `$1\n${variant}\n`);
-  if (!content.includes(variant)) content = `${variant}\n${content}`;
+    const variant = "@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));"
+    content = content.replace(/(@import\s+["']tailwindcss["'];?[ \t]*\r?\n)/, `$1\n${variant}\n`)
+    if (!content.includes(variant)) content = `${variant}\n${content}`
 
-  const media = /@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{([^}]*)\}\s*\}/;
-  if (media.test(content)) {
-    content = content.replace(media, "[data-theme='dark'] {$1}");
-  } else {
-    content += "\n[data-theme='dark'] {\n  --background: #0a0a0a;\n  --foreground: #ededed;\n}\n";
-  }
-  await fs.writeFile(file, content);
+    const media = /@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{([^}]*)\}\s*\}/
+    if (media.test(content)) {
+        content = content.replace(media, "[data-theme='dark'] {$1}")
+    } else {
+        content += "\n[data-theme='dark'] {\n  --background: #0a0a0a;\n  --foreground: #ededed;\n}\n"
+    }
+    await fs.writeFile(file, content)
 }
 
 async function write(root, rel, content) {
-  const target = path.join(root, rel);
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  await fs.writeFile(target, content);
+    const target = path.join(root, rel)
+    await fs.mkdir(path.dirname(target), { recursive: true })
+    await fs.writeFile(target, content)
 }
 
 export const nextjs = {
-  id: 'nextjs',
-  label: 'Next.js',
-  description: 'Next.js (laatste) + Tailwind CSS (laatste) + next-intl (laatste) + react-icons + Prettier, in ./frontend',
-  dir: DIR,
-  next: [`cd ${DIR}`, 'npm run dev'],
+    id: 'nextjs',
+    label: 'Next.js',
+    description:
+        'Next.js (laatste) + Tailwind CSS (laatste) + next-intl (laatste) + react-icons + Prettier, in ./frontend',
+    dir: DIR,
+    next: [`cd ${DIR}`, 'npm run dev'],
 
-  async ask() {
-    const ui = await select({
-      message: 'DafkeDD UI installeren?',
-      choices: [
-        { name: 'Ja, alle componenten', value: 'all', description: 'Config, tokens, helpers en alle componenten' },
-        { name: 'Ja, enkel de basis (init)', value: 'init', description: 'Daarna zelf componenten toevoegen met dafke-ui add' },
-        { name: 'Nee', value: 'none' },
-      ],
-    });
-    return { ui };
-  },
+    async ask() {
+        const ui = await select({
+            message: 'DafkeDD UI installeren?',
+            choices: [
+                {
+                    name: 'Ja, alle componenten',
+                    value: 'all',
+                    description: 'Config, tokens, helpers en alle componenten'
+                },
+                {
+                    name: 'Ja, enkel de basis (init)',
+                    value: 'init',
+                    description: 'Daarna zelf componenten toevoegen met dafke-ui add'
+                },
+                { name: 'Nee', value: 'none' }
+            ]
+        })
+        return { ui }
+    },
 
-  async steps({ projectDir, answers }) {
-    const root = path.join(projectDir, DIR);
-    const exists = await fs.stat(root).then(() => true, () => false);
-    if (exists) throw new Error(`De map ./${DIR} bestaat al. Verwijder of hernoem ze eerst.`);
+    async steps({ projectDir, answers }) {
+        const root = path.join(projectDir, DIR)
+        const exists = await fs.stat(root).then(
+            () => true,
+            () => false
+        )
+        if (exists) throw new Error(`De map ./${DIR} bestaat al. Verwijder of hernoem ze eerst.`)
 
-    let uiTmp = null;
-    const cleanupUi = async () => {
-      if (uiTmp) await fs.rm(uiTmp, { recursive: true, force: true });
-      uiTmp = null;
-    };
+        let uiTmp = null
+        const cleanupUi = async () => {
+            if (uiTmp) await fs.rm(uiTmp, { recursive: true, force: true })
+            uiTmp = null
+        }
 
-    const steps = [
-      {
-        title: 'Next.js + Tailwind CSS aanmaken',
-        weight: 3,
-        run: () =>
-          run('npx', [
-            '--yes', 'create-next-app@latest', DIR,
-            '--ts', '--tailwind', '--eslint', '--app', '--src-dir',
-            '--import-alias', '@/*', '--use-npm',
-            '--skip-install', '--disable-git', '--yes',
-          ], { cwd: projectDir }),
-      },
-      {
-        title: 'Dependencies installeren',
-        weight: 4,
-        run: () => run('npm', ['install'], { cwd: root }),
-      },
-      {
-        title: 'next-intl installeren',
-        weight: 2,
-        run: () => run('npm', ['install', 'next-intl@latest'], { cwd: root }),
-      },
-      {
-        title: 'react-icons installeren',
-        weight: 2,
-        run: () => run('npm', ['install', 'react-icons@latest'], { cwd: root }),
-      },
-      {
-        title: 'Prettier installeren',
-        weight: 2,
-        run: () =>
-          run('npm', ['install', '--save-dev', 'prettier@latest', 'prettier-plugin-tailwindcss@latest'], { cwd: root }),
-      },
-      {
-        title: 'next-intl configureren',
-        weight: 1,
-        run: async () => {
-          // Standaard template-pagina's vervangen door de [locale]-versie
-          await fs.rm(path.join(root, 'src/app/page.tsx'), { force: true });
-          await fs.rm(path.join(root, 'src/app/layout.tsx'), { force: true });
-          const withUi = answers?.ui === 'all';
-          for (const [rel, content] of Object.entries({ ...files, ...(withUi ? uiFiles : {}) })) {
-            await write(root, rel, content);
-          }
-          await patchNextConfig(root);
-          if (withUi) await write(root, 'src/app/globals.css', UI_GLOBALS_CSS);
-          else await patchGlobalsCss(root);
-        },
-      },
-    ];
-
-    if (answers?.ui && answers.ui !== 'none') {
-      const cli = () => path.join(uiTmp, 'packages', 'cli', 'bin', 'dafke-ui.mjs');
-      steps.push(
-        {
-          title: 'DafkeDD UI ophalen',
-          weight: 2,
-          run: async () => {
-            uiTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-ui-'));
-            try {
-              await run('git', ['clone', '--depth', '1', '--branch', UI_BRANCH, '--single-branch', UI_REPO, uiTmp]);
-            } catch (err) {
-              await cleanupUi();
-              throw err;
+        const steps = [
+            {
+                title: 'Next.js + Tailwind CSS aanmaken',
+                weight: 3,
+                run: () =>
+                    run(
+                        'npx',
+                        [
+                            '--yes',
+                            'create-next-app@latest',
+                            DIR,
+                            '--ts',
+                            '--tailwind',
+                            '--eslint',
+                            '--app',
+                            '--src-dir',
+                            '--import-alias',
+                            '@/*',
+                            '--use-npm',
+                            '--skip-install',
+                            '--disable-git',
+                            '--yes'
+                        ],
+                        { cwd: projectDir }
+                    )
+            },
+            {
+                title: 'Dependencies installeren',
+                weight: 4,
+                run: () => run('npm', ['install'], { cwd: root })
+            },
+            {
+                title: 'next-intl installeren',
+                weight: 2,
+                run: () => run('npm', ['install', 'next-intl@latest'], { cwd: root })
+            },
+            {
+                title: 'react-icons installeren',
+                weight: 2,
+                run: () => run('npm', ['install', 'react-icons@latest'], { cwd: root })
+            },
+            {
+                title: 'Prettier installeren',
+                weight: 2,
+                run: () =>
+                    run('npm', ['install', '--save-dev', 'prettier@latest', 'prettier-plugin-tailwindcss@latest'], {
+                        cwd: root
+                    })
+            },
+            {
+                title: 'next-intl configureren',
+                weight: 1,
+                run: async () => {
+                    // Standaard template-pagina's vervangen door de [locale]-versie
+                    await fs.rm(path.join(root, 'src/app/page.tsx'), { force: true })
+                    await fs.rm(path.join(root, 'src/app/layout.tsx'), { force: true })
+                    const withUi = answers?.ui === 'all'
+                    for (const [rel, content] of Object.entries({ ...files, ...(withUi ? uiFiles : {}) })) {
+                        await write(root, rel, content)
+                    }
+                    await patchNextConfig(root)
+                    if (withUi) await write(root, 'src/app/globals.css', UI_GLOBALS_CSS)
+                    else await patchGlobalsCss(root)
+                }
             }
-          },
-        },
-        {
-          title: 'DafkeDD UI installeren',
-          weight: 2,
-          run: async () => {
-            try {
-              await write(root, 'dafke-ui.json', JSON.stringify(UI_CONFIG, null, 2) + '\n');
-              await run('node', [cli(), 'init', '--yes'], { cwd: root });
-              if (answers.ui === 'all') await run('node', [cli(), 'add', '--all'], { cwd: root });
+        ]
 
-              // CSS-verzamelbestand van DafkeDD UI laden in de globale stylesheet
-              const css = path.join(root, 'src/app/globals.css');
-              const importLine = '@import "../components/ui/ui.css";';
-              let content = await fs.readFile(css, 'utf8');
-              if (!content.includes(importLine)) {
-                content = content.replace(/(@import\s+["']tailwindcss["'];?\r?\n)/, `$1${importLine}\n`);
-                if (!content.includes(importLine)) content = `${importLine}\n${content}`;
-                await fs.writeFile(css, content);
-              }
-            } finally {
-              await cleanupUi();
+        if (answers?.ui && answers.ui !== 'none') {
+            const cli = () => path.join(uiTmp, 'packages', 'cli', 'bin', 'dafke-ui.mjs')
+            steps.push(
+                {
+                    title: 'DafkeDD UI ophalen',
+                    weight: 2,
+                    run: async () => {
+                        uiTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-ui-'))
+                        try {
+                            await run('git', [
+                                'clone',
+                                '--depth',
+                                '1',
+                                '--branch',
+                                UI_BRANCH,
+                                '--single-branch',
+                                UI_REPO,
+                                uiTmp
+                            ])
+                        } catch (err) {
+                            await cleanupUi()
+                            throw err
+                        }
+                    }
+                },
+                {
+                    title: 'DafkeDD UI installeren',
+                    weight: 2,
+                    run: async () => {
+                        try {
+                            await write(root, 'dafke-ui.json', JSON.stringify(UI_CONFIG, null, 2) + '\n')
+                            await run('node', [cli(), 'init', '--yes'], { cwd: root })
+                            if (answers.ui === 'all') await run('node', [cli(), 'add', '--all'], { cwd: root })
+
+                            // CSS-verzamelbestand van DafkeDD UI laden in de globale stylesheet
+                            const css = path.join(root, 'src/app/globals.css')
+                            const importLine = '@import "../components/ui/ui.css";'
+                            let content = await fs.readFile(css, 'utf8')
+                            if (!content.includes(importLine)) {
+                                content = content.replace(/(@import\s+["']tailwindcss["'];?\r?\n)/, `$1${importLine}\n`)
+                                if (!content.includes(importLine)) content = `${importLine}\n${content}`
+                                await fs.writeFile(css, content)
+                            }
+                        } finally {
+                            await cleanupUi()
+                        }
+                    }
+                }
+            )
+        }
+
+        steps.push(
+            {
+                title: 'Prettier configureren',
+                weight: 2,
+                run: async () => {
+                    await write(root, '.prettierrc', PRETTIERRC)
+                    await write(root, '.prettierignore', PRETTIERIGNORE)
+
+                    const pkgPath = path.join(root, 'package.json')
+                    const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'))
+                    pkg.scripts = { ...pkg.scripts, format: 'prettier --write .', 'format:check': 'prettier --check .' }
+                    await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+
+                    await run('npx', ['--no-install', 'prettier', '--write', '.'], { cwd: root })
+                }
+            },
+            {
+                title: 'Project controleren (build)',
+                weight: 3,
+                run: () => run('npm', ['run', 'build'], { cwd: root })
             }
-          },
-        },
-      );
+        )
+
+        return steps
     }
-
-    steps.push(
-      {
-        title: 'Prettier configureren',
-        weight: 2,
-        run: async () => {
-          await write(root, '.prettierrc', PRETTIERRC);
-          await write(root, '.prettierignore', PRETTIERIGNORE);
-
-          const pkgPath = path.join(root, 'package.json');
-          const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'));
-          pkg.scripts = { ...pkg.scripts, format: 'prettier --write .', 'format:check': 'prettier --check .' };
-          await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
-
-          await run('npx', ['--no-install', 'prettier', '--write', '.'], { cwd: root });
-        },
-      },
-      {
-        title: 'Project controleren (build)',
-        weight: 3,
-        run: () => run('npm', ['run', 'build'], { cwd: root }),
-      },
-    );
-
-    return steps;
-  },
-};
+}

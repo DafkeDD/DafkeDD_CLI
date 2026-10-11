@@ -1,44 +1,44 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
+    push:
+        branches: [main]
 
 permissions:
-  contents: write
+    contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    release:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
-      - name: Versie bepalen
-        id: version
-        run: |
-          PKG=$(node -p "require('./package.json').version")
-          LAST=$(git tag --list 'v*' --sort=-v:refname | head -n1)
-          LAST=${LAST#v}
-          if [ -z "$LAST" ]; then
-            NEXT="$PKG"
-          else
-            HIGHEST=$(printf '%s\n%s\n' "$PKG" "$LAST" | sort -V | tail -n1)
-            if [ "$HIGHEST" = "$PKG" ] && [ "$PKG" != "$LAST" ]; then
-              NEXT="$PKG"
-            else
-              IFS=. read -r MA MI PA <<< "$LAST"
-              NEXT="$MA.$MI.$((PA+1))"
-            fi
-          fi
-          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+            - name: Versie bepalen
+              id: version
+              run: |
+                  PKG=$(node -p "require('./package.json').version")
+                  LAST=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+                  LAST=${LAST#v}
+                  if [ -z "$LAST" ]; then
+                    NEXT="$PKG"
+                  else
+                    HIGHEST=$(printf '%s\n%s\n' "$PKG" "$LAST" | sort -V | tail -n1)
+                    if [ "$HIGHEST" = "$PKG" ] && [ "$PKG" != "$LAST" ]; then
+                      NEXT="$PKG"
+                    else
+                      IFS=. read -r MA MI PA <<< "$LAST"
+                      NEXT="$MA.$MI.$((PA+1))"
+                    fi
+                  fi
+                  echo "version=$NEXT" >> "$GITHUB_OUTPUT"
 
-      - name: Release aanmaken
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "v${{ steps.version.outputs.version }}" \
-            --target "$GITHUB_SHA" \
-            --title "v${{ steps.version.outputs.version }}" \
-            --generate-notes
+            - name: Release aanmaken
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  gh release create "v${{ steps.version.outputs.version }}" \
+                    --target "$GITHUB_SHA" \
+                    --title "v${{ steps.version.outputs.version }}" \
+                    --generate-notes
