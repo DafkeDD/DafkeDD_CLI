@@ -13,8 +13,6 @@ export async function main() {
   console.log(pc.bold('\nDafkeDD_CLI') + pc.dim(` v${version}`) + pc.dim('  (alles wordt lokaal in dit project geïnstalleerd, nooit globaal)'));
   console.log(pc.dim(`Projectmap: ${projectDir}\n`));
 
-  const repo = await askRepo({ projectDir });
-
   const choice = await select({
     message: 'Welke frontend wil je installeren?',
     choices: Object.values(frontends).map((f) => ({
@@ -26,6 +24,7 @@ export async function main() {
 
   const frontend = frontends[choice];
   const answers = (await frontend.ask?.({ projectDir })) ?? {};
+  const repo = await askRepo({ projectDir });
   const steps = [...(await frontend.steps({ projectDir, answers })), ...repoSteps({ projectDir, repo })];
 
   console.log('');

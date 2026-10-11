@@ -415,12 +415,13 @@ export default async function LocaleLayout({
                 </span>
                 <span className="text-[15px] font-semibold tracking-tight">DafkeDD</span>
               </div>
-              <div className="flex gap-2">
-                <LocaleSwitcher />
-                <ThemeSwitcher />
-              </div>
             </header>
             {children}
+            <div className="fixed bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-1 shadow-lg">
+              <LocaleSwitcher />
+              <span aria-hidden className="h-[18px] w-px bg-[var(--border)]" />
+              <ThemeSwitcher />
+            </div>
           </NextIntlClientProvider>
         </ThemeProvider>
       </body>
@@ -448,7 +449,7 @@ export default function HomePage({ params }: { params: Promise<{ locale: string 
   ];
 
   return (
-    <main className="relative flex flex-1 flex-col items-center justify-center gap-7 overflow-x-clip px-6 pt-10 pb-16 text-center">
+    <main className="relative flex flex-1 flex-col items-center justify-center gap-7 overflow-x-clip px-6 pt-10 pb-28 text-center">
       <div className="pointer-events-none absolute top-[-200px] left-1/2 h-[640px] w-[900px] -translate-x-1/2 bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--accent)_14%,transparent),transparent)]" />
 
       <Badge tone="accent" dot>
@@ -533,7 +534,7 @@ export function ThemeSwitcher() {
   const { theme, setTheme } = useTheme();
 
   return (
-    <div className="w-36">
+    <div className="w-32 [&_.lui-select-trigger]:border-transparent! [&_.lui-select-trigger]:bg-transparent! [&_.lui-select-trigger]:shadow-none!">
       <Select value={theme} onValueChange={(value) => setTheme(value as Theme)}>
         <SelectTrigger size="sm" aria-label={t('theme')}>
           <SelectValue placeholder={t(theme)} style={{ color: 'var(--text)' }} />
@@ -576,7 +577,7 @@ export function LocaleSwitcher() {
   }
 
   return (
-    <div className="w-40">
+    <div className="w-36 [&_.lui-select-trigger]:border-transparent! [&_.lui-select-trigger]:bg-transparent! [&_.lui-select-trigger]:shadow-none!">
       <Select value={locale} onValueChange={change} disabled={isPending}>
         <SelectTrigger size="sm" aria-label={t('language')}>
           <SelectValue placeholder={languageName(locale)} style={{ color: 'var(--text)' }} />

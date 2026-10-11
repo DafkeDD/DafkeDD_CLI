@@ -83,8 +83,8 @@ Is de repo privé, dan moet je op die machine ingelogd zijn bij GitHub (`gh auth
 
 1. Ga naar de map van je project.
 2. Start de CLI (zie hierboven).
-3. Geef de naam van de repo (eerste vraag), kies het platform (voorlopig alleen GitHub) en of de repo private of public wordt.
-4. Kies de frontend (voorlopig alleen Next.js).
+3. Kies de frontend (voorlopig alleen Next.js) en beantwoord de vragen daarover (zoals DafkeDD UI).
+4. Als laatste: de naam van de repo, het platform (voorlopig alleen GitHub) en of de repo private of public wordt.
 5. Wacht tot de progressbar klaar is. Daarna staat je project (met `./frontend`) als eerste commit op GitHub.
 6. Start de frontend:
 
@@ -140,6 +140,8 @@ git switch developer
 
 ## Changelog
 
+- **0.9.0**: taal- en themakeuze staan nu samen in één zwevende pill onderaan (opent naar boven, ook op mobiel); header toont enkel het logo.
+- **0.8.1**: volgorde van de vragen: eerst de frontend (en DafkeDD UI), pas als laatste de GitHub-vragen.
 - **0.8.0**: moderner en cleaner voorbeeldpagina met DafkeDD UI (hero, logo, taal/thema-pillen, kaartjes met de stack en react-icons); werkt in licht en donker en op mobiel.
 - **0.7.0**: eerste vraag is nu de repo-naam, daarna het platform (alleen GitHub) en private/public; na de installatie wordt het project gepusht naar GitHub.
 - **0.6.0**: react-icons wordt mee geïnstalleerd in de frontend.
