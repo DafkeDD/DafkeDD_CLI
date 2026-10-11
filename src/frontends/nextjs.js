@@ -5,8 +5,8 @@ import { select } from '@inquirer/prompts';
 import { run } from '../runner.js';
 
 const DIR = 'frontend';
-const LOCALES = ['nl', 'en'];
-const DEFAULT_LOCALE = 'nl';
+const LOCALES = ['en', 'nl', 'fr', 'de'];
+const DEFAULT_LOCALE = 'en';
 
 // DafkeDD UI: componentenbibliotheek met een eigen CLI (dafke-ui). De CLI staat nog niet op npm,
 // dus halen we de repo tijdelijk op, draaien de CLI in ./frontend en ruimen de kloon weer op.
@@ -43,14 +43,57 @@ const PRETTIERRC = `{
 `;
 
 // De DafkeDD UI-bestanden blijven ongemoeid, anders ziet 'dafke-ui update' ze als "zelf aangepast".
+// AGENTS.md en next-env.d.ts worden door Next.js zelf herschreven (ook bij 'next dev').
 const PRETTIERIGNORE = `node_modules
 .next
 out
 build
 package-lock.json
+AGENTS.md
+next-env.d.ts
 dafke-ui.lock.json
 src/components/ui
 `;
+
+// Alle teksten bestaan in elke taal. Voeg je een taal toe aan LOCALES, voeg dan ook hier een vertaling toe.
+const MESSAGES = {
+  en: {
+    HomePage: {
+      title: 'Welcome',
+      description: 'Next.js, Tailwind CSS and next-intl are ready to use.',
+      start: 'Get started',
+      docs: 'Documentation',
+    },
+    Settings: { language: 'Language', theme: 'Theme', light: 'Light', dark: 'Dark', system: 'System' },
+  },
+  nl: {
+    HomePage: {
+      title: 'Welkom',
+      description: 'Next.js, Tailwind CSS en next-intl zijn klaar voor gebruik.',
+      start: 'Aan de slag',
+      docs: 'Documentatie',
+    },
+    Settings: { language: 'Taal', theme: 'Thema', light: 'Licht', dark: 'Donker', system: 'Systeem' },
+  },
+  fr: {
+    HomePage: {
+      title: 'Bienvenue',
+      description: "Next.js, Tailwind CSS et next-intl sont prêts à l'emploi.",
+      start: 'Commencer',
+      docs: 'Documentation',
+    },
+    Settings: { language: 'Langue', theme: 'Thème', light: 'Clair', dark: 'Sombre', system: 'Système' },
+  },
+  de: {
+    HomePage: {
+      title: 'Willkommen',
+      description: 'Next.js, Tailwind CSS und next-intl sind einsatzbereit.',
+      start: "Los geht's",
+      docs: 'Dokumentation',
+    },
+    Settings: { language: 'Sprache', theme: 'Design', light: 'Hell', dark: 'Dunkel', system: 'System' },
+  },
+};
 
 const files = {
   'src/i18n/routing.ts': `import { defineRouting } from 'next-intl/routing';
@@ -98,18 +141,10 @@ export const config = {
 };
 `,
 
-  'messages/nl.json': JSON.stringify(
-    {
-      HomePage: { title: 'Welkom', description: 'Next.js, Tailwind CSS en next-intl zijn klaar voor gebruik.' },
-      Settings: { language: 'Taal', theme: 'Thema', light: 'Licht', dark: 'Donker', system: 'Systeem' },
-    },
-    null, 2) + '\n',
-  'messages/en.json': JSON.stringify(
-    {
-      HomePage: { title: 'Welcome', description: 'Next.js, Tailwind CSS and next-intl are ready to use.' },
-      Settings: { language: 'Language', theme: 'Theme', light: 'Light', dark: 'Dark', system: 'System' },
-    },
-    null, 2) + '\n',
+  // Vertalingen: altijd in alle talen (en, nl, fr, de)
+  ...Object.fromEntries(
+    LOCALES.map((locale) => [`messages/${locale}.json`, JSON.stringify(MESSAGES[locale], null, 2) + '\n']),
+  ),
 
   'src/app/[locale]/layout.tsx': `import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
@@ -173,14 +208,36 @@ export default function HomePage({ params }: { params: Promise<{ locale: string 
 
   // Thema: wordt vóór het schilderen gezet (geen flits). DafkeDD UI en Tailwind lezen data-theme.
   // useServerInsertedHTML voegt het script enkel tijdens de serverweergave in, zodat React in de browser geen waarschuwing geeft.
+  // Bij een taalwissel zet Next de attributen van <html> terug: de observer past het opgeslagen thema dan opnieuw toe.
   'src/components/theme-script.tsx': `'use client';
 
+import { useEffect } from 'react';
 import { useServerInsertedHTML } from 'next/navigation';
 
 const code = \`(function(){try{var p=localStorage.getItem('theme');if(p!=='light'&&p!=='dark')p='system';var d=p==='dark'||(p==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);var r=document.documentElement;r.setAttribute('data-theme',d?'dark':'light');r.style.colorScheme=d?'dark':'light'}catch(e){}})()\`;
 
+function applyStored() {
+  try {
+    const stored = localStorage.getItem('theme');
+    const dark = stored === 'dark' || (stored !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+    const root = document.documentElement;
+    root.setAttribute('data-theme', dark ? 'dark' : 'light');
+    root.style.colorScheme = dark ? 'dark' : 'light';
+  } catch {}
+}
+
 export function ThemeScript() {
   useServerInsertedHTML(() => <script dangerouslySetInnerHTML={{ __html: code }} />);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      if (!root.hasAttribute('data-theme')) applyStored();
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
   return null;
 }
 `,
@@ -301,6 +358,210 @@ export function LocaleSwitcher() {
 `,
 };
 
+// Voorbeeld mét DafkeDD UI (enkel bij "alle componenten"): gebruikt het thema en de componenten van de bibliotheek.
+const uiFiles = {
+  'src/app/[locale]/layout.tsx': `import type { ReactNode } from 'react';
+import { notFound } from 'next/navigation';
+import { hasLocale, NextIntlClientProvider } from 'next-intl';
+import { setRequestLocale } from 'next-intl/server';
+import { LocaleSwitcher } from '@/components/locale-switcher';
+import { ThemeSwitcher } from '@/components/theme-switcher';
+import { ThemeScript } from '@/components/theme-script';
+import { ThemeProvider } from '@/components/ui';
+import { routing } from '@/i18n/routing';
+import '../globals.css';
+
+export function generateStaticParams() {
+  return routing.locales.map((locale) => ({ locale }));
+}
+
+export default async function LocaleLayout({
+  children,
+  params,
+}: {
+  children: ReactNode;
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  if (!hasLocale(routing.locales, locale)) notFound();
+  setRequestLocale(locale);
+
+  return (
+    <html lang={locale} suppressHydrationWarning>
+      <body className="flex min-h-screen flex-col">
+        <ThemeScript />
+        <ThemeProvider>
+          <NextIntlClientProvider>
+            <header className="flex justify-end gap-2 p-4">
+              <LocaleSwitcher />
+              <ThemeSwitcher />
+            </header>
+            {children}
+          </NextIntlClientProvider>
+        </ThemeProvider>
+      </body>
+    </html>
+  );
+}
+`,
+
+  'src/app/[locale]/page.tsx': `import { use } from 'react';
+import { useTranslations } from 'next-intl';
+import { setRequestLocale } from 'next-intl/server';
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui';
+
+export default function HomePage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = use(params);
+  setRequestLocale(locale);
+  const t = useTranslations('HomePage');
+
+  return (
+    <main className="flex flex-1 items-center justify-center p-8">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <div className="flex flex-col items-start gap-3">
+            <Badge tone="accent" dot>
+              DafkeDD UI
+            </Badge>
+            <div>
+              <CardTitle>{t('title')}</CardTitle>
+              <CardDescription>{t('description')}</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex gap-2">
+          <Button>{t('start')}</Button>
+          <Button variant="secondary">{t('docs')}</Button>
+        </CardContent>
+      </Card>
+    </main>
+  );
+}
+`,
+
+  // Zelfde opslagsleutels als de ThemeProvider van DafkeDD UI ('lui-theme'), zodat het script en de provider overeenkomen.
+  // Bij een taalwissel zet Next de attributen van <html> terug: thema en dichtheid worden dan opnieuw toegepast.
+  'src/components/theme-script.tsx': `'use client';
+
+import { useEffect } from 'react';
+import { useServerInsertedHTML } from 'next/navigation';
+
+const code = \`(function(){try{var t=localStorage.getItem('lui-theme')||'system';var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);var r=document.documentElement;r.setAttribute('data-theme',d?'dark':'light');r.style.colorScheme=d?'dark':'light';var y=localStorage.getItem('lui-theme-density');if(y)r.setAttribute('data-density',y)}catch(e){}})()\`;
+
+function applyStored() {
+  try {
+    const stored = localStorage.getItem('lui-theme') || 'system';
+    const dark = stored === 'dark' || (stored === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+    const root = document.documentElement;
+    root.setAttribute('data-theme', dark ? 'dark' : 'light');
+    root.style.colorScheme = dark ? 'dark' : 'light';
+    root.setAttribute('data-density', localStorage.getItem('lui-theme-density') || 'regular');
+  } catch {}
+}
+
+export function ThemeScript() {
+  useServerInsertedHTML(() => <script dangerouslySetInnerHTML={{ __html: code }} />);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      if (!root.hasAttribute('data-theme') || !root.hasAttribute('data-density')) applyStored();
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ['data-theme', 'data-density'] });
+    return () => observer.disconnect();
+  }, []);
+
+  return null;
+}
+`,
+
+  'src/components/theme-switcher.tsx': `'use client';
+
+import { useTranslations } from 'next-intl';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, useTheme } from '@/components/ui';
+import type { Theme } from '@/components/ui';
+
+export function ThemeSwitcher() {
+  const t = useTranslations('Settings');
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <div className="w-36">
+      <Select value={theme} onValueChange={(value) => setTheme(value as Theme)}>
+        <SelectTrigger size="sm" aria-label={t('theme')}>
+          <SelectValue placeholder={t(theme)} style={{ color: 'var(--text)' }} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="light">{t('light')}</SelectItem>
+          <SelectItem value="dark">{t('dark')}</SelectItem>
+          <SelectItem value="system">{t('system')}</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+`,
+
+  'src/components/locale-switcher.tsx': `'use client';
+
+import { useTransition } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui';
+import { usePathname, useRouter } from '@/i18n/navigation';
+import { routing } from '@/i18n/routing';
+
+function languageName(locale: string) {
+  const name = new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
+  return name.charAt(0).toLocaleUpperCase(locale) + name.slice(1);
+}
+
+export function LocaleSwitcher() {
+  const t = useTranslations('Settings');
+  const locale = useLocale();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [isPending, startTransition] = useTransition();
+
+  function change(next: string) {
+    startTransition(() => {
+      router.replace(pathname, { locale: next as (typeof routing.locales)[number] });
+    });
+  }
+
+  return (
+    <div className="w-40">
+      <Select value={locale} onValueChange={change} disabled={isPending}>
+        <SelectTrigger size="sm" aria-label={t('language')}>
+          <SelectValue placeholder={languageName(locale)} style={{ color: 'var(--text)' }} />
+        </SelectTrigger>
+        <SelectContent>
+          {routing.locales.map((value) => (
+            <SelectItem key={value} value={value}>
+              {languageName(value)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+`,
+};
+
+// Met DafkeDD UI komen kleuren en lettertype uit de tokens van de bibliotheek (base.css stijlt de body).
+const UI_GLOBALS_CSS = `@import 'tailwindcss';
+@import '../components/ui/ui.css';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --font-sans: var(--font);
+  --font-mono: var(--mono);
+}
+`;
+
 // next.config.ts van create-next-app bevat o.a. de Tailwind-koppeling: nooit overschrijven, enkel next-intl toevoegen.
 async function patchNextConfig(root) {
   const file = path.join(root, 'next.config.ts');
@@ -408,9 +669,13 @@ export const nextjs = {
           // Standaard template-pagina's vervangen door de [locale]-versie
           await fs.rm(path.join(root, 'src/app/page.tsx'), { force: true });
           await fs.rm(path.join(root, 'src/app/layout.tsx'), { force: true });
-          for (const [rel, content] of Object.entries(files)) await write(root, rel, content);
+          const withUi = answers?.ui === 'all';
+          for (const [rel, content] of Object.entries({ ...files, ...(withUi ? uiFiles : {}) })) {
+            await write(root, rel, content);
+          }
           await patchNextConfig(root);
-          await patchGlobalsCss(root);
+          if (withUi) await write(root, 'src/app/globals.css', UI_GLOBALS_CSS);
+          else await patchGlobalsCss(root);
         },
       },
     ];

@@ -14,8 +14,8 @@ De CLI stelt vragen, daarna volgt één progressbar voor alle stappen: aanmaken,
 
 De CLI vraagt of je [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI) wilt installeren:
 
-- **Alle componenten**: voert `dafke-ui init` en `dafke-ui add --all` uit in `./frontend`.
-- **Enkel de basis (init)**: alleen config, tokens en helpers. Daarna voeg je zelf componenten toe.
+- **Alle componenten**: voert `dafke-ui init` en `dafke-ui add --all` uit in `./frontend`. Het voorbeeld gebruikt dan het thema en de componenten van DafkeDD UI (`ThemeProvider`, `Card`, `Badge`, `Button` en `Select`).
+- **Enkel de basis (init)**: alleen config, tokens en helpers. Daarna voeg je zelf componenten toe. Het voorbeeld is dan een eenvoudige versie met Tailwind.
 - **Nee**: niets.
 
 De componenten komen in `frontend/src/components/ui` (`dafke-ui.json` en `dafke-ui.lock.json` staan in `frontend`) en `ui.css` wordt geladen in `src/app/globals.css`. De UI-repo (branch `main`) wordt tijdelijk opgehaald met `git clone` en daarna opgeruimd; er wordt niets globaal geïnstalleerd (geen `npm link`). Vereist daarom Git.
@@ -24,16 +24,16 @@ De componenten komen in `frontend/src/components/ui` (`dafke-ui.json` en `dafke-
 
 Rechtsboven staan twee dropdowns (componenten in `src/components`):
 
-- **Taal** (`locale-switcher.tsx`): wisselt tussen de ingestelde talen zonder dat de URL verandert. De keuze blijft bewaard.
+- **Taal** (`locale-switcher.tsx`): wisselt tussen English, Nederlands, Français en Deutsch zonder dat de URL verandert. De keuze blijft bewaard.
 - **Thema** (`theme-switcher.tsx`): **Licht**, **Donker** of **Systeem** (volgt het besturingssysteem). De keuze blijft bewaard in `localStorage` en wordt gezet vóór het schilderen, dus zonder flits.
 
-Het thema staat als `data-theme="light|dark"` op `<html>`. Dat is dezelfde schakelaar als die van DafkeDD UI, en Tailwind's `dark:`-klassen volgen hem ook. Talen toevoegen kan in `src/i18n/routing.ts` en `messages/<taal>.json`.
+Het thema staat als `data-theme="light|dark"` op `<html>`. Dat is dezelfde schakelaar als die van DafkeDD UI, en Tailwind's `dark:`-klassen volgen hem ook. Bij een taalwissel zet Next de attributen van `<html>` terug; `theme-script.tsx` past het opgeslagen thema dan meteen opnieuw toe, zodat het thema niet terugspringt. Met DafkeDD UI zijn de dropdowns de `Select` van de bibliotheek en gebruikt het thema de `ThemeProvider` (opslagsleutel `lui-theme`). Een taal toevoegen kan in `src/i18n/routing.ts`, met een bijhorend bestand `messages/<taal>.json` (altijd alle teksten vertalen).
 
 ### Prettier
 
-Prettier en `prettier-plugin-tailwindcss` worden als devDependency geïnstalleerd, met `.prettierrc` (4 spaties, geen puntkomma's, enkele quotes, `printWidth` 120, `proseWrap: always`) en `.prettierignore`. De scripts `npm run format` en `npm run format:check` zijn toegevoegd en het project wordt meteen geformatteerd. De map `src/components/ui` wordt bewust niet geformatteerd, zodat `dafke-ui update` je bestanden niet als "zelf aangepast" ziet.
+Prettier en `prettier-plugin-tailwindcss` worden als devDependency geïnstalleerd, met `.prettierrc` (4 spaties, geen puntkomma's, enkele quotes, `printWidth` 120, `proseWrap: always`) en `.prettierignore`. De scripts `npm run format` en `npm run format:check` zijn toegevoegd en het project wordt meteen geformatteerd. De map `src/components/ui` wordt bewust niet geformatteerd, zodat `dafke-ui update` je bestanden niet als "zelf aangepast" ziet. `AGENTS.md` en `next-env.d.ts` staan ook in `.prettierignore`, want Next.js herschrijft ze zelf.
 
-Standaard worden de talen `nl` (standaard) en `en` ingesteld. De taal staat niet in de URL: je surft naar `http://localhost:3000/`, de taal komt uit de keuze van de gebruiker (cookie) of anders uit de browsertaal.
+Er worden vier talen ingesteld: **Engels (`en`, standaard)**, Nederlands (`nl`), Frans (`fr`) en Duits (`de`). Alle teksten bestaan in alle vier de talen (`messages/en.json`, `nl.json`, `fr.json`, `de.json`). De taal staat niet in de URL: je surft naar `http://localhost:3000/`, de taal komt uit de keuze van de gebruiker (cookie), anders uit de browsertaal, en anders is het Engels.
 
 ## Installeren
 
@@ -131,6 +131,7 @@ git switch developer
 
 ## Changelog
 
+- **0.5.0**: vier talen (Engels standaard, Nederlands, Frans, Duits), het thema springt niet meer terug bij een taalwissel, en het voorbeeld gebruikt thema en componenten van DafkeDD UI (bij "alle componenten"). `AGENTS.md` en `next-env.d.ts` worden niet meer door Prettier gecontroleerd.
 - **0.4.0**: geen taalprefix meer in de URL (`/nl` weg), dropdowns voor taal en thema (licht, donker, systeem), en de Tailwind-koppeling van Next.js blijft behouden (de `@theme`-fout in `globals.css` is opgelost: `next.config.ts` wordt niet meer overschreven maar aangevuld).
 - **0.3.0**: optionele installatie van DafkeDD UI (vraag in de CLI), Prettier met eigen `.prettierrc` en scripts `format` / `format:check`.
 - **0.2.0**: versienummer bij het opstarten, één progressbar die continu doorloopt over alle stappen, geen Node-waarschuwingen (DEP0190) meer op Windows, `.npmignore` toegevoegd (geen `gitignore-fallback`-waarschuwing meer).
