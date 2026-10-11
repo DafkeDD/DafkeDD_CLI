@@ -63,6 +63,10 @@ const MESSAGES = {
       description: 'Next.js, Tailwind CSS and next-intl are ready to use.',
       start: 'Get started',
       docs: 'Documentation',
+      stackNext: 'App Router, TypeScript',
+      stackTailwind: 'Utility-first styling',
+      stackIntl: 'NL, FR, EN, DE',
+      stackIcons: 'Thousands of icons',
     },
     Settings: { language: 'Language', theme: 'Theme', light: 'Light', dark: 'Dark', system: 'System' },
   },
@@ -72,6 +76,10 @@ const MESSAGES = {
       description: 'Next.js, Tailwind CSS en next-intl zijn klaar voor gebruik.',
       start: 'Aan de slag',
       docs: 'Documentatie',
+      stackNext: 'App Router, TypeScript',
+      stackTailwind: 'Utility-first styling',
+      stackIntl: 'NL, FR, EN, DE',
+      stackIcons: 'Duizenden iconen',
     },
     Settings: { language: 'Taal', theme: 'Thema', light: 'Licht', dark: 'Donker', system: 'Systeem' },
   },
@@ -81,6 +89,10 @@ const MESSAGES = {
       description: "Next.js, Tailwind CSS et next-intl sont prêts à l'emploi.",
       start: 'Commencer',
       docs: 'Documentation',
+      stackNext: 'App Router, TypeScript',
+      stackTailwind: 'Style utilitaire',
+      stackIntl: 'NL, FR, EN, DE',
+      stackIcons: "Des milliers d'icônes",
     },
     Settings: { language: 'Langue', theme: 'Thème', light: 'Clair', dark: 'Sombre', system: 'Système' },
   },
@@ -90,6 +102,10 @@ const MESSAGES = {
       description: 'Next.js, Tailwind CSS und next-intl sind einsatzbereit.',
       start: "Los geht's",
       docs: 'Dokumentation',
+      stackNext: 'App Router, TypeScript',
+      stackTailwind: 'Utility-first-Styling',
+      stackIntl: 'NL, FR, EN, DE',
+      stackIcons: 'Tausende Icons',
     },
     Settings: { language: 'Sprache', theme: 'Design', light: 'Hell', dark: 'Dunkel', system: 'System' },
   },
@@ -392,9 +408,17 @@ export default async function LocaleLayout({
         <ThemeScript />
         <ThemeProvider>
           <NextIntlClientProvider>
-            <header className="flex justify-end gap-2 p-4">
-              <LocaleSwitcher />
-              <ThemeSwitcher />
+            <header className="relative z-10 flex flex-wrap items-center justify-between gap-3 px-6 py-5 sm:px-10">
+              <div className="flex items-center gap-2.5">
+                <span className="grid size-7 place-items-center rounded-lg bg-[var(--accent)] text-sm font-bold text-[var(--accent-fg)]">
+                  D
+                </span>
+                <span className="text-[15px] font-semibold tracking-tight">DafkeDD</span>
+              </div>
+              <div className="flex gap-2">
+                <LocaleSwitcher />
+                <ThemeSwitcher />
+              </div>
             </header>
             {children}
           </NextIntlClientProvider>
@@ -408,32 +432,55 @@ export default async function LocaleLayout({
   'src/app/[locale]/page.tsx': `import { use } from 'react';
 import { useTranslations } from 'next-intl';
 import { setRequestLocale } from 'next-intl/server';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui';
+import { LuArrowRight, LuGlobe, LuLayers, LuPalette, LuSparkles } from 'react-icons/lu';
+import { Badge, Button } from '@/components/ui';
 
 export default function HomePage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = use(params);
   setRequestLocale(locale);
   const t = useTranslations('HomePage');
 
+  const stack = [
+    { name: 'Next.js', text: t('stackNext'), icon: LuLayers },
+    { name: 'Tailwind CSS', text: t('stackTailwind'), icon: LuPalette },
+    { name: 'next-intl', text: t('stackIntl'), icon: LuGlobe },
+    { name: 'react-icons', text: t('stackIcons'), icon: LuSparkles }
+  ];
+
   return (
-    <main className="flex flex-1 items-center justify-center p-8">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <div className="flex flex-col items-start gap-3">
-            <Badge tone="accent" dot>
-              DafkeDD UI
-            </Badge>
-            <div>
-              <CardTitle>{t('title')}</CardTitle>
-              <CardDescription>{t('description')}</CardDescription>
-            </div>
+    <main className="relative flex flex-1 flex-col items-center justify-center gap-7 overflow-x-clip px-6 pt-10 pb-16 text-center">
+      <div className="pointer-events-none absolute top-[-200px] left-1/2 h-[640px] w-[900px] -translate-x-1/2 bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--accent)_14%,transparent),transparent)]" />
+
+      <Badge tone="accent" dot>
+        DafkeDD UI
+      </Badge>
+
+      <div className="relative flex flex-col items-center gap-3.5">
+        <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">{t('title')}</h1>
+        <p className="max-w-md text-lg leading-relaxed text-[var(--text-2)]">{t('description')}</p>
+      </div>
+
+      <div className="relative flex flex-wrap justify-center gap-2.5">
+        <Button className="h-11 gap-2 px-5">
+          {t('start')}
+          <LuArrowRight aria-hidden />
+        </Button>
+        <Button variant="secondary" className="h-11 px-5">
+          {t('docs')}
+        </Button>
+      </div>
+
+      <div className="relative mt-10 grid w-full max-w-3xl grid-cols-2 gap-3 text-left sm:grid-cols-4">
+        {stack.map(({ name, text, icon: Icon }) => (
+          <div key={name} className="flex flex-col gap-2.5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+            <span className="grid size-8 place-items-center rounded-[10px] bg-[var(--accent-tint)] text-[var(--accent)]">
+              <Icon aria-hidden />
+            </span>
+            <span className="text-sm font-semibold">{name}</span>
+            <span className="text-[13px] leading-snug text-[var(--text-3)]">{text}</span>
           </div>
-        </CardHeader>
-        <CardContent className="flex gap-2">
-          <Button>{t('start')}</Button>
-          <Button variant="secondary">{t('docs')}</Button>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
     </main>
   );
 }

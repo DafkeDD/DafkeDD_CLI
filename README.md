@@ -140,6 +140,7 @@ git switch developer
 
 ## Changelog
 
+- **0.8.0**: moderner en cleaner voorbeeldpagina met DafkeDD UI (hero, logo, taal/thema-pillen, kaartjes met de stack en react-icons); werkt in licht en donker en op mobiel.
 - **0.7.0**: eerste vraag is nu de repo-naam, daarna het platform (alleen GitHub) en private/public; na de installatie wordt het project gepusht naar GitHub.
 - **0.6.0**: react-icons wordt mee geïnstalleerd in de frontend.
 - **0.5.0**: vier talen (Engels standaard, Nederlands, Frans, Duits), het thema springt niet meer terug bij een taalwissel, en het voorbeeld gebruikt thema en componenten van DafkeDD UI (bij "alle componenten"). `AGENTS.md` en `next-env.d.ts` worden niet meer door Prettier gecontroleerd.
