@@ -732,6 +732,7 @@ export const nestjs = {
     label: 'NestJS',
     description: 'NestJS (latest) + i18n (nl, fr, en, de) + validation + Swagger + config + Prettier, in ./backend',
     dir: DIR,
+    docsFile: 'api.md',
     /** The API the frontend talks to (the frontend uses it for its language link and status card). */
     api: { port: PORT },
 

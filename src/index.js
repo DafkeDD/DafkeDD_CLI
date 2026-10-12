@@ -5,10 +5,21 @@ import { runSteps } from './progress.js'
 import { frontends } from './frontends/index.js'
 import { backends } from './backends/index.js'
 import { askRepo, repoSteps } from './repo.js'
+import { docsStep } from './docs.js'
 
 export const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
 const NONE = 'none'
+
+/** One step that gathers the READMEs of the installed parts into ./docs (only for parts that document themselves). */
+function docsSteps({ projectDir, frontend, backend }) {
+    const parts = [frontend, backend]
+        .filter(item => item?.docsFile)
+        .map(item => ({ dir: item.dir, file: item.docsFile, title: item.label }))
+    if (parts.length === 0) return []
+    const swagger = backend?.api ? `http://localhost:${backend.api.port}/docs` : null
+    return [docsStep({ projectDir, parts, swagger })]
+}
 
 const choicesOf = (registry, noneLabel) => [
     ...Object.values(registry).map(item => ({ name: item.label, value: item.id, description: item.description })),
@@ -62,6 +73,7 @@ export async function main({
               })
             : []),
         ...(backend ? await backend.steps({ projectDir, answers: backendAnswers }) : []),
+        ...docsSteps({ projectDir, frontend, backend }),
         ...(repo ? repoSteps({ projectDir, repo }) : [])
     ]
     if (steps.length === 0) {

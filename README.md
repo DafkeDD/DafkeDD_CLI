@@ -79,19 +79,22 @@ are ignored as well, because Next.js rewrites them itself.
 Everything the CLI installs is documented, and the documentation is generated together with the code so it always
 matches what was installed:
 
-- **`./backend/README.md`**: how to start, all npm scripts, every `.env` variable, the language detection and the error
+Everything ends up in **one folder, `./docs`**, with an index (`docs/README.md`). As the last step the CLI gathers the
+generated READMEs there and leaves a short pointer README in `./backend` and `./frontend`:
+
+- **`./docs/api.md`**: how to start, all npm scripts, every `.env` variable, the language detection and the error
   format, the database (and the users table), the login flow and **every API endpoint** with its body fields, a `curl`
   example, the response and all error codes (with the English message). The tests check that every route of the
   generated controllers is described there.
+- **`./docs/frontend.md`**: structure, languages, theme, icons, DafkeDD UI, **how to call the API** (`useApi()` in
+  client components, `apiFetch()` on the server, `ApiError`), and the login pages when they were installed.
 - **Swagger / OpenAPI** at `http://localhost:4000/docs`: every endpoint has a description and its responses, you can try
   calls from the browser and choose the `Accept-Language`.
-- **`./frontend/README.md`**: structure, languages, theme, icons, DafkeDD UI, **how to call the API** (`useApi()` in
-  client components, `apiFetch()` on the server, `ApiError`), and the login pages when they were installed.
 - **Code comments** on every generated function that is not obvious.
 
 When you add an endpoint to a generated backend: add `@ApiOperation` (and the response decorators) to the route, add it
-to `README.md`, and add a test for it. When you change this CLI, update this README, `CONTRIBUTING.md` and the changelog
-(see [CONTRIBUTING](CONTRIBUTING.md)).
+to the endpoint list in `src/backends/docs.js`, and add a test for it. When you change this CLI, update this README,
+`CONTRIBUTING.md` and the changelog (see [CONTRIBUTING](CONTRIBUTING.md)).
 
 ## Installation
 
@@ -340,6 +343,8 @@ git switch developer
 
 ## Changelog
 
+- **0.16.0**: one central documentation folder `./docs` (index, `api.md`, `frontend.md`) instead of READMEs spread over
+  `./backend` and `./frontend`; those now only point to it.
 - **0.15.0**: documentation for everything that is generated: `./backend/README.md` with every API endpoint (body,
   `curl` example, response, errors), Swagger descriptions on every route, `./frontend/README.md` with how to call the
   API; tests check that every route is documented.

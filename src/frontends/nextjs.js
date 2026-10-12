@@ -904,6 +904,7 @@ export const nextjs = {
     description:
         'Next.js (laatste) + Tailwind CSS (laatste) + next-intl (laatste) + react-icons + Prettier, in ./frontend',
     dir: DIR,
+    docsFile: 'frontend.md',
     next: [`cd ${DIR}`, 'npm run dev'],
 
     async ask({ prompts = { select } } = {}) {
