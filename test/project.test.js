@@ -53,3 +53,8 @@ test('CI runs the tests on pushes and pull requests, and releases wait for green
     assert.match(release, /needs:\s*test/)
     assert.match(release, /npm test/)
 })
+
+test('.gitattributes forces LF line endings, so Prettier passes on Windows runners too', async () => {
+    const attributes = await read('.gitattributes')
+    assert.match(attributes, /^\* text=auto eol=lf$/m)
+})

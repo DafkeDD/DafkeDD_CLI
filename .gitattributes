@@ -1,0 +1,2 @@
+# Always check out with LF so Prettier (endOfLine: lf) and the tests behave the same on Windows, macOS and Linux
+* text=auto eol=lf

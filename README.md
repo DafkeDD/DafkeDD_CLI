@@ -285,6 +285,7 @@ git switch developer
 
 ## Changelog
 
+- **0.13.2**: `.gitattributes` forces LF line endings, which fixes the failing format check of the CI on Windows.
 - **0.13.1**: for a local PostgreSQL the CLI now creates the database when it does not exist yet.
 - **0.13.0**: new database question (PostgreSQL, in Docker or local) with port, user, password and database name;
   `docker-compose.yml`, `.env`, `pg` driver (no ORM), database health check with translated errors and a connection test
