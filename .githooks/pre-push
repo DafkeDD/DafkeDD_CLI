@@ -1,0 +1,8 @@
+#!/bin/sh
+# Blocks `git push` unless the formatting is correct and ALL tests are green.
+echo "pre-push: running format check and tests..."
+npm run format:check --silent && npm test --silent || {
+    echo ""
+    echo "Push blocked: fix the failing tests / formatting first (npm test, npm run format)."
+    exit 1
+}

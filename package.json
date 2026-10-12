@@ -1,6 +1,6 @@
 {
     "name": "dafkedd_cli",
-    "version": "0.10.0",
+    "version": "0.11.0",
     "description": "Interactieve CLI om per project een frontend te installeren (nooit globaal)",
     "type": "module",
     "bin": {
@@ -12,7 +12,9 @@
     "scripts": {
         "start": "node bin/cli.js",
         "format": "prettier --write .",
-        "format:check": "prettier --check ."
+        "format:check": "prettier --check .",
+        "test": "node scripts/run-tests.mjs",
+        "postinstall": "node scripts/setup-hooks.mjs"
     },
     "dependencies": {
         "@inquirer/prompts": "^8.7.3",

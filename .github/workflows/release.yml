@@ -8,14 +8,29 @@ permissions:
     contents: write
 
 jobs:
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - run: npm ci
+            - run: npm run format:check
+            - run: npm test
+
     release:
+        needs: test
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
               with:
                   fetch-depth: 0
 
-            - name: Versie bepalen
+            - name: Determine version
               id: version
               run: |
                   PKG=$(node -p "require('./package.json').version")
@@ -34,7 +49,7 @@ jobs:
                   fi
                   echo "version=$NEXT" >> "$GITHUB_OUTPUT"
 
-            - name: Release aanmaken
+            - name: Create release
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |

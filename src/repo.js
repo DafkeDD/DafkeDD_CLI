@@ -7,45 +7,53 @@ export const platforms = {
     github: { id: 'github', label: 'GitHub' }
 }
 
-async function ghOwner(cwd) {
+export const NAME_PATTERN = /^[\w.-]+$/
+
+/** Returns the login of the authenticated GitHub user, or null when `gh` is unavailable or not logged in. */
+export async function ghOwner(cwd, exec = run) {
     try {
-        return (await run('gh', ['api', 'user', '--jq', '.login'], { cwd })).trim() || null
+        return (await exec('gh', ['api', 'user', '--jq', '.login'], { cwd })).trim() || null
     } catch {
         return null
     }
 }
 
-async function repoExists(owner, name, cwd) {
+/** True when `<owner>/<name>` already exists on GitHub. */
+export async function repoExists(owner, name, cwd, exec = run) {
     try {
-        await run('gh', ['repo', 'view', `${owner}/${name}`], { cwd })
+        await exec('gh', ['repo', 'view', `${owner}/${name}`], { cwd })
         return true
     } catch {
         return false
     }
 }
 
-/** Vragen: meteen pushen?, repo-naam, platform (voorlopig enkel GitHub) en zichtbaarheid. Geeft null als je niet pusht. */
-export async function askRepo({ projectDir }) {
-    const push = await confirm({ message: 'Wil je het project meteen naar een repo pushen?', default: true })
+/**
+ * Questions: push right away?, platform (GitHub only for now), repo name and visibility.
+ * Returns null when the user does not want to push.
+ * `prompts` and `exec` can be injected (used by the tests).
+ */
+export async function askRepo({ projectDir, prompts = { confirm, input, select }, exec = run }) {
+    const push = await prompts.confirm({ message: 'Wil je het project meteen naar een repo pushen?', default: true })
     if (!push) return null
 
-    const platform = await select({
+    const platform = await prompts.select({
         message: 'Op welk platform wil je pushen?',
         choices: Object.values(platforms).map(p => ({ name: p.label, value: p.id }))
     })
-    const owner = await ghOwner(projectDir)
-    const name = await input({
+    const owner = await ghOwner(projectDir, exec)
+    const name = await prompts.input({
         message: 'Hoe wil je de repo noemen?',
         default: basename(projectDir).replace(/[^\w.-]/g, '-'),
         validate: async v => {
             const value = v.trim()
-            if (!/^[\w.-]+$/.test(value)) return 'Gebruik enkel letters, cijfers, punt, streepje of underscore'
-            if (owner && (await repoExists(owner, value, projectDir)))
+            if (!NAME_PATTERN.test(value)) return 'Gebruik enkel letters, cijfers, punt, streepje of underscore'
+            if (owner && (await repoExists(owner, value, projectDir, exec)))
                 return `De repo "${owner}/${value}" bestaat al, kies een andere naam`
             return true
         }
     })
-    const visibility = await select({
+    const visibility = await prompts.select({
         message: 'Zichtbaarheid van de repo?',
         choices: [
             { name: 'Private', value: 'private' },
@@ -55,16 +63,16 @@ export async function askRepo({ projectDir }) {
     return { name: name.trim(), platform, visibility }
 }
 
-/** Stappen: git init, eerste commit, repo aanmaken en pushen. */
-export function repoSteps({ projectDir, repo }) {
+/** Steps: git init, first commit, create the repo and push. */
+export function repoSteps({ projectDir, repo, exec = run }) {
     return [
         {
             title: 'Git initialiseren',
             weight: 1,
             run: async () => {
-                if (!existsSync(`${projectDir}/.git`)) await run('git', ['init', '-b', 'main'], { cwd: projectDir })
-                await run('git', ['add', '-A'], { cwd: projectDir })
-                await run('git', ['commit', '-m', 'Initial commit'], { cwd: projectDir })
+                if (!existsSync(`${projectDir}/.git`)) await exec('git', ['init', '-b', 'main'], { cwd: projectDir })
+                await exec('git', ['add', '-A'], { cwd: projectDir })
+                await exec('git', ['commit', '-m', 'Initial commit'], { cwd: projectDir })
             }
         },
         {
@@ -72,18 +80,16 @@ export function repoSteps({ projectDir, repo }) {
             weight: 2,
             run: async () => {
                 try {
-                    await run('gh', ['auth', 'status'], { cwd: projectDir })
+                    await exec('gh', ['auth', 'status'], { cwd: projectDir })
                 } catch {
                     throw new Error(
                         'GitHub CLI (gh) is niet geïnstalleerd of niet ingelogd. Voer "gh auth login" uit en probeer opnieuw.'
                     )
                 }
-                await run(
+                await exec(
                     'gh',
                     ['repo', 'create', repo.name, `--${repo.visibility}`, '--source=.', '--remote=origin', '--push'],
-                    {
-                        cwd: projectDir
-                    }
+                    { cwd: projectDir }
                 )
             }
         }

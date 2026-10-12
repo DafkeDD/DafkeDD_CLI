@@ -4,22 +4,22 @@ import path from 'node:path'
 import { select } from '@inquirer/prompts'
 import { run } from '../runner.js'
 
-const DIR = 'frontend'
-const LOCALES = ['en', 'nl', 'fr', 'de']
-const DEFAULT_LOCALE = 'en'
+export const DIR = 'frontend'
+export const LOCALES = ['en', 'nl', 'fr', 'de']
+export const DEFAULT_LOCALE = 'en'
 
 // DafkeDD UI: componentenbibliotheek met een eigen CLI (dafke-ui). De CLI staat nog niet op npm,
 // dus halen we de repo tijdelijk op, draaien de CLI in ./frontend en ruimen de kloon weer op.
-const UI_REPO = 'https://github.com/DafkeDD/DafkeDD_UI.git'
-const UI_BRANCH = 'developer'
-const UI_CONFIG = {
+export const UI_REPO = 'https://github.com/DafkeDD/DafkeDD_UI.git'
+export const UI_BRANCH = 'developer'
+export const UI_CONFIG = {
     componentsDir: 'src/components/ui',
     cssEntry: 'src/components/ui/ui.css',
     importAlias: '@/components/ui'
 }
 
 // Prettier-instellingen (exact zoals opgegeven)
-const PRETTIERRC = `{
+export const PRETTIERRC = `{
     "arrowParens": "avoid",
     "singleQuote": true,
     "jsxSingleQuote": true,
@@ -44,7 +44,7 @@ const PRETTIERRC = `{
 
 // De DafkeDD UI-bestanden blijven ongemoeid, anders ziet 'dafke-ui update' ze als "zelf aangepast".
 // AGENTS.md en next-env.d.ts worden door Next.js zelf herschreven (ook bij 'next dev').
-const PRETTIERIGNORE = `node_modules
+export const PRETTIERIGNORE = `node_modules
 .next
 out
 build
@@ -56,7 +56,7 @@ src/components/ui
 `
 
 // Alle teksten bestaan in elke taal. Voeg je een taal toe aan LOCALES, voeg dan ook hier een vertaling toe.
-const MESSAGES = {
+export const MESSAGES = {
     en: {
         HomePage: {
             title: 'Welcome',
@@ -111,7 +111,7 @@ const MESSAGES = {
     }
 }
 
-const files = {
+export const files = {
     'src/i18n/routing.ts': `import { defineRouting } from 'next-intl/routing';
 
 export const routing = defineRouting({
@@ -375,7 +375,7 @@ export function LocaleSwitcher() {
 }
 
 // Voorbeeld mét DafkeDD UI (enkel bij "alle componenten"): gebruikt het thema en de componenten van de bibliotheek.
-const uiFiles = {
+export const uiFiles = {
     'src/app/[locale]/layout.tsx': `import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
 import { hasLocale, NextIntlClientProvider } from 'next-intl';
@@ -597,7 +597,7 @@ export function LocaleSwitcher() {
 }
 
 // Met DafkeDD UI komen kleuren en lettertype uit de tokens van de bibliotheek (base.css stijlt de body).
-const UI_GLOBALS_CSS = `@import 'tailwindcss';
+export const UI_GLOBALS_CSS = `@import 'tailwindcss';
 @import '../components/ui/ui.css';
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
@@ -611,7 +611,7 @@ const UI_GLOBALS_CSS = `@import 'tailwindcss';
 `
 
 // next.config.ts van create-next-app bevat o.a. de Tailwind-koppeling: nooit overschrijven, enkel next-intl toevoegen.
-async function patchNextConfig(root) {
+export async function patchNextConfig(root) {
     const file = path.join(root, 'next.config.ts')
     let content = await fs.readFile(file, 'utf8')
     if (content.includes('next-intl/plugin')) return
@@ -628,7 +628,7 @@ async function patchNextConfig(root) {
 }
 
 // Dark mode via data-theme (zoals DafkeDD UI) in plaats van enkel prefers-color-scheme.
-async function patchGlobalsCss(root) {
+export async function patchGlobalsCss(root) {
     const file = path.join(root, 'src/app/globals.css')
     let content = await fs.readFile(file, 'utf8')
     if (content.includes('data-theme')) return
@@ -646,7 +646,7 @@ async function patchGlobalsCss(root) {
     await fs.writeFile(file, content)
 }
 
-async function write(root, rel, content) {
+export async function write(root, rel, content) {
     const target = path.join(root, rel)
     await fs.mkdir(path.dirname(target), { recursive: true })
     await fs.writeFile(target, content)
@@ -660,8 +660,8 @@ export const nextjs = {
     dir: DIR,
     next: [`cd ${DIR}`, 'npm run dev'],
 
-    async ask() {
-        const ui = await select({
+    async ask({ prompts = { select } } = {}) {
+        const ui = await prompts.select({
             message: 'DafkeDD UI installeren?',
             choices: [
                 {
@@ -680,7 +680,7 @@ export const nextjs = {
         return { ui }
     },
 
-    async steps({ projectDir, answers }) {
+    async steps({ projectDir, answers, exec = run }) {
         const root = path.join(projectDir, DIR)
         const exists = await fs.stat(root).then(
             () => true,
@@ -699,7 +699,7 @@ export const nextjs = {
                 title: 'Next.js + Tailwind CSS aanmaken',
                 weight: 3,
                 run: () =>
-                    run(
+                    exec(
                         'npx',
                         [
                             '--yes',
@@ -723,23 +723,23 @@ export const nextjs = {
             {
                 title: 'Dependencies installeren',
                 weight: 4,
-                run: () => run('npm', ['install'], { cwd: root })
+                run: () => exec('npm', ['install'], { cwd: root })
             },
             {
                 title: 'next-intl installeren',
                 weight: 2,
-                run: () => run('npm', ['install', 'next-intl@latest'], { cwd: root })
+                run: () => exec('npm', ['install', 'next-intl@latest'], { cwd: root })
             },
             {
                 title: 'react-icons installeren',
                 weight: 2,
-                run: () => run('npm', ['install', 'react-icons@latest'], { cwd: root })
+                run: () => exec('npm', ['install', 'react-icons@latest'], { cwd: root })
             },
             {
                 title: 'Prettier installeren',
                 weight: 2,
                 run: () =>
-                    run('npm', ['install', '--save-dev', 'prettier@latest', 'prettier-plugin-tailwindcss@latest'], {
+                    exec('npm', ['install', '--save-dev', 'prettier@latest', 'prettier-plugin-tailwindcss@latest'], {
                         cwd: root
                     })
             },
@@ -770,7 +770,7 @@ export const nextjs = {
                     run: async () => {
                         uiTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-ui-'))
                         try {
-                            await run('git', [
+                            await exec('git', [
                                 'clone',
                                 '--depth',
                                 '1',
@@ -792,14 +792,14 @@ export const nextjs = {
                     run: async () => {
                         try {
                             await write(root, 'dafke-ui.json', JSON.stringify(UI_CONFIG, null, 2) + '\n')
-                            await run('node', [cli(), 'init', '--yes'], { cwd: root })
-                            if (answers.ui === 'all') await run('node', [cli(), 'add', '--all'], { cwd: root })
+                            await exec('node', [cli(), 'init', '--yes'], { cwd: root })
+                            if (answers.ui === 'all') await exec('node', [cli(), 'add', '--all'], { cwd: root })
 
                             // CSS-verzamelbestand van DafkeDD UI laden in de globale stylesheet
                             const css = path.join(root, 'src/app/globals.css')
                             const importLine = '@import "../components/ui/ui.css";'
                             let content = await fs.readFile(css, 'utf8')
-                            if (!content.includes(importLine)) {
+                            if (!/components\/ui\/ui\.css/.test(content)) {
                                 content = content.replace(/(@import\s+["']tailwindcss["'];?\r?\n)/, `$1${importLine}\n`)
                                 if (!content.includes(importLine)) content = `${importLine}\n${content}`
                                 await fs.writeFile(css, content)
@@ -825,13 +825,13 @@ export const nextjs = {
                     pkg.scripts = { ...pkg.scripts, format: 'prettier --write .', 'format:check': 'prettier --check .' }
                     await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
 
-                    await run('npx', ['--no-install', 'prettier', '--write', '.'], { cwd: root })
+                    await exec('npx', ['--no-install', 'prettier', '--write', '.'], { cwd: root })
                 }
             },
             {
                 title: 'Project controleren (build)',
                 weight: 3,
-                run: () => run('npm', ['run', 'build'], { cwd: root })
+                run: () => exec('npm', ['run', 'build'], { cwd: root })
             }
         )
 

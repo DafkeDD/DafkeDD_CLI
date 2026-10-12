@@ -4,7 +4,7 @@ const isWin = process.platform === 'win32'
 
 // Op Windows moeten npm/npx via cmd.exe draaien (.cmd-bestanden). Een volledige
 // commandostring zonder args-array vermijdt de Node DEP0190-waarschuwing.
-function quote(arg) {
+export function quote(arg) {
     return /^[\w@./:=+-]+$/.test(arg) ? arg : `"${String(arg).replace(/"/g, '\\"')}"`
 }
 

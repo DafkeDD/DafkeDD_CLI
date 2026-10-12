@@ -1,136 +1,140 @@
 # DafkeDD_CLI
 
-Interactieve CLI die per project een frontend installeert. Alles wordt **lokaal in het project** geïnstalleerd (in
-`./frontend`), nooit globaal.
+An interactive CLI that installs a frontend **per project**, into `./frontend`. Everything is installed **locally in the
+project**, never globally.
 
-## Wat wordt er geïnstalleerd?
+## What does it install?
 
-| Frontend | Inhoud                                                                                                                                                                                             |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Next.js  | Next.js (laatste versie) + Tailwind CSS (laatste versie) + next-intl (laatste versie) + react-icons + Prettier, in `./frontend`. Optioneel met [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI) |
+| Frontend | Contents                                                                                                                                                                     |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Next.js  | Next.js (latest) + Tailwind CSS (latest) + next-intl (latest) + react-icons + Prettier, in `./frontend`. Optionally with [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI) |
 
-De CLI stelt vragen, daarna volgt één progressbar voor alle stappen: aanmaken, dependencies installeren, next-intl,
-react-icons en Prettier installeren, DafkeDD UI ophalen en installeren, Prettier configureren en een build-controle.
+The CLI asks its questions first, then shows **one progress bar** for all steps: create the app, install dependencies,
+install next-intl, react-icons and Prettier, fetch and install DafkeDD UI, configure Prettier and run a build check.
+Optionally the project is pushed to GitHub as the very last step.
+
+Order of the questions:
+
+1. Which frontend?
+2. The frontend options (for Next.js: install DafkeDD UI?).
+3. Push to a repo right away? If yes: platform (GitHub only for now), repository name (the CLI checks that the name is
+   still free) and private/public.
 
 ### DafkeDD UI
 
-De CLI vraagt of je [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI) wilt installeren:
+The CLI asks whether to install [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI):
 
-- **Alle componenten**: voert `dafke-ui init` en `dafke-ui add --all` uit in `./frontend`. Het voorbeeld gebruikt dan
-  het thema en de componenten van DafkeDD UI (`ThemeProvider`, `Card`, `Badge`, `Button` en `Select`).
-- **Enkel de basis (init)**: alleen config, tokens en helpers. Daarna voeg je zelf componenten toe. Het voorbeeld is dan
-  een eenvoudige versie met Tailwind.
-- **Nee**: niets.
+- **All components**: runs `dafke-ui init` and `dafke-ui add --all` in `./frontend`. The example page then uses the
+  theme and components of DafkeDD UI (`ThemeProvider`, `Badge`, `Button` and `Select`).
+- **Base only (init)**: only config, tokens and helpers. You add components yourself afterwards. The example page is a
+  simple Tailwind version.
+- **No**: nothing.
 
-De componenten komen in `frontend/src/components/ui` (`dafke-ui.json` en `dafke-ui.lock.json` staan in `frontend`) en
-`ui.css` wordt geladen in `src/app/globals.css`. De UI-repo (branch `developer`) wordt tijdelijk opgehaald met
-`git clone` en daarna opgeruimd; er wordt niets globaal geïnstalleerd (geen `npm link`). Vereist daarom Git.
+The components end up in `frontend/src/components/ui` (`dafke-ui.json` and `dafke-ui.lock.json` live in `frontend`) and
+`ui.css` is loaded from `src/app/globals.css`. The UI repository (branch `developer`) is cloned temporarily with
+`git clone` and removed again; nothing is installed globally (no `npm link`). Git is therefore required.
 
 ### react-icons
 
-[react-icons](https://react-icons.github.io/react-icons/) staat als dependency in `frontend`. Gebruik:
-`import { FaReact } from 'react-icons/fa'` en dan `<FaReact />`. Importeer altijd uit de submap van de set
-(`react-icons/fa`, `react-icons/lu`, ...), dan bundelt Next enkel de iconen die je gebruikt.
+[react-icons](https://react-icons.github.io/react-icons/) is a dependency of `frontend`. Usage:
+`import { FaReact } from 'react-icons/fa'` and then `<FaReact />`. Always import from the sub-folder of the icon set
+(`react-icons/fa`, `react-icons/lu`, ...) so Next only bundles the icons you use.
 
-### Taal en thema
+### Language and theme
 
-Rechtsboven staan twee dropdowns (componenten in `src/components`):
+The example has a language dropdown and a theme dropdown (components in `src/components`). With DafkeDD UI they sit in
+one floating pill at the bottom of the page, in the plain variant they are simple native selects.
 
-- **Taal** (`locale-switcher.tsx`): wisselt tussen English, Nederlands, Français en Deutsch zonder dat de URL verandert.
-  De keuze blijft bewaard.
-- **Thema** (`theme-switcher.tsx`): **Licht**, **Donker** of **Systeem** (volgt het besturingssysteem). De keuze blijft
-  bewaard in `localStorage` en wordt gezet vóór het schilderen, dus zonder flits.
+- **Language** (`locale-switcher.tsx`): switches between English, Nederlands, Français and Deutsch without changing the
+  URL. The choice is remembered.
+- **Theme** (`theme-switcher.tsx`): **Light**, **Dark** or **System** (follows the operating system). The choice is
+  stored in `localStorage` and applied before the first paint, so there is no flash.
 
-Het thema staat als `data-theme="light|dark"` op `<html>`. Dat is dezelfde schakelaar als die van DafkeDD UI, en
-Tailwind's `dark:`-klassen volgen hem ook. Bij een taalwissel zet Next de attributen van `<html>` terug;
-`theme-script.tsx` past het opgeslagen thema dan meteen opnieuw toe, zodat het thema niet terugspringt. Met DafkeDD UI
-zijn de dropdowns de `Select` van de bibliotheek en gebruikt het thema de `ThemeProvider` (opslagsleutel `lui-theme`).
-Een taal toevoegen kan in `src/i18n/routing.ts`, met een bijhorend bestand `messages/<taal>.json` (altijd alle teksten
-vertalen).
+Four languages are configured: **English (`en`, the default)**, Dutch (`nl`), French (`fr`) and German (`de`). Every
+text exists in all four languages (`messages/en.json`, `nl.json`, `fr.json`, `de.json`). The language is not part of the
+URL: you browse to `http://localhost:3000/`; the language comes from the user's choice (cookie), otherwise from the
+browser language, otherwise it is English. To add a language, extend `src/i18n/routing.ts` and add a matching
+`messages/<language>.json` (always translate every text).
+
+The theme is set as `data-theme="light|dark"` on `<html>`. This is the same switch DafkeDD UI uses, and Tailwind's
+`dark:` classes follow it too. When the language changes, Next resets the attributes of `<html>`; `theme-script.tsx`
+re-applies the stored theme immediately so the theme never jumps back. With DafkeDD UI the dropdowns are the library's
+`Select` and the theme uses its `ThemeProvider` (storage key `lui-theme`).
 
 ### Prettier
 
-Prettier en `prettier-plugin-tailwindcss` worden als devDependency geïnstalleerd, met `.prettierrc` (4 spaties, geen
-puntkomma's, enkele quotes, `printWidth` 120, `proseWrap: always`) en `.prettierignore`. De scripts `npm run format` en
-`npm run format:check` zijn toegevoegd en het project wordt meteen geformatteerd. De map `src/components/ui` wordt
-bewust niet geformatteerd, zodat `dafke-ui update` je bestanden niet als "zelf aangepast" ziet. `AGENTS.md` en
-`next-env.d.ts` staan ook in `.prettierignore`, want Next.js herschrijft ze zelf.
+Prettier and `prettier-plugin-tailwindcss` are installed as devDependencies, together with `.prettierrc` (4 spaces, no
+semicolons, single quotes, `printWidth` 120, `proseWrap: always`) and `.prettierignore`. The scripts `npm run format`
+and `npm run format:check` are added and the project is formatted straight away. The folder `src/components/ui` is
+deliberately not formatted, so `dafke-ui update` does not see your files as "modified". `AGENTS.md` and `next-env.d.ts`
+are ignored as well, because Next.js rewrites them itself.
 
-Er worden vier talen ingesteld: **Engels (`en`, standaard)**, Nederlands (`nl`), Frans (`fr`) en Duits (`de`). Alle
-teksten bestaan in alle vier de talen (`messages/en.json`, `nl.json`, `fr.json`, `de.json`). De taal staat niet in de
-URL: je surft naar `http://localhost:3000/`, de taal komt uit de keuze van de gebruiker (cookie), anders uit de
-browsertaal, en anders is het Engels.
+## Installation
 
-## Installeren
+Requirements: [Node.js](https://nodejs.org) 20 or newer and Git.
 
-Vereist: [Node.js](https://nodejs.org) 20 of hoger en Git.
+### Without installing (recommended)
 
-### Zonder installatie (aanbevolen)
-
-Ga naar de map van je project en voer uit (haalt de branch `developer` op, de standaardbranch):
+Go to your project folder and run (this fetches the `developer` branch, the default branch):
 
 ```
 npx --allow-git=all github:DafkeDD/DafkeDD_CLI
 ```
 
-> **npm 12 of nieuwer:** npm blokkeert standaard het ophalen van pakketten via git (`allow-git=none`), waardoor je de
-> fout `EALLOWGIT` krijgt. Daarom staat `--allow-git=all` in de commando's hieronder. Op npm 11 of ouder mag je die vlag
-> weglaten. Permanent aanzetten kan met `npm config set allow-git all`.
+> **npm 12 or newer:** npm blocks fetching packages through git by default (`allow-git=none`), which results in the
+> error `EALLOWGIT`. That is why `--allow-git=all` is part of the commands below. On npm 11 or older you can leave the
+> flag out. To enable it permanently use `npm config set allow-git all`.
 
-### Eenmalig installeren (commando `DafkeDD_CLI`)
+### Install once (command `DafkeDD_CLI`)
 
 ```
 npm install -g --allow-git=all github:DafkeDD/DafkeDD_CLI
 ```
 
-Daarna in elke projectmap:
+Afterwards, in any project folder:
 
 ```
 DafkeDD_CLI
 ```
 
-Updaten kan met hetzelfde installatiecommando.
+Update by running the same install command again.
 
-> Dit installeert alleen de CLI zelf globaal. De frontend zelf komt altijd lokaal in `./frontend` van het project.
+> This only installs the CLI itself globally. The frontend always goes into `./frontend` of the project.
 
-### Versies
+### Versions
 
-| Doel                                     | Commando                                                |
-| ---------------------------------------- | ------------------------------------------------------- |
-| Ontwikkelversie (`developer`, standaard) | `npx --allow-git=all github:DafkeDD/DafkeDD_CLI`        |
-| Laatste release (`main`)                 | `npx --allow-git=all github:DafkeDD/DafkeDD_CLI#main`   |
-| Vaste versie                             | `npx --allow-git=all github:DafkeDD/DafkeDD_CLI#v0.2.0` |
+| Goal                                       | Command                                                 |
+| ------------------------------------------ | ------------------------------------------------------- |
+| Development version (`developer`, default) | `npx --allow-git=all github:DafkeDD/DafkeDD_CLI`        |
+| Latest release (`main`)                    | `npx --allow-git=all github:DafkeDD/DafkeDD_CLI#main`   |
+| Fixed version                              | `npx --allow-git=all github:DafkeDD/DafkeDD_CLI#v0.2.0` |
 
-Is de repo privé, dan moet je op die machine ingelogd zijn bij GitHub (`gh auth login` of een SSH-sleutel). Gebruik dan
-eventueel `git+ssh://git@github.com/DafkeDD/DafkeDD_CLI.git`.
+If the repository is private you must be logged in to GitHub on that machine (`gh auth login` or an SSH key). You can
+also use `git+ssh://git@github.com/DafkeDD/DafkeDD_CLI.git`.
 
-## Gebruik
+## Usage
 
-1. Ga naar de map van je project.
-2. Start de CLI (zie hierboven).
-3. Kies de frontend (voorlopig alleen Next.js) en beantwoord de vragen daarover (zoals DafkeDD UI).
-4. Als laatste: de vraag of je het project meteen naar een repo wilt pushen. Zo ja: het platform (voorlopig alleen
-   GitHub), de naam van de repo (de CLI controleert of die naam al bestaat) en private of public.
-5. Wacht tot de progressbar klaar is. Als je koos om te pushen, staat je project (met `./frontend`) daarna als eerste
-   commit op GitHub.
-6. Start de frontend:
+1. Go to the folder of your project.
+2. Start the CLI (see above).
+3. Choose the frontend (only Next.js for now) and answer its questions (such as DafkeDD UI).
+4. Last: choose whether to push to a repository right away (platform, name, private/public).
+5. Wait until the progress bar is done. If you chose to push, your project (including `./frontend`) is now the first
+   commit on GitHub.
+6. Start the frontend:
 
 ```
 cd frontend
 npm run dev
 ```
 
-Bestaat `./frontend` al, dan stopt de CLI zonder iets te verwijderen.
+If `./frontend` already exists, the CLI stops without deleting anything.
 
-### Repo pushen (GitHub)
+### Pushing to GitHub
 
-De CLI doet `git init` in de projectmap, maakt een eerste commit en maakt met de [GitHub CLI](https://cli.github.com)
-(`gh`) de repo aan en pusht. Daarvoor moet `gh` geïnstalleerd zijn en moet je ingelogd zijn (`gh auth login`).
+The CLI runs `git init` in the project folder, makes a first commit, and uses the [GitHub CLI](https://cli.github.com)
+(`gh`) to create the repository and push. `gh` must be installed and you must be logged in (`gh auth login`).
 
-## Lokaal ontwikkelen
-
-Prettier staat ook in deze repo (zelfde `.prettierrc` als in de frontend, ook voor de latere backend): `npm install`,
-daarna `npm run format` of `npm run format:check`.
+## Development
 
 ```
 git clone https://github.com/DafkeDD/DafkeDD_CLI.git
@@ -139,30 +143,55 @@ npm install
 node bin/cli.js
 ```
 
-Optioneel `npm link` om het commando `DafkeDD_CLI` lokaal te gebruiken.
+`npm install` also activates the git hooks (see below). Optionally use `npm link` to run the `DafkeDD_CLI` command from
+your checkout.
 
-### Structuur
+| Command                | What it does                                 |
+| ---------------------- | -------------------------------------------- |
+| `npm test`             | Runs the whole test suite                    |
+| `npm run format`       | Formats the repository with Prettier         |
+| `npm run format:check` | Checks the formatting without changing files |
+
+### Tests are mandatory
+
+Every piece of code must have tests, and **code cannot be pushed while the tests are not green**:
+
+- A **pre-push git hook** (`.githooks/pre-push`, activated by `npm install`) runs `npm run format:check` and `npm test`
+  and blocks the push when something fails.
+- **GitHub Actions** (`.github/workflows/ci.yml`) runs the same checks on every push and pull request to `developer` and
+  `main`, on Linux and Windows with Node 20 and 22. The release workflow only runs after the tests passed.
+- Hooks can be skipped locally (`--no-verify`), so also enable **branch protection** on `developer` and `main` in the
+  GitHub settings with the CI checks as _required status checks_.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how the tests are written.
+
+### Structure
 
 ```
-bin/cli.js               # startpunt
-src/index.js             # vragen en flow
-src/progress.js          # één progressbar voor alle stappen
-src/runner.js            # commando's stil uitvoeren
-src/frontends/index.js   # lijst van beschikbare frontends
-src/frontends/nextjs.js  # Next.js + Tailwind + next-intl + Prettier + DafkeDD UI
+bin/cli.js               # entry point
+src/index.js             # questions and flow
+src/progress.js          # one progress bar for all steps
+src/runner.js            # runs commands quietly
+src/repo.js              # push questions + git / GitHub steps
+src/frontends/index.js   # list of available frontends
+src/frontends/nextjs.js  # Next.js + Tailwind + next-intl + react-icons + Prettier + DafkeDD UI
+test/                    # test suite (node:test)
+scripts/                 # test runner and git hook setup
+.githooks/               # pre-push hook
 ```
 
-Een nieuwe frontend toevoegen: maak een bestand in `src/frontends/` (naar het voorbeeld van `nextjs.js`) en registreer
-het in `src/frontends/index.js`.
+To add a new frontend: create a file in `src/frontends/` (follow `nextjs.js`), register it in `src/frontends/index.js`
+and add tests for it in `test/`.
 
-## Branches en releases
+## Branches and releases
 
-- `developer` is de standaardbranch; hier werk je op.
-- Een push naar `main` maakt automatisch een nieuwe GitHub release (`.github/workflows/release.yml`).
-- Het versienummer telt automatisch +1 bij het patchnummer. Wil je een hogere versie (bijvoorbeeld `0.2.0`), verhoog dan
-  `version` in `package.json` voor je naar `main` pusht.
+- `developer` is the default branch; this is where you work. Everything goes to `developer` first.
+- Merging into `main` is only done on request. A push to `main` automatically creates a new GitHub release
+  (`.github/workflows/release.yml`), after the tests passed.
+- The version number automatically bumps the patch number. If you want a higher version (for example `0.2.0`), raise
+  `version` in `package.json` before pushing to `main`.
 
-Release maken:
+Creating a release:
 
 ```
 git switch main
@@ -173,25 +202,28 @@ git switch developer
 
 ## Changelog
 
-- **0.10.0**: de CLI vraagt of je meteen wilt pushen (alleen dan volgen platform, naam en zichtbaarheid) en controleert
-  of de repo-naam al bestaat; DafkeDD UI komt van de branch `developer`; Prettier (met `.prettierrc`) staat nu ook in
-  deze CLI-repo (`npm run format`, `npm run format:check`).
-- **0.9.0**: taal- en themakeuze staan nu samen in één zwevende pill onderaan (opent naar boven, ook op mobiel); header
-  toont enkel het logo.
-- **0.8.1**: volgorde van de vragen: eerst de frontend (en DafkeDD UI), pas als laatste de GitHub-vragen.
-- **0.8.0**: moderner en cleaner voorbeeldpagina met DafkeDD UI (hero, logo, taal/thema-pillen, kaartjes met de stack en
-  react-icons); werkt in licht en donker en op mobiel.
-- **0.7.0**: eerste vraag is nu de repo-naam, daarna het platform (alleen GitHub) en private/public; na de installatie
-  wordt het project gepusht naar GitHub.
-- **0.6.0**: react-icons wordt mee geïnstalleerd in de frontend.
-- **0.5.0**: vier talen (Engels standaard, Nederlands, Frans, Duits), het thema springt niet meer terug bij een
-  taalwissel, en het voorbeeld gebruikt thema en componenten van DafkeDD UI (bij "alle componenten"). `AGENTS.md` en
-  `next-env.d.ts` worden niet meer door Prettier gecontroleerd.
-- **0.4.0**: geen taalprefix meer in de URL (`/nl` weg), dropdowns voor taal en thema (licht, donker, systeem), en de
-  Tailwind-koppeling van Next.js blijft behouden (de `@theme`-fout in `globals.css` is opgelost: `next.config.ts` wordt
-  niet meer overschreven maar aangevuld).
-- **0.3.0**: optionele installatie van DafkeDD UI (vraag in de CLI), Prettier met eigen `.prettierrc` en scripts
-  `format` / `format:check`.
-- **0.2.0**: versienummer bij het opstarten, één progressbar die continu doorloopt over alle stappen, geen
-  Node-waarschuwingen (DEP0190) meer op Windows, `.npmignore` toegevoegd (geen `gitignore-fallback`-waarschuwing meer).
-- **0.1.0**: eerste versie, Next.js + Tailwind CSS + next-intl in `./frontend`.
+- **0.11.0**: test suite for all code (`npm test`), pre-push hook and CI that block pushes with failing tests, release
+  only after green tests; README and documentation in English; fixed a duplicate `ui.css` import in `globals.css` that
+  the new tests found.
+- **0.10.0**: the CLI asks whether to push right away (only then platform, name and visibility follow) and checks
+  whether the repository name already exists; DafkeDD UI comes from the `developer` branch; Prettier (with
+  `.prettierrc`) is now also used in this CLI repository.
+- **0.9.0**: language and theme selection now sit together in one floating pill at the bottom (opens upwards, also on
+  mobile); the header only shows the logo.
+- **0.8.1**: order of the questions: frontend (and DafkeDD UI) first, the GitHub questions last.
+- **0.8.0**: more modern and cleaner example page with DafkeDD UI (hero, logo, language/theme pills, cards with the
+  stack and react-icons); works in light and dark and on mobile.
+- **0.7.0**: ask for a repository name, platform (GitHub only) and private/public; the project is pushed to GitHub after
+  the installation.
+- **0.6.0**: react-icons is installed in the frontend.
+- **0.5.0**: four languages (English default, Dutch, French, German), the theme no longer jumps back on a language
+  change, and the example uses the theme and components of DafkeDD UI (with "all components"). `AGENTS.md` and
+  `next-env.d.ts` are no longer checked by Prettier.
+- **0.4.0**: no more locale prefix in the URL (no `/nl`), dropdowns for language and theme (light, dark, system), and
+  the Tailwind integration of Next.js is preserved (the `@theme` error in `globals.css` is fixed: `next.config.ts` is
+  patched instead of overwritten).
+- **0.3.0**: optional installation of DafkeDD UI (question in the CLI), Prettier with its own `.prettierrc` and the
+  scripts `format` / `format:check`.
+- **0.2.0**: version number at start-up, one progress bar that keeps moving across all steps, no more Node warnings
+  (DEP0190) on Windows, `.npmignore` added (no more `gitignore-fallback` warning).
+- **0.1.0**: first version, Next.js + Tailwind CSS + next-intl in `./frontend`.

@@ -5,37 +5,46 @@ import { runSteps } from './progress.js'
 import { frontends } from './frontends/index.js'
 import { askRepo, repoSteps } from './repo.js'
 
-const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+export const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
-export async function main() {
-    const projectDir = process.cwd()
-
-    console.log(
+/**
+ * Entry point of the CLI. Order of the questions: frontend, frontend options (e.g. DafkeDD UI),
+ * and last the (optional) GitHub push. Everything is injectable so the tests can run it without prompts.
+ */
+export async function main({
+    projectDir = process.cwd(),
+    prompts = { select },
+    ask = askRepo,
+    registry = frontends,
+    execute = runSteps,
+    log = console.log
+} = {}) {
+    log(
         pc.bold('\nDafkeDD_CLI') +
             pc.dim(` v${version}`) +
             pc.dim('  (alles wordt lokaal in dit project geïnstalleerd, nooit globaal)')
     )
-    console.log(pc.dim(`Projectmap: ${projectDir}\n`))
+    log(pc.dim(`Projectmap: ${projectDir}\n`))
 
-    const choice = await select({
+    const choice = await prompts.select({
         message: 'Welke frontend wil je installeren?',
-        choices: Object.values(frontends).map(f => ({
+        choices: Object.values(registry).map(f => ({
             name: f.label,
             value: f.id,
             description: f.description
         }))
     })
 
-    const frontend = frontends[choice]
+    const frontend = registry[choice]
     const answers = (await frontend.ask?.({ projectDir })) ?? {}
-    const repo = await askRepo({ projectDir })
+    const repo = await ask({ projectDir })
     const steps = [...(await frontend.steps({ projectDir, answers })), ...(repo ? repoSteps({ projectDir, repo }) : [])]
 
-    console.log('')
-    await runSteps(steps)
+    log('')
+    await execute(steps)
 
-    console.log(`\n${pc.green('✔')} ${frontend.label} geïnstalleerd in ${pc.bold('./' + frontend.dir)}`)
-    if (repo) console.log(`${pc.green('✔')} Gepusht naar GitHub: ${pc.bold(repo.name)}`)
-    for (const line of frontend.next ?? []) console.log(pc.dim('  ' + line))
-    console.log('')
+    log(`\n${pc.green('✔')} ${frontend.label} geïnstalleerd in ${pc.bold('./' + frontend.dir)}`)
+    if (repo) log(`${pc.green('✔')} Gepusht naar GitHub: ${pc.bold(repo.name)}`)
+    for (const line of frontend.next ?? []) log(pc.dim('  ' + line))
+    log('')
 }
