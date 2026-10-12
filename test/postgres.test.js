@@ -190,3 +190,12 @@ test('the database error is translated in nl, fr, en and de', () => {
         assert.ok(ERRORS[locale].DATABASE_UNAVAILABLE.trim())
     }
 })
+
+test('the connection check creates the database when it does not exist yet (error 3D000), via the postgres database', () => {
+    const script = databaseFiles['scripts/db-check.mjs']
+    assert.match(script, /3D000/)
+    assert.match(script, /connect\('postgres'\)/)
+    assert.match(script, /CREATE DATABASE/)
+    assert.match(script, /replaceAll\('"', '""'\)/, 'the name is quoted safely')
+    assert.match(script, /Created database/)
+})

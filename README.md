@@ -180,12 +180,15 @@ What you get in `./backend`:
   unit test. Inject `DatabaseService` anywhere and call `this.database.query('SELECT ...', [params])`.
 - `GET /health` returns `{ "status": "ok", "database": "up" }`, or a **translated 503** (`errors.DATABASE_UNAVAILABLE`)
   when the database does not answer.
-- `npm run db:check` tests the connection with the settings from `.env`.
+- `npm run db:check` tests the connection with the settings from `.env` and **creates the database if it does not exist
+  yet** (the user needs the `CREATEDB` right; the default `postgres` user has it). With Docker the database is created
+  by the container.
 - **Docker only:** a `docker-compose.yml` (PostgreSQL 17, data in a named volume, health check) that reads everything
   from `.env`, and the scripts `npm run db:up` (start and wait until healthy), `npm run db:down` and `npm run db:logs`.
   Docker has to be installed and running; the CLI does not start it for you.
-- **Local only:** as the last step the CLI tests the connection. If PostgreSQL is not reachable (yet) the install still
-  finishes and the CLI tells you at the end; fix `./backend/.env` or start the database and run `npm run db:check`.
+- **Local only:** as the last step the CLI runs `db:check`, which also creates your database. If PostgreSQL is not
+  reachable (yet) the install still finishes and the CLI tells you at the end; fix `./backend/.env` or start the
+  database and run `npm run db:check`.
 
 The generated tests never need a database: the e2e tests replace `DatabaseService` by a fake.
 
@@ -282,6 +285,7 @@ git switch developer
 
 ## Changelog
 
+- **0.13.1**: for a local PostgreSQL the CLI now creates the database when it does not exist yet.
 - **0.13.0**: new database question (PostgreSQL, in Docker or local) with port, user, password and database name;
   `docker-compose.yml`, `.env`, `pg` driver (no ORM), database health check with translated errors and a connection test
   for local databases; the frontend is connected to the backend with an API status card on the example page that shows
