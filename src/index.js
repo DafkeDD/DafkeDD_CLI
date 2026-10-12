@@ -5,7 +5,7 @@ import { runSteps } from './progress.js'
 import { frontends } from './frontends/index.js'
 import { backends } from './backends/index.js'
 import { askRepo, repoSteps } from './repo.js'
-import { docsStep } from './docs.js'
+import { docsStep, docsProject } from './docs.js'
 
 export const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
@@ -86,7 +86,8 @@ export async function main({
 
     const installed = [
         { item: frontend, answers },
-        { item: backend, answers: backendAnswers }
+        { item: backend, answers: backendAnswers },
+        { item: docsSteps({ projectDir, frontend, backend }).length > 0 ? docsProject : null, answers: {} }
     ].filter(entry => entry.item)
     log('')
     for (const { item, answers: own } of installed) {

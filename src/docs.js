@@ -42,11 +42,19 @@ createServer(async (req, res) => {
 }).listen(port, '127.0.0.1', () => console.log('Documentation: http://localhost:' + port))
 `
 
+/** The docs folder as a project of its own: listed in the summary of the CLI like the frontend and the backend. */
+export const docsProject = {
+    id: 'docs',
+    label: 'Documentatie',
+    dir: DOCS_DIR,
+    next: [`cd ${DOCS_DIR}`, 'npm run dev', `Documentatie: http://localhost:${DOCS_PORT}`]
+}
+
 const DOCS_PACKAGE = {
     name: 'docs',
     private: true,
     type: 'module',
-    scripts: { docs: 'node serve.mjs', start: 'node serve.mjs' }
+    scripts: { dev: 'node serve.mjs', start: 'node serve.mjs', docs: 'node serve.mjs' }
 }
 
 /** Adds `"docs": "node ../docs/serve.mjs"` to a package.json, keeping its indentation. */

@@ -140,3 +140,36 @@ test('the docs server serves the site and nothing outside ./docs', async () => {
         server.kill()
     }
 })
+
+test('docs is a project of its own: npm run dev in ./docs, and the CLI summary says so', async () => {
+    const dir = await project()
+    await docsStep({ projectDir: dir, parts }).run()
+    const pkg = JSON.parse(await fs.readFile(path.join(dir, DOCS_DIR, 'package.json'), 'utf8'))
+    assert.equal(pkg.scripts.dev, 'node serve.mjs')
+    assert.equal(pkg.scripts.start, 'node serve.mjs')
+
+    const logs = []
+    const item = (id, docsFile) => ({
+        id,
+        label: id,
+        dir: id,
+        docsFile,
+        next: [],
+        ask: async () => ({}),
+        steps: async () => []
+    })
+    await main({
+        projectDir: '/tmp/none',
+        prompts: { select: async c => (c.message.includes('frontend') ? 'fe' : 'be') },
+        ask: async () => null,
+        registry: { fe: item('fe', 'frontend.md') },
+        backendRegistry: { be: item('be', 'api.md') },
+        execute: async () => {},
+        log: line => logs.push(line)
+    })
+    const output = logs.join('\n')
+    assert.match(output, /Documentatie geïnstalleerd in .*\.\/docs/)
+    assert.match(output, /cd docs/)
+    assert.match(output, /npm run dev/)
+    assert.match(output, /http:\/\/localhost:5000/)
+})
