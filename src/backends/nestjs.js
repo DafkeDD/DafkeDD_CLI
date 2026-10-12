@@ -1,9 +1,11 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { input, password, select } from '@inquirer/prompts'
+import { randomBytes } from 'node:crypto'
+import { confirm, input, password, select } from '@inquirer/prompts'
 import { run } from '../runner.js'
 import { PRETTIERRC } from '../frontends/nextjs.js'
 import { databases } from '../databases/index.js'
+import * as login from './auth.js'
 
 export const DIR = 'backend'
 export const LOCALES = ['en', 'nl', 'fr', 'de']
@@ -540,7 +542,8 @@ const replaceOnce = (text, from, to) => {
  * The files of the backend. Without a database this is `files`; with a database (answers of the database question)
  * the module, health check, translations, .env files and tests are extended for it.
  */
-export function buildFiles(database = null) {
+export function buildFiles(database = null, { auth = null } = {}) {
+    if (auth && !database) throw new Error('Login en registratie hebben een database nodig')
     if (!database) return files
     const db = databases[database.id].backend(database)
     const result = { ...files, ...db.files }
@@ -579,7 +582,10 @@ export function buildFiles(database = null) {
         )};
 
 // A fake database: the tests do not need PostgreSQL.
-const database = { ping: vi.fn().mockResolvedValue(true) };
+const database = {
+  ping: vi.fn().mockResolvedValue(true),
+  query: vi.fn().mockResolvedValue({ rows: [] }),
+};
 
 describe('API (e2e)', () => {\n`
     )
@@ -616,6 +622,51 @@ describe('API (e2e)', () => {\n`
 `
     )
     result['test/app.e2e-spec.ts'] = e2e
+
+    if (auth) {
+        Object.assign(result, login.authFiles(login.usersTable(database.database)))
+        result['.env'] += login.envLines({ jwtSecret: auth.jwtSecret })
+        result['.env.example'] += login.envLines({ jwtSecret: login.EXAMPLE_SECRET })
+        for (const locale of LOCALES) {
+            result[`src/i18n/${locale}/errors.json`] = json({
+                ...JSON.parse(result[`src/i18n/${locale}/errors.json`]),
+                ...login.ERRORS[locale]
+            })
+            result[`src/i18n/${locale}/validation.json`] = json({
+                ...TRANSLATIONS[locale].validation,
+                ...login.VALIDATION[locale]
+            })
+        }
+        result['src/app.module.ts'] = replaceOnce(
+            replaceOnce(
+                result['src/app.module.ts'],
+                "import { DatabaseModule } from './database/database.module.js';\n",
+                "import { AuthModule } from './auth/auth.module.js';\nimport { DatabaseModule } from './database/database.module.js';\n"
+            ),
+            '    DatabaseModule,\n',
+            '    DatabaseModule,\n    AuthModule,\n'
+        )
+        result['src/setup.ts'] = replaceOnce(
+            replaceOnce(
+                files['src/setup.ts'],
+                "import { INestApplication } from '@nestjs/common';\n",
+                "import { INestApplication } from '@nestjs/common';\nimport cookieParser from 'cookie-parser';\n"
+            ),
+            '  app.enableCors({',
+            '  app.use(cookieParser());\n  app.enableCors({'
+        )
+        result['src/common/all-exceptions.filter.ts'] = replaceOnce(
+            files['src/common/all-exceptions.filter.ts'],
+            "  409: 'errors.CONFLICT',\n",
+            "  409: 'errors.CONFLICT',\n  429: 'errors.TOO_MANY_REQUESTS',\n"
+        )
+        // The main e2e spec creates the whole app, so it needs a JWT secret too
+        result['test/app.e2e-spec.ts'] = replaceOnce(
+            result['test/app.e2e-spec.ts'],
+            '// A fake database: the tests do not need PostgreSQL.\n',
+            "process.env.JWT_SECRET ??= 'test-only-secret';\n\n// A fake database: the tests do not need PostgreSQL.\n"
+        )
+    }
     return result
 }
 
@@ -651,7 +702,12 @@ export const nestjs = {
     api: { port: PORT },
 
     /** Question: which database? (PostgreSQL only for now), followed by that database's own questions. */
-    async ask({ projectDir = process.cwd(), prompts = { select, input, password }, registry = databases } = {}) {
+    async ask({
+        projectDir = process.cwd(),
+        hasFrontend = false,
+        prompts = { select, input, password, confirm },
+        registry = databases
+    } = {}) {
         const choice = await prompts.select({
             message: 'Welke database wil je gebruiken?',
             choices: [
@@ -659,8 +715,17 @@ export const nestjs = {
                 { name: 'Geen database (later)', value: 'none' }
             ]
         })
-        if (choice === 'none') return { database: null }
-        return { database: await registry[choice].ask({ projectDir, prompts }) }
+        if (choice === 'none') return { database: null, auth: false }
+        const database = await registry[choice].ask({ projectDir, prompts })
+
+        // A test login/register page needs a frontend (the pages) and a database (the users table)
+        const auth = hasFrontend
+            ? await prompts.confirm({
+                  message: `Een test login- en registerpagina toevoegen? (tabel ${login.usersTable(database.database)})`,
+                  default: true
+              })
+            : false
+        return { database, auth }
     },
 
     next(answers) {
@@ -670,7 +735,10 @@ export const nestjs = {
             ...(db?.mode === 'docker' ? ['npm run db:up       (start PostgreSQL in Docker)'] : []),
             ...(db?.mode === 'local' ? ['npm run db:check    (test the database connection)'] : []),
             'npm run start:dev',
-            `API: http://localhost:${PORT}  |  docs: http://localhost:${PORT}/docs`
+            `API: http://localhost:${PORT}  |  docs: http://localhost:${PORT}/docs`,
+            ...(answers?.auth
+                ? ['Login: http://localhost:3000/login  |  register: http://localhost:3000/register']
+                : [])
         ]
     },
 
@@ -679,20 +747,30 @@ export const nestjs = {
         const db = answers?.database
         if (!db) return []
         const where = `${db.host}:${db.port}/${db.database}`
-        if (db.mode === 'docker') return [{ ok: true, text: `PostgreSQL (Docker) ingesteld: ${where}` }]
+        const auth = answers?.auth
+            ? [
+                  {
+                      ok: true,
+                      text: `Login en registratie ingesteld (tabel ${login.usersTable(db.database)}, wordt bij de eerste start van de API aangemaakt)`
+                  }
+              ]
+            : []
+        if (db.mode === 'docker') return [{ ok: true, text: `PostgreSQL (Docker) ingesteld: ${where}` }, ...auth]
         if (db.connection === 'failed') {
             return [
                 {
                     ok: false,
                     text: `Geen verbinding met PostgreSQL op ${where}. Controleer ./${DIR}/.env en start de database; test daarna met npm run db:check`
-                }
+                },
+                ...auth
             ]
         }
-        return [{ ok: true, text: `Verbonden met PostgreSQL op ${where}` }]
+        return [{ ok: true, text: `Verbonden met PostgreSQL op ${where}` }, ...auth]
     },
 
-    async steps({ projectDir, exec = run, answers = {} }) {
+    async steps({ projectDir, exec = run, answers = {}, secret = () => randomBytes(48).toString('hex') }) {
         const database = answers?.database ?? null
+        const withAuth = Boolean(database && answers?.auth)
         const root = path.join(projectDir, DIR)
         if (await exists(root)) throw new Error(`De map ./${DIR} bestaat al. Verwijder of hernoem ze eerst.`)
 
@@ -754,6 +832,20 @@ export const nestjs = {
                       }
                   ]
                 : []),
+            ...(withAuth
+                ? [
+                      {
+                          title: 'Login-pakketten installeren (JWT, cookies, rate limiting)',
+                          weight: 2,
+                          run: async () => {
+                              await exec('npm', ['install', ...login.PACKAGES.dependencies], { cwd: root })
+                              await exec('npm', ['install', '--save-dev', ...login.PACKAGES.devDependencies], {
+                                  cwd: root
+                              })
+                          }
+                      }
+                  ]
+                : []),
             {
                 title: 'Prettier installeren (backend)',
                 weight: 2,
@@ -775,7 +867,10 @@ export const nestjs = {
                     ]) {
                         await fs.rm(path.join(root, rel), { force: true })
                     }
-                    for (const [rel, content] of Object.entries(buildFiles(database))) await write(root, rel, content)
+                    for (const [rel, content] of Object.entries(
+                        buildFiles(database, { auth: withAuth ? { jwtSecret: secret() } : null })
+                    ))
+                        await write(root, rel, content)
                     await patchNestCli(root)
                     if (database) {
                         const pkgPath = path.join(root, 'package.json')

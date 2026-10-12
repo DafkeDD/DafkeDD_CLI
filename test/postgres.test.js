@@ -199,3 +199,10 @@ test('the connection check creates the database when it does not exist yet (erro
     assert.match(script, /replaceAll\('"', '""'\)/, 'the name is quoted safely')
     assert.match(script, /Created database/)
 })
+
+test('the database name is limited to 50 characters, so "<name>users" fits the 63 characters of PostgreSQL', () => {
+    assert.equal(validators.databaseName('shop'), true)
+    assert.equal(validators.databaseName('x'.repeat(50)), true)
+    assert.notEqual(validators.databaseName('x'.repeat(51)), true)
+    assert.notEqual(validators.databaseName('my-db'), true)
+})

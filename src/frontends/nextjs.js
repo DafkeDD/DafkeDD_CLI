@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { select } from '@inquirer/prompts'
 import { run } from '../runner.js'
+import { AUTH_MESSAGES, authFiles } from './auth.js'
 
 export const DIR = 'frontend'
 export const LOCALES = ['en', 'nl', 'fr', 'de']
@@ -686,9 +687,12 @@ export class ApiError extends Error {
 export async function apiFetch<T>(path: string, locale: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set('Accept-Language', locale);
-  const response = await fetch(API_URL + path, { ...init, headers });
+  // credentials: 'include' sends the session cookie of a logged in user along
+  const response = await fetch(API_URL + path, { ...init, headers, credentials: 'include' });
   const body = await response.json().catch(() => null);
-  if (!response.ok) throw new ApiError(response.status, body?.message ?? response.statusText, body);
+  // Validation errors come back as a list of messages (already in the selected language)
+  const message = Array.isArray(body?.message) ? body.message.join('\\n') : body?.message;
+  if (!response.ok) throw new ApiError(response.status, message ?? response.statusText, body);
   return body as T;
 }
 `,
@@ -816,10 +820,18 @@ const replaceOnce = (text, from, to) => {
 
 /** Adds the backend connection to a set of frontend files: API client, status card, texts and the card on the page. */
 export function withApi(fileMap, api, { ui }) {
-    const result = { ...fileMap, ...apiFiles(api) }
+    const result = { ...fileMap, ...apiFiles(api), ...(api.auth ? authFiles() : {}) }
     for (const locale of LOCALES) {
         result[`messages/${locale}.json`] =
-            JSON.stringify({ ...MESSAGES[locale], ApiStatus: API_MESSAGES[locale] }, null, 2) + '\n'
+            JSON.stringify(
+                {
+                    ...MESSAGES[locale],
+                    ApiStatus: API_MESSAGES[locale],
+                    ...(api.auth ? { Auth: AUTH_MESSAGES[locale] } : {})
+                },
+                null,
+                2
+            ) + '\n'
     }
     const page = 'src/app/[locale]/page.tsx'
     const importAfter = ui
@@ -831,6 +843,14 @@ export function withApi(fileMap, api, { ui }) {
         importAfter + "import { ApiStatus } from '@/components/api-status';\n"
     )
     content = replaceOnce(content, '    </main>\n', '      <ApiStatus />\n    </main>\n')
+    if (api.auth) {
+        content = replaceOnce(
+            content,
+            "import { ApiStatus } from '@/components/api-status';\n",
+            "import { ApiStatus } from '@/components/api-status';\nimport { AuthLinks } from '@/components/auth-links';\n"
+        )
+        content = replaceOnce(content, '      <ApiStatus />\n', '      <ApiStatus />\n      <AuthLinks />\n')
+    }
     result[page] = content
     return result
 }

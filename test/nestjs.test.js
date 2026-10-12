@@ -364,7 +364,7 @@ test('ask: "no database" returns no database and asks nothing else', async () =>
             return 'none'
         }
     }
-    assert.deepEqual(await nestjs.ask({ prompts }), { database: null })
+    assert.deepEqual(await nestjs.ask({ prompts }), { database: null, auth: false })
     assert.equal(asked.length, 1)
 })
 
@@ -386,7 +386,7 @@ test('ask: offers PostgreSQL and "no database" and hands over to the database qu
     }
     const result = await nestjs.ask({ projectDir: '/p', prompts, registry })
     assert.deepEqual(choices, ['postgres', 'none'])
-    assert.deepEqual(result, { database: { id: 'postgres', projectDir: '/p' } })
+    assert.deepEqual(result, { database: { id: 'postgres', projectDir: '/p' }, auth: false })
 })
 
 // ---------------------------------------------------------------- generated code with a database

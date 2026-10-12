@@ -48,13 +48,19 @@ export async function main({
         choices: choicesOf(backendRegistry, 'Geen backend')
     })
     const backend = backendChoice === NONE ? null : backendRegistry[backendChoice]
-    const backendAnswers = (await backend?.ask?.({ projectDir })) ?? {}
+    const backendAnswers = (await backend?.ask?.({ projectDir, hasFrontend: Boolean(frontend) })) ?? {}
 
     const repo = await ask({ projectDir })
 
     const steps = [
         // The frontend gets to know the API (url, language link, status card) when a backend is installed.
-        ...(frontend ? await frontend.steps({ projectDir, answers, api: backend?.api ?? null }) : []),
+        ...(frontend
+            ? await frontend.steps({
+                  projectDir,
+                  answers,
+                  api: backend ? { ...backend.api, auth: Boolean(backendAnswers.auth) } : null
+              })
+            : []),
         ...(backend ? await backend.steps({ projectDir, answers: backendAnswers }) : []),
         ...(repo ? repoSteps({ projectDir, repo }) : [])
     ]

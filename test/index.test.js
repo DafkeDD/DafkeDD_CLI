@@ -11,9 +11,9 @@ function setup({ frontend = 'demo-fe', backend = 'demo-be', repo = null } = {}) 
         description: `${label} description`,
         dir,
         next: [`cd ${dir}`, `run ${id}`],
-        ask: async () => {
-            events.push(`${id}.ask`)
-            return { ui: 'all' }
+        ask: async ctx => {
+            events.push(`${id}.ask(${JSON.stringify({ hasFrontend: ctx?.hasFrontend ?? null })})`)
+            return { ui: 'all', auth: true }
         },
         steps: async ctx => {
             events.push(`${id}.steps(${JSON.stringify({ answers: ctx.answers, api: ctx.api ?? null })})`)
@@ -65,7 +65,8 @@ test('main prints the version and the project folder', async () => {
 test('main asks frontend, frontend options, backend and the GitHub question last', async () => {
     const { events, options } = setup()
     await main(options)
-    assert.deepEqual(events.slice(0, 5), ['select.frontend', 'demo-fe.ask', 'select.backend', 'demo-be.ask', 'askRepo'])
+    const order = events.slice(0, 5).map(e => e.replace(/\(.*\)$/, ''))
+    assert.deepEqual(order, ['select.frontend', 'demo-fe.ask', 'select.backend', 'demo-be.ask', 'askRepo'])
 })
 
 test('main offers "no frontend" and "no backend" next to the real choices', async () => {
@@ -88,10 +89,25 @@ test('main runs frontend steps, then backend steps, then the git steps', async (
     assert.match(executed, /^execute\(demo-fe step,demo-be step,Git initialiseren,Repo "demo-repo"/)
 })
 
+test('main tells the backend whether a frontend was chosen (the login pages need one)', async () => {
+    const withFrontend = setup()
+    await main(withFrontend.options)
+    assert.ok(withFrontend.events.includes('demo-be.ask({"hasFrontend":true})'))
+    const without = setup({ frontend: 'none' })
+    await main(without.options)
+    assert.ok(without.events.includes('demo-be.ask({"hasFrontend":false})'))
+})
+
+test('main tells the frontend whether the backend answered yes to the login pages', async () => {
+    const { events, options } = setup()
+    await main(options)
+    assert.ok(events.some(e => e.startsWith('demo-fe.steps') && e.includes('"api":{"port":4000,"auth":true}')))
+})
+
 test('main tells the frontend which API it talks to when a backend is installed', async () => {
     const { events, options } = setup()
     await main(options)
-    assert.ok(events.some(e => e.startsWith('demo-fe.steps') && e.includes('"api":{"port":4000}')))
+    assert.ok(events.some(e => e.startsWith('demo-fe.steps') && e.includes('"port":4000')))
 })
 
 test('main passes no API to the frontend when no backend was chosen', async () => {
@@ -103,7 +119,7 @@ test('main passes no API to the frontend when no backend was chosen', async () =
 test('main works with only a backend', async () => {
     const { events, options } = setup({ frontend: 'none' })
     await main(options)
-    assert.ok(!events.includes('demo-fe.ask'))
+    assert.ok(!events.some(e => e.startsWith('demo-fe.ask')))
     assert.ok(events.includes('execute(demo-be step)'))
 })
 
@@ -120,7 +136,7 @@ test('main works with only a frontend', async () => {
     const { events, logs, options } = setup({ backend: 'none' })
     await main(options)
     assert.ok(events.includes('execute(demo-fe step)'))
-    assert.ok(!events.includes('demo-be.ask'))
+    assert.ok(!events.some(e => e.startsWith('demo-be.ask')))
     assert.ok(!logs.some(l => l.includes('DemoBE')))
 })
 

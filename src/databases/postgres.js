@@ -21,6 +21,10 @@ export const slugify = name => {
 export const validators = {
     identifier: v =>
         IDENTIFIER_PATTERN.test(v.trim()) || 'Gebruik enkel letters, cijfers en underscores (begin met een letter)',
+    // The users table is called <database name>users; PostgreSQL names are at most 63 characters long
+    databaseName: v =>
+        (IDENTIFIER_PATTERN.test(v.trim()) && v.trim().length <= 50) ||
+        'Gebruik enkel letters, cijfers en underscores (begin met een letter, maximaal 50 tekens)',
     host: v => HOST_PATTERN.test(v.trim()) || 'Geef een geldige hostnaam of IP-adres op',
     port: v => {
         const value = v.trim()
@@ -310,7 +314,11 @@ export const postgres = {
             validate: validators.password
         })
         const database = (
-            await prompts.input({ message: 'Databasenaam:', default: project, validate: validators.identifier })
+            await prompts.input({
+                message: 'Databasenaam:',
+                default: project.slice(0, 50),
+                validate: validators.databaseName
+            })
         ).trim()
 
         return { id: 'postgres', mode, host, port, user, password: secret, database, project }
