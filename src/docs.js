@@ -7,6 +7,7 @@
  */
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { docsSite } from './docs-site.js'
 
 export const DOCS_DIR = 'docs'
 
@@ -62,10 +63,16 @@ export function docsStep({ projectDir, parts, swagger = null }) {
                 await fs.mkdir(path.join(projectDir, DOCS_DIR), { recursive: true })
                 await fs.writeFile(path.join(projectDir, DOCS_DIR, file), content)
                 await fs.writeFile(source, pointer(title, file))
-                done.push({ file })
+                done.push({ file, id: file.replace(/\.md$/, ''), title, markdown: content })
             }
             if (done.length > 0) {
                 await fs.writeFile(path.join(projectDir, DOCS_DIR, 'README.md'), docsIndex(done, { swagger }))
+                // The same documentation as a web page: open docs/index.html in a browser
+                const pages = [{ id: 'index', title: 'Overview', markdown: docsIndex(done, { swagger }) }, ...done]
+                await fs.writeFile(
+                    path.join(projectDir, DOCS_DIR, 'index.html'),
+                    docsSite(pages, { title: 'Project documentation', swagger })
+                )
             }
         }
     }

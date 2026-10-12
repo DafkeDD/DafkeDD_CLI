@@ -85,3 +85,13 @@ test('main adds the docs step last before the repo steps, only when parts docume
     })
     assert.deepEqual(titles, ['fe step', 'be step', 'Documentatie samenstellen (./docs)'])
 })
+
+test('docs step also writes docs/index.html, a self-contained web page', async () => {
+    const dir = await project()
+    await docsStep({ projectDir: dir, parts, swagger: 'http://localhost:4000/docs' }).run()
+    const html = await fs.readFile(path.join(dir, DOCS_DIR, 'index.html'), 'utf8')
+    assert.match(html, /<h1 id="api--backend-docs">|<h1 id="api-/)
+    assert.match(html, /<section id="frontend"/)
+    assert.match(html, /http:\/\/localhost:4000\/docs/)
+    assert.doesNotMatch(html, /<script src=|<link [^>]*href="http/)
+})

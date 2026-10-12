@@ -80,7 +80,10 @@ Everything the CLI installs is documented, and the documentation is generated to
 matches what was installed:
 
 Everything ends up in **one folder, `./docs`**, with an index (`docs/README.md`). As the last step the CLI gathers the
-generated READMEs there and leaves a short pointer README in `./backend` and `./frontend`:
+generated READMEs there and leaves a short pointer README in `./backend` and `./frontend`. Open **`./docs/index.html`**
+in a browser for the same documentation as a small website (sidebar, table of contents per document, light/dark mode,
+copy buttons, a link to Swagger). It is one self-contained file: no server, no build step and no extra packages in your
+project.
 
 - **`./docs/api.md`**: how to start, all npm scripts, every `.env` variable, the language detection and the error
   format, the database (and the users table), the login flow and **every API endpoint** with its body fields, a `curl`
@@ -343,6 +346,8 @@ git switch developer
 
 ## Changelog
 
+- **0.17.0**: `./docs/index.html`: the documentation as a self-contained website (markdown rendered by `marked`, a
+  dependency of the CLI only; nothing extra in the generated project).
 - **0.16.0**: one central documentation folder `./docs` (index, `api.md`, `frontend.md`) instead of READMEs spread over
   `./backend` and `./frontend`; those now only point to it.
 - **0.15.0**: documentation for everything that is generated: `./backend/README.md` with every API endpoint (body,
