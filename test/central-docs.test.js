@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { docsStep, docsIndex, DOCS_DIR } from '../src/docs.js'
 import { nestjs } from '../src/backends/nestjs.js'
@@ -94,4 +95,48 @@ test('docs step also writes docs/index.html, a self-contained web page', async (
     assert.match(html, /<section id="frontend"/)
     assert.match(html, /http:\/\/localhost:4000\/docs/)
     assert.doesNotMatch(html, /<script src=|<link [^>]*href="http/)
+})
+
+test('docs can be served: serve.mjs, docs/package.json and a docs script in backend and frontend', async () => {
+    const dir = await project()
+    await fs.writeFile(path.join(dir, 'backend/package.json'), JSON.stringify({ scripts: { test: 'x' } }, null, 4))
+    await fs.writeFile(path.join(dir, 'frontend/package.json'), JSON.stringify({ name: 'fe' }, null, 2))
+    await docsStep({ projectDir: dir, parts }).run()
+    const backend = await fs.readFile(path.join(dir, 'backend/package.json'), 'utf8')
+    assert.equal(JSON.parse(backend).scripts.docs, 'node ../docs/serve.mjs')
+    assert.equal(JSON.parse(backend).scripts.test, 'x')
+    assert.match(backend, /\n {4}"scripts"/, 'keeps the indentation of the file')
+    assert.equal(
+        JSON.parse(await fs.readFile(path.join(dir, 'frontend/package.json'), 'utf8')).scripts.docs,
+        'node ../docs/serve.mjs'
+    )
+    assert.equal(
+        JSON.parse(await fs.readFile(path.join(dir, DOCS_DIR, 'package.json'), 'utf8')).scripts.docs,
+        'node serve.mjs'
+    )
+})
+
+test('the docs server serves the site and nothing outside ./docs', async () => {
+    const dir = await project()
+    await fs.writeFile(path.join(dir, 'secret.txt'), 'secret')
+    await docsStep({ projectDir: dir, parts }).run()
+    const port = 5000 + Math.floor(Math.random() * 1000)
+    const server = spawn(process.execPath, [path.join(dir, DOCS_DIR, 'serve.mjs')], {
+        env: { ...process.env, DOCS_PORT: String(port) }
+    })
+    try {
+        await new Promise((resolve, reject) => {
+            server.stdout.once('data', resolve)
+            server.once('error', reject)
+        })
+        const home = await fetch(`http://127.0.0.1:${port}/`)
+        assert.equal(home.status, 200)
+        assert.match(home.headers.get('content-type'), /text\/html/)
+        assert.match(await home.text(), /<!doctype html>/)
+        assert.equal((await fetch(`http://127.0.0.1:${port}/api.md`)).status, 200)
+        assert.equal((await fetch(`http://127.0.0.1:${port}/serve.mjs`)).status, 404)
+        assert.equal((await fetch(`http://127.0.0.1:${port}/..%2Fsecret.txt`)).status, 404)
+    } finally {
+        server.kill()
+    }
 })

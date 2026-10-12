@@ -83,7 +83,8 @@ Everything ends up in **one folder, `./docs`**, with an index (`docs/README.md`)
 generated READMEs there and leaves a short pointer README in `./backend` and `./frontend`. Open **`./docs/index.html`**
 in a browser for the same documentation as a small website (sidebar, table of contents per document, light/dark mode,
 copy buttons, a link to Swagger). It is one self-contained file: no server, no build step and no extra packages in your
-project.
+project. To run it as a website, use **`npm run docs`** in `./backend`, `./frontend` or `./docs` (a tiny dependency-free
+Node server, `docs/serve.mjs`) and open **http://localhost:5000** (change the port with `DOCS_PORT`).
 
 - **`./docs/api.md`**: how to start, all npm scripts, every `.env` variable, the language detection and the error
   format, the database (and the users table), the login flow and **every API endpoint** with its body fields, a `curl`
@@ -346,6 +347,8 @@ git switch developer
 
 ## Changelog
 
+- **0.18.0**: `npm run docs` serves the documentation website on http://localhost:5000 (`docs/serve.mjs`, no
+  dependencies); the script is added to `./backend`, `./frontend` and `docs/package.json`.
 - **0.17.0**: `./docs/index.html`: the documentation as a self-contained website (markdown rendered by `marked`, a
   dependency of the CLI only; nothing extra in the generated project).
 - **0.16.0**: one central documentation folder `./docs` (index, `api.md`, `frontend.md`) instead of READMEs spread over
