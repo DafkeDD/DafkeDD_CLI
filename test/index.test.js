@@ -2,47 +2,47 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { main, version } from '../src/index.js'
 
-function setup({ repo = null } = {}) {
+/** Builds a fake frontend/backend plus injectable prompts that answer from `choices`. */
+function setup({ frontend = 'demo-fe', backend = 'demo-be', repo = null } = {}) {
     const events = []
-    const frontend = {
-        id: 'demo',
-        label: 'Demo',
-        description: 'demo frontend',
-        dir: 'frontend',
-        next: ['cd frontend', 'npm run dev'],
+    const make = (id, label, dir) => ({
+        id,
+        label,
+        description: `${label} description`,
+        dir,
+        next: [`cd ${dir}`, `run ${id}`],
         ask: async () => {
-            events.push('frontend.ask')
+            events.push(`${id}.ask`)
             return { ui: 'all' }
         },
-        steps: async ({ answers }) => {
-            events.push(`frontend.steps(${answers.ui})`)
-            return [{ title: 'frontend step', run: async () => {} }]
+        steps: async ctx => {
+            events.push(`${id}.steps(${JSON.stringify({ answers: ctx.answers, frontendDir: ctx.frontendDir })})`)
+            return [{ title: `${id} step`, run: async () => {} }]
         }
-    }
+    })
     const logs = []
+    const asked = []
     const options = {
         projectDir: '/tmp/project',
         prompts: {
             select: async config => {
-                events.push('select')
-                assert.deepEqual(
-                    config.choices.map(c => c.value),
-                    ['demo']
-                )
-                return 'demo'
+                asked.push(config)
+                events.push(config.message.includes('frontend') ? 'select.frontend' : 'select.backend')
+                return config.message.includes('frontend') ? frontend : backend
             }
         },
         ask: async () => {
             events.push('askRepo')
             return repo
         },
-        registry: { demo: frontend },
+        registry: { 'demo-fe': make('demo-fe', 'DemoFE', 'frontend') },
+        backendRegistry: { 'demo-be': make('demo-be', 'DemoBE', 'backend') },
         execute: async steps => {
             events.push(`execute(${steps.map(s => s.title).join(',')})`)
         },
         log: line => logs.push(line)
     }
-    return { events, logs, options }
+    return { events, logs, asked, options }
 }
 
 test('main prints the version and the project folder', async () => {
@@ -52,32 +52,78 @@ test('main prints the version and the project folder', async () => {
     assert.ok(logs.some(l => l.includes('/tmp/project')))
 })
 
-test('main asks the frontend question first and the GitHub question last', async () => {
+test('main asks frontend, frontend options, backend and the GitHub question last', async () => {
     const { events, options } = setup()
     await main(options)
-    assert.deepEqual(events.slice(0, 4), ['select', 'frontend.ask', 'askRepo', 'frontend.steps(all)'])
+    assert.deepEqual(events.slice(0, 5), ['select.frontend', 'demo-fe.ask', 'select.backend', 'demo-be.ask', 'askRepo'])
 })
 
-test('main only runs the frontend steps when the user does not want to push', async () => {
-    const { events, logs, options } = setup({ repo: null })
+test('main offers "no frontend" and "no backend" next to the real choices', async () => {
+    const { asked, options } = setup()
     await main(options)
-    assert.ok(events.includes('execute(frontend step)'))
-    assert.ok(!logs.some(l => l.includes('Gepusht')))
+    assert.deepEqual(
+        asked[0].choices.map(c => c.value),
+        ['demo-fe', 'none']
+    )
+    assert.deepEqual(
+        asked[1].choices.map(c => c.value),
+        ['demo-be', 'none']
+    )
 })
 
-test('main appends the git and GitHub steps when the user wants to push', async () => {
-    const { events, logs, options } = setup({ repo: { name: 'demo-repo', platform: 'github', visibility: 'private' } })
+test('main runs frontend steps, then backend steps, then the git steps', async () => {
+    const { events, options } = setup({ repo: { name: 'demo-repo', platform: 'github', visibility: 'private' } })
     await main(options)
     const executed = events.find(e => e.startsWith('execute('))
-    assert.match(executed, /^execute\(frontend step,Git initialiseren,Repo "demo-repo"/)
-    assert.ok(logs.some(l => l.includes('Gepusht') && l.includes('demo-repo')))
+    assert.match(executed, /^execute\(demo-fe step,demo-be step,Git initialiseren,Repo "demo-repo"/)
 })
 
-test('main prints how to start the frontend afterwards', async () => {
+test('main tells the backend which frontend folder exists, so it can link the language', async () => {
+    const { events, options } = setup()
+    await main(options)
+    assert.ok(events.some(e => e.startsWith('demo-be.steps') && e.includes('"frontendDir":"frontend"')))
+})
+
+test('main passes no frontend folder when no frontend was chosen', async () => {
+    const { events, options } = setup({ frontend: 'none' })
+    await main(options)
+    assert.ok(events.some(e => e.startsWith('demo-be.steps') && !e.includes('"frontendDir":"frontend"')))
+    assert.ok(!events.includes('demo-fe.ask'))
+    assert.ok(events.includes('execute(demo-be step)'))
+})
+
+test('main works with only a frontend', async () => {
+    const { events, logs, options } = setup({ backend: 'none' })
+    await main(options)
+    assert.ok(events.includes('execute(demo-fe step)'))
+    assert.ok(!events.includes('demo-be.ask'))
+    assert.ok(!logs.some(l => l.includes('DemoBE')))
+})
+
+test('main does nothing when no frontend, no backend and no push were chosen', async () => {
+    const { events, logs, options } = setup({ frontend: 'none', backend: 'none' })
+    await main(options)
+    assert.ok(!events.some(e => e.startsWith('execute(')))
+    assert.ok(logs.some(l => l.includes('Niets te installeren')))
+})
+
+test('main only pushes when the user wants to', async () => {
+    const withoutPush = setup({ repo: null })
+    await main(withoutPush.options)
+    assert.ok(!withoutPush.logs.some(l => l.includes('Gepusht')))
+    const withPush = setup({ repo: { name: 'demo-repo', platform: 'github', visibility: 'private' } })
+    await main(withPush.options)
+    assert.ok(withPush.logs.some(l => l.includes('Gepusht') && l.includes('demo-repo')))
+})
+
+test('main prints what was installed and how to start each part', async () => {
     const { logs, options } = setup()
     await main(options)
-    assert.ok(logs.some(l => l.includes('npm run dev')))
-    assert.ok(logs.some(l => l.includes('./frontend')))
+    const text = logs.join('\n')
+    assert.ok(text.includes('./frontend'))
+    assert.ok(text.includes('./backend'))
+    assert.ok(text.includes('run demo-fe'))
+    assert.ok(text.includes('run demo-be'))
 })
 
 test('main rethrows when a step fails', async () => {

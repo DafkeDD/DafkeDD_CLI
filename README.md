@@ -1,7 +1,7 @@
 # DafkeDD_CLI
 
-An interactive CLI that installs a frontend **per project**, into `./frontend`. Everything is installed **locally in the
-project**, never globally.
+An interactive CLI that installs a frontend into `./frontend` and a backend into `./backend`, **per project**.
+Everything is installed **locally in the project**, never globally.
 
 ## What does it install?
 
@@ -9,14 +9,18 @@ project**, never globally.
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Next.js  | Next.js (latest) + Tailwind CSS (latest) + next-intl (latest) + react-icons + Prettier, in `./frontend`. Optionally with [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI) |
 
+| Backend | Contents                                                                                                                                                   |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NestJS  | NestJS (latest) + nestjs-i18n + validation + Swagger + `.env` config + Prettier, in `./backend`. Translated server errors, health endpoint, CORS and tests |
+
 The CLI asks its questions first, then shows **one progress bar** for all steps: create the app, install dependencies,
 install next-intl, react-icons and Prettier, fetch and install DafkeDD UI, configure Prettier and run a build check.
 Optionally the project is pushed to GitHub as the very last step.
 
 Order of the questions:
 
-1. Which frontend?
-2. The frontend options (for Next.js: install DafkeDD UI?).
+1. Which frontend (or none)? Then the frontend options (for Next.js: install DafkeDD UI?).
+2. Which backend (or none)? Currently only NestJS.
 3. Push to a repo right away? If yes: platform (GitHub only for now), repository name (the CLI checks that the name is
    still free) and private/public.
 
@@ -129,6 +133,31 @@ npm run dev
 
 If `./frontend` already exists, the CLI stops without deleting anything.
 
+## Backend (NestJS)
+
+Installed in `./backend` (port **4000**). No ORM or database yet; that comes later.
+
+- **i18n for server errors** ([nestjs-i18n](https://nestjs-i18n.com)): English (default), Dutch, French and German in
+  `src/i18n/<lang>/{common,errors,validation}.json`. The language is detected in this order: `?lang=` query, `x-lang`
+  header, `Accept-Language` header, then English. Regional variants such as `nl-BE` fall back to `nl`.
+- **Translated errors**: throw `new AppException('errors.NOT_FOUND', 404)` and the response is
+  `{ statusCode, error, message, path, timestamp }` with `message` in the user's language. Unknown exceptions and
+  validation errors (class-validator) use the same shape and are translated too.
+- **Swagger / OpenAPI** at `http://localhost:4000/docs`.
+- **Health endpoint** at `/health`.
+- **CORS** for the frontend, configured through `.env` (`PORT=4000`, `CORS_ORIGIN=http://localhost:3000`; see
+  `.env.example`).
+- **Prettier** with the same `.prettierrc` (`npm run format`, `npm run format:check`).
+- **Tests** (unit and e2e, 17+ e2e tests) and a verification run (build, lint, tests) at the end of the install.
+
+When a frontend is installed too, the CLI adds `src/lib/api.ts` (`apiFetch`, `ApiError`) and `src/lib/use-api.ts`
+(`useApi()`) to it. They send the selected language as `Accept-Language`, so server errors appear in the language the
+user picked in the frontend.
+
+The generated NestJS 12 starter needs **npm 11 or newer** (npm 10 fails to install it).
+
+If `./backend` already exists, the CLI stops without deleting anything.
+
 ### Pushing to GitHub
 
 The CLI runs `git init` in the project folder, makes a first commit, and uses the [GitHub CLI](https://cli.github.com)
@@ -202,6 +231,9 @@ git switch developer
 
 ## Changelog
 
+- **0.12.0**: new backend question: NestJS in `./backend` with nestjs-i18n (translated server errors in nl, fr, en, de),
+  validation, Swagger, health endpoint, CORS, `.env` config, Prettier and tests; the frontend sends its language to the
+  backend; frontend and backend can be skipped.
 - **0.11.0**: test suite for all code (`npm test`), pre-push hook and CI that block pushes with failing tests, release
   only after green tests; README and documentation in English; fixed a duplicate `ui.css` import in `globals.css` that
   the new tests found.

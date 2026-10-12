@@ -17,3 +17,21 @@ test('every registered frontend has the fields the CLI relies on', () => {
         assert.ok(Array.isArray(frontend.next))
     }
 })
+
+test('the backend registry exposes NestJS under its id', async () => {
+    const { backends } = await import('../src/backends/index.js')
+    const { nestjs } = await import('../src/backends/nestjs.js')
+    assert.equal(backends.nestjs, nestjs)
+})
+
+test('every registered backend has the fields the CLI relies on', async () => {
+    const { backends } = await import('../src/backends/index.js')
+    for (const [id, backend] of Object.entries(backends)) {
+        assert.equal(backend.id, id)
+        assert.equal(typeof backend.label, 'string')
+        assert.equal(typeof backend.description, 'string')
+        assert.equal(typeof backend.dir, 'string')
+        assert.equal(typeof backend.steps, 'function')
+        assert.ok(Array.isArray(backend.next))
+    }
+})
