@@ -16,7 +16,7 @@ function setup({ frontend = 'demo-fe', backend = 'demo-be', repo = null } = {}) 
             return { ui: 'all' }
         },
         steps: async ctx => {
-            events.push(`${id}.steps(${JSON.stringify({ answers: ctx.answers, frontendDir: ctx.frontendDir })})`)
+            events.push(`${id}.steps(${JSON.stringify({ answers: ctx.answers, api: ctx.api ?? null })})`)
             return [{ title: `${id} step`, run: async () => {} }]
         }
     })
@@ -36,7 +36,17 @@ function setup({ frontend = 'demo-fe', backend = 'demo-be', repo = null } = {}) 
             return repo
         },
         registry: { 'demo-fe': make('demo-fe', 'DemoFE', 'frontend') },
-        backendRegistry: { 'demo-be': make('demo-be', 'DemoBE', 'backend') },
+        backendRegistry: {
+            'demo-be': {
+                ...make('demo-be', 'DemoBE', 'backend'),
+                api: { port: 4000 },
+                next: answers => [`cd backend`, `run demo-be ${answers.ui}`],
+                summary: () => [
+                    { ok: true, text: 'database ok' },
+                    { ok: false, text: 'database failed' }
+                ]
+            }
+        },
         execute: async steps => {
             events.push(`execute(${steps.map(s => s.title).join(',')})`)
         },
@@ -78,18 +88,32 @@ test('main runs frontend steps, then backend steps, then the git steps', async (
     assert.match(executed, /^execute\(demo-fe step,demo-be step,Git initialiseren,Repo "demo-repo"/)
 })
 
-test('main tells the backend which frontend folder exists, so it can link the language', async () => {
+test('main tells the frontend which API it talks to when a backend is installed', async () => {
     const { events, options } = setup()
     await main(options)
-    assert.ok(events.some(e => e.startsWith('demo-be.steps') && e.includes('"frontendDir":"frontend"')))
+    assert.ok(events.some(e => e.startsWith('demo-fe.steps') && e.includes('"api":{"port":4000}')))
 })
 
-test('main passes no frontend folder when no frontend was chosen', async () => {
+test('main passes no API to the frontend when no backend was chosen', async () => {
+    const { events, options } = setup({ backend: 'none' })
+    await main(options)
+    assert.ok(events.some(e => e.startsWith('demo-fe.steps') && e.includes('"api":null')))
+})
+
+test('main works with only a backend', async () => {
     const { events, options } = setup({ frontend: 'none' })
     await main(options)
-    assert.ok(events.some(e => e.startsWith('demo-be.steps') && !e.includes('"frontendDir":"frontend"')))
     assert.ok(!events.includes('demo-fe.ask'))
     assert.ok(events.includes('execute(demo-be step)'))
+})
+
+test('main shows the result lines of the backend (✔ and ✖) and its answer-dependent next steps', async () => {
+    const { logs, options } = setup()
+    await main(options)
+    const text = logs.join('\n')
+    assert.ok(text.includes('database ok'))
+    assert.ok(text.includes('database failed'))
+    assert.ok(text.includes('run demo-be all'))
 })
 
 test('main works with only a frontend', async () => {

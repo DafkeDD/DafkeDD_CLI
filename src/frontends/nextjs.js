@@ -610,6 +610,231 @@ export const UI_GLOBALS_CSS = `@import 'tailwindcss';
 }
 `
 
+/**
+ * Texts of the backend status card. They are only added to the message files when a backend is installed.
+ * Every language needs the same keys (checked by the tests).
+ */
+export const API_MESSAGES = {
+    en: {
+        title: 'Backend connection',
+        api: 'API',
+        loading: 'Connecting…',
+        online: 'Connected',
+        offline: 'Not reachable',
+        database: 'Database',
+        databaseUp: 'Connected',
+        databaseDown: 'Not reachable',
+        hint: 'Start the API: cd backend && npm run start:dev'
+    },
+    nl: {
+        title: 'Verbinding met de backend',
+        api: 'API',
+        loading: 'Verbinden…',
+        online: 'Verbonden',
+        offline: 'Niet bereikbaar',
+        database: 'Database',
+        databaseUp: 'Verbonden',
+        databaseDown: 'Niet bereikbaar',
+        hint: 'Start de API: cd backend && npm run start:dev'
+    },
+    fr: {
+        title: 'Connexion au backend',
+        api: 'API',
+        loading: 'Connexion…',
+        online: 'Connecté',
+        offline: 'Injoignable',
+        database: 'Base de données',
+        databaseUp: 'Connectée',
+        databaseDown: 'Injoignable',
+        hint: "Démarrez l'API : cd backend && npm run start:dev"
+    },
+    de: {
+        title: 'Verbindung zum Backend',
+        api: 'API',
+        loading: 'Verbindung wird hergestellt…',
+        online: 'Verbunden',
+        offline: 'Nicht erreichbar',
+        database: 'Datenbank',
+        databaseUp: 'Verbunden',
+        databaseDown: 'Nicht erreichbar',
+        hint: 'API starten: cd backend && npm run start:dev'
+    }
+}
+
+/**
+ * Files that connect the frontend to the backend: an API client that sends the selected language
+ * (Accept-Language, so server errors come back in that language), a hook for client components and a status card
+ * for the example page.
+ */
+export const apiFiles = api => ({
+    'src/lib/api.ts': `export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:${api.port}';
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public body: unknown,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Calls the backend and sends the language of the user (Accept-Language), so error messages from the server
+ * come back in that language. Use useApi() inside client components, or pass getLocale() on the server.
+ */
+export async function apiFetch<T>(path: string, locale: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  headers.set('Accept-Language', locale);
+  const response = await fetch(API_URL + path, { ...init, headers });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(response.status, body?.message ?? response.statusText, body);
+  return body as T;
+}
+`,
+
+    'src/lib/use-api.ts': `'use client';
+
+import { useMemo } from 'react';
+import { useLocale } from 'next-intl';
+import { apiFetch } from './api';
+
+/** API client for client components: always sends the language that is currently selected. */
+export function useApi() {
+  const locale = useLocale();
+  return useMemo(
+    () => ({
+      get: <T>(path: string) => apiFetch<T>(path, locale),
+      post: <T>(path: string, body: unknown) =>
+        apiFetch<T>(path, locale, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+    }),
+    [locale],
+  );
+}
+`,
+
+    'src/components/api-status.tsx': `'use client';
+
+import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { LuDatabase, LuServer } from 'react-icons/lu';
+import { ApiError } from '@/lib/api';
+import { useApi } from '@/lib/use-api';
+
+type Status =
+  | { state: 'loading' }
+  | { state: 'offline' }
+  | { state: 'online'; message: string; language: string; database: 'up' | 'down' | 'none'; databaseMessage?: string };
+
+/** Shows that the frontend can reach the API, which language the API answered in and whether the database works. */
+export function ApiStatus() {
+  const t = useTranslations('ApiStatus');
+  const api = useApi();
+  const [status, setStatus] = useState<Status>({ state: 'loading' });
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const hello = await api.get<{ message: string; language: string }>('/');
+        let database: 'up' | 'down' | 'none' = 'none';
+        let databaseMessage: string | undefined;
+        try {
+          const health = await api.get<{ status: string; database?: string }>('/health');
+          database = health.database === 'up' ? 'up' : 'none';
+        } catch (error) {
+          // The API answers 503 with a message in the selected language when its database is down.
+          if (error instanceof ApiError && error.status === 503) {
+            database = 'down';
+            databaseMessage = error.message;
+          }
+        }
+        if (active) setStatus({ state: 'online', message: hello.message, language: hello.language, database, databaseMessage });
+      } catch {
+        if (active) setStatus({ state: 'offline' });
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [api]);
+
+  return (
+    <section
+      aria-live="polite"
+      className="relative mt-2 w-full max-w-3xl rounded-2xl border border-black/10 bg-black/[.03] p-4 text-left dark:border-white/15 dark:bg-white/[.04]"
+    >
+      <h2 className="mb-3 text-sm font-semibold">{t('title')}</h2>
+      <ul className="flex flex-col gap-2 text-[13px]">
+        <li className="flex items-start gap-2.5">
+          <LuServer aria-hidden className="mt-0.5 shrink-0" />
+          <span>
+            <strong>{t('api')}: </strong>
+            {status.state === 'loading' && t('loading')}
+            {status.state === 'offline' && <span className="text-red-600 dark:text-red-400">{t('offline')}</span>}
+            {status.state === 'online' && (
+              <>
+                <span className="text-emerald-600 dark:text-emerald-400">{t('online')}</span>
+                {' · '}
+                {status.message}{' '}
+                <span className="rounded-full border border-current/25 px-1.5 py-0.5 text-[11px] uppercase">
+                  {status.language}
+                </span>
+              </>
+            )}
+          </span>
+        </li>
+        {status.state === 'online' && status.database !== 'none' && (
+          <li className="flex items-start gap-2.5">
+            <LuDatabase aria-hidden className="mt-0.5 shrink-0" />
+            <span>
+              <strong>{t('database')}: </strong>
+              {status.database === 'up' ? (
+                <span className="text-emerald-600 dark:text-emerald-400">{t('databaseUp')}</span>
+              ) : (
+                <span className="text-red-600 dark:text-red-400">{status.databaseMessage ?? t('databaseDown')}</span>
+              )}
+            </span>
+          </li>
+        )}
+      </ul>
+      {status.state === 'offline' && <p className="mt-3 text-xs opacity-70">{t('hint')}</p>}
+    </section>
+  );
+}
+`
+})
+
+const replaceOnce = (text, from, to) => {
+    if (!text.includes(from)) throw new Error(`Template changed, cannot find: ${from}`)
+    return text.replace(from, () => to)
+}
+
+/** Adds the backend connection to a set of frontend files: API client, status card, texts and the card on the page. */
+export function withApi(fileMap, api, { ui }) {
+    const result = { ...fileMap, ...apiFiles(api) }
+    for (const locale of LOCALES) {
+        result[`messages/${locale}.json`] =
+            JSON.stringify({ ...MESSAGES[locale], ApiStatus: API_MESSAGES[locale] }, null, 2) + '\n'
+    }
+    const page = 'src/app/[locale]/page.tsx'
+    const importAfter = ui
+        ? "import { Badge, Button } from '@/components/ui';\n"
+        : "import { setRequestLocale } from 'next-intl/server';\n"
+    let content = replaceOnce(
+        result[page],
+        importAfter,
+        importAfter + "import { ApiStatus } from '@/components/api-status';\n"
+    )
+    content = replaceOnce(content, '    </main>\n', '      <ApiStatus />\n    </main>\n')
+    result[page] = content
+    return result
+}
+
 // next.config.ts van create-next-app bevat o.a. de Tailwind-koppeling: nooit overschrijven, enkel next-intl toevoegen.
 export async function patchNextConfig(root) {
     const file = path.join(root, 'next.config.ts')
@@ -680,7 +905,7 @@ export const nextjs = {
         return { ui }
     },
 
-    async steps({ projectDir, answers, exec = run }) {
+    async steps({ projectDir, answers, api = null, exec = run }) {
         const root = path.join(projectDir, DIR)
         const exists = await fs.stat(root).then(
             () => true,
@@ -751,9 +976,10 @@ export const nextjs = {
                     await fs.rm(path.join(root, 'src/app/page.tsx'), { force: true })
                     await fs.rm(path.join(root, 'src/app/layout.tsx'), { force: true })
                     const withUi = answers?.ui === 'all'
-                    for (const [rel, content] of Object.entries({ ...files, ...(withUi ? uiFiles : {}) })) {
-                        await write(root, rel, content)
-                    }
+                    let all = { ...files, ...(withUi ? uiFiles : {}) }
+                    // With a backend the frontend also gets the API client, the status card and their texts
+                    if (api) all = withApi(all, api, { ui: withUi })
+                    for (const [rel, content] of Object.entries(all)) await write(root, rel, content)
                     await patchNextConfig(root)
                     if (withUi) await write(root, 'src/app/globals.css', UI_GLOBALS_CSS)
                     else await patchGlobalsCss(root)

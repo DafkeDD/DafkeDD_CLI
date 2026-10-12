@@ -53,10 +53,9 @@ export async function main({
     const repo = await ask({ projectDir })
 
     const steps = [
-        ...(frontend ? await frontend.steps({ projectDir, answers }) : []),
-        ...(backend
-            ? await backend.steps({ projectDir, answers: backendAnswers, frontendDir: frontend?.dir ?? null })
-            : []),
+        // The frontend gets to know the API (url, language link, status card) when a backend is installed.
+        ...(frontend ? await frontend.steps({ projectDir, answers, api: backend?.api ?? null }) : []),
+        ...(backend ? await backend.steps({ projectDir, answers: backendAnswers }) : []),
         ...(repo ? repoSteps({ projectDir, repo }) : [])
     ]
     if (steps.length === 0) {
@@ -67,13 +66,20 @@ export async function main({
     log('')
     await execute(steps)
 
-    const installed = [frontend, backend].filter(Boolean)
+    const installed = [
+        { item: frontend, answers },
+        { item: backend, answers: backendAnswers }
+    ].filter(entry => entry.item)
     log('')
-    for (const item of installed) log(`${pc.green('✔')} ${item.label} geïnstalleerd in ${pc.bold('./' + item.dir)}`)
+    for (const { item, answers: own } of installed) {
+        log(`${pc.green('✔')} ${item.label} geïnstalleerd in ${pc.bold('./' + item.dir)}`)
+        for (const line of item.summary?.(own) ?? []) log(`${line.ok ? pc.green('✔') : pc.red('✖')} ${line.text}`)
+    }
     if (repo) log(`${pc.green('✔')} Gepusht naar GitHub: ${pc.bold(repo.name)}`)
-    for (const item of installed) {
+    for (const { item, answers: own } of installed) {
         log(pc.dim(`\n${item.label}:`))
-        for (const line of item.next ?? []) log(pc.dim('  ' + line))
+        const lines = typeof item.next === 'function' ? item.next(own) : (item.next ?? [])
+        for (const line of lines) log(pc.dim('  ' + line))
     }
     log('')
 }

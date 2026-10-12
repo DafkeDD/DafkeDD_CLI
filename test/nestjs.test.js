@@ -13,7 +13,7 @@ import {
     ENV_EXAMPLE,
     GITIGNORE,
     files,
-    frontendLinkFiles,
+    buildFiles,
     patchNestCli,
     write
 } from '../src/backends/nestjs.js'
@@ -207,19 +207,6 @@ test('the generated project ships tests for translations, exceptions and the API
     assert.match(e2e, /\?lang=fr/)
 })
 
-// ---------------------------------------------------------------- frontend link
-
-test('the frontend link sends the selected language to the API', () => {
-    const api = frontendLinkFiles['src/lib/api.ts']
-    assert.match(api, /Accept-Language/)
-    assert.match(api, /localhost:4000/)
-    assert.match(api, /class ApiError/)
-    const hook = frontendLinkFiles['src/lib/use-api.ts']
-    assert.match(hook, /^'use client'/)
-    assert.match(hook, /useLocale/)
-    assert.match(hook, /from '\.\/api'/, 'frontend (bundler resolution) imports have no .js extension')
-})
-
 // ---------------------------------------------------------------- patches
 
 test('patchNestCli copies the translation JSON files to dist and keeps other options', async t => {
@@ -238,9 +225,11 @@ test('the NestJS backend definition is complete', () => {
     assert.equal(nestjs.id, 'nestjs')
     assert.equal(nestjs.label, 'NestJS')
     assert.equal(nestjs.dir, 'backend')
-    assert.ok(nestjs.next.includes('cd backend'))
-    assert.ok(nestjs.next.some(line => line.includes('npm run start:dev')))
-    assert.ok(nestjs.next.some(line => line.includes('localhost:4000/docs')))
+    const next = nestjs.next({ database: null })
+    assert.ok(next.includes('cd backend'))
+    assert.ok(next.some(line => line.includes('npm run start:dev')))
+    assert.ok(next.some(line => line.includes('localhost:4000/docs')))
+    assert.deepEqual(nestjs.api, { port: 4000 }, 'the frontend learns the port from the backend definition')
 })
 
 // ---------------------------------------------------------------- install flow (fake exec, no network)
@@ -347,38 +336,211 @@ test('steps configure Prettier with the shared .prettierrc and format scripts', 
     assert.equal(pkg.scripts.test, 'vitest run', 'existing scripts are kept')
 })
 
-test('steps (with a frontend) add the language link before Prettier runs', async t => {
-    const projectDir = await tmp(t)
-    await write(projectDir, 'frontend/package.json', '{}')
-    const calls = []
-    const steps = await nestjs.steps({ projectDir, frontendDir: 'frontend', exec: fakeExec(calls) })
-    const names = titles(steps)
-    assert.ok(names.includes('Taalkoppeling met de frontend'))
-    assert.ok(names.indexOf('Taalkoppeling met de frontend') < names.indexOf('Prettier configureren (backend)'))
-    await runAll(steps)
-    const api = await fs.readFile(path.join(projectDir, 'frontend/src/lib/api.ts'), 'utf8')
-    assert.match(api, /Accept-Language/)
-    assert.ok(await exists(path.join(projectDir, 'frontend/src/lib/use-api.ts')))
-    const format = calls.find(c => c.line === 'npx --no-install prettier --write src/lib')
-    assert.equal(format.cwd, path.join(projectDir, 'frontend'))
-})
-
-test('steps (without a frontend) do not add the language link step', async t => {
-    const projectDir = await tmp(t)
-    const names = titles(await nestjs.steps({ projectDir, frontendDir: null, exec: fakeExec() }))
-    assert.ok(!names.includes('Taalkoppeling met de frontend'))
-})
-
-test('the language link is skipped when the frontend folder is missing', async t => {
-    const projectDir = await tmp(t)
-    const steps = await nestjs.steps({ projectDir, frontendDir: 'frontend', exec: fakeExec() })
-    await steps.find(s => s.title === 'Taalkoppeling met de frontend').run()
-    assert.ok(!(await exists(path.join(projectDir, 'frontend'))))
-})
-
 test('steps refuse to run when ./backend already exists and delete nothing', async t => {
     const projectDir = await tmp(t)
     await write(projectDir, 'backend/keep.txt', 'mine')
     await assert.rejects(nestjs.steps({ projectDir, exec: fakeExec() }), /bestaat al/)
     assert.equal(await fs.readFile(path.join(projectDir, 'backend/keep.txt'), 'utf8'), 'mine')
+})
+
+// ---------------------------------------------------------------- database question
+
+const DB = {
+    id: 'postgres',
+    mode: 'docker',
+    host: 'localhost',
+    port: 5433,
+    user: 'app',
+    password: 'secret',
+    database: 'demo',
+    project: 'demo'
+}
+
+test('ask: "no database" returns no database and asks nothing else', async () => {
+    const asked = []
+    const prompts = {
+        select: async config => {
+            asked.push(config.message)
+            return 'none'
+        }
+    }
+    assert.deepEqual(await nestjs.ask({ prompts }), { database: null })
+    assert.equal(asked.length, 1)
+})
+
+test('ask: offers PostgreSQL and "no database" and hands over to the database questions', async () => {
+    let choices
+    const registry = {
+        postgres: {
+            id: 'postgres',
+            label: 'PostgreSQL',
+            description: 'x',
+            ask: async ({ projectDir }) => ({ id: 'postgres', projectDir })
+        }
+    }
+    const prompts = {
+        select: async config => {
+            choices = config.choices.map(c => c.value)
+            return 'postgres'
+        }
+    }
+    const result = await nestjs.ask({ projectDir: '/p', prompts, registry })
+    assert.deepEqual(choices, ['postgres', 'none'])
+    assert.deepEqual(result, { database: { id: 'postgres', projectDir: '/p' } })
+})
+
+// ---------------------------------------------------------------- generated code with a database
+
+test('buildFiles without a database is the plain set of files', () => {
+    assert.equal(buildFiles(null), files)
+    assert.ok(!('src/database/database.service.ts' in files))
+    assert.ok(!files['src/health/health.controller.ts'].includes('DatabaseService'))
+})
+
+test('buildFiles (database) wires the database module, health check, env files and translations', () => {
+    const all = buildFiles(DB)
+    assert.match(all['src/app.module.ts'], /import \{ DatabaseModule \} from '\.\/database\/database\.module\.js'/)
+    assert.match(all['src/app.module.ts'], /ConfigModule\.forRoot\(\{ isGlobal: true \}\),\n\s+DatabaseModule,/)
+    assert.match(all['src/health/health.controller.ts'], /errors\.DATABASE_UNAVAILABLE/)
+    assert.match(all['src/health/health.controller.ts'], /SERVICE_UNAVAILABLE/)
+    for (const rel of ['.env', '.env.example']) {
+        for (const key of ['DATABASE_HOST', 'DATABASE_PORT', 'DATABASE_USER', 'DATABASE_PASSWORD', 'DATABASE_NAME']) {
+            assert.ok(all[rel].includes(key), `${rel} ${key}`)
+        }
+        assert.ok(all[rel].includes(`PORT=${PORT}`), 'the API settings stay in place')
+    }
+    assert.ok(all['.env'].includes("DATABASE_PASSWORD='secret'"))
+    assert.ok(!all['.env.example'].includes('secret'), 'the password never ends up in .env.example')
+    assert.ok(GITIGNORE.split('\n').includes('.env'), '.env (with the password) is not committed')
+})
+
+test('buildFiles (database) adds a translated database error to every language', () => {
+    const all = buildFiles(DB)
+    const texts = new Set()
+    for (const locale of LOCALES) {
+        const errors = JSON.parse(all[`src/i18n/${locale}/errors.json`])
+        assert.ok(errors.DATABASE_UNAVAILABLE?.trim(), locale)
+        assert.deepEqual(Object.keys(errors).sort(), Object.keys(JSON.parse(all['src/i18n/en/errors.json'])).sort())
+        for (const key of Object.keys(TRANSLATIONS[locale].errors)) assert.ok(key in errors, `${locale} ${key}`)
+        texts.add(errors.DATABASE_UNAVAILABLE)
+    }
+    assert.equal(texts.size, 4, 'four different translations')
+})
+
+test('buildFiles (database) tests the health check with a fake database in all four languages', () => {
+    const e2e = buildFiles(DB)['test/app.e2e-spec.ts']
+    assert.match(e2e, /overrideProvider\(DatabaseService\)/)
+    assert.match(e2e, /database: 'up'/)
+    assert.match(e2e, /\.expect\(503\)/)
+    for (const locale of LOCALES) {
+        assert.ok(
+            e2e.includes(JSON.parse(buildFiles(DB)[`src/i18n/${locale}/errors.json`]).DATABASE_UNAVAILABLE),
+            locale
+        )
+    }
+})
+
+test('the database code is ESM-safe (.js imports) and has its own unit test', () => {
+    const all = buildFiles(DB)
+    for (const rel of Object.keys(all).filter(
+        r => r.startsWith('src/database/') || r === 'src/health/health.controller.ts'
+    )) {
+        for (const [, spec] of all[rel].matchAll(/from '(\.[^']*)'/g))
+            assert.ok(spec.endsWith('.js'), `${rel}: ${spec}`)
+    }
+    assert.ok('src/database/database.service.spec.ts' in all)
+    assert.ok(!all['src/database/database.service.ts'].includes('__dirname'))
+})
+
+// ---------------------------------------------------------------- install flow with a database
+
+test('steps (database) install the driver right after the other packages, before Prettier', async t => {
+    const projectDir = await tmp(t)
+    const steps = await nestjs.steps({ projectDir, answers: { database: { ...DB } }, exec: fakeExec() })
+    const names = titles(steps)
+    assert.ok(names.includes('Database-driver installeren (PostgreSQL)'))
+    assert.ok(names.indexOf('Database-driver installeren (PostgreSQL)') < names.indexOf('i18n en API configureren'))
+})
+
+test('steps (database) install pg and its types locally and write scripts, compose and env files', async t => {
+    const projectDir = await tmp(t)
+    const calls = []
+    await runAll(await nestjs.steps({ projectDir, answers: { database: { ...DB } }, exec: fakeExec(calls) }))
+    const lines = calls.map(c => c.line)
+    assert.ok(lines.includes('npm install pg@latest'))
+    assert.ok(lines.includes('npm install --save-dev @types/pg@latest'))
+    const root = path.join(projectDir, 'backend')
+    for (const c of calls.filter(c => c.line.startsWith('npm install pg') || c.line.includes('@types/pg')))
+        assert.equal(c.cwd, root)
+    assert.ok(await exists(path.join(root, 'docker-compose.yml')))
+    assert.ok(await exists(path.join(root, 'src/database/database.service.ts')))
+    assert.ok(await exists(path.join(root, 'scripts/db-check.mjs')))
+    const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'))
+    for (const script of ['db:check', 'db:up', 'db:down']) assert.ok(pkg.scripts[script], script)
+    assert.equal(pkg.scripts.test, 'vitest run', 'existing scripts are kept')
+    assert.match(await fs.readFile(path.join(root, '.env'), 'utf8'), /DATABASE_PORT=5433/)
+})
+
+test('steps (no database) install no driver and write no database files', async t => {
+    const projectDir = await tmp(t)
+    const calls = []
+    const steps = await nestjs.steps({ projectDir, answers: { database: null }, exec: fakeExec(calls) })
+    await runAll(steps)
+    assert.ok(!titles(steps).some(name => name.startsWith('Database')))
+    assert.ok(!calls.some(c => c.line.includes(' pg@')))
+    assert.ok(!(await exists(path.join(projectDir, 'backend/docker-compose.yml'))))
+    assert.ok(!(await exists(path.join(projectDir, 'backend/src/database'))))
+})
+
+test('steps (local database) test the connection last and report success', async t => {
+    const projectDir = await tmp(t)
+    const database = { ...DB, mode: 'local' }
+    const calls = []
+    const steps = await nestjs.steps({ projectDir, answers: { database }, exec: fakeExec(calls) })
+    assert.equal(titles(steps).at(-1), 'Databaseverbinding testen')
+    await runAll(steps)
+    assert.equal(calls.at(-1).line, 'npm run db:check')
+    assert.equal(database.connection, 'ok')
+    assert.deepEqual(nestjs.summary({ database }), [
+        { ok: true, text: 'Verbonden met PostgreSQL op localhost:5433/demo' }
+    ])
+    assert.ok(
+        !(await exists(path.join(projectDir, 'backend/docker-compose.yml'))),
+        'no compose file for a local database'
+    )
+})
+
+test('steps (local database) survive an unreachable database and report it at the end', async t => {
+    const projectDir = await tmp(t)
+    const database = { ...DB, mode: 'local' }
+    const base = fakeExec()
+    const exec = async (cmd, args, options) => {
+        if (args.join(' ') === 'run db:check') throw new Error('ECONNREFUSED')
+        return base(cmd, args, options)
+    }
+    await runAll(await nestjs.steps({ projectDir, answers: { database }, exec }))
+    assert.equal(database.connection, 'failed')
+    const [line] = nestjs.summary({ database })
+    assert.equal(line.ok, false)
+    assert.match(line.text, /db:check/)
+})
+
+test('steps (docker database) do not try to connect and explain how to start it', async t => {
+    const projectDir = await tmp(t)
+    const database = { ...DB }
+    const steps = await nestjs.steps({ projectDir, answers: { database }, exec: fakeExec() })
+    assert.ok(!titles(steps).includes('Databaseverbinding testen'))
+    assert.ok(nestjs.next({ database }).some(line => line.includes('npm run db:up')))
+    assert.equal(nestjs.summary({ database })[0].ok, true)
+})
+
+test('next steps for a local database mention the connection test, not Docker', () => {
+    const next = nestjs.next({ database: { ...DB, mode: 'local' } })
+    assert.ok(next.some(line => line.includes('npm run db:check')))
+    assert.ok(!next.some(line => line.includes('db:up')))
+})
+
+test('only unexpected errors are logged as crashes, deliberate HttpExceptions are not', () => {
+    const filter = files['src/common/all-exceptions.filter.ts']
+    assert.match(filter, /if \(!\(exception instanceof HttpException\)\) this\.logger\.error/)
 })

@@ -1,8 +1,9 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { select } from '@inquirer/prompts'
+import { input, password, select } from '@inquirer/prompts'
 import { run } from '../runner.js'
 import { PRETTIERRC } from '../frontends/nextjs.js'
+import { databases } from '../databases/index.js'
 
 export const DIR = 'backend'
 export const LOCALES = ['en', 'nl', 'fr', 'de']
@@ -293,7 +294,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const request = http.getRequest<Request>();
 
     const status = exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
-    if (status >= 500) this.logger.error(exception instanceof Error ? exception.stack : String(exception));
+    // Deliberate HttpExceptions (such as a 503 for an unavailable database) are answered, not logged as crashes.
+    if (!(exception instanceof HttpException)) this.logger.error(exception instanceof Error ? exception.stack : String(exception));
 
     const key = exception instanceof AppException ? exception.key : (STATUS_KEYS[status] ?? 'errors.INTERNAL');
     const args = exception instanceof AppException ? exception.args : undefined;
@@ -529,57 +531,92 @@ describe('API (e2e)', () => {
 `
 }
 
-/** Files added to the Next.js frontend (when one is installed) so it sends its language to the API. */
-export const frontendLinkFiles = {
-    'src/lib/api.ts': `export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:${PORT}';
-
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public body: unknown,
-  ) {
-    super(message);
-  }
+const replaceOnce = (text, from, to) => {
+    if (!text.includes(from)) throw new Error(`Template changed, cannot find: ${from}`)
+    return text.replace(from, () => to)
 }
 
 /**
- * Calls the backend and sends the language of the user (Accept-Language), so error messages from the server
- * come back in that language. Use useApi() inside client components, or pass getLocale() on the server.
+ * The files of the backend. Without a database this is `files`; with a database (answers of the database question)
+ * the module, health check, translations, .env files and tests are extended for it.
  */
-export async function apiFetch<T>(path: string, locale: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  headers.set('Accept-Language', locale);
-  const response = await fetch(API_URL + path, { ...init, headers });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) throw new ApiError(response.status, body?.message ?? response.statusText, body);
-  return body as T;
-}
+export function buildFiles(database = null) {
+    if (!database) return files
+    const db = databases[database.id].backend(database)
+    const result = { ...files, ...db.files }
+
+    result['.env'] = ENV_EXAMPLE + db.env
+    result['.env.example'] = ENV_EXAMPLE + db.envExample
+    for (const locale of LOCALES) {
+        result[`src/i18n/${locale}/errors.json`] = json({ ...TRANSLATIONS[locale].errors, ...db.errors[locale] })
+    }
+
+    let appModule = files['src/app.module.ts']
+    appModule = replaceOnce(
+        appModule,
+        "import { HealthController } from './health/health.controller.js';\n",
+        "import { DatabaseModule } from './database/database.module.js';\nimport { HealthController } from './health/health.controller.js';\n"
+    )
+    appModule = replaceOnce(
+        appModule,
+        '    ConfigModule.forRoot({ isGlobal: true }),\n',
+        '    ConfigModule.forRoot({ isGlobal: true }),\n    DatabaseModule,\n'
+    )
+    result['src/app.module.ts'] = appModule
+
+    // The e2e tests never need a real database: DatabaseService is replaced by a fake.
+    let e2e = files['test/app.e2e-spec.ts']
+    e2e = replaceOnce(
+        e2e,
+        "import { configureApp } from '../src/setup.js';\n",
+        "import { DatabaseService } from '../src/database/database.service.js';\nimport { configureApp } from '../src/setup.js';\n"
+    )
+    e2e = replaceOnce(
+        e2e,
+        "describe('API (e2e)', () => {\n",
+        `const DATABASE_DOWN: Record<string, string> = ${JSON.stringify(
+            Object.fromEntries(LOCALES.map(locale => [locale, db.errors[locale].DATABASE_UNAVAILABLE]))
+        )};
+
+// A fake database: the tests do not need PostgreSQL.
+const database = { ping: vi.fn().mockResolvedValue(true) };
+
+describe('API (e2e)', () => {\n`
+    )
+    e2e = replaceOnce(
+        e2e,
+        'const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();',
+        'const moduleRef = await Test.createTestingModule({ imports: [AppModule] })\n      .overrideProvider(DatabaseService)\n      .useValue(database)\n      .compile();'
+    )
+    e2e = replaceOnce(
+        e2e,
+        `    it('GET /health returns ok', async () => {
+      const response = await http().get('/health').expect(200);
+      expect(response.body).toEqual({ status: 'ok' });
+    });
 `,
+        `    it('GET /health returns ok when the database answers', async () => {
+      const response = await http().get('/health').expect(200);
+      expect(response.body).toEqual({ status: 'ok', database: 'up' });
+    });
 
-    'src/lib/use-api.ts': `'use client';
-
-import { useMemo } from 'react';
-import { useLocale } from 'next-intl';
-import { apiFetch } from './api';
-
-/** API client for client components: always sends the language that is currently selected. */
-export function useApi() {
-  const locale = useLocale();
-  return useMemo(
-    () => ({
-      get: <T>(path: string) => apiFetch<T>(path, locale),
-      post: <T>(path: string, body: unknown) =>
-        apiFetch<T>(path, locale, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        }),
-    }),
-    [locale],
-  );
-}
+    it.each(Object.entries(DATABASE_DOWN))(
+      'GET /health returns a translated 503 in %s when the database is down',
+      async (language, text) => {
+        database.ping.mockResolvedValueOnce(false);
+        const response = await http().get('/health').set('Accept-Language', language).expect(503);
+        expect(response.body).toMatchObject({
+          statusCode: 503,
+          error: 'errors.DATABASE_UNAVAILABLE',
+          message: text,
+          path: '/health',
+        });
+      },
+    );
 `
+    )
+    result['test/app.e2e-spec.ts'] = e2e
+    return result
 }
 
 /** Adds the i18n files to nest-cli.json so they are copied to dist/ when building. */
@@ -610,9 +647,52 @@ export const nestjs = {
     label: 'NestJS',
     description: 'NestJS (latest) + i18n (nl, fr, en, de) + validation + Swagger + config + Prettier, in ./backend',
     dir: DIR,
-    next: [`cd ${DIR}`, 'npm run start:dev', `API: http://localhost:${PORT}  |  docs: http://localhost:${PORT}/docs`],
+    /** The API the frontend talks to (the frontend uses it for its language link and status card). */
+    api: { port: PORT },
 
-    async steps({ projectDir, exec = run, frontendDir = null }) {
+    /** Question: which database? (PostgreSQL only for now), followed by that database's own questions. */
+    async ask({ projectDir = process.cwd(), prompts = { select, input, password }, registry = databases } = {}) {
+        const choice = await prompts.select({
+            message: 'Welke database wil je gebruiken?',
+            choices: [
+                ...Object.values(registry).map(db => ({ name: db.label, value: db.id, description: db.description })),
+                { name: 'Geen database (later)', value: 'none' }
+            ]
+        })
+        if (choice === 'none') return { database: null }
+        return { database: await registry[choice].ask({ projectDir, prompts }) }
+    },
+
+    next(answers) {
+        const db = answers?.database
+        return [
+            `cd ${DIR}`,
+            ...(db?.mode === 'docker' ? ['npm run db:up       (start PostgreSQL in Docker)'] : []),
+            ...(db?.mode === 'local' ? ['npm run db:check    (test the database connection)'] : []),
+            'npm run start:dev',
+            `API: http://localhost:${PORT}  |  docs: http://localhost:${PORT}/docs`
+        ]
+    },
+
+    /** Extra result lines for the end of the run: { ok, text }. */
+    summary(answers) {
+        const db = answers?.database
+        if (!db) return []
+        const where = `${db.host}:${db.port}/${db.database}`
+        if (db.mode === 'docker') return [{ ok: true, text: `PostgreSQL (Docker) ingesteld: ${where}` }]
+        if (db.connection === 'failed') {
+            return [
+                {
+                    ok: false,
+                    text: `Geen verbinding met PostgreSQL op ${where}. Controleer ./${DIR}/.env en start de database; test daarna met npm run db:check`
+                }
+            ]
+        }
+        return [{ ok: true, text: `Verbonden met PostgreSQL op ${where}` }]
+    },
+
+    async steps({ projectDir, exec = run, answers = {} }) {
+        const database = answers?.database ?? null
         const root = path.join(projectDir, DIR)
         if (await exists(root)) throw new Error(`De map ./${DIR} bestaat al. Verwijder of hernoem ze eerst.`)
 
@@ -659,6 +739,21 @@ export const nestjs = {
                         { cwd: root }
                     )
             },
+            ...(database
+                ? [
+                      {
+                          title: `Database-driver installeren (${databases[database.id].label})`,
+                          weight: 2,
+                          run: async () => {
+                              const definition = databases[database.id]
+                              await exec('npm', ['install', ...definition.dependencies], { cwd: root })
+                              await exec('npm', ['install', '--save-dev', ...definition.devDependencies], {
+                                  cwd: root
+                              })
+                          }
+                      }
+                  ]
+                : []),
             {
                 title: 'Prettier installeren (backend)',
                 weight: 2,
@@ -680,25 +775,17 @@ export const nestjs = {
                     ]) {
                         await fs.rm(path.join(root, rel), { force: true })
                     }
-                    for (const [rel, content] of Object.entries(files)) await write(root, rel, content)
+                    for (const [rel, content] of Object.entries(buildFiles(database))) await write(root, rel, content)
                     await patchNestCli(root)
+                    if (database) {
+                        const pkgPath = path.join(root, 'package.json')
+                        const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'))
+                        pkg.scripts = { ...pkg.scripts, ...databases[database.id].backend(database).scripts }
+                        await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+                    }
                 }
             }
         ]
-
-        if (frontendDir) {
-            steps.push({
-                title: 'Taalkoppeling met de frontend',
-                weight: 1,
-                run: async () => {
-                    const frontendRoot = path.join(projectDir, frontendDir)
-                    if (!(await exists(frontendRoot))) return
-                    for (const [rel, content] of Object.entries(frontendLinkFiles))
-                        await write(frontendRoot, rel, content)
-                    await exec('npx', ['--no-install', 'prettier', '--write', 'src/lib'], { cwd: frontendRoot })
-                }
-            })
-        }
 
         steps.push(
             {
@@ -727,6 +814,22 @@ export const nestjs = {
                 }
             }
         )
+
+        if (database?.mode === 'local') {
+            steps.push({
+                title: 'Databaseverbinding testen',
+                weight: 1,
+                run: async () => {
+                    // A database that is not reachable (yet) must not undo a finished install: report it at the end.
+                    try {
+                        await exec('npm', ['run', 'db:check'], { cwd: root })
+                        database.connection = 'ok'
+                    } catch {
+                        database.connection = 'failed'
+                    }
+                }
+            })
+        }
 
         return steps
     }

@@ -32,6 +32,9 @@ test('every registered backend has the fields the CLI relies on', async () => {
         assert.equal(typeof backend.description, 'string')
         assert.equal(typeof backend.dir, 'string')
         assert.equal(typeof backend.steps, 'function')
-        assert.ok(Array.isArray(backend.next))
+        assert.equal(typeof backend.ask, 'function')
+        assert.equal(typeof backend.next, 'function', 'next steps depend on the answers')
+        assert.equal(typeof backend.summary, 'function')
+        assert.equal(typeof backend.api.port, 'number', 'the frontend needs to know where the API runs')
     }
 })

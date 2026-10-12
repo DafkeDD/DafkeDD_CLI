@@ -29,8 +29,9 @@ Nothing in the tests touches the network, GitHub or the real `npm`:
 - **Commands** are run through `exec` (default: `run` from `src/runner.js`). Functions such as `nextjs.steps()` and
   `repoSteps()` accept an `exec` parameter, so tests pass a fake that records the commands and simulates what the real
   tools do on disk (for example creating `next.config.ts` like `create-next-app` does).
-- **Prompts** (`@inquirer/prompts`) are injected as `prompts` in `askRepo()` and `nextjs.ask()`, and `main()` takes
-  `prompts`, `ask`, `registry`, `execute` and `log`.
+- **Prompts** (`@inquirer/prompts`) are injected as `prompts` in `askRepo()`, `nextjs.ask()`, `nestjs.ask()` and
+  `postgres.ask()`, and `main()` takes `prompts`, `ask`, `registry`, `backendRegistry`, `execute` and `log`. A new
+  database goes in `src/databases/` and is registered in `src/databases/index.js`.
 - **Files** are written to a temporary folder (`fs.mkdtemp`) that is removed after each test.
 
 ### What to test

@@ -15,6 +15,9 @@ import {
     files,
     uiFiles,
     UI_GLOBALS_CSS,
+    API_MESSAGES,
+    apiFiles,
+    withApi,
     patchNextConfig,
     patchGlobalsCss,
     write
@@ -452,4 +455,114 @@ test('globals.css loads the DafkeDD UI stylesheet exactly once (regression: dupl
         const css = await fs.readFile(path.join(projectDir, 'frontend/src/app/globals.css'), 'utf8')
         assert.equal(css.match(/components\/ui\/ui\.css/g).length, 1, ui)
     }
+})
+
+// ---------------------------------------------------------------- backend connection
+
+const API = { port: 4000 }
+
+test('the API status texts exist in nl, fr, en and de with the same keys', () => {
+    assert.deepEqual(Object.keys(API_MESSAGES).sort(), ['de', 'en', 'fr', 'nl'])
+    for (const locale of LOCALES) {
+        assert.deepEqual(Object.keys(API_MESSAGES[locale]).sort(), Object.keys(API_MESSAGES.en).sort(), locale)
+        for (const [key, value] of Object.entries(API_MESSAGES[locale])) assert.ok(value.trim(), `${locale}.${key}`)
+    }
+})
+
+test('the API client sends the selected language and uses the port of the backend', () => {
+    const api = apiFiles({ port: 4321 })['src/lib/api.ts']
+    assert.match(api, /Accept-Language/)
+    assert.match(api, /localhost:4321/)
+    assert.match(api, /NEXT_PUBLIC_API_URL/)
+    assert.match(api, /class ApiError/)
+    const hook = apiFiles(API)['src/lib/use-api.ts']
+    assert.match(hook, /^'use client'/)
+    assert.match(hook, /useLocale/)
+    assert.match(hook, /from '\.\/api'/, 'bundler imports have no .js extension')
+})
+
+test('the status card shows the API message and language, the database state and translated server errors', () => {
+    const card = apiFiles(API)['src/components/api-status.tsx']
+    assert.match(card, /^'use client'/)
+    assert.match(card, /useApi\(\)/)
+    assert.match(card, /'\/health'/)
+    assert.match(card, /status === 503/, 'a 503 means the database is down')
+    assert.match(card, /error\.message/, 'the server message is already in the selected language')
+    for (const key of Object.keys(API_MESSAGES.en)) {
+        if (key !== 'hint' || card.includes("t('hint')")) assert.ok(card.includes(`t('${key}')`), key)
+    }
+})
+
+test('withApi adds the files, the card on the page and the texts in four languages (plain variant)', () => {
+    const result = withApi(files, API, { ui: false })
+    for (const rel of ['src/lib/api.ts', 'src/lib/use-api.ts', 'src/components/api-status.tsx'])
+        assert.ok(rel in result, rel)
+    const page = result['src/app/[locale]/page.tsx']
+    assert.match(page, /import \{ ApiStatus \} from '@\/components\/api-status'/)
+    assert.match(page, /<ApiStatus \/>/)
+    for (const locale of LOCALES) {
+        const messages = JSON.parse(result[`messages/${locale}.json`])
+        assert.deepEqual(messages.ApiStatus, API_MESSAGES[locale])
+        assert.deepEqual(messages.HomePage, MESSAGES[locale].HomePage, 'existing texts are kept')
+    }
+})
+
+test('withApi adds the card to the DafkeDD UI page as well', () => {
+    const result = withApi({ ...files, ...uiFiles }, API, { ui: true })
+    const page = result['src/app/[locale]/page.tsx']
+    assert.equal(page.match(/<ApiStatus \/>/g).length, 1)
+    assert.match(page, /import \{ ApiStatus \}/)
+})
+
+test('withApi does not change the original files', () => {
+    const before = files['src/app/[locale]/page.tsx']
+    withApi(files, API, { ui: false })
+    assert.equal(files['src/app/[locale]/page.tsx'], before)
+    assert.ok(!before.includes('ApiStatus'))
+})
+
+test('withApi fails loudly when a page template changes', () => {
+    assert.throws(
+        () => withApi({ ...files, 'src/app/[locale]/page.tsx': 'nothing here' }, API, { ui: false }),
+        /Template changed/
+    )
+})
+
+test('steps (with a backend) write the API client, the status card and extra texts', async t => {
+    const projectDir = await tmp(t)
+    const exec = async (cmd, args, { cwd } = {}) => {
+        if (cmd === 'npx' && args.includes('create-next-app@latest')) {
+            const root = path.join(cwd, 'frontend')
+            await write(root, 'package.json', JSON.stringify({ name: 'frontend', scripts: {} }))
+            await write(root, 'next.config.ts', NEXT_CONFIG)
+            await write(root, 'src/app/globals.css', GLOBALS_CSS)
+            await write(root, 'src/app/page.tsx', '// starter')
+            await write(root, 'src/app/layout.tsx', '// starter')
+        }
+        return ''
+    }
+    for (const step of await nextjs.steps({ projectDir, answers: { ui: 'none' }, api: API, exec })) await step.run()
+    const root = path.join(projectDir, 'frontend')
+    assert.match(await fs.readFile(path.join(root, 'src/lib/api.ts'), 'utf8'), /Accept-Language/)
+    assert.match(await fs.readFile(path.join(root, 'src/app/[locale]/page.tsx'), 'utf8'), /<ApiStatus \/>/)
+    const nl = JSON.parse(await fs.readFile(path.join(root, 'messages/nl.json'), 'utf8'))
+    assert.equal(nl.ApiStatus.online, 'Verbonden')
+})
+
+test('steps (without a backend) leave the frontend free of API code', async t => {
+    const projectDir = await tmp(t)
+    const exec = async (cmd, args, { cwd } = {}) => {
+        if (cmd === 'npx' && args.includes('create-next-app@latest')) {
+            const root = path.join(cwd, 'frontend')
+            await write(root, 'package.json', JSON.stringify({ name: 'frontend', scripts: {} }))
+            await write(root, 'next.config.ts', NEXT_CONFIG)
+            await write(root, 'src/app/globals.css', GLOBALS_CSS)
+        }
+        return ''
+    }
+    for (const step of await nextjs.steps({ projectDir, answers: { ui: 'none' }, api: null, exec })) await step.run()
+    const root = path.join(projectDir, 'frontend')
+    assert.ok(!(await exists(path.join(root, 'src/lib/api.ts'))))
+    assert.ok(!(await exists(path.join(root, 'src/components/api-status.tsx'))))
+    assert.ok(!('ApiStatus' in JSON.parse(await fs.readFile(path.join(root, 'messages/en.json'), 'utf8'))))
 })
