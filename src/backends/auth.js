@@ -459,7 +459,16 @@ export class AuthGuard implements CanActivate {
 
     'src/auth/auth.controller.ts': `import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiTags } from '@nestjs/swagger';
+import {
+  ApiConflictResponse,
+  ApiCookieAuth,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+  ApiTooManyRequestsResponse,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { AppException } from '../common/app.exception.js';
@@ -491,6 +500,10 @@ export class AuthController {
   }
 
   @Post('register')
+  @ApiOperation({ summary: 'Create an account and log in (sets the session cookie)' })
+  @ApiCreatedResponse({ description: 'The new user, without the password' })
+  @ApiConflictResponse({ description: 'errors.EMAIL_TAKEN, translated' })
+  @ApiTooManyRequestsResponse({ description: 'errors.TOO_MANY_REQUESTS, translated' })
   @UseGuards(ThrottlerGuard)
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) response: Response) {
     const { user, token } = await this.auth.register(dto);
@@ -500,6 +513,10 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Log in (sets the session cookie)' })
+  @ApiOkResponse({ description: 'The user, without the password' })
+  @ApiUnauthorizedResponse({ description: 'errors.INVALID_CREDENTIALS, translated' })
+  @ApiTooManyRequestsResponse({ description: 'errors.TOO_MANY_REQUESTS, translated' })
   @UseGuards(ThrottlerGuard)
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) response: Response) {
     const { user, token } = await this.auth.login(dto);
@@ -509,12 +526,18 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Log out (clears the session cookie)' })
+  @ApiOkResponse({ schema: { example: { status: 'ok' } } })
   logout(@Res({ passthrough: true }) response: Response) {
     response.clearCookie(SESSION_COOKIE, this.cookieOptions());
     return { status: 'ok' };
   }
 
   @Get('me')
+  @ApiOperation({ summary: 'The logged in user (needs the session cookie)' })
+  @ApiCookieAuth()
+  @ApiOkResponse({ description: 'The user from the database, without the password' })
+  @ApiUnauthorizedResponse({ description: 'errors.UNAUTHORIZED, translated' })
   @UseGuards(AuthGuard)
   async me(@Req() request: AuthenticatedRequest) {
     const user = await this.users.findById(request.userId);

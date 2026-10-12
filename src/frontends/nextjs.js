@@ -4,6 +4,7 @@ import path from 'node:path'
 import { select } from '@inquirer/prompts'
 import { run } from '../runner.js'
 import { AUTH_MESSAGES, authFiles } from './auth.js'
+import { frontendReadme } from './docs.js'
 
 export const DIR = 'frontend'
 export const LOCALES = ['en', 'nl', 'fr', 'de']
@@ -1000,6 +1001,12 @@ export const nextjs = {
                     // With a backend the frontend also gets the API client, the status card and their texts
                     if (api) all = withApi(all, api, { ui: withUi })
                     for (const [rel, content] of Object.entries(all)) await write(root, rel, content)
+                    // Documentation of this frontend (replaces the README of create-next-app)
+                    await write(
+                        root,
+                        'README.md',
+                        frontendReadme({ ui: answers?.ui ?? 'none', api, locales: LOCALES, apiPort: api?.port })
+                    )
                     await patchNextConfig(root)
                     if (withUi) await write(root, 'src/app/globals.css', UI_GLOBALS_CSS)
                     else await patchGlobalsCss(root)

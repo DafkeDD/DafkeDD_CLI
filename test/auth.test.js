@@ -102,8 +102,8 @@ test('the session is a signed JWT in an httpOnly, SameSite=Lax cookie that is Se
 test('login and register are rate limited, logout and me are not (the frontend polls /auth/me)', () => {
     const controller = authFiles('t')['src/auth/auth.controller.ts']
     assert.equal(controller.match(/UseGuards\(ThrottlerGuard\)/g).length, 2)
-    assert.match(controller, /@Post\('register'\)\s+@UseGuards\(ThrottlerGuard\)/)
-    assert.match(controller, /@Post\('login'\)\s+@HttpCode\(HttpStatus\.OK\)\s+@UseGuards\(ThrottlerGuard\)/)
+    assert.match(controller, /@Post\('register'\)[^]*?@UseGuards\(ThrottlerGuard\)\s+async register/)
+    assert.match(controller, /@Post\('login'\)[^]*?@UseGuards\(ThrottlerGuard\)\s+async login/)
 })
 
 test('an unknown email takes as long as a wrong password and gives the same error', () => {

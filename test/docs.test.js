@@ -1,0 +1,228 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs/promises'
+import { buildFiles, TRANSLATIONS, LOCALES, PORT } from '../src/backends/nestjs.js'
+import { endpoints, backendReadme } from '../src/backends/docs.js'
+import { frontendReadme } from '../src/frontends/docs.js'
+
+const DB = {
+    id: 'postgres',
+    mode: 'docker',
+    host: 'localhost',
+    port: 5432,
+    user: 'app',
+    password: 'secret',
+    database: 'shop',
+    project: 'shop'
+}
+
+const VARIANTS = {
+    'no database': { database: null, auth: null },
+    database: { database: DB, auth: null },
+    'database + login': { database: DB, auth: { jwtSecret: 'x' } }
+}
+
+const filesOf = ({ database, auth }) => buildFiles(database, { auth })
+const optionsOf = ({ database, auth }) => ({ database, auth: Boolean(auth) })
+
+/** Every route that the generated controllers define, as "METHOD /path". */
+function routesOf(files) {
+    const routes = []
+    for (const [rel, content] of Object.entries(files)) {
+        if (!rel.endsWith('.controller.ts')) continue
+        const prefix = content.match(/@Controller\('([^']*)'\)/)?.[1] ?? ''
+        for (const [, method, sub] of content.matchAll(/@(Get|Post|Put|Patch|Delete)\((?:'([^']*)')?\)/g)) {
+            const parts = [prefix, sub ?? ''].filter(Boolean)
+            routes.push({ rel, key: `${method.toUpperCase()} /${parts.join('/')}` })
+        }
+    }
+    return routes
+}
+
+// ---------------------------------------------------------------- every endpoint is documented
+
+for (const [name, variant] of Object.entries(VARIANTS)) {
+    test(`(${name}) every route of the controllers is documented, and every documented route exists`, () => {
+        const routes = routesOf(filesOf(variant)).map(r => r.key)
+        const documented = endpoints(optionsOf(variant)).map(e => `${e.method} ${e.path}`)
+        assert.deepEqual([...routes].sort(), [...documented].sort())
+    })
+
+    test(`(${name}) every route has a Swagger description (@ApiOperation) and is in the README`, () => {
+        const files = filesOf(variant)
+        for (const [rel, content] of Object.entries(files).filter(([r]) => r.endsWith('.controller.ts'))) {
+            const routeCount = (content.match(/@(Get|Post|Put|Patch|Delete)\(/g) ?? []).length
+            const described = (content.match(/@ApiOperation\(/g) ?? []).length
+            assert.equal(described, routeCount, `${rel}: every route needs @ApiOperation`)
+            assert.match(content, /@ApiTags\(/, rel)
+        }
+        const readme = files['README.md']
+        for (const route of routesOf(files))
+            assert.ok(readme.includes(`### ${route.key}`), `README documents ${route.key}`)
+    })
+
+    test(`(${name}) the README shows body, example, response and errors of each endpoint`, () => {
+        const readme = filesOf(variant)['README.md']
+        for (const endpoint of endpoints(optionsOf(variant))) {
+            const start = readme.indexOf(`### ${endpoint.method} ${endpoint.path}`)
+            const next = readme.indexOf('\n### ', start + 1)
+            const section = readme.slice(start, next === -1 ? undefined : next)
+            assert.ok(endpoint.summary.length > 10)
+            assert.ok(section.includes(endpoint.summary), `${endpoint.path}: summary`)
+            assert.match(section, /curl /, `${endpoint.path}: curl example`)
+            assert.ok(section.includes(`http://localhost:${PORT}`), `${endpoint.path}: full URL`)
+            if (endpoint.body) {
+                assert.match(section, /\*\*Body\*\*/, `${endpoint.path}: body table`)
+                for (const [field] of endpoint.body.fields)
+                    assert.ok(section.includes(`\`${field}\``), `${endpoint.path}: ${field}`)
+                assert.ok(section.includes(JSON.stringify(endpoint.body.example)), `${endpoint.path}: body example`)
+            }
+            if (endpoint.response)
+                assert.ok(section.includes(`**Response ${endpoint.response.status}:**`), `${endpoint.path}: response`)
+            for (const [status, key] of endpoint.errors)
+                assert.ok(section.includes(`| ${status} | \`${key}\``), `${endpoint.path}: ${status} ${key}`)
+        }
+    })
+
+    test(`(${name}) every documented error key exists in all four languages`, () => {
+        const files = filesOf(variant)
+        for (const endpoint of endpoints(optionsOf(variant))) {
+            for (const [, key] of endpoint.errors) {
+                for (const locale of LOCALES) {
+                    const errors = JSON.parse(files[`src/i18n/${locale}/errors.json`])
+                    assert.ok(errors[key.replace('errors.', '')]?.trim(), `${locale} ${key}`)
+                }
+            }
+        }
+    })
+}
+
+test('documented request examples fill in all documented fields', () => {
+    for (const endpoint of endpoints({ database: DB, auth: true }).filter(e => e.body)) {
+        assert.deepEqual(
+            Object.keys(endpoint.body.example).sort(),
+            endpoint.body.fields.map(f => f[0]).sort(),
+            endpoint.path
+        )
+    }
+})
+
+// ---------------------------------------------------------------- what else the backend README explains
+
+test('the backend README explains start, scripts, .env, languages and the error format', () => {
+    const readme = filesOf(VARIANTS['database + login'])['README.md']
+    for (const text of [
+        '# Backend (NestJS)',
+        `http://localhost:${PORT}/docs`,
+        'npm run db:up',
+        'npm run db:check',
+        'DATABASE_PASSWORD',
+        'JWT_SECRET',
+        'AUTH_RATE_LIMIT',
+        '?lang=nl',
+        'x-lang',
+        'Accept-Language',
+        '"statusCode"',
+        'AppException',
+        '## Endpoints',
+        '## Tests'
+    ]) {
+        assert.ok(readme.includes(text), text)
+    }
+})
+
+test('the README never contains the database password or the JWT secret', () => {
+    const files = buildFiles({ ...DB, password: 'Sup3rSecretPw' }, { auth: { jwtSecret: 'TopSecretJwtValue' } })
+    assert.ok(!files['README.md'].includes('Sup3rSecretPw'))
+    assert.ok(!files['README.md'].includes('TopSecretJwtValue'))
+})
+
+test('the README only mentions features that were installed', () => {
+    const plain = filesOf(VARIANTS['no database'])['README.md']
+    for (const text of ['DATABASE_', 'db:check', '/auth/', 'JWT_SECRET', 'Users table'])
+        assert.ok(!plain.includes(text), text)
+    const local = buildFiles({ ...DB, mode: 'local' }, { auth: null })['README.md']
+    assert.ok(local.includes('db:check'))
+    assert.ok(!local.includes('db:up'), 'no Docker scripts for a local database')
+    const noLogin = filesOf(VARIANTS.database)['README.md']
+    assert.ok(!noLogin.includes('/auth/'))
+})
+
+test('the users table and its columns are documented under its real name', () => {
+    const readme = filesOf(VARIANTS['database + login'])['README.md']
+    assert.match(readme, /\*\*`shopusers`\*\*/)
+    for (const column of ['id', 'name', 'email', 'password_hash', 'created_at'])
+        assert.ok(readme.includes(`| \`${column}\` |`), column)
+})
+
+test('backendReadme can be used on its own with only English translations', () => {
+    const readme = backendReadme({ translations: { en: { errors: TRANSLATIONS.en.errors } } })
+    assert.match(readme, /### GET \/health/)
+})
+
+test('Swagger knows about the cookie when login is installed', () => {
+    assert.match(filesOf(VARIANTS['database + login'])['src/main.ts'], /addCookieAuth\('session'\)/)
+    assert.ok(!filesOf(VARIANTS.database)['src/main.ts'].includes('addCookieAuth'))
+})
+
+// ---------------------------------------------------------------- frontend README
+
+test('the frontend README explains structure, languages, theme and icons', () => {
+    const readme = frontendReadme({ ui: 'none', api: null })
+    for (const text of [
+        '# Frontend (Next.js)',
+        'npm run dev',
+        'messages/<language>.json',
+        '@/i18n/navigation',
+        'data-theme',
+        'react-icons/lu'
+    ]) {
+        assert.ok(readme.includes(text), text)
+    }
+    assert.ok(!readme.includes('useApi'), 'no API section without a backend')
+})
+
+test('the frontend README documents calling the API when a backend is installed', () => {
+    const readme = frontendReadme({ ui: 'all', api: { port: 4000, auth: false } })
+    for (const text of [
+        '## Calling the API',
+        'useApi()',
+        'apiFetch',
+        'ApiError',
+        'Accept-Language',
+        'NEXT_PUBLIC_API_URL',
+        'http://localhost:4000',
+        'getLocale'
+    ]) {
+        assert.ok(readme.includes(text), text)
+    }
+    assert.ok(readme.includes('## DafkeDD UI'))
+    assert.ok(!readme.includes('## Login pages'))
+})
+
+test('the frontend README documents the login pages only when they were installed', () => {
+    const readme = frontendReadme({ ui: 'none', api: { port: 4000, auth: true } })
+    for (const text of ['## Login pages', '/login', '/register', '/profile', 'GET /auth/me', 'httpOnly'])
+        assert.ok(readme.includes(text), text)
+})
+
+test('the README of the frontend mentions every language it was generated with', () => {
+    const readme = frontendReadme({ locales: ['en', 'nl'], api: null })
+    assert.ok(readme.includes('`en`, `nl`'))
+})
+
+// ---------------------------------------------------------------- documentation rule of this repository
+
+const read = rel => fs.readFile(new URL(`../${rel}`, import.meta.url), 'utf8')
+
+test('the README of this repository documents the generated documentation', async () => {
+    const readme = await read('README.md')
+    assert.match(readme, /## Documentation/)
+    assert.match(readme, /Swagger/)
+})
+
+test('CONTRIBUTING makes documentation mandatory for every step and every API call', async () => {
+    const contributing = await read('CONTRIBUTING.md')
+    assert.match(contributing, /Documentation is mandatory/)
+    assert.match(contributing, /every API call/i)
+})

@@ -74,6 +74,25 @@ and `npm run format:check` are added and the project is formatted straight away.
 deliberately not formatted, so `dafke-ui update` does not see your files as "modified". `AGENTS.md` and `next-env.d.ts`
 are ignored as well, because Next.js rewrites them itself.
 
+## Documentation
+
+Everything the CLI installs is documented, and the documentation is generated together with the code so it always
+matches what was installed:
+
+- **`./backend/README.md`**: how to start, all npm scripts, every `.env` variable, the language detection and the error
+  format, the database (and the users table), the login flow and **every API endpoint** with its body fields, a `curl`
+  example, the response and all error codes (with the English message). The tests check that every route of the
+  generated controllers is described there.
+- **Swagger / OpenAPI** at `http://localhost:4000/docs`: every endpoint has a description and its responses, you can try
+  calls from the browser and choose the `Accept-Language`.
+- **`./frontend/README.md`**: structure, languages, theme, icons, DafkeDD UI, **how to call the API** (`useApi()` in
+  client components, `apiFetch()` on the server, `ApiError`), and the login pages when they were installed.
+- **Code comments** on every generated function that is not obvious.
+
+When you add an endpoint to a generated backend: add `@ApiOperation` (and the response decorators) to the route, add it
+to `README.md`, and add a test for it. When you change this CLI, update this README, `CONTRIBUTING.md` and the changelog
+(see [CONTRIBUTING](CONTRIBUTING.md)).
+
 ## Installation
 
 Requirements: [Node.js](https://nodejs.org) 20 or newer and Git.
@@ -321,6 +340,9 @@ git switch developer
 
 ## Changelog
 
+- **0.15.0**: documentation for everything that is generated: `./backend/README.md` with every API endpoint (body,
+  `curl` example, response, errors), Swagger descriptions on every route, `./frontend/README.md` with how to call the
+  API; tests check that every route is documented.
 - **0.14.0**: optional test login/register pages: a users table named `<database>users` (one table, created by the API),
   scrypt password hashing, JWT in an httpOnly cookie, rate limiting, translated errors, and login, register and profile
   pages in the frontend, with tests.

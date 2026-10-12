@@ -171,7 +171,7 @@ describe('DatabaseService', () => {
 `,
 
     'src/health/health.controller.ts': `import { Controller, Get, HttpStatus } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiServiceUnavailableResponse, ApiTags } from '@nestjs/swagger';
 import { AppException } from '../common/app.exception.js';
 import { DatabaseService } from '../database/database.service.js';
 
@@ -182,6 +182,9 @@ export class HealthController {
 
   /** 200 when the API and the database work, a translated 503 when the database is down. */
   @Get()
+  @ApiOperation({ summary: 'Is the API running and does the database answer?' })
+  @ApiOkResponse({ schema: { example: { status: 'ok', database: 'up' } } })
+  @ApiServiceUnavailableResponse({ description: 'errors.DATABASE_UNAVAILABLE, translated' })
   async check() {
     if (!(await this.database.ping())) {
       throw new AppException('errors.DATABASE_UNAVAILABLE', HttpStatus.SERVICE_UNAVAILABLE);

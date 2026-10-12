@@ -34,6 +34,19 @@ Nothing in the tests touches the network, GitHub or the real `npm`:
   database goes in `src/databases/` and is registered in `src/databases/index.js`.
 - **Files** are written to a temporary folder (`fs.mkdtemp`) that is removed after each test.
 
+### Documentation
+
+**Documentation is mandatory**, just like tests: nothing is finished until it is documented, and it is written in
+English. For every step, option or feature that you add or change:
+
+- update `README.md` (what it does, how to use it) and add a line to the changelog;
+- **every API call** (endpoint) of a generated backend needs a Swagger description (`@ApiOperation` and the response
+  decorators), an entry in `src/backends/docs.js` (body fields, example, response, errors) and a test;
+- every way to call the API from the frontend needs an example in `src/frontends/docs.js`;
+- generated code gets comments that explain the "why".
+
+`test/docs.test.js` fails when a generated route is not documented.
+
 ### What to test
 
 - New step or option: the step titles/order, the commands that are run and where (`cwd` inside `./frontend`, never

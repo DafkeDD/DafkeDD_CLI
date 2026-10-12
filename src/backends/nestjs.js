@@ -6,6 +6,7 @@ import { run } from '../runner.js'
 import { PRETTIERRC } from '../frontends/nextjs.js'
 import { databases } from '../databases/index.js'
 import * as login from './auth.js'
+import { backendReadme } from './docs.js'
 
 export const DIR = 'backend'
 export const LOCALES = ['en', 'nl', 'fr', 'de']
@@ -119,6 +120,13 @@ const translationFiles = Object.fromEntries(
 export const files = {
     ...translationFiles,
 
+    // Documentation of every endpoint (replaces the README of the NestJS starter)
+    'README.md': backendReadme({
+        translations: { en: { errors: TRANSLATIONS.en.errors } },
+        port: PORT,
+        origin: FRONTEND_ORIGIN
+    }),
+
     '.gitignore': GITIGNORE,
     '.env': ENV_EXAMPLE,
     '.env.example': ENV_EXAMPLE,
@@ -135,7 +143,10 @@ async function bootstrap() {
 
   const swagger = new DocumentBuilder()
     .setTitle('API')
-    .setDescription('Error messages are translated: send Accept-Language (or ?lang=, or the x-lang header).')
+    .setDescription(
+      'Error messages are translated: send Accept-Language (or ?lang=, or the x-lang header). ' +
+        'Every error has the shape { statusCode, error, message, path, timestamp }.',
+    )
     .setVersion('1.0')
     .addGlobalParameters({
       name: 'Accept-Language',
@@ -202,13 +213,18 @@ export class AppModule {}
 `,
 
     'src/app.controller.ts': `import { Controller, Get } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { I18n, I18nContext } from 'nestjs-i18n';
 
 @ApiTags('app')
 @Controller()
 export class AppController {
   @Get()
+  @ApiOperation({ summary: 'Greeting in the language of the request' })
+  @ApiOkResponse({
+    description: 'The message and the language that was used',
+    schema: { example: { message: 'Hello from the API!', language: 'en' } },
+  })
   getHello(@I18n() i18n: I18nContext) {
     return { message: i18n.t('common.HELLO'), language: i18n.lang };
   }
@@ -216,12 +232,14 @@ export class AppController {
 `,
 
     'src/health/health.controller.ts': `import { Controller, Get } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
   @Get()
+  @ApiOperation({ summary: 'Is the API running?' })
+  @ApiOkResponse({ schema: { example: { status: 'ok' } } })
   check() {
     return { status: 'ok' };
   }
@@ -332,7 +350,7 @@ export class CreateExampleDto {
 `,
 
     'src/examples/examples.controller.ts': `import { Body, Controller, Get, HttpStatus, Param, Post } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AppException } from '../common/app.exception.js';
 import { CreateExampleDto } from './dto/create-example.dto.js';
 
@@ -341,11 +359,14 @@ import { CreateExampleDto } from './dto/create-example.dto.js';
 @Controller('examples')
 export class ExamplesController {
   @Post()
+  @ApiOperation({ summary: 'Example with validation: invalid input gives a translated 400' })
   create(@Body() dto: CreateExampleDto) {
     return { id: 1, name: dto.name, email: dto.email };
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Example of a translated exception: always answers 404' })
+  @ApiNotFoundResponse({ description: 'errors.EXAMPLE_NOT_FOUND, translated' })
   findOne(@Param('id') id: string): never {
     throw new AppException('errors.EXAMPLE_NOT_FOUND', HttpStatus.NOT_FOUND, { id });
   }
@@ -637,6 +658,11 @@ describe('API (e2e)', () => {\n`
                 ...login.VALIDATION[locale]
             })
         }
+        result['src/main.ts'] = replaceOnce(
+            files['src/main.ts'],
+            ".setVersion('1.0')",
+            `.setVersion('1.0')\n    .addCookieAuth('${login.COOKIE}')`
+        )
         result['src/app.module.ts'] = replaceOnce(
             replaceOnce(
                 result['src/app.module.ts'],
@@ -667,6 +693,14 @@ describe('API (e2e)', () => {\n`
             "process.env.JWT_SECRET ??= 'test-only-secret';\n\n// A fake database: the tests do not need PostgreSQL.\n"
         )
     }
+    result['README.md'] = backendReadme({
+        database,
+        auth: Boolean(auth),
+        port: PORT,
+        origin: FRONTEND_ORIGIN,
+        table: auth ? login.usersTable(database.database) : null,
+        translations: { en: { errors: JSON.parse(result['src/i18n/en/errors.json']) } }
+    })
     return result
 }
 
