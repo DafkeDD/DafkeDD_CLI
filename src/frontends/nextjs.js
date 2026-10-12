@@ -766,10 +766,10 @@ export function ApiStatus() {
   return (
     <section
       aria-live="polite"
-      className="relative mt-2 w-full max-w-3xl rounded-2xl border border-black/10 bg-black/[.03] p-4 text-left dark:border-white/15 dark:bg-white/[.04]"
+      className="relative mt-6 w-full max-w-3xl rounded-2xl border border-black/10 bg-black/[.03] p-5 text-left dark:border-white/15 dark:bg-white/[.04]"
     >
-      <h2 className="mb-3 text-sm font-semibold">{t('title')}</h2>
-      <ul className="flex flex-col gap-2 text-[13px]">
+      <h2 className="mb-5 text-sm font-semibold">{t('title')}</h2>
+      <ul className="flex flex-col gap-3 text-[13px]">
         <li className="flex items-start gap-2.5">
           <LuServer aria-hidden className="mt-0.5 shrink-0" />
           <span>
@@ -802,7 +802,7 @@ export function ApiStatus() {
           </li>
         )}
       </ul>
-      {status.state === 'offline' && <p className="mt-3 text-xs opacity-70">{t('hint')}</p>}
+      {status.state === 'offline' && <p className="mt-4 text-xs opacity-70">{t('hint')}</p>}
     </section>
   );
 }

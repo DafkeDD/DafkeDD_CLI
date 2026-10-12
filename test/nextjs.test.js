@@ -566,3 +566,9 @@ test('steps (without a backend) leave the frontend free of API code', async t =>
     assert.ok(!(await exists(path.join(root, 'src/components/api-status.tsx'))))
     assert.ok(!('ApiStatus' in JSON.parse(await fs.readFile(path.join(root, 'messages/en.json'), 'utf8'))))
 })
+
+test('the status card has room between its title and the rows', () => {
+    const card = apiFiles(API)['src/components/api-status.tsx']
+    assert.match(card, /<h2 className="mb-5 /)
+    assert.match(card, /<ul className="flex flex-col gap-3 /)
+})
