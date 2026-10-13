@@ -2,6 +2,20 @@ import { Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { BootstrapAdmin } from './store/oidc.store.js'
 
+/** The slug of a tenant name: lowercase letters, digits and dashes, 2 to 63 characters ("Acme Café" -> "acme-cafe"). */
+export function slugify(name: string): string {
+    const slug =
+        name
+            .normalize('NFKD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 63)
+            .replace(/-+$/, '') || 'tenant'
+    return slug.length >= 2 ? slug : slug + '-tenant'
+}
+
 /** Lifetimes and limits of the OpenID Connect server (seconds unless stated otherwise). */
 export const OIDC = {
     SESSION_COOKIE: 'oidc_session',
@@ -18,8 +32,16 @@ export const OIDC = {
     /** A signing key is replaced after 90 days and stays in the JWKS for 14 more days. */
     KEY_ROTATION_DAYS: 90,
     KEY_GRACE_DAYS: 14,
-    /** Password login is "level of assurance 1"; MFA comes in a later phase. */
+    /** Password login is "level of assurance 1"; with two-factor authentication it is "loa2". */
     ACR_PASSWORD: 'loa1',
+    /** Password and a second factor (authenticator app or recovery code). */
+    ACR_MFA: 'loa2',
+    /** Lifetimes of the links in emails. */
+    VERIFY_EMAIL_SECONDS: 24 * 60 * 60,
+    RESET_PASSWORD_SECONDS: 60 * 60,
+    INVITATION_SECONDS: 7 * 24 * 60 * 60,
+    PASSWORD_MIN: 12,
+    PASSWORD_MAX: 128,
     SCOPES: ['openid', 'profile', 'email', 'tenant'],
     LOCALES: ['en', 'nl', 'fr', 'de']
 } as const
@@ -48,6 +70,29 @@ export class OidcConfig {
         return this.config.get<string>('OIDC_LOGIN_UI_URL') || null
     }
 
+    /** The frontend: links in emails go to its pages (/verify-email, /reset-password, /invite). */
+    get appUrl(): string {
+        return (this.config.get<string>('APP_URL') || 'http://localhost:3000').replace(/\/+$/, '')
+    }
+
+    /** The name of the application in emails. */
+    get appName(): string {
+        return this.config.get<string>('APP_NAME') || 'App'
+    }
+
+    /**
+     * Two-step verification for every account (OIDC_MFA=required, the default): an account without it sets it up at its
+     * next login, before it gets a session. `optional` is only meant for tests and demos.
+     */
+    get mfaRequired(): boolean {
+        return (this.config.get<string>('OIDC_MFA') ?? 'required') !== 'optional'
+    }
+
+    /** OIDC_REGISTRATION=closed: nobody can create an account; people only join through an invitation. */
+    get registrationOpen(): boolean {
+        return (this.config.get<string>('OIDC_REGISTRATION') ?? 'open') !== 'closed'
+    }
+
     get secureCookies(): boolean {
         return this.config.get<string>('NODE_ENV') === 'production'
     }
@@ -72,20 +117,12 @@ export class OidcConfig {
         const passwordHash = this.config.get<string>('OIDC_BOOTSTRAP_ADMIN_PASSWORD_HASH')
         if (!email || !passwordHash) return null
         const tenantName = this.config.get<string>('OIDC_BOOTSTRAP_TENANT') ?? 'My organisation'
-        const slug =
-            tenantName
-                .normalize('NFKD')
-                .replace(/[\u0300-\u036f]/g, '')
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '-')
-                .replace(/^-+|-+$/g, '')
-                .slice(0, 63) || 'default'
         return {
             email: email.trim().toLowerCase(),
             name: this.config.get<string>('OIDC_BOOTSTRAP_ADMIN_NAME') ?? 'Admin',
             passwordHash,
             tenantName,
-            tenantSlug: slug.length >= 2 ? slug : slug + '-tenant'
+            tenantSlug: slugify(tenantName)
         }
     }
 }

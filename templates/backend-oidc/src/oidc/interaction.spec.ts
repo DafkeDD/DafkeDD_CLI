@@ -22,13 +22,16 @@ const interaction = (overrides: Partial<Interaction> = {}): Interaction => ({
     },
     csrf: randomToken(),
     userId: null,
+    mfaPending: false,
+    enrolling: false,
+    amr: [],
     expiresAt: Date.now() + 60_000,
     ...overrides
 })
 
 describe('login cookie (interaction)', () => {
     it('opens what it sealed', () => {
-        const original = interaction({ userId: 'user-1' })
+        const original = interaction({ userId: 'user-1', mfaPending: true, amr: ['pwd'] })
         expect(openInteraction(original.id, sealInteraction(original, key), key)).toEqual(original)
     })
 

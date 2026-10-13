@@ -1,5 +1,7 @@
 // Creates or updates a user and adds it to a tenant: npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme
-// Options: --password <text> (otherwise a random password is printed once), --roles admin,editor, --tenant-name "Acme".
+// Options: --password <text> (otherwise a random password is printed once), --role user|admin (default user),
+// --tenant-name "Acme", --superadmin (admin of every tenant of the platform),
+// --reset-mfa (removes two-step verification: the user sets it up again at the next login, e.g. after losing the phone).
 // Start the API once first: it creates the tables.
 import { randomBytes, scrypt } from 'node:crypto'
 import { parseArgs } from 'node:util'
@@ -18,15 +20,64 @@ const { values } = parseArgs({
         password: { type: 'string' },
         tenant: { type: 'string' },
         'tenant-name': { type: 'string' },
-        roles: { type: 'string', default: '' }
+        role: { type: 'string', default: 'user' },
+        superadmin: { type: 'boolean', default: false },
+        'reset-mfa': { type: 'boolean', default: false }
     }
 })
 
 const email = values.email?.trim().toLowerCase()
 const tenantSlug = values.tenant?.trim().toLowerCase()
-if (!email || !/^[^@\s]+@[^@\s]+$/.test(email) || !tenantSlug || !/^[a-z0-9][a-z0-9-]{1,62}$/.test(tenantSlug)) {
+
+const connect = async () => {
+    const client = new pg.Client({
+        host: process.env.DATABASE_HOST,
+        port: Number(process.env.DATABASE_PORT),
+        user: process.env.DATABASE_USER,
+        password: process.env.DATABASE_PASSWORD,
+        database: process.env.DATABASE_NAME
+    })
+    await client.connect()
+    return client
+}
+
+// npm run oidc:user -- --email ada@example.com --reset-mfa: only removes two-step verification and ends the sessions
+if (values['reset-mfa']) {
+    if (!email) {
+        console.error('Usage: npm run oidc:user -- --email ada@example.com --reset-mfa')
+        process.exit(1)
+    }
+    const client = await connect()
+    try {
+        const users = '"' + process.env.DATABASE_NAME + 'users"'
+        const { rows } = await client.query(
+            `UPDATE ${users} SET totp_secret = NULL, totp_enabled = false, totp_last_step = NULL, recovery_codes = '{}',
+         updated_at = now() WHERE lower(email) = lower($1) RETURNING id`,
+            [email]
+        )
+        if (!rows[0]) {
+            console.error(`No account with ${email}.`)
+            process.exitCode = 1
+        } else {
+            await client.query('UPDATE oidc_sessions SET expires_at = least(expires_at, now()) WHERE user_id = $1', [
+                rows[0].id
+            ])
+            console.log(`Two-step verification of ${email} was reset: it is set up again at the next login.`)
+        }
+    } finally {
+        await client.end()
+    }
+    process.exit()
+}
+if (
+    !email ||
+    !/^[^@\s]+@[^@\s]+$/.test(email) ||
+    !tenantSlug ||
+    !/^[a-z0-9][a-z0-9-]{1,62}$/.test(tenantSlug) ||
+    !['user', 'admin'].includes(values.role)
+) {
     console.error(
-        'Usage: npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme [--roles admin] [--password ...]'
+        'Usage: npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme [--role user|admin] [--superadmin] [--password ...]'
     )
     process.exit(1)
 }
@@ -48,22 +99,11 @@ if (password.length < 12) {
     console.error('Use a password of at least 12 characters.')
     process.exit(1)
 }
-const roles = values.roles
-    .split(',')
-    .map(role => role.trim())
-    .filter(Boolean)
 const usersTable = '"' + process.env.DATABASE_NAME + 'users"'
 
-const client = new pg.Client({
-    host: process.env.DATABASE_HOST,
-    port: Number(process.env.DATABASE_PORT),
-    user: process.env.DATABASE_USER,
-    password: process.env.DATABASE_PASSWORD,
-    database: process.env.DATABASE_NAME
-})
-
+let client
 try {
-    await client.connect()
+    client = await connect()
     await client.query('BEGIN')
     const tenant = await client.query(
         `INSERT INTO tenants (slug, name) VALUES ($1, $2)
@@ -71,23 +111,24 @@ try {
         [tenantSlug, values['tenant-name'] ?? tenantSlug, values['tenant-name'] ?? null]
     )
     const user = await client.query(
-        `INSERT INTO ${usersTable} (email, email_verified, name, password_hash) VALUES ($1, true, $2, $3)
-     ON CONFLICT (lower(email)) DO UPDATE SET password_hash = EXCLUDED.password_hash, name = COALESCE($4, ${usersTable}.name), updated_at = now()
+        `INSERT INTO ${usersTable} (email, email_verified, name, password_hash, is_superadmin) VALUES ($1, true, $2, $3, $5)
+     ON CONFLICT (lower(email)) DO UPDATE SET password_hash = EXCLUDED.password_hash, name = COALESCE($4, ${usersTable}.name),
+       is_superadmin = ${usersTable}.is_superadmin OR $5, email_verified = true, updated_at = now()
      RETURNING id`,
-        [email, values.name ?? email, await hashPassword(password), values.name ?? null]
+        [email, values.name ?? email, await hashPassword(password), values.name ?? null, values.superadmin]
     )
     await client.query(
-        `INSERT INTO tenant_members (tenant_id, user_id, roles) VALUES ($1, $2, $3)
-     ON CONFLICT (tenant_id, user_id) DO UPDATE SET roles = EXCLUDED.roles`,
-        [tenant.rows[0].id, user.rows[0].id, roles]
+        `INSERT INTO tenant_members (tenant_id, user_id, role) VALUES ($1, $2, $3)
+     ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
+        [tenant.rows[0].id, user.rows[0].id, values.role]
     )
     await client.query('COMMIT')
     console.log(
-        `User ${email} is a member of "${tenant.rows[0].name}" (${tenantSlug})${roles.length ? ' with roles ' + roles.join(', ') : ''}.`
+        `User ${email} is ${values.role} of "${tenant.rows[0].name}" (${tenantSlug})${values.superadmin ? ' and superadmin' : ''}.`
     )
     if (generated) console.log(`Password (shown once): ${password}`)
 } catch (error) {
-    await client.query('ROLLBACK').catch(() => undefined)
+    await client?.query('ROLLBACK').catch(() => undefined)
     const message = error instanceof Error ? error.message : String(error)
     console.error(
         'Could not save the user: ' +
@@ -96,5 +137,5 @@ try {
     )
     process.exitCode = 1
 } finally {
-    await client.end()
+    await client?.end()
 }

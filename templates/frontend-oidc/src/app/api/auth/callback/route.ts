@@ -34,13 +34,14 @@ export async function GET(request: NextRequest) {
 
     try {
         const tokens = await exchangeCode(code, flow.verifier)
-        const { sub, tenant } = await verifyIdToken(tokens.id_token, flow.nonce, tokens.access_token)
+        const { sub, tenant, superadmin } = await verifyIdToken(tokens.id_token, flow.nonce, tokens.access_token)
         const claims = (await userinfo(tokens.access_token)) ?? {}
         const session: Session = {
             sub,
             name: typeof claims.name === 'string' ? claims.name : '',
             email: typeof claims.email === 'string' ? claims.email : '',
             tenant,
+            superadmin,
             accessToken: tokens.access_token,
             expiresAt: Date.now() + tokens.expires_in * 1000
         }

@@ -1,9 +1,14 @@
 import { Module } from '@nestjs/common'
-import { TenantMembersService } from './tenant-members.service.js'
+import { OidcModule } from '../oidc/oidc.module.js'
+import { MembersController } from './members.controller.js'
+import { PlatformController } from './platform.controller.js'
 
-/** Tenant-scoped services (Row-Level Security through DatabaseService.withTenant). */
+/**
+ * Managing tenants: the members of the own tenant (admins) and every tenant of the platform (superadmins). Member data
+ * is read and changed with PostgreSQL Row-Level Security (see PgOidcStore.listMembers and DatabaseService.withTenant).
+ */
 @Module({
-    providers: [TenantMembersService],
-    exports: [TenantMembersService]
+    imports: [OidcModule],
+    controllers: [MembersController, PlatformController]
 })
 export class TenantsModule {}

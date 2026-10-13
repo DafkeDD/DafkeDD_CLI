@@ -37,6 +37,14 @@ CREATE TABLE ${users} (
   locale text,
   password_hash text NOT NULL,
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+  -- Platform administrator: admin of every tenant, also new ones. Never set by registration.
+  is_superadmin boolean NOT NULL DEFAULT false,
+  -- Two-factor authentication (TOTP): the secret encrypted with OIDC_MASTER_KEY, the last time step used (replay
+  -- protection) and sha256 hashes of the unused recovery codes
+  totp_secret text,
+  totp_enabled boolean NOT NULL DEFAULT false,
+  totp_last_step bigint,
+  recovery_codes text[] NOT NULL DEFAULT '{}',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -53,7 +61,8 @@ CREATE TABLE tenants (
 CREATE TABLE tenant_members (
   tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
-  roles text[] NOT NULL DEFAULT '{}',
+  -- user: uses the application; admin: manages this tenant (members, invitations, settings)
+  role text NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, user_id)
 );
@@ -138,7 +147,7 @@ ${isolate('oidc_codes', 'tenant_id')}
 
 GRANT SELECT, UPDATE ON tenants TO ${role};
 GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_members TO ${role};
-GRANT SELECT (id, email, name, locale) ON ${users} TO ${role};
+GRANT SELECT (id, email, name, locale, email_verified) ON ${users} TO ${role};
 `
     }
 ]

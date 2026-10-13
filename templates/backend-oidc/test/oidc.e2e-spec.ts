@@ -15,6 +15,8 @@ import { configureApp } from '../src/setup.js'
 
 process.env.OIDC_MASTER_KEY ??= randomBytes(32).toString('hex')
 process.env.OIDC_LOGIN_RATE_LIMIT = '1000'
+// Two-step verification is tested in accounts.e2e-spec.ts; here the login flow itself
+process.env.OIDC_MFA = 'optional'
 // The HTML login page of the API, whatever .env says (the frontend login page is tested separately below)
 process.env.OIDC_LOGIN_UI_URL = ''
 
@@ -46,9 +48,9 @@ describe('OpenID Connect (e2e)', () => {
         const alice = store.addUser({ email: 'alice@example.com', name: 'Alice', passwordHash })
         const bob = store.addUser({ email: 'bob@example.com', name: 'Bob', passwordHash })
         const carol = store.addUser({ email: 'carol@example.com', name: 'Carol', passwordHash })
-        store.addMember(acme.id, alice.id, ['admin'])
-        store.addMember(acme.id, bob.id, [])
-        store.addMember(globex.id, bob.id, ['editor'])
+        store.addMembership(acme.id, alice.id, 'admin')
+        store.addMembership(acme.id, bob.id, 'user')
+        store.addMembership(globex.id, bob.id, 'admin')
         Object.assign(ids, { acme: acme.id, globex: globex.id, alice: alice.id, bob: bob.id, carol: carol.id })
         await store.upsertClient({
             clientId: 'server-app',
@@ -435,7 +437,7 @@ describe('OpenID Connect (e2e)', () => {
             const id = await verifyToken(tokens.body.id_token, 'RS256', CLIENT, 'JWT')
             expect(id).toMatchObject({ sub: ids.alice, aud: CLIENT, nonce: 'nonce-456', acr: 'loa1', amr: ['pwd'] })
             expect(id.at_hash).toBe(halfHash(tokens.body.access_token))
-            expect(id.tenant).toEqual({ id: ids.acme, name: 'Acme', roles: ['admin'] })
+            expect(id.tenant).toEqual({ id: ids.acme, name: 'Acme', role: 'admin' })
 
             const access = await verifyToken(tokens.body.access_token, 'ES256', AUDIENCE, 'at+jwt')
             expect(access).toMatchObject({ sub: ids.alice, client_id: CLIENT, scope: 'openid profile email tenant' })
@@ -517,7 +519,7 @@ describe('OpenID Connect (e2e)', () => {
         it('asks for the password again with prompt=login or an old session (max_age)', async () => {
             const { response } = await login('alice@example.com')
             const cookie = sessionCookie(response).split(';')[0] ?? ''
-            for (const extra of [{ prompt: 'login' }, { max_age: '0' }]) {
+            for (const extra of [{ prompt: 'login' }, { max_age: '0' }] as Record<string, string>[]) {
                 await new Promise(resolve => setTimeout(resolve, 5))
                 const again = await authorize({ code_challenge: pkce().challenge, ...extra }, cookie).expect(303)
                 expect(path(again.headers.location as string)).toMatch(/^\/oidc\/interaction\//)
@@ -547,7 +549,7 @@ describe('OpenID Connect (e2e)', () => {
             expect(decodeUnverified(tokens.body.access_token)?.tenant).toEqual({
                 id: ids.globex,
                 name: 'Globex',
-                roles: ['editor']
+                role: 'admin'
             })
         })
 
@@ -579,7 +581,7 @@ describe('OpenID Connect (e2e)', () => {
 
         it('a suspended tenant can no longer be used', async () => {
             const tenant = store.addTenant('suspended-co', 'Suspended Co', 'suspended')
-            store.addMember(tenant.id, ids.carol, [])
+            store.addMembership(tenant.id, ids.carol)
             const { response } = await login('carol@example.com')
             expect(response.status).toBe(403)
         })
@@ -599,7 +601,7 @@ describe('OpenID Connect (e2e)', () => {
                 name: 'Alice',
                 email: 'alice@example.com',
                 email_verified: true,
-                tenant: { id: ids.acme, name: 'Acme', roles: ['admin'] }
+                tenant: { id: ids.acme, name: 'Acme', role: 'admin' }
             }
             expect(
                 (

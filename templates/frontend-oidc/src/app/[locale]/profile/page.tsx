@@ -1,6 +1,8 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { getFormatter, getTranslations, setRequestLocale } from 'next-intl/server'
+import { LINK, roleLabel } from '@/components/account-ui'
+import { Link } from '@/i18n/navigation'
 import { userinfo } from '@/lib/oidc'
 import { getSession } from '@/lib/session'
 
@@ -36,7 +38,7 @@ async function Profile() {
         [t('name'), session.name],
         [t('email'), session.email],
         [t('organisation'), session.tenant.name],
-        [t('roles'), session.tenant.roles.length ? session.tenant.roles.join(', ') : t('noRoles')],
+        [t('role'), roleLabel(t, session.tenant.role) + (session.superadmin ? ' · ' + t('superadmin') : '')],
         [t('validUntil'), format.dateTime(new Date(session.expiresAt), { timeStyle: 'short' })]
     ]
 
@@ -51,13 +53,28 @@ async function Profile() {
                     </div>
                 ))}
             </dl>
-            <p
+            <div className='flex flex-wrap gap-4 text-sm'>
+                <Link href='/security' className={LINK}>
+                    {t('securityTitle')}
+                </Link>
+                {session.tenant.role === 'admin' && (
+                    <Link href='/members' className={LINK}>
+                        {t('manageMembers')}
+                    </Link>
+                )}
+                {session.superadmin && (
+                    <Link href='/admin' className={LINK}>
+                        {t('platformTitle')}
+                    </Link>
+                )}
+            </div>
+            <div
                 className={
                     api ? 'text-sm text-green-700 dark:text-green-400' : 'text-sm text-red-600 dark:text-red-400'
                 }
             >
                 {api ? t('apiCheck') : t('apiFailed')}
-            </p>
+            </div>
             <form method='post' action='/api/auth/logout'>
                 <button type='submit' className={BUTTON}>
                     {t('logout')}

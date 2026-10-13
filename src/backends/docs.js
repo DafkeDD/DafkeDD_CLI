@@ -146,7 +146,7 @@ const curlFor = (endpoint, { port }) => {
         parts.push(`-d '${JSON.stringify(endpoint.body.example)}'`)
     }
     parts.push(
-        `http://localhost:${port}${endpoint.path.replace(':id', endpoint.path.startsWith('/oidc/') ? 'ID' : '7')}`
+        `http://localhost:${port}${endpoint.pathExample ?? endpoint.path.replace(':id', endpoint.path.startsWith('/oidc/') ? 'ID' : '7')}`
     )
     return parts.join(' ')
 }
@@ -179,8 +179,11 @@ export function backendReadme({
     translations
 }) {
     const list = endpoints({ database, auth, oidc, port })
+    // Every namespace of the translations: errors.NOT_FOUND, oidc.INVALID_LINK, ...
     const errorMessages = Object.fromEntries(
-        Object.entries(translations.en.errors).map(([key, text]) => [`errors.${key}`, text])
+        Object.entries(translations.en).flatMap(([namespace, texts]) =>
+            Object.entries(texts).map(([key, text]) => [`${namespace}.${key}`, text])
+        )
     )
 
     const sections = list.map(endpoint => {
@@ -279,7 +282,25 @@ export function backendReadme({
                       'scrypt hash of the temporary password the CLI showed once'
                   ],
                   ['OIDC_LOGIN_UI_URL', '(empty)', 'Login page of the frontend; empty means the HTML page of the API'],
-                  ['OIDC_CLIENTS_FILE', 'config/oidc-clients.json', 'The registered clients (optional)']
+                  ['OIDC_CLIENTS_FILE', 'config/oidc-clients.json', 'The registered clients (optional)'],
+                  [
+                      'OIDC_MFA',
+                      'required',
+                      'Two-step verification (authenticator app) for every account; `optional` only for tests and demos'
+                  ],
+                  [
+                      'OIDC_REGISTRATION',
+                      'open',
+                      '`open`: anyone can create an account (with a new organisation); `closed`: only by invitation'
+                  ],
+                  ['APP_URL', origin, 'The frontend: the links in emails open its pages'],
+                  ['APP_NAME', '(project name)', 'Name of the application in emails'],
+                  ['SMTP_HOST', 'localhost', 'Mail server; empty prints the mails in the console (development only)'],
+                  ['SMTP_PORT', '1025', 'Port of the mail server (1025 is Mailpit; usually 587 or 465 in production)'],
+                  ['SMTP_SECURE', 'false', '`true` for TLS from the start (port 465)'],
+                  ['SMTP_USER', '(empty)', 'Login of the mail server, when it needs one'],
+                  ['SMTP_PASSWORD', '(empty)', 'Password of the mail server'],
+                  ['MAIL_FROM', '(project) <no-reply@example.com>', 'Sender of every email']
               ]
             : [])
     ]
@@ -298,7 +319,8 @@ export function backendReadme({
         ...(oidc
             ? [
                   ['npm run test:db', 'Tests against the real PostgreSQL: tenant isolation (RLS) and storage'],
-                  ['npm run oidc:user', 'Add a user to a tenant (see "OpenID Connect")']
+                  ['npm run oidc:user', 'Add a user to a tenant (see "OpenID Connect")'],
+                  ['npm run mail:dev', 'Start Mailpit in Docker: every email at http://localhost:8025']
               ]
             : []),
         ...(database?.mode === 'docker'
@@ -440,14 +462,19 @@ finds all endpoints there.
 
 ### Try it
 
-1. Start the API (\`npm run start:dev\`). The first start creates the tables, the signing keys, the clients of
-   \`config/oidc-clients.json\` and the first tenant with its admin (the email and temporary password the CLI showed).
+1. Start Mailpit (\`npm run mail:dev\`, needs Docker) and the API (\`npm run start:dev\`). The first start creates the
+   tables, the signing keys, the clients of \`config/oidc-clients.json\` and the first tenant with its admin: the
+   **superadmin** (the email and temporary password the CLI showed).
 2. With the Next.js frontend: start it (\`npm run dev\` in \`./frontend\`) and open **http://localhost:3000**. "Log in" goes
    through this server and comes back to the frontend; \`/profile\` shows the user, the tenant and what the API answered.
    The login page itself is the page \`/login\` of the frontend (\`OIDC_LOGIN_UI_URL\`), which talks to the JSON variant of
    \`/oidc/interaction/...\`. Without a frontend the API shows its own HTML login page.
-3. Add users: \`npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme --roles admin\` (creates the tenant
-   when it does not exist; prints a random password once, or use \`--password\`).
+3. Log in: the first login asks you to set up **two-step verification** (scan the QR code with an authenticator app).
+   Create an account on **http://localhost:3000/register**: the email with the confirmation link arrives in Mailpit
+   (**http://localhost:8025**). Invite colleagues on \`/members\`; as superadmin, manage every organisation on \`/admin\`.
+4. Or add users from the command line: \`npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme --role
+   admin\` (creates the tenant when it does not exist; prints a random password once, or use \`--password\`; add
+   \`--superadmin\` for a platform administrator; \`--email ... --reset-mfa\` resets two-step verification).
 
 ### How a login works (authorization code flow with PKCE)
 
@@ -456,9 +483,12 @@ finds all endpoints there.
 2. The server keeps the request in an encrypted login cookie (10 minutes, see below) and sends the browser to the login
    page: \`/login?interaction=<id>\` of the frontend when \`OIDC_LOGIN_UI_URL\` is set, otherwise its own page
    \`/oidc/interaction/<id>\`, in the language of the browser (or \`ui_locales\`). Email and password are checked
-   (scrypt); attempts are limited per IP and per email.
-3. A user that belongs to several tenants chooses one (or \`tenant_hint\` decides). Users without an active tenant cannot
-   log in.
+   (scrypt); attempts are limited per IP and per email. Then the **second step**: the 6-digit code of the authenticator
+   app (or a recovery code). An account without two-step verification sets it up right there (QR code), before it gets
+   a session.
+3. Only an account with a verified email address can log in (said only after the right password, so it reveals
+   nothing). A user that belongs to several tenants chooses one (or \`tenant_hint\` decides); a superadmin can choose
+   every active tenant. Users without an active tenant cannot log in.
 4. The browser gets the \`oidc_session\` cookie (httpOnly, SameSite=Lax, Path=/oidc, 12 hours) and is sent back to the
    client with \`code\`, \`state\` and \`iss\`. A next login of the same browser skips the password, unless the client
    asks \`prompt=login\` or \`max_age\`.
@@ -466,12 +496,90 @@ finds all endpoints there.
 
 | Token | Format | Lifetime | Contents |
 | --- | --- | --- | --- |
-| ID token | JWT, RS256, \`aud\` = client | 5 minutes | \`sub\`, \`auth_time\`, \`nonce\`, \`acr\` (\`loa1\`), \`amr\` (\`pwd\`), \`sid\`, \`at_hash\`, \`tenant\` |
-| Access token | JWT, ES256, \`typ: at+jwt\` (RFC 9068), \`aud\` = \`OIDC_AUDIENCE\` | 10 minutes | \`sub\`, \`client_id\`, \`scope\`, \`tenant\` |
+| ID token | JWT, RS256, \`aud\` = client | 5 minutes | \`sub\`, \`auth_time\`, \`nonce\`, \`acr\` (\`loa1\`), \`amr\` (\`pwd\`), \`sid\`, \`at_hash\`, \`tenant\`, \`superadmin\` |
+| Access token | JWT, ES256, \`typ: at+jwt\` (RFC 9068), \`aud\` = \`OIDC_AUDIENCE\` | 10 minutes | \`sub\`, \`client_id\`, \`scope\`, \`tenant\`, \`superadmin\` |
 
-The \`tenant\` claim is \`{ "id": "...", "name": "Acme", "roles": ["admin"] }\`: the tenant the user chose, with the roles
-of the user in that tenant. Verify tokens with the keys of \`/oidc/jwks\`, check \`iss\`, \`aud\` and \`exp\`, and take
-the tenant only from a verified token, never from a header or the URL.
+The \`tenant\` claim is \`{ "id": "...", "name": "Acme", "role": "admin" }\`: the tenant the user chose, with the role
+of the user there (\`user\` or \`admin\`). \`superadmin: true\` is only present for superadmins. Verify tokens with the
+keys of \`/oidc/jwks\`, check \`iss\`, \`aud\` and \`exp\`, and take the tenant only from a verified token, never from a
+header or the URL.
+
+### Roles: user, admin, superadmin
+
+| Level | Stored in | May |
+| --- | --- | --- |
+| \`user\` | \`tenant_members.role\` | Use the application in the tenants they belong to |
+| \`admin\` | \`tenant_members.role\` | Everything in **their own** tenant: invite people, change roles, remove members |
+| \`superadmin\` | \`is_superadmin\` on the account | Admin of **every** tenant (also new ones, without a membership row); create and suspend tenants; grant superadmin |
+
+- The first account (the admin the CLI created) is superadmin. Registration never makes a superadmin: only
+  \`npm run oidc:user -- ... --superadmin\` or another superadmin (\`POST /admin/superadmins\`).
+- A tenant always keeps at least one admin, and the platform at least one superadmin (checked under a database lock, so
+  two changes at the same moment cannot both remove the last one).
+- Protect your own endpoints with \`@Access()\` (any member), \`@Access('admin')\` or \`@Access('superadmin')\` from
+  \`src/access/access.ts\`, and read the caller with \`@Auth() auth: AuthContext\` (\`userId\`, \`tenantId\`, \`role\`,
+  \`superadmin\`). The guard checks the access token, and reads the role and the superadmin flag **from the database on
+  every request**: a role taken away works at once, not only when the token expires. A suspended tenant has no access.
+
+${fence}ts
+@Controller('invoices')
+@Access('admin')
+export class InvoicesController {
+  @Get()
+  list(@Auth() auth: AuthContext) {
+    return this.invoices.list(auth.tenantId) // with DatabaseService.withTenant(auth.tenantId, ...)
+  }
+}
+${fence}
+
+### Two-step verification (required)
+
+Every account logs in with its password **and** a code of an authenticator app (Google Authenticator, Microsoft
+Authenticator, 1Password, ...): TOTP, RFC 6238, our own code on \`node:crypto\` (\`src/oidc/totp.ts\`, tested with the
+official test vectors of RFC 4226 and RFC 6238). \`OIDC_MFA=required\` is the default; \`optional\` exists only for tests
+and demos.
+
+| Moment | What happens |
+| --- | --- |
+| First login | After the password the login page shows a **QR code** (and the key to type in by hand). The first code turns it on; then **ten recovery codes** are shown once, and only then the session starts. |
+| Every next login | Password, then the 6-digit code (\`/oidc/interaction/<id>/mfa\`). A code works **once** (also two requests at the same moment); one step of clock drift (30 seconds) is accepted. |
+| Phone not at hand | A recovery code (\`k7qm-2xpd\`) instead of the code; each works once. New ones: \`POST /me/mfa/recovery-codes\` or the page \`/security\` of the frontend. |
+| Phone and codes lost | A superadmin resets it (\`DELETE /admin/users/<id>/mfa\`, or \`npm run oidc:user -- --email ... --reset-mfa\`); the account sets it up again at its next login. |
+
+- The secret is stored encrypted (AES-256-GCM, key derived from \`OIDC_MASTER_KEY\`, bound to the account); recovery codes
+  only as hashes. Attempts are rate limited per account.
+- Tokens after two-step verification have \`acr: "loa2"\` and \`amr: ["pwd", "otp", "mfa"]\` (\`["pwd", "mfa"]\` with a
+  recovery code). A browser session from before two-step verification was required does not count: it logs in again.
+- Turning on ends the other sessions of the account; with \`required\` it can never be turned off
+  (\`POST /me/mfa/disable\` answers 403 \`oidc.MFA_REQUIRED\`).
+
+### Accounts: registration, email verification, forgotten password, invitations
+
+| Flow | How |
+| --- | --- |
+| Registration | \`POST /oidc/account/register\` creates the account, a new tenant (the organisation name) and makes the account its admin. A verification email follows. \`OIDC_REGISTRATION=closed\` turns registration off (then people only join by invitation). |
+| Email verification | The link (24 hours) opens \`/verify-email?token=...\` of the frontend, which calls \`POST /oidc/account/verify-email\`. Without a verified address an account cannot log in; the login page offers to send the email again. |
+| Forgotten password | \`POST /oidc/account/forgot-password\` mails a link (1 hour) to \`/reset-password?token=...\`. The link works **once** (it holds a fingerprint of the old password hash), and every session of the account ends. |
+| Invitations | An admin invites by email (\`POST /tenants/current/invitations\`, 7 days). \`/invite?token=...\` joins an existing account, or creates one with a name and password (already verified). The link stops working when the inviter is no longer admin or the tenant is suspended. |
+
+- Registration, "forgot password" and "send again" always answer the same (202 \`check-email\`), so nobody can find out
+  which email addresses have an account. Registering an address that has an account mails its owner instead.
+- The links hold an **encrypted token** (AES-256-GCM, key derived from \`OIDC_MASTER_KEY\`, bound to its kind, with an
+  expiry): there is no table for them.
+- Rate limited per IP and per email address (\`OIDC_LOGIN_RATE_LIMIT\` per minute).
+- Passwords: 12 to 128 characters, stored as a scrypt hash.
+
+### Email (SMTP)
+
+\`src/mail/mail.service.ts\` sends with \`nodemailer\` over SMTP (\`SMTP_*\` and \`MAIL_FROM\` in \`.env\`). The texts are in
+\`src/i18n/<language>/mail.json\` (plain text and simple HTML, in the language of the user).
+
+- **Development**: \`npm run mail:dev\` starts Mailpit in Docker; every email shows up on **http://localhost:8025** (the
+  default \`.env\` sends to it on port 1025). Without Docker, leave \`SMTP_HOST\` empty: the emails (with their links) are
+  printed in the console of the API.
+- **Production**: fill in the SMTP server of your mail provider (for example port 587 with \`SMTP_SECURE=false\`, or 465
+  with \`true\`), and a \`MAIL_FROM\` address of a domain that is set up for it (SPF, DKIM). A mail that cannot be sent is
+  logged as an error, never with its contents.
 
 ### Login cookie (no table for running logins)
 
@@ -513,8 +621,8 @@ stored keys cannot be used (new keys are then created and existing tokens stop w
 
 ### Not in this version yet
 
-Refresh tokens, logout, token revocation and introspection, MFA, a consent screen for external clients, and an admin
-API and UI follow in the next phases. Tokens are short-lived until then: a client logs in again (without a password,
+Refresh tokens, logout, token revocation and introspection, passkeys, a consent screen for external clients, an audit log and
+licences follow in the next phases. Tokens are short-lived until then: a client logs in again (without a password,
 thanks to the session) when its access token expired.
 
 ## Multi-tenant (Row-Level Security)
@@ -525,9 +633,9 @@ Every table with customer data has a \`tenant_id\` and a PostgreSQL **Row-Level 
 inserts rows of that tenant, also when a query forgets \`WHERE tenant_id = ...\`:
 
 ${fence}ts
-// No WHERE tenant_id: Row-Level Security filters (see src/tenants/tenant-members.service.ts)
+// No WHERE tenant_id: Row-Level Security filters (see listMembers in src/oidc/store/pg-oidc.store.ts)
 const members = await this.database.withTenant(tenantId, (db) =>
-  db.query('SELECT user_id, roles FROM tenant_members ORDER BY created_at'),
+  db.query('SELECT user_id, role FROM tenant_members ORDER BY created_at'),
 );
 ${fence}
 
@@ -542,9 +650,9 @@ ${fence}
 
 | Table | Contents | Tenant (RLS) |
 | --- | --- | --- |
-| users table (database name + \`users\`) | Accounts: email (unique, case-insensitive), name, scrypt hash, status | no: one account can be in several tenants |
+| users table (database name + \`users\`) | Accounts: email (unique, case-insensitive), verified or not, name, scrypt hash, status, \`is_superadmin\`, two-step verification (encrypted secret, last used step, hashed recovery codes) | no: one account can be in several tenants |
 | \`tenants\` | Organisations: \`slug\`, name, status (\`active\` or \`suspended\`) | yes |
-| \`tenant_members\` | Which user is in which tenant, with roles | yes |
+| \`tenant_members\` | Which user is in which tenant, with the role \`user\` or \`admin\` | yes |
 | \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\`) | no |
 | \`oidc_signing_keys\` | Signing keys (private part encrypted) | no |
 | \`oidc_sessions\` | Browser sessions (hash of the cookie, and of the login that created it) | yes |

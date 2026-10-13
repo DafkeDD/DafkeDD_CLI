@@ -98,9 +98,10 @@ for (const [name, variant] of Object.entries(VARIANTS)) {
         const files = filesOf(variant)
         for (const endpoint of endpoints(optionsOf(variant))) {
             for (const [, key] of endpoint.errors) {
+                const [namespace, name] = key.split('.')
                 for (const locale of LOCALES) {
-                    const errors = JSON.parse(files[`src/i18n/${locale}/errors.json`])
-                    assert.ok(errors[key.replace('errors.', '')]?.trim(), `${locale} ${key}`)
+                    const texts = JSON.parse(files[`src/i18n/${locale}/${namespace}.json`])
+                    assert.ok(texts[name]?.trim(), `${locale} ${key}`)
                 }
             }
         }

@@ -13,8 +13,14 @@ export interface Interaction {
     id: string
     params: AuthorizationParams
     csrf: string
-    /** Set after the password was checked, while the user chooses an organisation. */
+    /** Set after the password was checked (for the second factor and the organisation choice). */
     userId: string | null
+    /** The password was right, but the code of the authenticator app (or a recovery code) is still needed. */
+    mfaPending: boolean
+    /** Two-step verification is required but not set up yet: this login sets it up first (QR code). */
+    enrolling: boolean
+    /** How the user proved who they are so far (RFC 8176): ["pwd"], or ["pwd", "otp", "mfa"] after the second factor. */
+    amr: string[]
     /** Milliseconds since 1970. */
     expiresAt: number
 }
@@ -32,7 +38,15 @@ export const interactionKey = (masterKey: Buffer): Buffer => deriveKey(masterKey
 const context = (id: string) => 'interaction:' + id
 
 export function sealInteraction(interaction: Interaction, key: Buffer): string {
-    const data = { p: interaction.params, c: interaction.csrf, u: interaction.userId, e: interaction.expiresAt }
+    const data = {
+        p: interaction.params,
+        c: interaction.csrf,
+        u: interaction.userId,
+        m: interaction.mfaPending,
+        n: interaction.enrolling,
+        a: interaction.amr,
+        e: interaction.expiresAt
+    }
     return encrypt(JSON.stringify(data), key, context(interaction.id))
 }
 
@@ -49,10 +63,22 @@ export function openInteraction(
             p: AuthorizationParams
             c: string
             u: string | null
+            m?: boolean
+            n?: boolean
+            a?: string[]
             e: number
         }
         if (typeof data.e !== 'number' || data.e <= now || typeof data.c !== 'string') return null
-        return { id, params: data.p, csrf: data.c, userId: data.u ?? null, expiresAt: data.e }
+        return {
+            id,
+            params: data.p,
+            csrf: data.c,
+            userId: data.u ?? null,
+            mfaPending: data.m === true,
+            enrolling: data.n === true,
+            amr: Array.isArray(data.a) ? data.a : [],
+            expiresAt: data.e
+        }
     } catch {
         return null
     }

@@ -702,7 +702,21 @@ describe('API (e2e)', () => {\n`
         )
         result['.env'] += oidc.envLines(oidcAnswers, { port: PORT })
         result['.env.example'] += oidc.envLines(oidcAnswers, { port: PORT, example: true })
-        for (const locale of LOCALES) result[`src/i18n/${locale}/oidc.json`] = json(oidc.MESSAGES[locale])
+        for (const locale of LOCALES) {
+            result[`src/i18n/${locale}/oidc.json`] = json(oidc.MESSAGES[locale])
+            result[`src/i18n/${locale}/mail.json`] = json(oidc.MAIL_MESSAGES[locale])
+            result[`src/i18n/${locale}/validation.json`] = json({
+                ...TRANSLATIONS[locale].validation,
+                ...login.VALIDATION[locale],
+                ...oidc.VALIDATION[locale]
+            })
+        }
+        // The member and platform endpoints need the access token of the OIDC server
+        result['src/main.ts'] = replaceOnce(
+            files['src/main.ts'],
+            ".setVersion('1.0')",
+            ".setVersion('1.0')\n    .addBearerAuth()"
+        )
         result['src/app.module.ts'] = replaceOnce(
             replaceOnce(
                 result['src/app.module.ts'],
@@ -746,7 +760,12 @@ describe('API (e2e)', () => {\n`
         port: PORT,
         origin: FRONTEND_ORIGIN,
         table: auth ? login.usersTable(database.database) : null,
-        translations: { en: { errors: JSON.parse(result['src/i18n/en/errors.json']) } }
+        translations: {
+            en: {
+                errors: JSON.parse(result['src/i18n/en/errors.json']),
+                ...(oidcAnswers ? { oidc: oidc.MESSAGES.en } : {})
+            }
+        }
     })
     return result
 }
@@ -840,8 +859,11 @@ export const nestjs = {
             ...(answers?.oidc
                 ? [
                       `OIDC: http://localhost:${PORT}/oidc/.well-known/openid-configuration`,
-                      ...(answers.oidc.loginUi ? ['Log in: http://localhost:3000/login'] : []),
-                      'npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme   (add a user)'
+                      ...(answers.oidc.loginUi
+                          ? ['Log in: http://localhost:3000/login  |  register: http://localhost:3000/register']
+                          : []),
+                      `npm run mail:dev    (Mailpit in Docker: every mail at ${oidc.MAILPIT_URL}; SMTP settings in .env)`,
+                      'npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme --role admin   (add a user)'
                   ]
                 : [])
         ]
@@ -863,7 +885,7 @@ export const nestjs = {
         if (answers?.oidc) {
             auth.push({
                 ok: true,
-                text: `OIDC-server ingesteld: tenant "${answers.oidc.tenantName}", beheerder ${answers.oidc.adminEmail}, tijdelijk wachtwoord ${answers.oidc.adminPassword} (enkel nu getoond)`
+                text: `OIDC-server ingesteld: tenant "${answers.oidc.tenantName}", superadmin ${answers.oidc.adminEmail}, tijdelijk wachtwoord ${answers.oidc.adminPassword} (enkel nu getoond). Bij de eerste login stel je tweestapsverificatie in (QR-code)`
             })
         }
         if (db.mode === 'docker') return [{ ok: true, text: `PostgreSQL (Docker) ingesteld: ${where}` }, ...auth]

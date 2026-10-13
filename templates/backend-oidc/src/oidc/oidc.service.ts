@@ -6,7 +6,9 @@ import { ConfigService } from '@nestjs/config'
 import { PKCE_CHALLENGE, PKCE_VERIFIER, pkceChallenge, randomToken, safeEqual, sha256 } from './crypto.js'
 import { type Interaction, interactionKey, openInteraction, sealInteraction } from './interaction.js'
 import { halfHash, JoseError, signJwt, verifyJwt } from './jose.js'
+import { AppException } from '../common/app.exception.js'
 import { KeysService } from './keys.service.js'
+import { MFA_AMR, MfaService, type MfaSetup, type SecondFactor } from './mfa.service.js'
 import { OAuthError } from './oauth.error.js'
 import { OIDC, OidcConfig } from './oidc.config.js'
 import { hashPassword, verifyPassword } from './password.js'
@@ -43,6 +45,16 @@ export type LoginResult =
     | { kind: 'no-tenant'; cookie: InteractionCookie }
     | { kind: 'choose-tenant'; interaction: Interaction; memberships: Membership[]; cookie: InteractionCookie }
     | { kind: 'done'; location: string; sessionId: string; cookie: InteractionCookie }
+    | { kind: 'mfa'; interaction: Interaction; client: OidcClient; cookie: InteractionCookie; errorKey?: string }
+    | {
+          kind: 'mfa-setup'
+          interaction: Interaction
+          client: OidcClient
+          setup: MfaSetup
+          cookie: InteractionCookie
+          errorKey?: string
+      }
+    | { kind: 'recovery-codes'; interaction: Interaction; recoveryCodes: string[]; cookie: InteractionCookie }
 
 export interface TokenResponse {
     access_token: string
@@ -73,6 +85,7 @@ export class OidcService implements OnApplicationBootstrap {
     constructor(
         @Inject(OIDC_STORE) private readonly store: OidcStore,
         private readonly keys: KeysService,
+        private readonly mfa: MfaService,
         private readonly config: OidcConfig,
         private readonly env: ConfigService
     ) {}
@@ -160,7 +173,7 @@ export class OidcService implements OnApplicationBootstrap {
             userinfo_signing_alg_values_supported: ['none'],
             token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
             code_challenge_methods_supported: ['S256'],
-            acr_values_supported: [OIDC.ACR_PASSWORD],
+            acr_values_supported: [OIDC.ACR_PASSWORD, OIDC.ACR_MFA],
             claims_supported: [
                 'sub',
                 'iss',
@@ -241,6 +254,9 @@ export class OidcService implements OnApplicationBootstrap {
             params,
             csrf: randomToken(),
             userId: null,
+            mfaPending: false,
+            enrolling: false,
+            amr: [],
             expiresAt: Date.now() + OIDC.INTERACTION_SECONDS * 1000
         })
         if (sealed.length > OIDC.MAX_INTERACTION_COOKIE) {
@@ -336,10 +352,12 @@ export class OidcService implements OnApplicationBootstrap {
         if (params.prompt.includes('login') || params.prompt.includes('select_account')) return null
         const session = await this.store.findSession(sha256(sessionId))
         if (!session) return null
+        // A session from before two-step verification was required does not count any more
+        if (this.config.mfaRequired && session.acr !== OIDC.ACR_MFA) return null
         if (params.maxAge !== null && Date.now() - session.authTime.getTime() > params.maxAge * 1000) return null
         const user = await this.store.findUserById(session.userId)
         if (user?.status !== 'active') return null
-        const membership = (await this.store.listMemberships(user.id)).find(item => item.tenantId === session.tenantId)
+        const membership = (await this.memberships(user)).find(item => item.tenantId === session.tenantId)
         if (!membership) return null
         if (params.tenantHint && params.tenantHint !== membership.tenantId && params.tenantHint !== membership.slug)
             return null
@@ -370,8 +388,97 @@ export class OidcService implements OnApplicationBootstrap {
         if (!user || !valid || user.status !== 'active') {
             return { kind: 'form', interaction, client, errorKey: 'oidc.INVALID_CREDENTIALS', email }
         }
+        // Only said after the right password, so it does not reveal which email addresses have an account
+        if (!user.emailVerified) {
+            return { kind: 'form', interaction, client, errorKey: 'oidc.EMAIL_NOT_VERIFIED', email }
+        }
 
-        const memberships = await this.store.listMemberships(user.id)
+        // Two-step verification: the password was right, now the code of the authenticator app
+        if (user.mfaEnabled) {
+            const waiting = { ...interaction, userId: user.id, mfaPending: true, enrolling: false, amr: ['pwd'] }
+            return { kind: 'mfa', interaction: waiting, client, cookie: { id, value: this.seal(waiting) } }
+        }
+        // Required but not set up yet: set it up now (QR code), before there is a session
+        if (this.config.mfaRequired) {
+            const waiting = { ...interaction, userId: user.id, mfaPending: true, enrolling: true, amr: ['pwd'] }
+            const setup = await this.mfa.pendingSetup(user)
+            return { kind: 'mfa-setup', interaction: waiting, client, setup, cookie: { id, value: this.seal(waiting) } }
+        }
+        return this.authenticated(
+            { ...interaction, userId: user.id, mfaPending: false, enrolling: false, amr: ['pwd'] },
+            user
+        )
+    }
+
+    /** The second factor: a code of the authenticator app or a recovery code, after the right password. */
+    async verifyMfa(id: string, sealed: string | undefined, form: Params): Promise<LoginResult> {
+        const found = await this.findInteraction(id, sealed)
+        if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
+            return { kind: 'expired' }
+        const { interaction, client } = found
+        const user = interaction.userId ? await this.store.findUserById(interaction.userId) : null
+        if (!interaction.mfaPending || user?.status !== 'active') return { kind: 'expired' }
+        const cookie = { id, value: sealed ?? null }
+        const code = typeof form.code === 'string' ? form.code.slice(0, 20) : ''
+        if (interaction.enrolling) return this.enroll(interaction, client, user, code)
+        let factor: SecondFactor | null
+        try {
+            factor = await this.mfa.check(user.id, typeof form.code === 'string' ? form.code.slice(0, 20) : '')
+        } catch (error) {
+            if (error instanceof AppException)
+                return { kind: 'mfa', interaction, client, cookie, errorKey: 'oidc.TOO_MANY_ATTEMPTS' }
+            throw error
+        }
+        if (!factor) return { kind: 'mfa', interaction, client, cookie, errorKey: 'oidc.MFA_INVALID_CODE' }
+        return this.authenticated({ ...interaction, mfaPending: false, amr: MFA_AMR[factor] }, user)
+    }
+
+    /** Setting up two-step verification during the login: the first code confirms it, then the recovery codes. */
+    private async enroll(
+        interaction: Interaction,
+        client: OidcClient,
+        user: StoredUser,
+        code: string
+    ): Promise<LoginResult> {
+        const cookie = { id: interaction.id, value: this.seal(interaction) }
+        try {
+            const { recoveryCodes } = await this.mfa.enable(user.id, code)
+            const next = { ...interaction, mfaPending: false, enrolling: false, amr: MFA_AMR.totp }
+            return {
+                kind: 'recovery-codes',
+                interaction: next,
+                recoveryCodes,
+                cookie: { id: next.id, value: this.seal(next) }
+            }
+        } catch (error) {
+            if (!(error instanceof AppException)) throw error
+            const errorKey = error.key === 'oidc.TOO_MANY_ATTEMPTS' ? error.key : 'oidc.MFA_INVALID_CODE'
+            return {
+                kind: 'mfa-setup',
+                interaction,
+                client,
+                setup: await this.mfa.pendingSetup(user),
+                cookie,
+                errorKey
+            }
+        }
+    }
+
+    /** After the recovery codes were shown: on to the organisation (choice) and back to the client. */
+    async continueLogin(id: string, sealed: string | undefined, form: Params): Promise<LoginResult> {
+        const found = await this.findInteraction(id, sealed)
+        if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
+            return { kind: 'expired' }
+        const { interaction } = found
+        const user = interaction.userId ? await this.store.findUserById(interaction.userId) : null
+        if (user?.status !== 'active' || interaction.mfaPending) return { kind: 'expired' }
+        return this.authenticated(interaction, user)
+    }
+
+    /** The user proved who they are: finish in their only (or the hinted) tenant, or let them choose one. */
+    private async authenticated(interaction: Interaction, user: StoredUser): Promise<LoginResult> {
+        const id = interaction.id
+        const memberships = await this.memberships(user)
         const hinted = memberships.find(
             item => item.tenantId === interaction.params.tenantHint || item.slug === interaction.params.tenantHint
         )
@@ -379,9 +486,8 @@ export class OidcService implements OnApplicationBootstrap {
         const membership = hinted ?? only
         if (membership) return this.finish(interaction, user, membership)
         if (memberships.length === 0) return { kind: 'no-tenant', cookie: { id, value: null } }
-        // The password was right: remember the user in the cookie while they choose an organisation.
-        const chosen = { ...interaction, userId: user.id }
-        return { kind: 'choose-tenant', interaction: chosen, memberships, cookie: { id, value: this.seal(chosen) } }
+        // Remember the user in the cookie while they choose an organisation
+        return { kind: 'choose-tenant', interaction, memberships, cookie: { id, value: this.seal(interaction) } }
     }
 
     async chooseTenant(id: string, sealed: string | undefined, form: Params): Promise<LoginResult> {
@@ -390,8 +496,9 @@ export class OidcService implements OnApplicationBootstrap {
             return { kind: 'expired' }
         const { interaction } = found
         const user = interaction.userId ? await this.store.findUserById(interaction.userId) : null
-        if (user?.status !== 'active') return { kind: 'expired' }
-        const memberships = await this.store.listMemberships(user.id)
+        // Only after the password and (when it is on) the second factor
+        if (user?.status !== 'active' || interaction.mfaPending) return { kind: 'expired' }
+        const memberships = await this.memberships(user)
         const membership = memberships.find(item => item.tenantId === form.tenant)
         if (!membership)
             return { kind: 'choose-tenant', interaction, memberships, cookie: { id, value: sealed ?? null } }
@@ -411,8 +518,8 @@ export class OidcService implements OnApplicationBootstrap {
             userId: user.id,
             tenantId: membership.tenantId,
             authTime: now,
-            acr: OIDC.ACR_PASSWORD,
-            amr: ['pwd'],
+            acr: interaction.amr.includes('mfa') ? OIDC.ACR_MFA : OIDC.ACR_PASSWORD,
+            amr: interaction.amr.length ? interaction.amr : ['pwd'],
             expiresAt: new Date(now.getTime() + OIDC.SESSION_SECONDS * 1000)
         }
         if (!(await this.store.createSession(session))) return { kind: 'expired' }
@@ -495,12 +602,13 @@ export class OidcService implements OnApplicationBootstrap {
         }
         const user = await this.store.findUserById(grant.userId)
         const membership = user
-            ? (await this.store.listMemberships(user.id)).find(item => item.tenantId === grant.tenantId)
+            ? (await this.memberships(user)).find(item => item.tenantId === grant.tenantId)
             : undefined
         if (user?.status !== 'active' || !membership) throw invalid
 
         const now = Math.floor(Date.now() / 1000)
-        const tenant = { id: membership.tenantId, name: membership.name, roles: membership.roles }
+        const tenant = { id: membership.tenantId, name: membership.name, role: membership.role }
+        const superadmin = user.isSuperadmin ? { superadmin: true } : {}
         const accessKey = await this.keys.signingKey('ES256')
         const accessToken = signJwt(
             {
@@ -514,7 +622,8 @@ export class OidcService implements OnApplicationBootstrap {
                 jti: randomUUID(),
                 auth_time: Math.floor(grant.authTime.getTime() / 1000),
                 acr: grant.acr,
-                tenant
+                tenant,
+                ...superadmin
             },
             { alg: 'ES256', kid: accessKey.kid, typ: 'at+jwt' },
             accessKey.privateKey
@@ -533,7 +642,7 @@ export class OidcService implements OnApplicationBootstrap {
                 amr: grant.amr,
                 sid: grant.sessionHash.slice(0, 32),
                 at_hash: halfHash(accessToken),
-                ...(grant.scope.split(' ').includes('tenant') ? { tenant } : {})
+                ...(grant.scope.split(' ').includes('tenant') ? { tenant, ...superadmin } : {})
             },
             { alg: 'RS256', kid: idKey.kid, typ: 'JWT' },
             idKey.privateKey
@@ -585,13 +694,16 @@ export class OidcService implements OnApplicationBootstrap {
 
     // ------------------------------------------------------------------ userinfo
 
-    async userinfo(token: string | undefined): Promise<Record<string, unknown>> {
+    /**
+     * Verifies an access token of this server (signature, typ at+jwt, iss, aud, exp) and returns its claims. Throws an
+     * OAuthError invalid_token (401) otherwise. Used by userinfo and by AccessTokenGuard for the own API.
+     */
+    async verifyAccessToken(token: string | undefined): Promise<Record<string, unknown>> {
         await this.prepare()
         if (!token) throw new OAuthError('invalid_token', 'An access token is required', 401)
-        let payload
         try {
             const keys = await this.keys.verificationKeys()
-            payload = verifyJwt(token, {
+            return verifyJwt(token, {
                 keys: kid => keys.get(kid),
                 algorithms: ['ES256'],
                 issuer: this.config.issuer,
@@ -603,6 +715,10 @@ export class OidcService implements OnApplicationBootstrap {
                 throw new OAuthError('invalid_token', 'The access token is invalid or expired', 401)
             throw error
         }
+    }
+
+    async userinfo(token: string | undefined): Promise<Record<string, unknown>> {
+        const payload = await this.verifyAccessToken(token)
         const scope = typeof payload.scope === 'string' ? payload.scope.split(' ') : []
         if (!scope.includes('openid') || typeof payload.sub !== 'string') {
             throw new OAuthError('insufficient_scope', 'The openid scope is required', 403)
@@ -613,8 +729,21 @@ export class OidcService implements OnApplicationBootstrap {
             sub: user.id,
             ...(scope.includes('profile') ? { name: user.name, ...(user.locale ? { locale: user.locale } : {}) } : {}),
             ...(scope.includes('email') ? { email: user.email, email_verified: user.emailVerified } : {}),
-            ...(scope.includes('tenant') ? { tenant: payload.tenant } : {})
+            ...(scope.includes('tenant')
+                ? { tenant: payload.tenant, ...(user.isSuperadmin ? { superadmin: true } : {}) }
+                : {})
         }
+    }
+
+    /**
+     * The tenants a user can log in to, with the role there. A superadmin is admin of every active tenant (also new ones,
+     * without a row in tenant_members); everybody else gets the rows of tenant_members.
+     */
+    async memberships(user: StoredUser): Promise<Membership[]> {
+        if (!user.isSuperadmin) return this.store.listMemberships(user.id)
+        return (await this.store.listTenants())
+            .filter(tenant => tenant.status === 'active')
+            .map(tenant => ({ tenantId: tenant.id, slug: tenant.slug, name: tenant.name, role: 'admin' as const }))
     }
 }
 

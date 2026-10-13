@@ -52,7 +52,23 @@ test('the backend gets the OIDC server, its tests, scripts and the multi-tenant 
         'src/oidc/store/memory-oidc.store.ts',
         'src/database/migrations.ts',
         'src/database/migrator.ts',
-        'src/tenants/tenant-members.service.ts',
+        'src/tenants/tenants.module.ts',
+        'src/tenants/members.controller.ts',
+        'src/tenants/platform.controller.ts',
+        'src/access/access.ts',
+        'src/oidc/account.controller.ts',
+        'src/oidc/account.service.ts',
+        'src/oidc/account-token.ts',
+        'src/oidc/account-token.spec.ts',
+        'src/mail/mail.service.ts',
+        'src/mail/mail.service.spec.ts',
+        'src/mail/mails.ts',
+        'src/mail/mails.spec.ts',
+        'test/accounts.e2e-spec.ts',
+        'src/oidc/totp.ts',
+        'src/oidc/totp.spec.ts',
+        'src/oidc/mfa.service.ts',
+        'src/oidc/mfa.controller.ts',
         'config/oidc-clients.json',
         'scripts/oidc-user.mjs',
         'test/oidc.e2e-spec.ts',
@@ -140,6 +156,38 @@ test('the API docs explain the login cookie and no longer list a table for runni
         assert.ok(docs.includes(text), text)
     }
     assert.doesNotMatch(Object.values(files).join('\n'), /oidc_interactions/)
+})
+
+test('two-step verification is required by default, with our own TOTP and the RFC test vectors', () => {
+    assert.match(files['.env'], /^OIDC_MFA=required$/m)
+    const totp = templates['src/oidc/totp.ts']
+    assert.match(totp, /createHmac\('sha1'/)
+    assert.match(templates['src/oidc/totp.spec.ts'], /94287082/)
+    assert.match(templates['src/oidc/oidc.config.ts'], /'OIDC_MFA'\) \?\? 'required'/)
+    assert.match(templates['src/oidc/oidc.service.ts'], /this\.config\.mfaRequired/)
+    assert.match(templates['src/oidc/mfa.service.ts'], /oidc\.MFA_REQUIRED/)
+    for (const locale of LOCALES)
+        for (const key of ['MFA_TITLE', 'MFA_SETUP_TITLE', 'RECOVERY_TITLE', 'MFA_INVALID_CODE', 'MFA_REQUIRED'])
+            assert.ok(oidc.MESSAGES[locale][key], `${locale} ${key}`)
+})
+
+test('.env gets the SMTP settings for Mailpit, the app URL and open registration', () => {
+    const env = files['.env']
+    for (const line of [
+        'SMTP_HOST=localhost',
+        'SMTP_PORT=1025',
+        'SMTP_SECURE=false',
+        'OIDC_REGISTRATION=open',
+        'APP_URL=http://localhost:3000'
+    ])
+        assert.match(env, new RegExp('^' + line.replace(/[.]/g, '\\.') + '$', 'm'), line)
+    assert.match(env, /^SMTP_USER=$/m)
+    assert.match(env, /^SMTP_PASSWORD=$/m)
+    assert.match(env, /^MAIL_FROM='.+ <no-reply@example\.com>'$/m)
+    assert.equal(oidc.SCRIPTS['mail:dev'].includes('axllent/mailpit'), true)
+    for (const locale of LOCALES)
+        assert.deepEqual(Object.keys(oidc.MAIL_MESSAGES[locale]), Object.keys(oidc.MAIL_MESSAGES.en))
+    assert.ok(files['src/i18n/nl/mail.json'])
 })
 
 // ---------------------------------------------------------------- .env

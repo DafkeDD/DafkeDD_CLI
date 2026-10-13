@@ -73,7 +73,7 @@ describe('jose', () => {
     })
 
     it('checks expiry, issuer, audience, type and unknown keys', () => {
-        const token = (payload: object, kid = 'ec', typ = 'JWT') =>
+        const token = (payload: Record<string, unknown>, kid = 'ec', typ = 'JWT') =>
             signJwt(payload, { alg: 'ES256', kid, typ }, ec.privateKey)
         expect(() => verifyJwt(token({ ...claims, exp: now - 60 }), options())).toThrow('expired')
         expect(() => verifyJwt(token({ ...claims, exp: undefined }), options())).toThrow('Missing expiry')

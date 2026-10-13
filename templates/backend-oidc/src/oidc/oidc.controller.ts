@@ -15,9 +15,27 @@ import { LoginLimiter } from './login-limiter.js'
 import { OAuthError } from './oauth.error.js'
 import { OIDC, OidcConfig } from './oidc.config.js'
 import { type AuthorizeResult, type InteractionCookie, type LoginResult, OidcService } from './oidc.service.js'
-import { loginPage, messagePage, sendPage, tenantPage, type Translate } from './pages.js'
+import {
+    loginPage,
+    messagePage,
+    mfaPage,
+    mfaSetupPage,
+    recoveryCodesPage,
+    sendPage,
+    tenantPage,
+    type Translate
+} from './pages.js'
 
 type Params = Record<string, unknown>
+
+/** HTTP status of a refused login: wrong password, too many attempts, or an email address that is not verified yet. */
+const LOGIN_ERRORS: Record<string, { status: number; error: string }> = {
+    'oidc.INVALID_CREDENTIALS': { status: 401, error: 'INVALID_CREDENTIALS' },
+    'oidc.TOO_MANY_ATTEMPTS': { status: 429, error: 'TOO_MANY_ATTEMPTS' },
+    'oidc.EMAIL_NOT_VERIFIED': { status: 403, error: 'EMAIL_NOT_VERIFIED' },
+    'oidc.MFA_INVALID_CODE': { status: 401, error: 'MFA_INVALID_CODE' }
+}
+const loginError = (key: string) => LOGIN_ERRORS[key] ?? { status: 401, error: 'INVALID_CREDENTIALS' }
 
 /** The login page of the frontend asks for JSON; the server's own HTML page posts forms. */
 const wantsJson = (request: Request): boolean =>
@@ -90,6 +108,7 @@ export class OidcController {
             return this.json(response, 200, {
                 step: 'login',
                 clientName: found.client.name,
+                registration: this.config.registrationOpen,
                 csrf: found.interaction.csrf,
                 loginHint: found.interaction.params.loginHint ?? ''
             })
@@ -125,6 +144,44 @@ export class OidcController {
         const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
         const allowed = this.limiter.allow(['ip:' + (request.ip ?? 'unknown'), 'email:' + email])
         const result = await this.oidc.login(id, this.interactionCookie(request, id), body, allowed)
+        this.loginAnswer(id, result, request, response, i18n)
+    }
+
+    @Post('interaction/:id/mfa')
+    @ApiOperation({
+        summary:
+            'Submit the second factor (form-encoded or JSON): a code of the authenticator app or a recovery code. Rate limited.'
+    })
+    @ApiProduces('text/html', 'application/json')
+    @ApiResponse({ status: 303, description: 'Back to the client with a code, or the organisation choice' })
+    @ApiResponse({ status: 401, description: 'Wrong or used code (the page again, or { status: "mfa", error })' })
+    async mfa(@Param('id') id: string, @Req() request: Request, @Res() response: Response, @I18n() i18n: I18nContext) {
+        const result = await this.oidc.verifyMfa(
+            id,
+            this.interactionCookie(request, id),
+            (request.body ?? {}) as Params
+        )
+        this.loginAnswer(id, result, request, response, i18n)
+    }
+
+    @Post('interaction/:id/continue')
+    @ApiOperation({
+        summary:
+            'Continue after the recovery codes were shown (form-encoded or JSON): the organisation choice or the client'
+    })
+    @ApiProduces('text/html', 'application/json')
+    @ApiResponse({ status: 303, description: 'Back to the client with a code, or the organisation choice' })
+    async continue(
+        @Param('id') id: string,
+        @Req() request: Request,
+        @Res() response: Response,
+        @I18n() i18n: I18nContext
+    ) {
+        const result = await this.oidc.continueLogin(
+            id,
+            this.interactionCookie(request, id),
+            (request.body ?? {}) as Params
+        )
         this.loginAnswer(id, result, request, response, i18n)
     }
 
@@ -222,7 +279,7 @@ export class OidcController {
     }
 
     /** Action URL of a form on the login page; keeps ?lang= so errors come back in the same language. */
-    private action(id: string, step: 'login' | 'tenant', request: Request): string {
+    private action(id: string, step: 'login' | 'mfa' | 'continue' | 'tenant', request: Request): string {
         const url = new URL(this.config.issuer + '/interaction/' + encodeURIComponent(id) + '/' + step)
         if (typeof request.query.lang === 'string') url.searchParams.set('lang', request.query.lang)
         return url.toString()
@@ -257,7 +314,7 @@ export class OidcController {
             case 'form':
                 return sendPage(response, {
                     lang: i18n.lang,
-                    status: result.errorKey === 'oidc.TOO_MANY_ATTEMPTS' ? 429 : 401,
+                    status: loginError(result.errorKey).status,
                     formTargets: [new URL(result.interaction.params.redirectUri).origin],
                     ...loginPage(t, {
                         action: this.action(id, 'login', request),
@@ -265,6 +322,40 @@ export class OidcController {
                         clientName: result.client.name,
                         email: result.email,
                         error: t(result.errorKey)
+                    })
+                })
+            case 'mfa':
+                return sendPage(response, {
+                    lang: i18n.lang,
+                    status: result.errorKey ? loginError(result.errorKey).status : 200,
+                    formTargets: [new URL(result.interaction.params.redirectUri).origin],
+                    ...mfaPage(t, {
+                        action: this.action(id, 'mfa', request),
+                        csrf: result.interaction.csrf,
+                        error: result.errorKey ? t(result.errorKey) : undefined
+                    })
+                })
+            case 'mfa-setup':
+                return sendPage(response, {
+                    lang: i18n.lang,
+                    status: result.errorKey ? loginError(result.errorKey).status : 200,
+                    formTargets: [new URL(result.interaction.params.redirectUri).origin],
+                    ...mfaSetupPage(t, {
+                        action: this.action(id, 'mfa', request),
+                        csrf: result.interaction.csrf,
+                        qrSvg: result.setup.qrSvg,
+                        secret: result.setup.secret,
+                        error: result.errorKey ? t(result.errorKey) : undefined
+                    })
+                })
+            case 'recovery-codes':
+                return sendPage(response, {
+                    lang: i18n.lang,
+                    formTargets: [new URL(result.interaction.params.redirectUri).origin],
+                    ...recoveryCodesPage(t, {
+                        action: this.action(id, 'continue', request),
+                        csrf: result.interaction.csrf,
+                        codes: result.recoveryCodes
                     })
                 })
             case 'choose-tenant':
@@ -295,18 +386,46 @@ export class OidcController {
             case 'no-tenant':
                 return this.json(response, 403, { status: 'no-tenant', message: t('oidc.NO_TENANT') })
             case 'form': {
-                const tooMany = result.errorKey === 'oidc.TOO_MANY_ATTEMPTS'
-                return this.json(response, tooMany ? 429 : 401, {
-                    status: 'error',
-                    error: tooMany ? 'TOO_MANY_ATTEMPTS' : 'INVALID_CREDENTIALS',
+                const { status, error } = loginError(result.errorKey)
+                return this.json(response, status, { status: 'error', error, message: t(result.errorKey) })
+            }
+            case 'mfa': {
+                if (!result.errorKey) return this.json(response, 200, { status: 'mfa', csrf: result.interaction.csrf })
+                const { status, error } = loginError(result.errorKey)
+                return this.json(response, status, {
+                    status: 'mfa',
+                    csrf: result.interaction.csrf,
+                    error,
                     message: t(result.errorKey)
                 })
             }
+            case 'mfa-setup': {
+                const setup = {
+                    status: 'mfa-setup',
+                    csrf: result.interaction.csrf,
+                    secret: result.setup.secret,
+                    otpauthUrl: result.setup.otpauthUrl,
+                    qrSvg: result.setup.qrSvg
+                }
+                if (!result.errorKey) return this.json(response, 200, setup)
+                const { status, error } = loginError(result.errorKey)
+                return this.json(response, status, { ...setup, error, message: t(result.errorKey) })
+            }
+            case 'recovery-codes':
+                return this.json(response, 200, {
+                    status: 'recovery-codes',
+                    csrf: result.interaction.csrf,
+                    recoveryCodes: result.recoveryCodes
+                })
             case 'choose-tenant':
                 return this.json(response, 200, {
                     status: 'choose-tenant',
                     csrf: result.interaction.csrf,
-                    tenants: result.memberships.map(membership => ({ id: membership.tenantId, name: membership.name }))
+                    tenants: result.memberships.map(membership => ({
+                        id: membership.tenantId,
+                        name: membership.name,
+                        role: membership.role
+                    }))
                 })
             case 'done':
                 this.setSessionCookie(response, result.sessionId)

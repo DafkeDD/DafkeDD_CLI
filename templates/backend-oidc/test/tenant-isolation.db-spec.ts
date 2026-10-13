@@ -5,7 +5,6 @@ import { TENANT_ROLE, TENANT_TABLES, USERS_TABLE } from '../src/database/databas
 import { DatabaseService } from '../src/database/database.service.js'
 import { runMigrations } from '../src/database/migrator.js'
 import { PgOidcStore } from '../src/oidc/store/pg-oidc.store.js'
-import { TenantMembersService } from '../src/tenants/tenant-members.service.js'
 
 /**
  * Runs against a REAL PostgreSQL (the one from .env): npm run test:db
@@ -71,8 +70,8 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
             'Bob'
         ])
         await database.query(
-            'INSERT INTO tenant_members (tenant_id, user_id, roles) VALUES ($1, $2, $3), ($4, $5, $6)',
-            [tenant.a, user.ada, ['admin'], tenant.b, user.bob, []]
+            'INSERT INTO tenant_members (tenant_id, user_id, role) VALUES ($1, $2, $3), ($4, $5, $6)',
+            [tenant.a, user.ada, 'admin', tenant.b, user.bob, 'user']
         )
     })
 
@@ -120,9 +119,9 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
     })
 
     it('a tenant only sees its own rows, even without a WHERE clause', async () => {
-        const members = new TenantMembersService(database)
-        expect((await members.list(tenant.a)).map(member => member.email)).toEqual(['ada@example.com'])
-        expect((await members.list(tenant.b)).map(member => member.email)).toEqual(['bob@example.com'])
+        const store = new PgOidcStore(database)
+        expect((await store.listMembers(tenant.a)).map(member => member.email)).toEqual(['ada@example.com'])
+        expect((await store.listMembers(tenant.b)).map(member => member.email)).toEqual(['bob@example.com'])
         const tenants = await database.withTenant(tenant.a, db => db.query<{ id: string }>('SELECT id FROM tenants'))
         expect(tenants.rows.map(row => row.id)).toEqual([tenant.a])
         const unknown = await database.withTenant(randomUUID(), db => db.query('SELECT * FROM tenant_members'))
@@ -130,8 +129,9 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
     })
 
     it('a tenant cannot change or delete rows of another tenant', async () => {
-        const members = new TenantMembersService(database)
-        expect(await members.setRoles(tenant.a, user.bob, ['admin'])).toBe(false)
+        const store = new PgOidcStore(database)
+        expect(await store.setMemberRole(tenant.a, user.bob, 'admin')).toBe('not-found')
+        expect(await store.removeMember(tenant.a, user.bob)).toBe('not-found')
         const deleted = await database.withTenant(tenant.a, db =>
             db.query('DELETE FROM tenant_members WHERE user_id = $1', [user.bob])
         )
@@ -140,11 +140,10 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
             db.query("UPDATE tenants SET name = 'hacked' WHERE id = $1", [tenant.b])
         )
         expect(renamed.rowCount).toBe(0)
-        const { rows } = await database.query<{ roles: string[] }>(
-            'SELECT roles FROM tenant_members WHERE user_id = $1',
-            [user.bob]
-        )
-        expect(rows[0]?.roles).toEqual([])
+        const { rows } = await database.query<{ role: string }>('SELECT role FROM tenant_members WHERE user_id = $1', [
+            user.bob
+        ])
+        expect(rows[0]?.role).toBe('user')
     })
 
     it('a tenant cannot insert rows for another tenant', async () => {
@@ -243,7 +242,129 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         expect(await store.bootstrapAdmin(admin)).toBe(true)
         expect(await store.bootstrapAdmin(admin)).toBe(false)
         const memberships = await store.listMemberships((await store.findUserByEmail('ROOT@example.com'))?.id ?? '')
-        expect(memberships).toEqual([expect.objectContaining({ slug: 'root', roles: ['admin'] })])
+        expect(memberships).toEqual([expect.objectContaining({ slug: 'root', role: 'admin' })])
+        expect((await store.findUserByEmail('root@example.com'))?.isSuperadmin).toBe(true)
+    })
+
+    it('registers an account with its own tenant in one go, with a free slug and a unique email address', async () => {
+        const store = new PgOidcStore(database)
+        const account = { email: 'new@example.com', name: 'New', passwordHash: 'x', emailVerified: false, locale: 'nl' }
+        const first = await store.register(account, { name: 'Tenant A', slug: 'tenant-a' })
+        expect(first?.tenant.slug).toMatch(/^tenant-a-[0-9a-f]{4}$/)
+        expect(first?.user).toMatchObject({ email: 'new@example.com', emailVerified: false, isSuperadmin: false })
+        expect(await store.findMemberRole(first?.tenant.id ?? '', first?.user.id ?? '')).toBe('admin')
+        const tenantsBefore = (await store.listTenants()).length
+        expect(await store.register({ ...account, email: 'NEW@example.com' }, { name: 'X', slug: 'x-x' })).toBeNull()
+        expect((await store.listTenants()).length).toBe(tenantsBefore)
+        expect(await store.createUser({ ...account, email: 'New@Example.com' })).toBeNull()
+    })
+
+    it('keeps at least one admin per tenant and one superadmin, also with changes at the same time', async () => {
+        const store = new PgOidcStore(database)
+        const created = await store.register(
+            { email: 'owner@example.com', name: 'Owner', passwordHash: 'x', emailVerified: true, locale: null },
+            { name: 'Race', slug: 'race' }
+        )
+        const tenantId = created?.tenant.id ?? ''
+        const owner = created?.user.id ?? ''
+        const account = (email: string) => ({
+            email,
+            name: email,
+            passwordHash: 'x',
+            emailVerified: true,
+            locale: null
+        })
+        const second = (await store.createUser(account('second@example.com')))?.id ?? ''
+        const third = (await store.createUser(account('third@example.com')))?.id ?? ''
+        await store.addMember(tenantId, second, 'admin')
+        await store.addMember(tenantId, second, 'user') // keeps the higher role
+        expect(await store.findMemberRole(tenantId, second)).toBe('admin')
+        // Two admins demote each other at the same time: one of both must stay admin
+        const results = await Promise.all([
+            store.setMemberRole(tenantId, owner, 'user'),
+            store.setMemberRole(tenantId, second, 'user')
+        ])
+        expect(results.sort()).toEqual(['last-admin', 'ok'])
+        const admins = (await store.listMembers(tenantId)).filter(member => member.role === 'admin')
+        expect(admins).toHaveLength(1)
+        expect(await store.removeMember(tenantId, admins[0]?.userId ?? '')).toBe('last-admin')
+
+        // Superadmins: the last one cannot be revoked
+        const superadmins = await store.listSuperadmins()
+        expect(superadmins.map(item => item.email)).toEqual(['root@example.com'])
+        expect(await store.setSuperadmin(superadmins[0]?.id ?? '', false)).toBe('last-admin')
+        expect(await store.setSuperadmin(third, true)).toBe('ok')
+        const revoked = await Promise.all([
+            store.setSuperadmin(third, false),
+            store.setSuperadmin(superadmins[0]?.id ?? '', false)
+        ])
+        expect(revoked.sort()).toEqual(['last-admin', 'ok'])
+        expect(await store.listSuperadmins()).toHaveLength(1)
+    })
+
+    it('verifies email addresses, changes passwords, suspends tenants and counts members', async () => {
+        const store = new PgOidcStore(database)
+        const created = await store.register(
+            { email: 'later@example.com', name: 'Later', passwordHash: 'old', emailVerified: false, locale: null },
+            { name: 'Later Co', slug: 'later-co' }
+        )
+        const id = created?.user.id ?? ''
+        await store.setEmailVerified(id)
+        await store.setPassword(id, 'new')
+        expect(await store.findUserById(id)).toMatchObject({ emailVerified: true, passwordHash: 'new' })
+        const session = {
+            idHash: randomBytes(16).toString('hex'),
+            interactionHash: randomBytes(16).toString('hex'),
+            userId: id,
+            tenantId: created?.tenant.id ?? '',
+            authTime: new Date(),
+            acr: 'loa1',
+            amr: ['pwd'],
+            expiresAt: new Date(Date.now() + 60_000)
+        }
+        await store.createSession(session)
+        await store.endUserSessions(id)
+        expect(await store.findSession(session.idHash)).toBeNull()
+        expect(await store.setTenantStatus(created?.tenant.id ?? '', 'suspended')).toBe(true)
+        expect(await store.listMemberships(id)).toEqual([])
+        const listed = (await store.listTenants()).find(item => item.id === created?.tenant.id)
+        expect(listed).toMatchObject({ status: 'suspended', members: 1 })
+        expect(await store.setTenantStatus(randomUUID(), 'active')).toBe(false)
+    })
+
+    it('stores two-step verification, and every code or recovery code works only once (also at the same time)', async () => {
+        const store = new PgOidcStore(database)
+        const id =
+            (
+                await store.createUser({
+                    email: 'mfa@example.com',
+                    name: 'Mfa',
+                    passwordHash: 'x',
+                    emailVerified: true,
+                    locale: null
+                })
+            )?.id ?? ''
+        expect(await store.getMfa(id)).toEqual({ secret: null, enabled: false, lastStep: null, recoveryCodes: [] })
+        await store.setMfaSecret(id, 'v1.encrypted')
+        expect((await store.findUserById(id))?.mfaEnabled).toBe(false)
+        await store.enableMfa(id, ['h1', 'h2'], 1000)
+        expect(await store.getMfa(id)).toEqual({
+            secret: 'v1.encrypted',
+            enabled: true,
+            lastStep: 1000,
+            recoveryCodes: ['h1', 'h2']
+        })
+        expect((await store.findUserById(id))?.mfaEnabled).toBe(true)
+
+        const steps = await Promise.all([store.useTotpStep(id, 1001), store.useTotpStep(id, 1001)])
+        expect(steps.sort()).toEqual([false, true])
+        expect(await store.useTotpStep(id, 1000)).toBe(false)
+        const codes = await Promise.all([store.useRecoveryCode(id, 'h1'), store.useRecoveryCode(id, 'h1')])
+        expect(codes.sort()).toEqual([false, true])
+        expect((await store.getMfa(id))?.recoveryCodes).toEqual(['h2'])
+
+        await store.disableMfa(id)
+        expect(await store.getMfa(id)).toEqual({ secret: null, enabled: false, lastStep: null, recoveryCodes: [] })
     })
 
     it('the tenant role exists and owns nothing', async () => {

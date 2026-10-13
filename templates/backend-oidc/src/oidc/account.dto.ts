@@ -1,0 +1,86 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator'
+import { i18nValidationMessage } from 'nestjs-i18n'
+import { OIDC } from './oidc.config.js'
+import { TENANT_ROLES, type TenantRole } from './store/oidc.store.js'
+
+const isString = { message: i18nValidationMessage('validation.IS_STRING') }
+const minLength = { message: i18nValidationMessage('validation.MIN_LENGTH') }
+const maxLength = { message: i18nValidationMessage('validation.MAX_LENGTH') }
+const isEmail = { message: i18nValidationMessage('validation.IS_EMAIL') }
+const isIn = { message: i18nValidationMessage('validation.IS_IN') }
+
+export class RegisterDto {
+    @ApiProperty({ example: 'Ada Lovelace' })
+    @IsString(isString)
+    @MinLength(2, minLength)
+    @MaxLength(100, maxLength)
+    name!: string
+
+    @ApiProperty({ example: 'ada@example.com' })
+    @IsEmail({}, isEmail)
+    @MaxLength(254, maxLength)
+    email!: string
+
+    @ApiProperty({ example: 'correct-horse-battery', minLength: OIDC.PASSWORD_MIN })
+    @IsString(isString)
+    @MinLength(OIDC.PASSWORD_MIN, minLength)
+    @MaxLength(OIDC.PASSWORD_MAX, maxLength)
+    password!: string
+
+    @ApiProperty({ example: 'Acme', description: 'Name of the new organisation; the new account becomes its admin' })
+    @IsString(isString)
+    @MinLength(2, minLength)
+    @MaxLength(100, maxLength)
+    organisation!: string
+}
+
+export class TokenDto {
+    @ApiProperty({ description: 'The token from the link in the email' })
+    @IsString(isString)
+    @MaxLength(2000, maxLength)
+    token!: string
+}
+
+export class EmailDto {
+    @ApiProperty({ example: 'ada@example.com' })
+    @IsEmail({}, isEmail)
+    @MaxLength(254, maxLength)
+    email!: string
+}
+
+export class ResetPasswordDto extends TokenDto {
+    @ApiProperty({ example: 'a-new-long-password', minLength: OIDC.PASSWORD_MIN })
+    @IsString(isString)
+    @MinLength(OIDC.PASSWORD_MIN, minLength)
+    @MaxLength(OIDC.PASSWORD_MAX, maxLength)
+    password!: string
+}
+
+export class AcceptInvitationDto extends TokenDto {
+    @ApiPropertyOptional({ example: 'Ada Lovelace', description: 'Only for a new account' })
+    @IsOptional()
+    @IsString(isString)
+    @MinLength(2, minLength)
+    @MaxLength(100, maxLength)
+    name?: string
+
+    @ApiPropertyOptional({ example: 'correct-horse-battery', description: 'Only for a new account' })
+    @IsOptional()
+    @IsString(isString)
+    @MinLength(OIDC.PASSWORD_MIN, minLength)
+    @MaxLength(OIDC.PASSWORD_MAX, maxLength)
+    password?: string
+}
+
+export class InviteDto extends EmailDto {
+    @ApiProperty({ enum: TENANT_ROLES, example: 'user' })
+    @IsIn(TENANT_ROLES, isIn)
+    role!: TenantRole
+}
+
+export class RoleDto {
+    @ApiProperty({ enum: TENANT_ROLES, example: 'admin' })
+    @IsIn(TENANT_ROLES, isIn)
+    role!: TenantRole
+}

@@ -2,17 +2,25 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
+import { Link } from '@/i18n/navigation'
+import { BUTTON, CARD, INPUT, LINK, roleLabel } from '@/components/account-ui'
+import { MfaQr, RecoveryCodes } from '@/components/mfa-ui'
+import { useAccountApi } from '@/lib/account'
 import { API_URL } from '@/lib/api'
 
-type Tenant = { id: string; name: string }
+type Tenant = { id: string; name: string; role?: 'user' | 'admin' }
 type State =
     | { step: 'loading' }
-    | { step: 'login'; clientName: string; csrf: string; loginHint: string }
+    | { step: 'login'; clientName: string; csrf: string; loginHint: string; registration: boolean }
     | { step: 'tenant'; csrf: string; tenants: Tenant[] }
+    | { step: 'mfa'; csrf: string }
+    | { step: 'mfa-setup'; csrf: string; secret: string; qrSvg: string }
+    | { step: 'recovery-codes'; csrf: string; codes: string[] }
     | { step: 'fatal'; message: string }
 
 type Answer = {
     status?: string
+    error?: string
     message?: string
     location?: string
     csrf?: string
@@ -20,16 +28,16 @@ type Answer = {
     step?: string
     clientName?: string
     loginHint?: string
+    registration?: boolean
+    secret?: string
+    qrSvg?: string
+    recoveryCodes?: string[]
 }
 
-const CARD =
-    'flex w-full max-w-sm flex-col gap-5 rounded-2xl border border-black/10 bg-black/[.03] p-6 text-left dark:border-white/15 dark:bg-white/[.04]'
-const INPUT =
-    'h-11 w-full rounded-xl border border-black/15 bg-transparent px-3.5 text-sm outline-none focus:border-[var(--accent,#6366f1)] dark:border-white/20'
-const BUTTON =
-    'inline-flex h-11 items-center justify-center rounded-xl bg-[var(--accent,#171717)] px-5 text-sm font-semibold text-[var(--accent-fg,#ffffff)] disabled:opacity-60 dark:bg-[var(--accent,#ededed)] dark:text-[var(--accent-fg,#0a0a0a)]'
 const CHOICE =
-    'flex h-11 items-center rounded-xl border border-black/15 px-4 text-left text-sm font-semibold hover:border-[var(--accent,#6366f1)] disabled:opacity-60 dark:border-white/20'
+    'flex h-11 items-center justify-between gap-3 rounded-xl border border-black/15 px-4 text-left text-sm font-semibold hover:border-[var(--accent,#6366f1)] disabled:opacity-60 dark:border-white/20'
+/** From this many organisations on, the choice gets a search field. */
+const SEARCH_FROM = 7
 
 /**
  * The login page of the OIDC server, shown by this frontend: /login?interaction=<id>. It talks to the JSON variant of
@@ -42,6 +50,11 @@ export function OidcLogin({ interaction }: { interaction: string }) {
     const [state, setState] = useState<State>({ step: 'loading' })
     const [error, setError] = useState<string | null>(null)
     const [busy, setBusy] = useState(false)
+    // Set when the password was right but the email address is not verified yet: offers to send the email again
+    const [unverified, setUnverified] = useState('')
+    const [resent, setResent] = useState(false)
+    const [search, setSearch] = useState('')
+    const account = useAccountApi()
     const base = `${API_URL}/oidc/interaction/${encodeURIComponent(interaction)}`
 
     async function call(path: string, body?: object): Promise<{ status: number; answer: Answer }> {
@@ -68,7 +81,8 @@ export function OidcLogin({ interaction }: { interaction: string }) {
                         step: 'login',
                         clientName: answer.clientName ?? '',
                         csrf: answer.csrf,
-                        loginHint: answer.loginHint ?? ''
+                        loginHint: answer.loginHint ?? '',
+                        registration: answer.registration !== false
                     })
                 } else {
                     setState({ step: 'fatal', message: answer.message ?? t('offline') })
@@ -84,14 +98,35 @@ export function OidcLogin({ interaction }: { interaction: string }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [interaction])
 
-    /** Handles every answer of the login server. */
-    function handle(status: number, answer: Answer) {
+    /** Handles every answer of the login server. `email` is what the user typed (for "send the email again"). */
+    function handle(status: number, answer: Answer, email = '') {
         if (answer.status === 'redirect' && answer.location) {
             window.location.assign(answer.location)
             return
         }
+        // Two-step verification: the code after the password, setting it up, or the recovery codes after setting it up
+        if (
+            answer.csrf &&
+            (answer.status === 'mfa' || answer.status === 'mfa-setup' || answer.status === 'recovery-codes')
+        ) {
+            if (answer.status === 'mfa') setState({ step: 'mfa', csrf: answer.csrf })
+            else if (answer.status === 'mfa-setup')
+                setState({
+                    step: 'mfa-setup',
+                    csrf: answer.csrf,
+                    secret: answer.secret ?? '',
+                    qrSvg: answer.qrSvg ?? ''
+                })
+            else setState({ step: 'recovery-codes', csrf: answer.csrf, codes: answer.recoveryCodes ?? [] })
+            setError(answer.message ?? null)
+            setBusy(false)
+            return
+        }
         if (answer.status === 'choose-tenant' && answer.csrf) {
             setState({ step: 'tenant', csrf: answer.csrf, tenants: answer.tenants ?? [] })
+        } else if (status === 403 && answer.error === 'EMAIL_NOT_VERIFIED') {
+            setError(answer.message ?? null)
+            setUnverified(email)
         } else if (status === 401 || status === 429) {
             setError(answer.message ?? null)
         } else {
@@ -100,12 +135,12 @@ export function OidcLogin({ interaction }: { interaction: string }) {
         setBusy(false)
     }
 
-    async function submit(path: string, body: object) {
+    async function submit(path: string, body: object, email = '') {
         setBusy(true)
         setError(null)
         try {
             const { status, answer } = await call(path, body)
-            handle(status, answer)
+            handle(status, answer, email)
         } catch {
             setError(t('offline'))
             setBusy(false)
@@ -116,7 +151,19 @@ export function OidcLogin({ interaction }: { interaction: string }) {
         event.preventDefault()
         if (state.step !== 'login') return
         const values = Object.fromEntries(new FormData(event.currentTarget))
-        void submit('/login', { csrf: state.csrf, email: values.email, password: values.password })
+        setUnverified('')
+        setResent(false)
+        void submit(
+            '/login',
+            { csrf: state.csrf, email: values.email, password: values.password },
+            String(values.email)
+        )
+    }
+
+    async function resend() {
+        setResent(false)
+        await account('resend-verification', { email: unverified }).catch(() => null)
+        setResent(true)
     }
 
     if (state.step === 'loading') return <p className='text-sm opacity-70'>{t('busy')}</p>
@@ -125,9 +172,9 @@ export function OidcLogin({ interaction }: { interaction: string }) {
         return (
             <section className={CARD}>
                 <h1 className='text-2xl font-bold tracking-tight'>{t('loginTitle')}</h1>
-                <p role='alert' className='text-sm text-red-600 dark:text-red-400'>
+                <div role='alert' className='text-sm text-red-600 dark:text-red-400'>
                     {state.message}
-                </p>
+                </div>
                 <form action='/api/auth/login' method='get' className='flex flex-col'>
                     <button type='submit' className={BUTTON}>
                         {t('startAgain')}
@@ -137,13 +184,90 @@ export function OidcLogin({ interaction }: { interaction: string }) {
         )
     }
 
+    if (state.step === 'mfa' || state.step === 'mfa-setup') {
+        const setup = state.step === 'mfa-setup' ? state : null
+        return (
+            <form
+                // A new form (not the login form reused by React): the password must never end up in the code field
+                key={state.step}
+                className={CARD}
+                onSubmit={event => {
+                    event.preventDefault()
+                    const code = String(new FormData(event.currentTarget).get('code') ?? '')
+                    void submit('/mfa', { csrf: state.csrf, code })
+                }}
+            >
+                <div className='flex flex-col gap-1.5'>
+                    <h1 className='text-2xl font-bold tracking-tight'>{setup ? t('mfaSetupTitle') : t('mfaTitle')}</h1>
+                    <p className='text-sm opacity-80'>{setup ? t('mfaSetupText') : t('mfaText')}</p>
+                </div>
+                {setup && (
+                    <MfaQr qrSvg={setup.qrSvg} secret={setup.secret} label={t('mfaQr')} secretLabel={t('mfaSecret')} />
+                )}
+                <label className='flex flex-col gap-1.5 text-sm font-medium'>
+                    {t('mfaCode')}
+                    <input
+                        name='code'
+                        required
+                        minLength={6}
+                        maxLength={setup ? 7 : 20}
+                        autoComplete='one-time-code'
+                        inputMode={setup ? 'numeric' : 'text'}
+                        autoFocus
+                        className={INPUT + ' tracking-widest'}
+                    />
+                </label>
+                {error && (
+                    <div role='alert' className='text-sm text-red-600 dark:text-red-400'>
+                        {error}
+                    </div>
+                )}
+                <button type='submit' disabled={busy} className={BUTTON}>
+                    {busy ? t('busy') : t('mfaSubmit')}
+                </button>
+            </form>
+        )
+    }
+
+    if (state.step === 'recovery-codes') {
+        return (
+            <section className={CARD}>
+                <div className='flex flex-col gap-1.5'>
+                    <h1 className='text-2xl font-bold tracking-tight'>{t('recoveryTitle')}</h1>
+                    <p className='text-sm opacity-80'>{t('recoveryText')}</p>
+                </div>
+                <RecoveryCodes codes={state.codes} copyLabel={t('copyCodes')} copiedLabel={t('copied')} />
+                <button
+                    type='button'
+                    disabled={busy}
+                    className={BUTTON}
+                    onClick={() => void submit('/continue', { csrf: state.csrf })}
+                >
+                    {busy ? t('busy') : t('continue')}
+                </button>
+            </section>
+        )
+    }
+
     if (state.step === 'tenant') {
+        const query = search.trim().toLowerCase()
+        const shown = state.tenants.filter(tenant => tenant.name.toLowerCase().includes(query))
         return (
             <section className={CARD}>
                 <h1 className='text-2xl font-bold tracking-tight'>{t('tenantTitle')}</h1>
                 <p className='text-sm opacity-80'>{t('tenantSubtitle')}</p>
-                <div className='flex flex-col gap-2.5'>
-                    {state.tenants.map(tenant => (
+                {state.tenants.length >= SEARCH_FROM && (
+                    <input
+                        type='search'
+                        value={search}
+                        onChange={event => setSearch(event.target.value)}
+                        placeholder={t('searchTenant')}
+                        aria-label={t('searchTenant')}
+                        className={INPUT}
+                    />
+                )}
+                <div className='flex max-h-96 flex-col gap-2.5 overflow-y-auto'>
+                    {shown.map(tenant => (
                         <button
                             key={tenant.id}
                             type='button'
@@ -151,16 +275,20 @@ export function OidcLogin({ interaction }: { interaction: string }) {
                             className={CHOICE}
                             onClick={() => void submit('/tenant', { csrf: state.csrf, tenant: tenant.id })}
                         >
-                            {tenant.name}
+                            <span>{tenant.name}</span>
+                            {tenant.role && (
+                                <span className='text-xs font-medium opacity-60'>{roleLabel(t, tenant.role)}</span>
+                            )}
                         </button>
                     ))}
+                    {shown.length === 0 && <p className='text-sm opacity-70'>{t('noTenantFound')}</p>}
                 </div>
             </section>
         )
     }
 
     return (
-        <form onSubmit={onLogin} className={CARD}>
+        <form key='login' onSubmit={onLogin} className={CARD}>
             <div className='flex flex-col gap-1.5'>
                 <h1 className='text-2xl font-bold tracking-tight'>{t('loginTitle')}</h1>
                 <p className='text-sm opacity-80'>{t('loginSubtitle', { client: state.clientName })}</p>
@@ -189,13 +317,34 @@ export function OidcLogin({ interaction }: { interaction: string }) {
                 />
             </label>
             {error && (
-                <p role='alert' className='text-sm text-red-600 dark:text-red-400'>
+                <div role='alert' className='text-sm text-red-600 dark:text-red-400'>
                     {error}
-                </p>
+                </div>
+            )}
+            {unverified && (
+                <div className='flex flex-col gap-1.5 text-sm'>
+                    <button type='button' className={LINK + ' self-start'} onClick={() => void resend()}>
+                        {t('resend')}
+                    </button>
+                    {resent && <div role='status'>{t('resent')}</div>}
+                </div>
             )}
             <button type='submit' disabled={busy} className={BUTTON}>
                 {busy ? t('busy') : t('submit')}
             </button>
+            <div className='flex flex-wrap items-center justify-between gap-2 text-sm'>
+                <Link href='/forgot-password' className={LINK}>
+                    {t('forgotPassword')}
+                </Link>
+                {state.registration && (
+                    <span>
+                        <span className='opacity-80'>{t('noAccount')}</span>{' '}
+                        <Link href='/register' className={LINK}>
+                            {t('register')}
+                        </Link>
+                    </span>
+                )}
+            </div>
         </form>
     )
 }

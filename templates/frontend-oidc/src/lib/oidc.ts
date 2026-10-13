@@ -22,10 +22,11 @@ export const SESSION_COOKIE = 'app_session'
 export const FLOW_COOKIE = 'app_oidc'
 export const FLOW_SECONDS = 10 * 60
 
+/** The tenant of the session, with the role of the user there: user or admin (a superadmin is admin everywhere). */
 export interface Tenant {
     id: string
     name: string
-    roles: string[]
+    role: 'user' | 'admin'
 }
 
 /** What the session cookie holds. */
@@ -34,6 +35,8 @@ export interface Session {
     name: string
     email: string
     tenant: Tenant
+    /** Platform administrator: admin of every tenant. */
+    superadmin: boolean
     accessToken: string
     /** When the access token expires (milliseconds). After that the user logs in again, without a password (SSO). */
     expiresAt: number
@@ -171,7 +174,7 @@ export async function verifyIdToken(
     idToken: string,
     nonce: string,
     accessToken: string
-): Promise<{ sub: string; tenant: Tenant }> {
+): Promise<{ sub: string; tenant: Tenant; superadmin: boolean }> {
     const [header, payload, signature] = idToken.split('.')
     if (!header || !payload || !signature) throw new Error('Malformed ID token')
     const head = JSON.parse(Buffer.from(header, 'base64url').toString('utf8')) as { alg?: string; kid?: string }
@@ -194,7 +197,7 @@ export async function verifyIdToken(
     const atHash = b64url(createHash('sha256').update(accessToken).digest().subarray(0, 16))
     if (claims.at_hash !== atHash) throw new Error('The access token does not belong to the ID token')
     if (typeof claims.sub !== 'string') throw new Error('Missing subject')
-    return { sub: claims.sub, tenant: claims.tenant as Tenant }
+    return { sub: claims.sub, tenant: claims.tenant as Tenant, superadmin: claims.superadmin === true }
 }
 
 /** Exchanges the code for tokens (public client: client_id + code_verifier, no secret). */

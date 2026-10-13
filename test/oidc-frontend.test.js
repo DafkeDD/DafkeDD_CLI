@@ -19,7 +19,23 @@ test('the frontend login files are copied with the API port filled in', () => {
         'src/app/[locale]/login/page.tsx',
         'src/app/[locale]/profile/page.tsx',
         'src/components/oidc-login.tsx',
-        'src/components/session-links.tsx'
+        'src/components/session-links.tsx',
+        'src/app/[locale]/register/page.tsx',
+        'src/app/[locale]/verify-email/page.tsx',
+        'src/app/[locale]/forgot-password/page.tsx',
+        'src/app/[locale]/reset-password/page.tsx',
+        'src/app/[locale]/invite/page.tsx',
+        'src/app/[locale]/members/page.tsx',
+        'src/app/[locale]/admin/page.tsx',
+        'src/app/[locale]/security/page.tsx',
+        'src/app/api/backend/[...path]/route.ts',
+        'src/components/account-forms.tsx',
+        'src/components/account-ui.tsx',
+        'src/components/members.tsx',
+        'src/components/platform.tsx',
+        'src/components/mfa-ui.tsx',
+        'src/components/security.tsx',
+        'src/lib/account.ts'
     ]) {
         assert.ok(templates[rel], rel)
     }
@@ -160,4 +176,20 @@ test('index: the frontend learns that the backend is an OIDC server', async () =
         log: () => {}
     })
     assert.deepEqual(events[0], { port: 4000, auth: false, oidc: true })
+})
+
+test('the API proxy only forwards members, platform and two-step calls, with the token added on the server', () => {
+    const route = templates['src/app/api/backend/[...path]/route.ts']
+    assert.match(route, /Authorization: 'Bearer ' \+ session\.accessToken/)
+    assert.match(route, /request\.headers\.get\('origin'\) !== new URL\(APP_URL\)\.origin/)
+    const allowed = new RegExp(/const ALLOWED = \/(.+)\/$/m.exec(route)[1])
+    for (const path of ['tenants/current/members', 'admin/tenants', 'me/mfa', 'me/mfa/recovery-codes'])
+        assert.ok(allowed.test(path), path)
+    for (const path of ['oidc/token', 'health', 'tenants/other/members', '../admin', 'me/profile'])
+        assert.ok(!allowed.test(path), path)
+})
+
+test('the QR code is shown as an image, never inserted as HTML', () => {
+    for (const [rel, content] of Object.entries(templates)) assert.ok(!content.includes('dangerouslySetInnerHTML'), rel)
+    assert.match(templates['src/components/mfa-ui.tsx'], /data:image\/svg\+xml/)
 })
