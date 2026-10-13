@@ -4,6 +4,8 @@
  * controllers appears here and in Swagger (/docs).
  */
 
+import { endpoints as oidcEndpoints, DEMO_PORT } from './oidc.js'
+
 const fence = '```'
 const json = value => JSON.stringify(value, null, 2)
 
@@ -18,7 +20,7 @@ const USER = {
  * Every endpoint of the generated backend. `errors` are [status, translation key].
  * The same list is used to write the README, and the tests compare it with the controllers.
  */
-export const endpoints = ({ database = null, auth = false } = {}) => [
+export const endpoints = ({ database = null, auth = false, oidc = false, port = 4000 } = {}) => [
     {
         method: 'GET',
         path: '/',
@@ -121,20 +123,31 @@ export const endpoints = ({ database = null, auth = false } = {}) => [
                   cookie: 'needs'
               }
           ]
-        : [])
+        : []),
+    ...(oidc ? oidcEndpoints({ port }) : [])
 ]
 
+/** A form body as it is sent: a=1&b=2 */
+export const formBody = example => new URLSearchParams(example).toString()
+
 const curlFor = (endpoint, { port }) => {
+    if (endpoint.curl) return endpoint.curl
     const parts = ['curl']
     if (endpoint.method !== 'GET') parts.push(`-X ${endpoint.method}`)
     if (endpoint.cookie === 'sets' || endpoint.cookie === 'clears') parts.push('-c cookies.txt')
     if (endpoint.cookie === 'needs' || endpoint.cookie === 'clears') parts.push('-b cookies.txt')
     parts.push("-H 'Accept-Language: nl'")
-    if (endpoint.body) {
+    if (endpoint.bearer) parts.push('-H "Authorization: Bearer $ACCESS_TOKEN"')
+    if (endpoint.body && endpoint.form) {
+        parts.push("-H 'Content-Type: application/x-www-form-urlencoded'")
+        parts.push(`-d '${formBody(endpoint.body.example)}'`)
+    } else if (endpoint.body) {
         parts.push("-H 'Content-Type: application/json'")
         parts.push(`-d '${JSON.stringify(endpoint.body.example)}'`)
     }
-    parts.push(`http://localhost:${port}${endpoint.path.replace(':id', '7')}`)
+    parts.push(
+        `http://localhost:${port}${endpoint.path.replace(':id', endpoint.path.startsWith('/oidc/') ? 'ID' : '7')}`
+    )
     return parts.join(' ')
 }
 
@@ -158,12 +171,14 @@ const errorTable = (list, messages) => {
 export function backendReadme({
     database = null,
     auth = false,
+    oidc = false,
+    tenantRole = null,
     port = 4000,
     origin = 'http://localhost:3000',
     table = null,
     translations
 }) {
-    const list = endpoints({ database, auth })
+    const list = endpoints({ database, auth, oidc, port })
     const errorMessages = Object.fromEntries(
         Object.entries(translations.en.errors).map(([key, text]) => [`errors.${key}`, text])
     )
@@ -174,9 +189,19 @@ export function backendReadme({
         if (endpoint.cookie === 'clears') lines.push('Clears the `session` cookie.', '')
         if (endpoint.cookie === 'needs')
             lines.push('Needs the `session` cookie from `/auth/login` or `/auth/register`.', '')
+        if (endpoint.query) {
+            lines.push(
+                '**Query parameters:**',
+                '',
+                '| Parameter | | Meaning |',
+                '| --- | --- | --- |',
+                ...endpoint.query.map(([name, need, text]) => `| \`${name}\` | ${need} | ${text} |`),
+                ''
+            )
+        }
         if (endpoint.body) {
             lines.push(
-                '**Body** (JSON):',
+                endpoint.form ? '**Body** (form-encoded, `application/x-www-form-urlencoded`):' : '**Body** (JSON):',
                 '',
                 '| Field | Type | Rules |',
                 '| --- | --- | --- |',
@@ -197,6 +222,12 @@ export function backendReadme({
         }
         const errors = errorTable(endpoint.errors, errorMessages)
         if (errors) lines.push(errors)
+        if (endpoint.oauthErrors) {
+            lines.push(
+                `**OAuth errors** (\`{ "error": "...", "error_description": "..." }\`, or \`?error=\` on the redirect): ${endpoint.oauthErrors.map(code => '`' + code + '`').join(', ')}.`,
+                ''
+            )
+        }
         return lines.join('\n')
     })
 
@@ -221,6 +252,34 @@ export function backendReadme({
                   ],
                   ['AUTH_RATE_LIMIT', '10', 'Maximum login and register attempts per minute per IP address']
               ]
+            : []),
+        ...(oidc
+            ? [
+                  [
+                      'OIDC_ISSUER',
+                      `http://localhost:${port}/oidc`,
+                      'Public base URL of the login server (the `iss` of every token)'
+                  ],
+                  [
+                      'OIDC_AUDIENCE',
+                      `http://localhost:${port}`,
+                      'The `aud` of access tokens: the API that accepts them'
+                  ],
+                  [
+                      'OIDC_MASTER_KEY',
+                      '(generated)',
+                      'Encrypts the private signing keys in the database. 64 hex characters; keep it secret and backed up'
+                  ],
+                  ['OIDC_LOGIN_RATE_LIMIT', '10', 'Login attempts per minute, per IP address and per email address'],
+                  ['OIDC_BOOTSTRAP_TENANT', '(your answer)', 'Name of the first tenant, created at the first start'],
+                  ['OIDC_BOOTSTRAP_ADMIN_EMAIL', '(your answer)', 'Email address of the first admin'],
+                  [
+                      'OIDC_BOOTSTRAP_ADMIN_PASSWORD_HASH',
+                      '(generated)',
+                      'scrypt hash of the temporary password the CLI showed once'
+                  ],
+                  ['OIDC_CLIENTS_FILE', 'config/oidc-clients.json', 'The registered clients (optional)']
+              ]
             : [])
     ]
 
@@ -234,6 +293,13 @@ export function backendReadme({
         ['npm run format', 'Format with Prettier (`format:check` only checks)'],
         ...(database
             ? [['npm run db:check', 'Test the database connection (creates the database when it does not exist)']]
+            : []),
+        ...(oidc
+            ? [
+                  ['npm run test:db', 'Tests against the real PostgreSQL: tenant isolation (RLS) and storage'],
+                  ['npm run oidc:user', 'Add a user to a tenant (see "OpenID Connect")'],
+                  ['npm run oidc:demo', `A small client to try the login on http://localhost:${DEMO_PORT}`]
+              ]
             : []),
         ...(database?.mode === 'docker'
             ? [
@@ -350,14 +416,121 @@ For production: HTTPS, a long random \`JWT_SECRET\`, your real \`CORS_ORIGIN\`, 
 `
             : ''
     }
-## Endpoints
+${oidc ? oidcSection({ port, tenantRole }) : ''}## Endpoints
 
 CORS allows ${'`' + origin + '`'} (change \`CORS_ORIGIN\`). Examples use \`-H 'Accept-Language: nl'\`; leave it out for English.
 
 ${sections.join('\n')}
 ## Tests
 
-Unit tests (\`npm test\`) and end-to-end tests (\`npm run test:e2e\`) never need a database${auth ? ' (the users table is replaced by an in-memory fake)' : ''}.
+Unit tests (\`npm test\`) and end-to-end tests (\`npm run test:e2e\`) never need a database${auth ? ' (the users table is replaced by an in-memory fake)' : ''}${oidc ? ' (the OpenID Connect data is kept in memory)' : ''}.${oidc ? '\n`npm run test:db` runs the Row-Level Security and storage tests against the real PostgreSQL from `.env`: it creates a\nseparate `<DATABASE_NAME>_test` database and removes it afterwards.' : ''}
 Add a test for every endpoint you add, and for every translated error in all four languages.
+`
+}
+
+/** The README section about the OpenID Connect server and multi-tenancy. */
+function oidcSection({ port, tenantRole }) {
+    return `
+## OpenID Connect (login server)
+
+This backend is also an **OpenID Connect provider**: other applications (your frontend, a mobile app, another server)
+let their users log in here and receive signed tokens. Discovery:
+**http://localhost:${port}/oidc/.well-known/openid-configuration**. Every client library that speaks OpenID Connect
+finds all endpoints there.
+
+### Try it
+
+1. Start the API (\`npm run start:dev\`). The first start creates the tables, the signing keys, the clients of
+   \`config/oidc-clients.json\` and the first tenant with its admin (the email and temporary password the CLI showed).
+2. \`npm run oidc:demo\` and open **http://localhost:${DEMO_PORT}**: a small client (\`scripts/oidc-demo.mjs\`, no
+   dependencies) redirects you to the login page, exchanges the code and shows the verified ID token and the userinfo.
+3. Add users: \`npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme --roles admin\` (creates the tenant
+   when it does not exist; prints a random password once, or use \`--password\`).
+
+### How a login works (authorization code flow with PKCE)
+
+1. The client sends the browser to \`/oidc/authorize\` with \`client_id\`, an exact registered \`redirect_uri\`,
+   \`scope=openid ...\`, \`state\`, \`nonce\` and a PKCE \`code_challenge\` (S256, **required for every client**).
+2. The server stores the request (10 minutes) and shows the login page \`/oidc/interaction/<id>\` in the language of the
+   browser (or \`ui_locales\`). Email and password are checked (scrypt); attempts are limited per IP and per email.
+3. A user that belongs to several tenants chooses one (or \`tenant_hint\` decides). Users without an active tenant cannot
+   log in.
+4. The browser gets the \`oidc_session\` cookie (httpOnly, SameSite=Lax, Path=/oidc, 12 hours) and is sent back to the
+   client with \`code\`, \`state\` and \`iss\`. A next login of the same browser skips the password, unless the client
+   asks \`prompt=login\` or \`max_age\`.
+5. The client exchanges the code (once, within 60 seconds) at \`/oidc/token\` with its \`code_verifier\`, and gets:
+
+| Token | Format | Lifetime | Contents |
+| --- | --- | --- | --- |
+| ID token | JWT, RS256, \`aud\` = client | 5 minutes | \`sub\`, \`auth_time\`, \`nonce\`, \`acr\` (\`loa1\`), \`amr\` (\`pwd\`), \`sid\`, \`at_hash\`, \`tenant\` |
+| Access token | JWT, ES256, \`typ: at+jwt\` (RFC 9068), \`aud\` = \`OIDC_AUDIENCE\` | 10 minutes | \`sub\`, \`client_id\`, \`scope\`, \`tenant\` |
+
+The \`tenant\` claim is \`{ "id": "...", "name": "Acme", "roles": ["admin"] }\`: the tenant the user chose, with the roles
+of the user in that tenant. Verify tokens with the keys of \`/oidc/jwks\`, check \`iss\`, \`aud\` and \`exp\`, and take
+the tenant only from a verified token, never from a header or the URL.
+
+### Clients
+
+\`config/oidc-clients.json\` lists the applications that may use the login (applied at every start):
+
+| Field | Meaning |
+| --- | --- |
+| \`clientId\` | Name of the client (letters, digits, \`.\`, \`_\`, \`-\`) |
+| \`type\` | \`public\` (browser and mobile apps: no secret, PKCE) or \`confidential\` (a server with a secret) |
+| \`secretEnv\` | Confidential only: the \`.env\` variable with its secret (at least 32 characters); never in the file |
+| \`redirectUris\` | Exact addresses the browser may be sent back to (https; http only on localhost) |
+| \`scopes\` | Scopes the client may ask for: \`openid\`, \`profile\`, \`email\`, \`tenant\` |
+| \`firstParty\` | Your own application (no consent screen) |
+
+### Keys
+
+One RS256 key signs ID tokens (required by OpenID Connect), one ES256 key signs access tokens. They are created at the
+first start, stored in \`oidc_signing_keys\` with the private part encrypted (AES-256-GCM with \`OIDC_MASTER_KEY\`),
+replaced after 90 days and kept in the JWKS for 14 more days. **Keep a backup of \`OIDC_MASTER_KEY\`**: without it the
+stored keys cannot be used (new keys are then created and existing tokens stop working).
+
+### Not in this version yet
+
+Refresh tokens, logout, token revocation and introspection, MFA, a consent screen for external clients, and an admin
+API and UI follow in the next phases. Tokens are short-lived until then: a client logs in again (without a password,
+thanks to the session) when its access token expired.
+
+## Multi-tenant (Row-Level Security)
+
+Every table with customer data has a \`tenant_id\` and a PostgreSQL **Row-Level Security** policy. Run tenant code with
+\`DatabaseService.withTenant(tenantId, ...)\`: it runs the queries in one transaction as the role
+**\`${tenantRole}\`** (that owns nothing) with \`app.tenant_id\` set, so PostgreSQL itself only shows, changes and
+inserts rows of that tenant, also when a query forgets \`WHERE tenant_id = ...\`:
+
+${fence}ts
+// No WHERE tenant_id: Row-Level Security filters (see src/tenants/tenant-members.service.ts)
+const members = await this.database.withTenant(tenantId, (db) =>
+  db.query('SELECT user_id, roles FROM tenant_members ORDER BY created_at'),
+);
+${fence}
+
+- Take \`tenantId\` from the verified access token (\`tenant.id\`), never from user input.
+- A new table with customer data gets \`tenant_id uuid NOT NULL REFERENCES tenants (id)\`, \`ENABLE ROW LEVEL SECURITY\`,
+  the \`tenant_isolation\` policy and \`GRANT\`s for \`${tenantRole}\` in a new migration (\`src/database/migrations.ts\`), and
+  its name in \`TENANT_TABLES\`. The tests fail when you forget one of these.
+- \`DatabaseService.query()\` runs as the owner of the tables and sees everything: use it only for platform code
+  (login, migrations).
+
+### Tables
+
+| Table | Contents | Tenant (RLS) |
+| --- | --- | --- |
+| users table (database name + \`users\`) | Accounts: email (unique, case-insensitive), name, scrypt hash, status | no: one account can be in several tenants |
+| \`tenants\` | Organisations: \`slug\`, name, status (\`active\` or \`suspended\`) | yes |
+| \`tenant_members\` | Which user is in which tenant, with roles | yes |
+| \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\`) | no |
+| \`oidc_signing_keys\` | Signing keys (private part encrypted) | no |
+| \`oidc_interactions\` | Running logins (10 minutes) | no |
+| \`oidc_sessions\` | Browser sessions (hash of the cookie) | yes |
+| \`oidc_codes\` | Authorization codes (hash, once, 60 seconds) | yes |
+| \`schema_migrations\` | Which migration ran, with a checksum | no |
+
+Migrations run automatically at start, under an advisory lock (several instances can start at once). Never change a
+migration that already ran: add a new one.
 `
 }

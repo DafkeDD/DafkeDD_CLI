@@ -227,15 +227,18 @@ test('without login the backend has no auth files, no cookie parser and no secre
 
 // ---------------------------------------------------------------- the question
 
-function confirmPrompts(answer) {
+/** Fake prompts: the database question answers "postgres", the login question answers `choice`. */
+function loginPrompts(choice) {
     const asked = []
     return {
         asked,
         prompts: {
-            select: async () => 'postgres',
-            confirm: async config => {
+            select: async config => {
                 asked.push(config)
-                return answer
+                return config.message.includes('database') ? 'postgres' : choice
+            },
+            input: async () => {
+                throw new Error('no input expected')
             }
         }
     }
@@ -245,37 +248,52 @@ const registry = {
     postgres: { id: 'postgres', label: 'PostgreSQL', description: 'x', ask: async () => ({ ...DB }) }
 }
 
-test('with a frontend and a database the CLI asks about the test login pages and names the table', async () => {
-    const { prompts, asked } = confirmPrompts(true)
+test('with a frontend and a database the CLI asks how to log in: OIDC server, simple test login or none', async () => {
+    const { prompts, asked } = loginPrompts('simple')
     const result = await nestjs.ask({ hasFrontend: true, prompts, registry })
     assert.equal(result.auth, true)
-    assert.equal(asked.length, 1)
-    assert.match(asked[0].message, /login/i)
-    assert.ok(asked[0].message.includes('shopusers'), 'the user sees the table name')
-    assert.equal(asked[0].default, true)
+    assert.equal(result.oidc, null)
+    const question = asked.find(config => /login/i.test(config.message))
+    assert.ok(question, 'a login question is asked')
+    assert.deepEqual(
+        question.choices.map(choice => choice.value),
+        ['oidc', 'simple', 'none']
+    )
+    assert.ok(
+        question.choices.every(choice => choice.value === 'none' || choice.description.includes('shopusers')),
+        'the user sees the table name'
+    )
 })
 
-test('the answer "no" gives no login pages', async () => {
-    const { prompts } = confirmPrompts(false)
-    assert.equal((await nestjs.ask({ hasFrontend: true, prompts, registry })).auth, false)
+test('the answer "none" gives no login', async () => {
+    const { prompts } = loginPrompts('none')
+    const result = await nestjs.ask({ hasFrontend: true, prompts, registry })
+    assert.equal(result.auth, false)
+    assert.equal(result.oidc, null)
 })
 
-test('without a frontend the login question is not asked', async () => {
-    const { prompts, asked } = confirmPrompts(true)
+test('without a frontend the simple login (it needs the pages) is not offered, the OIDC server is', async () => {
+    const { prompts, asked } = loginPrompts('none')
     const result = await nestjs.ask({ hasFrontend: false, prompts, registry })
     assert.equal(result.auth, false)
-    assert.equal(asked.length, 0)
+    const question = asked.find(config => /login/i.test(config.message))
+    assert.deepEqual(
+        question.choices.map(choice => choice.value),
+        ['oidc', 'none']
+    )
 })
 
 test('without a database the login question is not asked', async () => {
     const asked = []
     const prompts = {
-        select: async () => 'none',
-        confirm: async config => asked.push(config)
+        select: async config => {
+            asked.push(config)
+            return 'none'
+        }
     }
     const result = await nestjs.ask({ hasFrontend: true, prompts, registry })
-    assert.deepEqual(result, { database: null, auth: false })
-    assert.equal(asked.length, 0)
+    assert.deepEqual(result, { database: null, auth: false, oidc: null })
+    assert.equal(asked.length, 1)
 })
 
 // ---------------------------------------------------------------- install flow

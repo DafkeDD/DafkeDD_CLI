@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import { buildFiles, TRANSLATIONS, LOCALES, PORT } from '../src/backends/nestjs.js'
-import { endpoints, backendReadme } from '../src/backends/docs.js'
+import { endpoints, backendReadme, formBody } from '../src/backends/docs.js'
 import { frontendReadme } from '../src/frontends/docs.js'
 
 const DB = {
@@ -16,14 +16,23 @@ const DB = {
     project: 'shop'
 }
 
-const VARIANTS = {
-    'no database': { database: null, auth: null },
-    database: { database: DB, auth: null },
-    'database + login': { database: DB, auth: { jwtSecret: 'x' } }
+const OIDC = {
+    tenantName: 'Acme',
+    adminEmail: 'admin@example.com',
+    adminPassword: 'TempPassword123',
+    adminPasswordHash: 'scrypt$32768$aa$bb',
+    masterKey: 'ab'.repeat(32)
 }
 
-const filesOf = ({ database, auth }) => buildFiles(database, { auth })
-const optionsOf = ({ database, auth }) => ({ database, auth: Boolean(auth) })
+const VARIANTS = {
+    'no database': { database: null, auth: null, oidc: null },
+    database: { database: DB, auth: null, oidc: null },
+    'database + login': { database: DB, auth: { jwtSecret: 'x' }, oidc: null },
+    'database + OIDC server': { database: DB, auth: null, oidc: OIDC }
+}
+
+const filesOf = ({ database, auth, oidc }) => buildFiles(database, { auth, oidc })
+const optionsOf = ({ database, auth, oidc }) => ({ database, auth: Boolean(auth), oidc: Boolean(oidc) })
 
 /** Every route that the generated controllers define, as "METHOD /path". */
 function routesOf(files) {
@@ -75,7 +84,8 @@ for (const [name, variant] of Object.entries(VARIANTS)) {
                 assert.match(section, /\*\*Body\*\*/, `${endpoint.path}: body table`)
                 for (const [field] of endpoint.body.fields)
                     assert.ok(section.includes(`\`${field}\``), `${endpoint.path}: ${field}`)
-                assert.ok(section.includes(JSON.stringify(endpoint.body.example)), `${endpoint.path}: body example`)
+                const example = endpoint.form ? formBody(endpoint.body.example) : JSON.stringify(endpoint.body.example)
+                assert.ok(section.includes(example), `${endpoint.path}: body example`)
             }
             if (endpoint.response)
                 assert.ok(section.includes(`**Response ${endpoint.response.status}:**`), `${endpoint.path}: response`)
@@ -98,7 +108,10 @@ for (const [name, variant] of Object.entries(VARIANTS)) {
 }
 
 test('documented request examples fill in all documented fields', () => {
-    for (const endpoint of endpoints({ database: DB, auth: true }).filter(e => e.body)) {
+    for (const endpoint of [
+        ...endpoints({ database: DB, auth: true }),
+        ...endpoints({ database: DB, oidc: true })
+    ].filter(e => e.body)) {
         assert.deepEqual(
             Object.keys(endpoint.body.example).sort(),
             endpoint.body.fields.map(f => f[0]).sort(),
@@ -225,4 +238,46 @@ test('CONTRIBUTING makes documentation mandatory for every step and every API ca
     const contributing = await read('CONTRIBUTING.md')
     assert.match(contributing, /Documentation is mandatory/)
     assert.match(contributing, /every API call/i)
+})
+
+// ---------------------------------------------------------------- OpenID Connect documentation
+
+test('the README of an OIDC backend explains the login server, multi-tenancy and every OIDC setting', () => {
+    const readme = filesOf(VARIANTS['database + OIDC server'])['README.md']
+    for (const text of [
+        '## OpenID Connect (login server)',
+        '/oidc/.well-known/openid-configuration',
+        'npm run oidc:demo',
+        'npm run oidc:user',
+        'npm run test:db',
+        'PKCE',
+        'config/oidc-clients.json',
+        'OIDC_MASTER_KEY',
+        'OIDC_ISSUER',
+        'OIDC_AUDIENCE',
+        'OIDC_BOOTSTRAP_ADMIN_EMAIL',
+        '## Multi-tenant (Row-Level Security)',
+        'withTenant',
+        'shop_tenant',
+        'TENANT_TABLES',
+        '**OAuth errors**',
+        '**Query parameters:**',
+        'application/x-www-form-urlencoded'
+    ]) {
+        assert.ok(readme.includes(text), text)
+    }
+})
+
+test('the README never contains the OIDC master key, the admin password or its hash', () => {
+    const readme = filesOf(VARIANTS['database + OIDC server'])['README.md']
+    for (const secret of [OIDC.masterKey, OIDC.adminPassword, OIDC.adminPasswordHash])
+        assert.ok(!readme.includes(secret))
+})
+
+test('only an OIDC backend documents the OIDC server', () => {
+    for (const name of ['no database', 'database', 'database + login']) {
+        const readme = filesOf(VARIANTS[name])['README.md']
+        assert.ok(!readme.includes('/oidc/'), name)
+        assert.ok(!readme.includes('OIDC_'), name)
+    }
 })

@@ -6,6 +6,7 @@ import { run } from '../runner.js'
 import { PRETTIERRC } from '../frontends/nextjs.js'
 import { databases } from '../databases/index.js'
 import * as login from './auth.js'
+import * as oidc from './oidc.js'
 import { backendReadme } from './docs.js'
 
 export const DIR = 'backend'
@@ -563,8 +564,9 @@ const replaceOnce = (text, from, to) => {
  * The files of the backend. Without a database this is `files`; with a database (answers of the database question)
  * the module, health check, translations, .env files and tests are extended for it.
  */
-export function buildFiles(database = null, { auth = null } = {}) {
-    if (auth && !database) throw new Error('Login en registratie hebben een database nodig')
+export function buildFiles(database = null, { auth = null, oidc: oidcAnswers = null } = {}) {
+    if ((auth || oidcAnswers) && !database) throw new Error('Login en registratie hebben een database nodig')
+    if (auth && oidcAnswers) throw new Error('Kies de eenvoudige login of de OIDC-server, niet allebei')
     if (!database) return files
     const db = databases[database.id].backend(database)
     const result = { ...files, ...db.files }
@@ -693,9 +695,54 @@ describe('API (e2e)', () => {\n`
             "process.env.JWT_SECRET ??= 'test-only-secret';\n\n// A fake database: the tests do not need PostgreSQL.\n"
         )
     }
+    if (oidcAnswers) {
+        Object.assign(
+            result,
+            oidc.oidcFiles({ usersTable: login.usersTable(database.database), database: database.database, port: PORT })
+        )
+        result['.env'] += oidc.envLines(oidcAnswers, { port: PORT })
+        result['.env.example'] += oidc.envLines(oidcAnswers, { port: PORT, example: true })
+        for (const locale of LOCALES) result[`src/i18n/${locale}/oidc.json`] = json(oidc.MESSAGES[locale])
+        result['src/app.module.ts'] = replaceOnce(
+            replaceOnce(
+                result['src/app.module.ts'],
+                "import { HealthController } from './health/health.controller.js';\n",
+                "import { HealthController } from './health/health.controller.js';\nimport { OidcModule } from './oidc/oidc.module.js';\nimport { TenantsModule } from './tenants/tenants.module.js';\n"
+            ),
+            '    DatabaseModule,\n',
+            '    DatabaseModule,\n    OidcModule,\n    TenantsModule,\n'
+        )
+        result['src/setup.ts'] = replaceOnce(
+            replaceOnce(
+                files['src/setup.ts'],
+                "import { INestApplication } from '@nestjs/common';\n",
+                "import { INestApplication } from '@nestjs/common';\nimport cookieParser from 'cookie-parser';\n"
+            ),
+            '  app.enableCors({',
+            '  app.use(cookieParser());\n  app.enableCors({'
+        )
+        // The main e2e spec creates the whole app: it gets an in-memory OIDC store and a test master key
+        let e2e = replaceOnce(
+            result['test/app.e2e-spec.ts'],
+            "import { DatabaseService } from '../src/database/database.service.js';\n",
+            "import { randomBytes } from 'node:crypto';\nimport { DatabaseService } from '../src/database/database.service.js';\nimport { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js';\nimport { OIDC_STORE } from '../src/oidc/store/oidc.store.js';\n"
+        )
+        e2e = replaceOnce(
+            e2e,
+            '// A fake database: the tests do not need PostgreSQL.\n',
+            "process.env.OIDC_MASTER_KEY ??= randomBytes(32).toString('hex');\n\n// A fake database: the tests do not need PostgreSQL.\n"
+        )
+        result['test/app.e2e-spec.ts'] = replaceOnce(
+            e2e,
+            '      .useValue(database)\n',
+            '      .useValue(database)\n      .overrideProvider(OIDC_STORE)\n      .useValue(new MemoryOidcStore())\n'
+        )
+    }
     result['README.md'] = backendReadme({
         database,
         auth: Boolean(auth),
+        oidc: Boolean(oidcAnswers),
+        tenantRole: oidcAnswers ? oidc.tenantRole(database.database) : null,
         port: PORT,
         origin: FRONTEND_ORIGIN,
         table: auth ? login.usersTable(database.database) : null,
@@ -750,17 +797,33 @@ export const nestjs = {
                 { name: 'Geen database (later)', value: 'none' }
             ]
         })
-        if (choice === 'none') return { database: null, auth: false }
+        if (choice === 'none') return { database: null, auth: false, oidc: null }
         const database = await registry[choice].ask({ projectDir, prompts })
 
-        // A test login/register page needs a frontend (the pages) and a database (the users table)
-        const auth = hasFrontend
-            ? await prompts.confirm({
-                  message: `Een test login- en registerpagina toevoegen? (tabel ${login.usersTable(database.database)})`,
-                  default: true
-              })
-            : false
-        return { database, auth }
+        // Login: a simple test login (needs the frontend pages) or our own multi-tenant OpenID Connect server
+        const table = login.usersTable(database.database)
+        const how = await prompts.select({
+            message: 'Login toevoegen?',
+            choices: [
+                {
+                    name: 'Eigen OIDC-server (multi-tenant, OpenID Connect)',
+                    value: 'oidc',
+                    description: `Login met PKCE, tokens, tenants met Row-Level Security; tabel ${table}`
+                },
+                ...(hasFrontend
+                    ? [
+                          {
+                              name: 'Eenvoudige test-login (login- en registerpagina)',
+                              value: 'simple',
+                              description: `E-mail en wachtwoord met een sessiecookie; tabel ${table}`
+                          }
+                      ]
+                    : []),
+                { name: 'Geen login', value: 'none' }
+            ]
+        })
+        const oidcAnswers = how === 'oidc' ? await oidc.ask({ projectDir, prompts }) : null
+        return { database, auth: how === 'simple', oidc: oidcAnswers }
     },
 
     next(answers) {
@@ -773,6 +836,13 @@ export const nestjs = {
             `API: http://localhost:${PORT}  |  docs: http://localhost:${PORT}/docs`,
             ...(answers?.auth
                 ? ['Login: http://localhost:3000/login  |  register: http://localhost:3000/register']
+                : []),
+            ...(answers?.oidc
+                ? [
+                      `OIDC: http://localhost:${PORT}/oidc/.well-known/openid-configuration`,
+                      `npm run oidc:demo   (test the login: http://localhost:${oidc.DEMO_PORT})`,
+                      'npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme   (add a user)'
+                  ]
                 : [])
         ]
     },
@@ -790,6 +860,12 @@ export const nestjs = {
                   }
               ]
             : []
+        if (answers?.oidc) {
+            auth.push({
+                ok: true,
+                text: `OIDC-server ingesteld: tenant "${answers.oidc.tenantName}", beheerder ${answers.oidc.adminEmail}, tijdelijk wachtwoord ${answers.oidc.adminPassword} (enkel nu getoond)`
+            })
+        }
         if (db.mode === 'docker') return [{ ok: true, text: `PostgreSQL (Docker) ingesteld: ${where}` }, ...auth]
         if (db.connection === 'failed') {
             return [
@@ -806,6 +882,7 @@ export const nestjs = {
     async steps({ projectDir, exec = run, answers = {}, secret = () => randomBytes(48).toString('hex') }) {
         const database = answers?.database ?? null
         const withAuth = Boolean(database && answers?.auth)
+        const withOidc = database && answers?.oidc ? answers.oidc : null
         const root = path.join(projectDir, DIR)
         if (await exists(root)) throw new Error(`De map ./${DIR} bestaat al. Verwijder of hernoem ze eerst.`)
 
@@ -881,6 +958,20 @@ export const nestjs = {
                       }
                   ]
                 : []),
+            ...(withOidc
+                ? [
+                      {
+                          title: 'OIDC-pakketten installeren (cookies)',
+                          weight: 1,
+                          run: async () => {
+                              await exec('npm', ['install', ...oidc.PACKAGES.dependencies], { cwd: root })
+                              await exec('npm', ['install', '--save-dev', ...oidc.PACKAGES.devDependencies], {
+                                  cwd: root
+                              })
+                          }
+                      }
+                  ]
+                : []),
             {
                 title: 'Prettier installeren (backend)',
                 weight: 2,
@@ -903,14 +994,18 @@ export const nestjs = {
                         await fs.rm(path.join(root, rel), { force: true })
                     }
                     for (const [rel, content] of Object.entries(
-                        buildFiles(database, { auth: withAuth ? { jwtSecret: secret() } : null })
+                        buildFiles(database, { auth: withAuth ? { jwtSecret: secret() } : null, oidc: withOidc })
                     ))
                         await write(root, rel, content)
                     await patchNestCli(root)
                     if (database) {
                         const pkgPath = path.join(root, 'package.json')
                         const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'))
-                        pkg.scripts = { ...pkg.scripts, ...databases[database.id].backend(database).scripts }
+                        pkg.scripts = {
+                            ...pkg.scripts,
+                            ...databases[database.id].backend(database).scripts,
+                            ...(withOidc ? oidc.SCRIPTS : {})
+                        }
                         await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
                     }
                 }

@@ -1,0 +1,255 @@
+import { randomBytes, randomUUID } from 'node:crypto'
+import { ConfigService } from '@nestjs/config'
+import pg from 'pg'
+import { TENANT_ROLE, TENANT_TABLES, USERS_TABLE } from '../src/database/database.constants.js'
+import { DatabaseService } from '../src/database/database.service.js'
+import { runMigrations } from '../src/database/migrator.js'
+import { PgOidcStore } from '../src/oidc/store/pg-oidc.store.js'
+import { TenantMembersService } from '../src/tenants/tenant-members.service.js'
+
+/**
+ * Runs against a REAL PostgreSQL (the one from .env): npm run test:db
+ * It creates a separate database <DATABASE_NAME>_test, runs the migrations in it and removes it again afterwards.
+ */
+try {
+    process.loadEnvFile()
+} catch {
+    // no .env file: use the environment as it is
+}
+
+const settings = {
+    DATABASE_HOST: process.env.DATABASE_HOST ?? 'localhost',
+    DATABASE_PORT: process.env.DATABASE_PORT ?? '5432',
+    DATABASE_USER: process.env.DATABASE_USER ?? 'postgres',
+    DATABASE_PASSWORD: process.env.DATABASE_PASSWORD ?? '',
+    DATABASE_NAME: (process.env.DATABASE_NAME ?? 'app') + '_test'
+}
+
+async function admin(sql: string) {
+    const client = new pg.Client({
+        host: settings.DATABASE_HOST,
+        port: Number(settings.DATABASE_PORT),
+        user: settings.DATABASE_USER,
+        password: settings.DATABASE_PASSWORD,
+        database: 'postgres'
+    })
+    await client.connect()
+    try {
+        await client.query(sql)
+    } finally {
+        await client.end()
+    }
+}
+
+describe('tenant isolation and storage (real PostgreSQL)', () => {
+    let database: DatabaseService
+    const users = '"' + USERS_TABLE + '"'
+    const tenant = { a: '', b: '' }
+    const user = { ada: '', bob: '' }
+
+    beforeAll(async () => {
+        await admin(`DROP DATABASE IF EXISTS "${settings.DATABASE_NAME}" WITH (FORCE)`)
+        await admin(`CREATE DATABASE "${settings.DATABASE_NAME}"`)
+        database = new DatabaseService(new ConfigService(settings))
+        await database.ready()
+        const insert = async (text: string, params: unknown[]) =>
+            (await database.query<{ id: string }>(text, params)).rows[0]?.id ?? ''
+        tenant.a = await insert('INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id', [
+            'tenant-a',
+            'Tenant A'
+        ])
+        tenant.b = await insert('INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id', [
+            'tenant-b',
+            'Tenant B'
+        ])
+        user.ada = await insert(`INSERT INTO ${users} (email, name, password_hash) VALUES ($1, $2, 'x') RETURNING id`, [
+            'ada@example.com',
+            'Ada'
+        ])
+        user.bob = await insert(`INSERT INTO ${users} (email, name, password_hash) VALUES ($1, $2, 'x') RETURNING id`, [
+            'bob@example.com',
+            'Bob'
+        ])
+        await database.query(
+            'INSERT INTO tenant_members (tenant_id, user_id, roles) VALUES ($1, $2, $3), ($4, $5, $6)',
+            [tenant.a, user.ada, ['admin'], tenant.b, user.bob, []]
+        )
+    })
+
+    afterAll(async () => {
+        await database?.onModuleDestroy()
+        await admin(`DROP DATABASE IF EXISTS "${settings.DATABASE_NAME}" WITH (FORCE)`)
+    })
+
+    it('runs the migrations once (a second run changes nothing)', async () => {
+        const pool = new pg.Pool(poolSettings())
+        const client = await pool.connect()
+        try {
+            expect(await runMigrations(client)).toEqual([])
+        } finally {
+            client.release()
+            await pool.end()
+        }
+    })
+
+    it('has Row-Level Security and a policy on every table with a tenant_id', async () => {
+        const { rows } = await database.query<{ table: string; rls: boolean; policies: number }>(
+            `SELECT c.relname AS "table", c.relrowsecurity AS rls,
+              (SELECT count(*)::int FROM pg_policies p WHERE p.tablename = c.relname) AS policies
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relkind = 'r'
+          AND (c.relname = 'tenants' OR EXISTS (
+            SELECT 1 FROM information_schema.columns col
+             WHERE col.table_schema = 'public' AND col.table_name = c.relname AND col.column_name = 'tenant_id'))`
+        )
+        expect(rows.map(row => row.table).sort()).toEqual([...TENANT_TABLES].sort())
+        for (const row of rows) {
+            expect(row.rls, row.table).toBe(true)
+            expect(row.policies, row.table).toBeGreaterThan(0)
+        }
+    })
+
+    it('the tenant role cannot read the OpenID Connect tables or password hashes', async () => {
+        for (const statement of [
+            'SELECT * FROM oidc_signing_keys',
+            'SELECT * FROM oidc_sessions',
+            `SELECT password_hash FROM ${users}`
+        ]) {
+            await expect(database.withTenant(tenant.a, db => db.query(statement))).rejects.toThrow(/permission denied/)
+        }
+    })
+
+    it('a tenant only sees its own rows, even without a WHERE clause', async () => {
+        const members = new TenantMembersService(database)
+        expect((await members.list(tenant.a)).map(member => member.email)).toEqual(['ada@example.com'])
+        expect((await members.list(tenant.b)).map(member => member.email)).toEqual(['bob@example.com'])
+        const tenants = await database.withTenant(tenant.a, db => db.query<{ id: string }>('SELECT id FROM tenants'))
+        expect(tenants.rows.map(row => row.id)).toEqual([tenant.a])
+        const unknown = await database.withTenant(randomUUID(), db => db.query('SELECT * FROM tenant_members'))
+        expect(unknown.rows).toEqual([])
+    })
+
+    it('a tenant cannot change or delete rows of another tenant', async () => {
+        const members = new TenantMembersService(database)
+        expect(await members.setRoles(tenant.a, user.bob, ['admin'])).toBe(false)
+        const deleted = await database.withTenant(tenant.a, db =>
+            db.query('DELETE FROM tenant_members WHERE user_id = $1', [user.bob])
+        )
+        expect(deleted.rowCount).toBe(0)
+        const renamed = await database.withTenant(tenant.a, db =>
+            db.query("UPDATE tenants SET name = 'hacked' WHERE id = $1", [tenant.b])
+        )
+        expect(renamed.rowCount).toBe(0)
+        const { rows } = await database.query<{ roles: string[] }>(
+            'SELECT roles FROM tenant_members WHERE user_id = $1',
+            [user.bob]
+        )
+        expect(rows[0]?.roles).toEqual([])
+    })
+
+    it('a tenant cannot insert rows for another tenant', async () => {
+        await expect(
+            database.withTenant(tenant.a, db =>
+                db.query('INSERT INTO tenant_members (tenant_id, user_id) VALUES ($1, $2)', [tenant.b, user.ada])
+            )
+        ).rejects.toThrow(/row-level security/)
+    })
+
+    it('withTenant refuses something that is not a tenant id', async () => {
+        await expect(database.withTenant("x' OR 1=1 --", async () => 1)).rejects.toThrow('tenant id')
+    })
+
+    it('stores codes that can be used only once, and keeps one active key per algorithm', async () => {
+        const store = new PgOidcStore(database)
+        await store.upsertClient({
+            clientId: 'test',
+            name: 'Test',
+            type: 'public',
+            secretHash: null,
+            redirectUris: ['http://localhost/cb'],
+            postLogoutRedirectUris: [],
+            grantTypes: ['authorization_code'],
+            scopes: ['openid'],
+            firstParty: true
+        })
+        const session = {
+            idHash: randomBytes(16).toString('hex'),
+            userId: user.ada,
+            tenantId: tenant.a,
+            authTime: new Date(),
+            acr: 'loa1',
+            amr: ['pwd'],
+            expiresAt: new Date(Date.now() + 60_000)
+        }
+        await store.createSession(session)
+        expect((await store.findSession(session.idHash))?.tenantId).toBe(tenant.a)
+        const code = {
+            codeHash: randomBytes(16).toString('hex'),
+            clientId: 'test',
+            userId: user.ada,
+            tenantId: tenant.a,
+            sessionHash: session.idHash,
+            redirectUri: 'http://localhost/cb',
+            scope: 'openid',
+            nonce: null,
+            codeChallenge: 'x'.repeat(43),
+            authTime: new Date(),
+            acr: 'loa1',
+            amr: ['pwd'],
+            expiresAt: new Date(Date.now() + 60_000)
+        }
+        await store.createCode(code)
+        const [first, second] = await Promise.all([store.consumeCode(code.codeHash), store.consumeCode(code.codeHash)])
+        expect([first, second].filter(Boolean)).toHaveLength(1)
+
+        const key = (kid: string, createdAt: Date) => ({
+            kid,
+            alg: 'ES256' as const,
+            publicJwk: { kty: 'EC' },
+            privateKey: 'v1.x',
+            status: 'active' as const,
+            createdAt,
+            retiredAt: null
+        })
+        expect(await store.activateKey(key('k1', new Date()), new Date(0))).toBe(true)
+        expect(await store.activateKey(key('k2', new Date()), new Date(0))).toBe(false)
+        expect(await store.activateKey(key('k3', new Date()), new Date(Date.now() + 1000))).toBe(true)
+        const keys = await store.listKeys()
+        expect(keys.filter(item => item.status === 'active').map(item => item.kid)).toEqual(['k3'])
+    })
+
+    it('creates the first admin only once', async () => {
+        const store = new PgOidcStore(database)
+        const admin = {
+            email: 'root@example.com',
+            name: 'Root',
+            passwordHash: 'x',
+            tenantName: 'Root',
+            tenantSlug: 'root'
+        }
+        expect(await store.bootstrapAdmin(admin)).toBe(false) // there are users already
+        await database.query(`DELETE FROM ${users}`)
+        expect(await store.bootstrapAdmin(admin)).toBe(true)
+        expect(await store.bootstrapAdmin(admin)).toBe(false)
+        const memberships = await store.listMemberships((await store.findUserByEmail('ROOT@example.com'))?.id ?? '')
+        expect(memberships).toEqual([expect.objectContaining({ slug: 'root', roles: ['admin'] })])
+    })
+
+    it('the tenant role exists and owns nothing', async () => {
+        const { rows } = await database.query<{ owned: number }>(
+            `SELECT count(*)::int AS owned FROM pg_class c JOIN pg_roles r ON r.oid = c.relowner WHERE r.rolname = $1`,
+            [TENANT_ROLE]
+        )
+        expect(rows[0]?.owned).toBe(0)
+    })
+})
+
+function poolSettings() {
+    return {
+        host: settings.DATABASE_HOST,
+        port: Number(settings.DATABASE_PORT),
+        user: settings.DATABASE_USER,
+        password: settings.DATABASE_PASSWORD,
+        database: settings.DATABASE_NAME
+    }
+}

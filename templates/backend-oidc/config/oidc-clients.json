@@ -1,0 +1,22 @@
+{
+    "clients": [
+        {
+            "clientId": "frontend",
+            "name": "Frontend",
+            "type": "public",
+            "redirectUris": ["http://localhost:3000/auth/callback"],
+            "postLogoutRedirectUris": ["http://localhost:3000"],
+            "scopes": ["openid", "profile", "email", "tenant"],
+            "firstParty": true
+        },
+        {
+            "clientId": "demo",
+            "name": "OIDC demo (npm run oidc:demo)",
+            "type": "public",
+            "redirectUris": ["http://localhost:4400/callback"],
+            "postLogoutRedirectUris": ["http://localhost:4400"],
+            "scopes": ["openid", "profile", "email", "tenant"],
+            "firstParty": true
+        }
+    ]
+}
