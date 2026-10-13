@@ -123,7 +123,8 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | \`/api/auth/logout\` | POST: logs out of this frontend (the session of the login server stays) |
 
 **Flow**: "Log in" → \`/api/auth/login\` → the API (\`/oidc/authorize\`) → \`/login?interaction=...\` (this frontend talks to
-\`/oidc/interaction/...\` of the API with \`fetch\` and \`credentials: 'include'\`) → back to the API → \`/api/auth/callback\`
+\`/oidc/interaction/...\` of the API with \`fetch\` and \`credentials: 'include'\`, so the browser sends the encrypted
+login cookie of the API along) → back to the API → \`/api/auth/callback\`
 → the page you came from. A next login of the same browser skips the password (single sign-on).
 
 **Session**: an httpOnly cookie \`app_session\`, encrypted with \`AUTH_SECRET\` (AES-256-GCM), with the name, email,

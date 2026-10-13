@@ -10,10 +10,11 @@ import {
 } from '@nestjs/swagger'
 import type { Request, Response } from 'express'
 import { I18n, I18nContext } from 'nestjs-i18n'
+import { interactionCookieName, interactionCookiePath } from './interaction.js'
 import { LoginLimiter } from './login-limiter.js'
 import { OAuthError } from './oauth.error.js'
 import { OIDC, OidcConfig } from './oidc.config.js'
-import { type AuthorizeResult, type LoginResult, OidcService } from './oidc.service.js'
+import { type AuthorizeResult, type InteractionCookie, type LoginResult, OidcService } from './oidc.service.js'
 import { loginPage, messagePage, sendPage, tenantPage, type Translate } from './pages.js'
 
 type Params = Record<string, unknown>
@@ -83,7 +84,7 @@ export class OidcController {
         @I18n() i18n: I18nContext
     ) {
         const t = translator(i18n)
-        const found = await this.oidc.findInteraction(id)
+        const found = await this.oidc.findInteraction(id, this.interactionCookie(request, id))
         if (wantsJson(request)) {
             if (!found) return this.json(response, 410, { status: 'expired', message: t('oidc.EXPIRED') })
             return this.json(response, 200, {
@@ -123,7 +124,7 @@ export class OidcController {
         const body = (request.body ?? {}) as Params
         const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
         const allowed = this.limiter.allow(['ip:' + (request.ip ?? 'unknown'), 'email:' + email])
-        const result = await this.oidc.login(id, body, allowed)
+        const result = await this.oidc.login(id, this.interactionCookie(request, id), body, allowed)
         this.loginAnswer(id, result, request, response, i18n)
     }
 
@@ -139,7 +140,11 @@ export class OidcController {
         @Res() response: Response,
         @I18n() i18n: I18nContext
     ) {
-        const result = await this.oidc.chooseTenant(id, (request.body ?? {}) as Params)
+        const result = await this.oidc.chooseTenant(
+            id,
+            this.interactionCookie(request, id),
+            (request.body ?? {}) as Params
+        )
         this.loginAnswer(id, result, request, response, i18n)
     }
 
@@ -189,6 +194,28 @@ export class OidcController {
         return typeof value === 'string' ? value : undefined
     }
 
+    /** The encrypted cookie of a running login (oidc_ia_<id>). */
+    private interactionCookie(request: Request, id: string): string | undefined {
+        const value: unknown = (request.cookies as Record<string, unknown> | undefined)?.[interactionCookieName(id)]
+        return typeof value === 'string' ? value : undefined
+    }
+
+    /** Sets (or with value null removes) the cookie of a running login; only sent to /oidc/interaction/<id>. */
+    private setInteractionCookie(response: Response, cookie: InteractionCookie) {
+        const options = {
+            httpOnly: true,
+            sameSite: 'lax' as const,
+            secure: this.config.secureCookies,
+            path: interactionCookiePath(cookie.id)
+        }
+        if (cookie.value === null) response.clearCookie(interactionCookieName(cookie.id), options)
+        else
+            response.cookie(interactionCookieName(cookie.id), cookie.value, {
+                ...options,
+                maxAge: OIDC.INTERACTION_SECONDS * 1000
+            })
+    }
+
     private bearer(request: Request): string | undefined {
         const match = /^Bearer ([A-Za-z0-9._~+/=-]+)$/i.exec(request.headers.authorization ?? '')
         return match?.[1]
@@ -203,6 +230,7 @@ export class OidcController {
 
     private answer(result: AuthorizeResult, response: Response, i18n: I18nContext) {
         if (result.kind === 'redirect') {
+            if (result.interaction) this.setInteractionCookie(response, result.interaction)
             response.set('Cache-Control', 'no-store').redirect(HttpStatus.SEE_OTHER, result.location)
             return
         }
@@ -215,6 +243,7 @@ export class OidcController {
 
     private loginAnswer(id: string, result: LoginResult, request: Request, response: Response, i18n: I18nContext) {
         const t = translator(i18n)
+        if ('cookie' in result) this.setInteractionCookie(response, result.cookie)
         if (wantsJson(request)) return this.loginJson(result, response, t)
         switch (result.kind) {
             case 'expired':

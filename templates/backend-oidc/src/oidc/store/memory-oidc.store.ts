@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import type {
     AuthorizationCode,
     BootstrapAdmin,
-    Interaction,
     Membership,
     OidcClient,
     OidcStore,
@@ -25,7 +24,6 @@ export class MemoryOidcStore implements OidcStore {
     members: { tenantId: string; userId: string; roles: string[] }[] = []
     clients = new Map<string, OidcClient>()
     keys: StoredKey[] = []
-    interactions = new Map<string, Interaction>()
     sessions = new Map<string, Session>()
     codes = new Map<string, AuthorizationCode & { usedAt: Date | null }>()
 
@@ -90,26 +88,11 @@ export class MemoryOidcStore implements OidcStore {
         return true
     }
 
-    async createInteraction(interaction: Interaction) {
-        this.interactions.set(interaction.idHash, interaction)
-    }
-
-    async findInteraction(idHash: string) {
-        const interaction = this.interactions.get(idHash)
-        return interaction && interaction.expiresAt > new Date() ? interaction : null
-    }
-
-    async setInteractionUser(idHash: string, userId: string) {
-        const interaction = this.interactions.get(idHash)
-        if (interaction) interaction.userId = userId
-    }
-
-    async deleteInteraction(idHash: string) {
-        this.interactions.delete(idHash)
-    }
-
     async createSession(session: Session) {
-        this.sessions.set(session.idHash, session)
+        for (const existing of this.sessions.values())
+            if (existing.interactionHash === session.interactionHash) return false
+        this.sessions.set(session.idHash, { ...session })
+        return true
     }
 
     async findSession(idHash: string) {
@@ -117,8 +100,9 @@ export class MemoryOidcStore implements OidcStore {
         return session && session.expiresAt > new Date() ? session : null
     }
 
-    async deleteSession(idHash: string) {
-        this.sessions.delete(idHash)
+    async endSession(idHash: string) {
+        const session = this.sessions.get(idHash)
+        if (session && session.expiresAt > new Date()) session.expiresAt = new Date()
     }
 
     async createCode(code: AuthorizationCode) {
@@ -143,9 +127,8 @@ export class MemoryOidcStore implements OidcStore {
     }
 
     async deleteExpired(now: Date) {
-        for (const [id, interaction] of this.interactions)
-            if (interaction.expiresAt <= now) this.interactions.delete(id)
-        for (const [id, session] of this.sessions) if (session.expiresAt <= now) this.sessions.delete(id)
+        const ended = now.getTime() - 60 * 60 * 1000
+        for (const [id, session] of this.sessions) if (session.expiresAt.getTime() <= ended) this.sessions.delete(id)
         for (const [id, code] of this.codes) if (code.expiresAt <= now) this.codes.delete(id)
     }
 }

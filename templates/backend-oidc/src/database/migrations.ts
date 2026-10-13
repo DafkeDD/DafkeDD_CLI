@@ -85,18 +85,11 @@ CREATE TABLE oidc_signing_keys (
 );
 CREATE UNIQUE INDEX oidc_signing_keys_one_active ON oidc_signing_keys (alg) WHERE status = 'active';
 
-CREATE TABLE oidc_interactions (
-  id_hash text PRIMARY KEY,
-  client_id text NOT NULL REFERENCES oidc_clients (client_id) ON DELETE CASCADE,
-  params jsonb NOT NULL,
-  csrf text NOT NULL,
-  user_id uuid REFERENCES ${users} (id) ON DELETE CASCADE,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  expires_at timestamptz NOT NULL
-);
-
+-- A running login is not stored here: it lives in an encrypted cookie (src/oidc/interaction.ts).
+-- interaction_hash is unique, so one login can create only one session (no replay of that cookie).
 CREATE TABLE oidc_sessions (
   id_hash text PRIMARY KEY,
+  interaction_hash text NOT NULL UNIQUE,
   user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
   tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   auth_time timestamptz NOT NULL,

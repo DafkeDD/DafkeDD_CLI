@@ -5,9 +5,7 @@ import { DatabaseService } from '../../database/database.service.js'
 import type { JwsAlgorithm } from '../jose.js'
 import type {
     AuthorizationCode,
-    AuthorizationParams,
     BootstrapAdmin,
-    Interaction,
     Membership,
     OidcClient,
     OidcStore,
@@ -125,42 +123,14 @@ export class PgOidcStore implements OidcStore {
         })
     }
 
-    async createInteraction(interaction: Interaction) {
-        await this.query(
-            `INSERT INTO oidc_interactions (id_hash, client_id, params, csrf, user_id, expires_at) VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-                interaction.idHash,
-                interaction.clientId,
-                JSON.stringify(interaction.params),
-                interaction.csrf,
-                interaction.userId,
-                interaction.expiresAt
-            ]
-        )
-    }
-
-    async findInteraction(idHash: string) {
-        const rows = await this.query<Interaction & { params: AuthorizationParams }>(
-            `SELECT id_hash AS "idHash", client_id AS "clientId", params, csrf, user_id AS "userId", expires_at AS "expiresAt"
-         FROM oidc_interactions WHERE id_hash = $1 AND expires_at > now()`,
-            [idHash]
-        )
-        return rows[0] ?? null
-    }
-
-    async setInteractionUser(idHash: string, userId: string) {
-        await this.query('UPDATE oidc_interactions SET user_id = $2 WHERE id_hash = $1', [idHash, userId])
-    }
-
-    async deleteInteraction(idHash: string) {
-        await this.query('DELETE FROM oidc_interactions WHERE id_hash = $1', [idHash])
-    }
-
     async createSession(session: Session) {
-        await this.query(
-            `INSERT INTO oidc_sessions (id_hash, user_id, tenant_id, auth_time, acr, amr, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        const rows = await this.query<{ id_hash: string }>(
+            `INSERT INTO oidc_sessions (id_hash, interaction_hash, user_id, tenant_id, auth_time, acr, amr, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (interaction_hash) DO NOTHING RETURNING id_hash`,
             [
                 session.idHash,
+                session.interactionHash,
                 session.userId,
                 session.tenantId,
                 session.authTime,
@@ -169,11 +139,12 @@ export class PgOidcStore implements OidcStore {
                 session.expiresAt
             ]
         )
+        return rows.length === 1
     }
 
     async findSession(idHash: string) {
         const rows = await this.query<Session>(
-            `SELECT id_hash AS "idHash", user_id AS "userId", tenant_id AS "tenantId", auth_time AS "authTime", acr, amr,
+            `SELECT id_hash AS "idHash", interaction_hash AS "interactionHash", user_id AS "userId", tenant_id AS "tenantId", auth_time AS "authTime", acr, amr,
               expires_at AS "expiresAt"
          FROM oidc_sessions WHERE id_hash = $1 AND expires_at > now()`,
             [idHash]
@@ -181,8 +152,8 @@ export class PgOidcStore implements OidcStore {
         return rows[0] ?? null
     }
 
-    async deleteSession(idHash: string) {
-        await this.query('DELETE FROM oidc_sessions WHERE id_hash = $1', [idHash])
+    async endSession(idHash: string) {
+        await this.query('UPDATE oidc_sessions SET expires_at = least(expires_at, now()) WHERE id_hash = $1', [idHash])
     }
 
     async createCode(code: AuthorizationCode) {
@@ -243,8 +214,7 @@ export class PgOidcStore implements OidcStore {
     }
 
     async deleteExpired(now: Date) {
-        await this.query('DELETE FROM oidc_interactions WHERE expires_at <= $1', [now])
-        await this.query('DELETE FROM oidc_sessions WHERE expires_at <= $1', [now])
+        await this.query(`DELETE FROM oidc_sessions WHERE expires_at <= $1::timestamptz - interval '1 hour'`, [now])
         await this.query('DELETE FROM oidc_codes WHERE expires_at <= $1', [now])
     }
 }

@@ -60,17 +60,10 @@ export interface AuthorizationParams {
     uiLocales: string[]
 }
 
-export interface Interaction {
-    idHash: string
-    clientId: string
-    params: AuthorizationParams
-    csrf: string
-    userId: string | null
-    expiresAt: Date
-}
-
 export interface Session {
     idHash: string
+    /** sha256 of the login (interaction) that created the session: a login can create only one session. */
+    interactionHash: string
     userId: string
     tenantId: string
     authTime: Date
@@ -119,16 +112,15 @@ export interface OidcStore {
      */
     activateKey(key: StoredKey, replaceBefore: Date): Promise<boolean>
 
-    createInteraction(interaction: Interaction): Promise<void>
-    /** Only interactions that did not expire. */
-    findInteraction(idHash: string): Promise<Interaction | null>
-    setInteractionUser(idHash: string, userId: string): Promise<void>
-    deleteInteraction(idHash: string): Promise<void>
-
-    createSession(session: Session): Promise<void>
+    /**
+     * Stores a new session. Returns false (and stores nothing) when a session of the same login exists already: the
+     * login cookie cannot be used twice, also not a copy of it.
+     */
+    createSession(session: Session): Promise<boolean>
     /** Only sessions that did not expire. */
     findSession(idHash: string): Promise<Session | null>
-    deleteSession(idHash: string): Promise<void>
+    /** Ends a session. The row stays a while (see deleteExpired), so its login cannot be replayed. */
+    endSession(idHash: string): Promise<void>
 
     createCode(code: AuthorizationCode): Promise<void>
     /** Marks the code as used and returns it; null when it does not exist, expired or was used before. */
@@ -136,6 +128,6 @@ export interface OidcStore {
 
     /** Creates the first tenant and its admin, only when there are no users at all. Returns true when it did. */
     bootstrapAdmin(admin: BootstrapAdmin): Promise<boolean>
-    /** Removes expired interactions, sessions and codes. */
+    /** Removes expired codes, and sessions that ended at least an hour ago (longer than a login cookie lives). */
     deleteExpired(now: Date): Promise<void>
 }

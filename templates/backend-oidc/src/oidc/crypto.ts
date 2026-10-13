@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto'
 
 /** Random, URL-safe string with `bytes` bytes of entropy (codes, session ids, CSRF tokens). */
 export const randomToken = (bytes = 32): string => randomBytes(bytes).toString('base64url')
@@ -43,3 +43,10 @@ export function decrypt(encrypted: string, masterKey: Buffer, context: string): 
     decipher.setAuthTag(Buffer.from(tag, 'base64url'))
     return Buffer.concat([decipher.update(Buffer.from(data, 'base64url')), decipher.final()]).toString('utf8')
 }
+
+/**
+ * A separate 32-byte key for one purpose, derived from the master key with HKDF-SHA256 (RFC 5869). The login cookies
+ * never use the key that encrypts the signing keys.
+ */
+export const deriveKey = (masterKey: Buffer, purpose: string): Buffer =>
+    Buffer.from(hkdfSync('sha256', masterKey, Buffer.alloc(0), purpose, 32))

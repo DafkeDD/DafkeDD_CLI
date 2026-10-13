@@ -119,6 +119,29 @@ test('every table with tenant data has Row-Level Security in the migration', () 
     assert.match(sql, /NULLIF\(current_setting\('app\.tenant_id', true\), ''\)::uuid/)
 })
 
+test('a running login is an encrypted cookie, not a table; one login creates at most one session', () => {
+    const sql = templates['src/database/migrations.ts']
+    assert.doesNotMatch(sql, /oidc_interactions/)
+    assert.match(sql, /interaction_hash text NOT NULL UNIQUE/)
+    const cookie = templates['src/oidc/interaction.ts']
+    assert.match(cookie, /sealInteraction/)
+    assert.match(cookie, /openInteraction/)
+    assert.match(cookie, /deriveKey\(masterKey, 'oidc interaction cookie v1'\)/)
+    assert.ok(templates['src/oidc/interaction.spec.ts'], 'unit tests of the login cookie')
+    const controller = templates['src/oidc/oidc.controller.ts']
+    assert.match(controller, /httpOnly: true/)
+    assert.match(controller, /interactionCookiePath\(cookie\.id\)/)
+    assert.match(templates['src/oidc/store/pg-oidc.store.ts'], /ON CONFLICT \(interaction_hash\) DO NOTHING/)
+})
+
+test('the API docs explain the login cookie and no longer list a table for running logins', () => {
+    const docs = files['README.md']
+    for (const text of ['### Login cookie', 'oidc_ia_<id>', 'HttpOnly', 'interaction_hash', 'same site']) {
+        assert.ok(docs.includes(text), text)
+    }
+    assert.doesNotMatch(Object.values(files).join('\n'), /oidc_interactions/)
+})
+
 // ---------------------------------------------------------------- .env
 
 test('.env gets the generated master key and admin; .env.example only placeholders', () => {

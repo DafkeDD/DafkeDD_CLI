@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { PKCE_CHALLENGE, PKCE_VERIFIER, pkceChallenge, randomToken, safeEqual, sha256 } from './crypto.js'
+import { type Interaction, interactionKey, openInteraction, sealInteraction } from './interaction.js'
 import { halfHash, JoseError, signJwt, verifyJwt } from './jose.js'
 import { KeysService } from './keys.service.js'
 import { OAuthError } from './oauth.error.js'
@@ -11,7 +12,6 @@ import { OIDC, OidcConfig } from './oidc.config.js'
 import { hashPassword, verifyPassword } from './password.js'
 import {
     type AuthorizationParams,
-    type Interaction,
     type Membership,
     type OidcClient,
     OIDC_STORE,
@@ -27,15 +27,22 @@ const PROMPTS = ['none', 'login', 'consent', 'select_account']
 const MAX_STATE = 1024
 const MAX_NONCE = 512
 
+/** A login cookie the controller sets: `value` null removes it. */
+export interface InteractionCookie {
+    id: string
+    value: string | null
+}
+
 export type AuthorizeResult =
-    { kind: 'page'; status: number; titleKey: string; textKey: string } | { kind: 'redirect'; location: string }
+    | { kind: 'page'; status: number; titleKey: string; textKey: string }
+    | { kind: 'redirect'; location: string; interaction?: InteractionCookie }
 
 export type LoginResult =
     | { kind: 'expired' }
     | { kind: 'form'; interaction: Interaction; client: OidcClient; errorKey: string; email: string }
-    | { kind: 'no-tenant' }
-    | { kind: 'choose-tenant'; interaction: Interaction; memberships: Membership[] }
-    | { kind: 'done'; location: string; sessionId: string }
+    | { kind: 'no-tenant'; cookie: InteractionCookie }
+    | { kind: 'choose-tenant'; interaction: Interaction; memberships: Membership[]; cookie: InteractionCookie }
+    | { kind: 'done'; location: string; sessionId: string; cookie: InteractionCookie }
 
 export interface TokenResponse {
     access_token: string
@@ -227,21 +234,35 @@ export class OidcService implements OnApplicationBootstrap {
             )
         }
 
+        // The login itself is not stored: it goes into an encrypted cookie for /oidc/interaction/<id>.
         const id = randomToken()
-        await this.store.createInteraction({
-            idHash: sha256(id),
-            clientId: client.clientId,
+        const sealed = this.seal({
+            id,
             params,
             csrf: randomToken(),
             userId: null,
-            expiresAt: new Date(Date.now() + OIDC.INTERACTION_SECONDS * 1000)
+            expiresAt: Date.now() + OIDC.INTERACTION_SECONDS * 1000
         })
+        if (sealed.length > OIDC.MAX_INTERACTION_COOKIE) {
+            return this.errorRedirect(
+                redirectUri,
+                new OAuthError(
+                    'invalid_request',
+                    'The authorization request is too large (state, nonce or login_hint)'
+                ),
+                params.state
+            )
+        }
         const ui = this.config.loginUiUrl
         const location = new URL(ui ?? this.config.issuer + '/interaction/' + id)
         if (ui) location.searchParams.set('interaction', id)
         const locale = params.uiLocales[0]
         if (locale) location.searchParams.set('lang', locale)
-        return { kind: 'redirect', location: location.toString() }
+        return { kind: 'redirect', location: location.toString(), interaction: { id, value: sealed } }
+    }
+
+    private seal(interaction: Interaction): string {
+        return sealInteraction(interaction, interactionKey(this.config.masterKey()))
     }
 
     private validateAuthorization(query: Params, client: OidcClient, redirectUri: string): AuthorizationParams {
@@ -327,15 +348,16 @@ export class OidcService implements OnApplicationBootstrap {
 
     // ------------------------------------------------------------------ login pages
 
-    async findInteraction(id: string) {
-        const interaction = await this.store.findInteraction(sha256(id))
+    /** The running login of this id and its cookie (oidc_ia_<id>), with its client; null when expired or invalid. */
+    async findInteraction(id: string, sealed: string | undefined) {
+        const interaction = openInteraction(id, sealed, interactionKey(this.config.masterKey()))
         if (!interaction) return null
-        const client = await this.store.findClient(interaction.clientId)
+        const client = await this.store.findClient(interaction.params.clientId)
         return client ? { interaction, client } : null
     }
 
-    async login(id: string, form: Params, allowed: boolean): Promise<LoginResult> {
-        const found = await this.findInteraction(id)
+    async login(id: string, sealed: string | undefined, form: Params, allowed: boolean): Promise<LoginResult> {
+        const found = await this.findInteraction(id, sealed)
         if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
             return { kind: 'expired' }
         const { interaction, client } = found
@@ -356,16 +378,14 @@ export class OidcService implements OnApplicationBootstrap {
         const only = memberships.length === 1 ? memberships[0] : undefined
         const membership = hinted ?? only
         if (membership) return this.finish(interaction, user, membership)
-        if (memberships.length === 0) {
-            await this.store.deleteInteraction(interaction.idHash)
-            return { kind: 'no-tenant' }
-        }
-        await this.store.setInteractionUser(interaction.idHash, user.id)
-        return { kind: 'choose-tenant', interaction, memberships }
+        if (memberships.length === 0) return { kind: 'no-tenant', cookie: { id, value: null } }
+        // The password was right: remember the user in the cookie while they choose an organisation.
+        const chosen = { ...interaction, userId: user.id }
+        return { kind: 'choose-tenant', interaction: chosen, memberships, cookie: { id, value: this.seal(chosen) } }
     }
 
-    async chooseTenant(id: string, form: Params): Promise<LoginResult> {
-        const found = await this.findInteraction(id)
+    async chooseTenant(id: string, sealed: string | undefined, form: Params): Promise<LoginResult> {
+        const found = await this.findInteraction(id, sealed)
         if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
             return { kind: 'expired' }
         const { interaction } = found
@@ -373,16 +393,21 @@ export class OidcService implements OnApplicationBootstrap {
         if (user?.status !== 'active') return { kind: 'expired' }
         const memberships = await this.store.listMemberships(user.id)
         const membership = memberships.find(item => item.tenantId === form.tenant)
-        if (!membership) return { kind: 'choose-tenant', interaction, memberships }
+        if (!membership)
+            return { kind: 'choose-tenant', interaction, memberships, cookie: { id, value: sealed ?? null } }
         return this.finish(interaction, user, membership)
     }
 
-    /** Logged in: a new session (never reuse an old id), a code, and back to the client. */
+    /**
+     * Logged in: a new session (never reuse an old id), a code, and back to the client. The session remembers the
+     * login, so a copy of the login cookie cannot log in a second time.
+     */
     private async finish(interaction: Interaction, user: StoredUser, membership: Membership): Promise<LoginResult> {
         const sessionId = randomToken()
         const now = new Date()
         const session: Session = {
             idHash: sha256(sessionId),
+            interactionHash: sha256(interaction.id),
             userId: user.id,
             tenantId: membership.tenantId,
             authTime: now,
@@ -390,10 +415,14 @@ export class OidcService implements OnApplicationBootstrap {
             amr: ['pwd'],
             expiresAt: new Date(now.getTime() + OIDC.SESSION_SECONDS * 1000)
         }
-        await this.store.createSession(session)
-        await this.store.deleteInteraction(interaction.idHash)
+        if (!(await this.store.createSession(session))) return { kind: 'expired' }
         const result = await this.issueCode(interaction.params, session, user, membership)
-        return { kind: 'done', location: result.kind === 'redirect' ? result.location : '', sessionId }
+        return {
+            kind: 'done',
+            location: result.kind === 'redirect' ? result.location : '',
+            sessionId,
+            cookie: { id: interaction.id, value: null }
+        }
     }
 
     private async issueCode(

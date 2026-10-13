@@ -6,7 +6,11 @@ import type { BootstrapAdmin } from './store/oidc.store.js'
 export const OIDC = {
     SESSION_COOKIE: 'oidc_session',
     COOKIE_PATH: '/oidc',
+    /** A running login lives in an encrypted cookie oidc_ia_<id>, one per login (so several tabs work side by side). */
+    INTERACTION_COOKIE: 'oidc_ia_',
     INTERACTION_SECONDS: 10 * 60,
+    /** Browsers drop cookies above about 4 KB: a bigger login request is refused with a clear error. */
+    MAX_INTERACTION_COOKIE: 3800,
     CODE_SECONDS: 60,
     ACCESS_TOKEN_SECONDS: 10 * 60,
     ID_TOKEN_SECONDS: 5 * 60,
@@ -53,7 +57,7 @@ export class OidcConfig {
         return Number(this.config.get<string>('OIDC_LOGIN_RATE_LIMIT') ?? 10)
     }
 
-    /** The 32-byte key that encrypts the private signing keys in the database. */
+    /** The 32-byte key that encrypts the private signing keys in the database and (derived) the login cookies. */
     masterKey(): Buffer {
         const hex = this.config.get<string>('OIDC_MASTER_KEY') ?? ''
         if (!/^[0-9a-f]{64}$/i.test(hex)) {

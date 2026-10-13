@@ -453,9 +453,10 @@ finds all endpoints there.
 
 1. The client sends the browser to \`/oidc/authorize\` with \`client_id\`, an exact registered \`redirect_uri\`,
    \`scope=openid ...\`, \`state\`, \`nonce\` and a PKCE \`code_challenge\` (S256, **required for every client**).
-2. The server stores the request (10 minutes) and sends the browser to the login page: \`/login?interaction=<id>\` of
-   the frontend when \`OIDC_LOGIN_UI_URL\` is set, otherwise its own page \`/oidc/interaction/<id>\`, in the language of
-   the browser (or \`ui_locales\`). Email and password are checked (scrypt); attempts are limited per IP and per email.
+2. The server keeps the request in an encrypted login cookie (10 minutes, see below) and sends the browser to the login
+   page: \`/login?interaction=<id>\` of the frontend when \`OIDC_LOGIN_UI_URL\` is set, otherwise its own page
+   \`/oidc/interaction/<id>\`, in the language of the browser (or \`ui_locales\`). Email and password are checked
+   (scrypt); attempts are limited per IP and per email.
 3. A user that belongs to several tenants chooses one (or \`tenant_hint\` decides). Users without an active tenant cannot
    log in.
 4. The browser gets the \`oidc_session\` cookie (httpOnly, SameSite=Lax, Path=/oidc, 12 hours) and is sent back to the
@@ -471,6 +472,24 @@ finds all endpoints there.
 The \`tenant\` claim is \`{ "id": "...", "name": "Acme", "roles": ["admin"] }\`: the tenant the user chose, with the roles
 of the user in that tenant. Verify tokens with the keys of \`/oidc/jwks\`, check \`iss\`, \`aud\` and \`exp\`, and take
 the tenant only from a verified token, never from a header or the URL.
+
+### Login cookie (no table for running logins)
+
+A running login (from \`/oidc/authorize\` until the code goes back to the client) is not stored in the database. It lives
+in a cookie \`oidc_ia_<id>\`, one per login:
+
+| Property | Value | Why |
+| --- | --- | --- |
+| Encryption | AES-256-GCM, with a key derived from \`OIDC_MASTER_KEY\` (HKDF, not the key of the signing keys) | Nobody can read or change it; the \`<id>\` is bound to it, so it never works for another login |
+| Attributes | \`HttpOnly\`, \`SameSite=Lax\`, \`Secure\` in production, \`Path=/oidc/interaction/<id>\` | JavaScript cannot read it; only the requests of this login get it |
+| Lifetime | 10 minutes, removed after the login | An old link says "expired" |
+| One per login | The name contains the \`<id>\` | Logins in several tabs at once do not get in each other's way |
+| No replay | \`oidc_sessions.interaction_hash\` is unique | A copy of the cookie cannot log in a second time; an ended session keeps its row for an hour |
+| Size | About 0.7 KB, at most about 3 KB (limits on \`state\`, \`nonce\`, \`login_hint\`) | A request that would not fit (over 3800 characters) gets \`error=invalid_request\` |
+
+**Production**: the frontend and the API must be on the same site (for example \`app.example.com\` and
+\`auth.example.com\`): browsers do not send cookies from another site (\`app.example.com\` and \`api.other.com\`). This
+was already so for the \`oidc_session\` cookie (single sign-on).
 
 ### Clients
 
@@ -528,8 +547,7 @@ ${fence}
 | \`tenant_members\` | Which user is in which tenant, with roles | yes |
 | \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\`) | no |
 | \`oidc_signing_keys\` | Signing keys (private part encrypted) | no |
-| \`oidc_interactions\` | Running logins (10 minutes) | no |
-| \`oidc_sessions\` | Browser sessions (hash of the cookie) | yes |
+| \`oidc_sessions\` | Browser sessions (hash of the cookie, and of the login that created it) | yes |
 | \`oidc_codes\` | Authorization codes (hash, once, 60 seconds) | yes |
 | \`schema_migrations\` | Which migration ran, with a checksum | no |
 

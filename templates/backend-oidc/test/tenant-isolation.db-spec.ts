@@ -174,6 +174,7 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         })
         const session = {
             idHash: randomBytes(16).toString('hex'),
+            interactionHash: randomBytes(16).toString('hex'),
             userId: user.ada,
             tenantId: tenant.a,
             authTime: new Date(),
@@ -181,8 +182,14 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
             amr: ['pwd'],
             expiresAt: new Date(Date.now() + 60_000)
         }
-        await store.createSession(session)
+        expect(await store.createSession(session)).toBe(true)
         expect((await store.findSession(session.idHash))?.tenantId).toBe(tenant.a)
+        // One login, one session: a copy of the login cookie cannot create a second one
+        expect(await store.createSession({ ...session, idHash: randomBytes(16).toString('hex') })).toBe(false)
+        // An ended session no longer works, but still blocks its login until the cleanup an hour later
+        await store.endSession(session.idHash)
+        expect(await store.findSession(session.idHash)).toBeNull()
+        expect(await store.createSession({ ...session, idHash: randomBytes(16).toString('hex') })).toBe(false)
         const code = {
             codeHash: randomBytes(16).toString('hex'),
             clientId: 'test',
@@ -201,6 +208,10 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         await store.createCode(code)
         const [first, second] = await Promise.all([store.consumeCode(code.codeHash), store.consumeCode(code.codeHash)])
         expect([first, second].filter(Boolean)).toHaveLength(1)
+        await store.deleteExpired(new Date(Date.now() + 2 * 60 * 60 * 1000))
+        expect(await database.query('SELECT 1 FROM oidc_sessions WHERE id_hash = $1', [session.idHash])).toMatchObject({
+            rows: []
+        })
 
         const key = (kid: string, createdAt: Date) => ({
             kid,

@@ -246,8 +246,9 @@ password for that admin **once** at the end.
 - **Multi-tenant**: one account can belong to several tenants (it chooses one at login, or `tenant_hint` decides). Every
   table with tenant data has PostgreSQL **Row-Level Security**: `DatabaseService.withTenant()` runs queries as a
   separate role (`<database>_tenant`) that only sees the rows of that tenant, even without a `WHERE`.
-- **Database**: the users table (always `<database>users`), `tenants`, `tenant_members` and the `oidc_*` tables, created
-  by numbered migrations (checksum, advisory lock) at start.
+- **Database**: the users table (always `<database>users`), `tenants`, `tenant_members` and four `oidc_*` tables
+  (clients, signing keys, sessions, codes), created by numbered migrations (checksum, advisory lock) at start. A running
+  login is not a table: it is an encrypted, httpOnly cookie per login (10 minutes, no replay).
 - **Security**: scrypt passwords, the same error and timing for an unknown email, login rate limit per IP and per email,
   exact redirect URIs (https, http only on localhost), `iss` in every redirect (RFC 9207), client authentication with
   `client_secret_basic`, `client_secret_post` or none (public clients with PKCE), codes and session ids only as hashes.
@@ -407,6 +408,10 @@ git switch developer
 
 ## Changelog
 
+- **0.21.0**: one table fewer: the table `oidc_interactions` is gone. A running login now lives in an encrypted cookie
+  `oidc_ia_<id>` (AES-256-GCM, key derived from `OIDC_MASTER_KEY`, httpOnly, SameSite=Lax, only for
+  `/oidc/interaction/<id>`, 10 minutes), one per login so several tabs work. A copy of the cookie cannot log in twice
+  (`oidc_sessions.interaction_hash` is unique). New unit, end-to-end and database tests; documented in `docs/api.md`.
 - **0.20.0**: the login of the own OIDC server moves into the frontend on port 3000: login page (`/login`) and
   organisation choice in the frontend (JSON variant of the interaction endpoints, `OIDC_LOGIN_UI_URL`), login with PKCE
   through route handlers, encrypted session cookie, profile page, "Log in" / "Signed in as" on the home page. The demo

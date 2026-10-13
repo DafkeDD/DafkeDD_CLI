@@ -100,10 +100,15 @@ describe('OpenID Connect (e2e)', () => {
     const csrfOf = (html: string) => /name="csrf" value="([^"]+)"/.exec(html)?.[1] ?? ''
     /** Where the form on the page posts to (keeps ?lang=). */
     const actionOf = (html: string) => path((/action="([^"]+)"/.exec(html)?.[1] ?? '').replaceAll('&amp;', '&'))
+    const setCookies = (response: request.Response) =>
+        (response.headers['set-cookie'] as unknown as string[] | undefined) ?? []
     const sessionCookie = (response: request.Response) =>
-        ((response.headers['set-cookie'] as unknown as string[] | undefined) ?? []).find(c =>
-            c.startsWith('oidc_session=')
-        ) ?? ''
+        setCookies(response).find(c => c.startsWith('oidc_session=')) ?? ''
+    /** The full Set-Cookie header of the login cookie (oidc_ia_<id>), or ''. */
+    const loginCookieHeader = (response: request.Response) =>
+        setCookies(response).find(c => c.startsWith('oidc_ia_')) ?? ''
+    /** The login cookie as the browser sends it back: "oidc_ia_<id>=<value>". */
+    const loginCookie = (response: request.Response) => loginCookieHeader(response).split(';')[0] ?? ''
 
     /** Starts a login, submits the password, and returns the response of the login form. */
     async function login(email: string, extra: Record<string, string> = {}, password = PASSWORD) {
@@ -111,12 +116,16 @@ describe('OpenID Connect (e2e)', () => {
         const start = await authorize({ code_challenge: challenge, ...extra }).expect(303)
         const interaction = path(start.headers.location as string)
         expect(interaction).toMatch(/^\/oidc\/interaction\//)
-        const page = await http().get(interaction).expect(200)
+        const startCookie = loginCookie(start)
+        const page = await http().get(interaction).set('Cookie', startCookie).expect(200)
         const response = await http()
             .post(actionOf(page.text))
+            .set('Cookie', startCookie)
             .type('form')
             .send({ csrf: csrfOf(page.text), email, password })
-        return { response, verifier, interaction, page }
+        // After the password the cookie can change (it then also holds the user, for the organisation choice)
+        const cookie = loginCookie(response) || startCookie
+        return { response, verifier, interaction, page, cookie, startCookie }
     }
 
     function exchange(code: string, verifier: string, extra: Record<string, string> = {}) {
@@ -266,6 +275,7 @@ describe('OpenID Connect (e2e)', () => {
             const start = await authorize({ code_challenge: pkce().challenge, ui_locales: language }).expect(303)
             const page = await http()
                 .get(path(start.headers.location as string))
+                .set('Cookie', loginCookie(start))
                 .expect(200)
             expect(page.text).toContain(`lang="${language}"`)
             expect(page.text).toContain(texts.LOGIN_SUBMIT)
@@ -291,9 +301,10 @@ describe('OpenID Connect (e2e)', () => {
         })
 
         it('refuses a form without the right CSRF token', async () => {
-            const { page } = await login('alice@example.com', {}, 'wrong-password')
+            const { page, cookie } = await login('alice@example.com', {}, 'wrong-password')
             await http()
                 .post(actionOf(page.text))
+                .set('Cookie', cookie)
                 .type('form')
                 .send({ csrf: 'forged', email: 'alice@example.com', password: PASSWORD })
                 .expect(400)
@@ -301,6 +312,97 @@ describe('OpenID Connect (e2e)', () => {
 
         it('shows a page when the login link expired or does not exist', async () => {
             await http().get('/oidc/interaction/does-not-exist').expect(400)
+        })
+    })
+
+    describe('login cookie (no database table)', () => {
+        async function start(extra: Record<string, string> = {}) {
+            const response = await authorize({ code_challenge: pkce().challenge, ...extra }).expect(303)
+            const id = new URL(response.headers.location as string).pathname.split('/').pop() ?? ''
+            return { id, header: loginCookieHeader(response), cookie: loginCookie(response) }
+        }
+
+        it('is httpOnly, SameSite=Lax, only for this login and lives 10 minutes', async () => {
+            const { id, header } = await start()
+            expect(header.startsWith(`oidc_ia_${id}=`)).toBe(true)
+            expect(header).toContain('HttpOnly')
+            expect(header).toContain('SameSite=Lax')
+            expect(header).toContain(`Path=/oidc/interaction/${id}`)
+            expect(header).toContain('Max-Age=600')
+        })
+
+        it('is encrypted: nothing of the request can be read from it', async () => {
+            const { cookie } = await start({ state: 'readable-state', login_hint: 'alice@example.com' })
+            const value = decodeURIComponent(cookie.split('=').slice(1).join('='))
+            expect(value).toMatch(/^v1\./)
+            expect(Buffer.from(value.replaceAll('.', ''), 'base64url').toString('latin1')).not.toMatch(
+                /readable-state|alice@example\.com|localhost/
+            )
+        })
+
+        it('is required: without it, changed, or of another login the page says the login expired', async () => {
+            const first = await start()
+            const second = await start()
+            const value = first.cookie.split('=').slice(1).join('=')
+            await http()
+                .get('/oidc/interaction/' + first.id)
+                .expect(400)
+            await http()
+                .get('/oidc/interaction/' + first.id)
+                .set('Cookie', `oidc_ia_${first.id}=${value.slice(0, -4)}AAAA`)
+                .expect(400)
+            await http()
+                .get('/oidc/interaction/' + second.id)
+                .set('Cookie', `oidc_ia_${second.id}=${value}`)
+                .expect(400)
+            await http()
+                .get('/oidc/interaction/' + first.id)
+                .set('Cookie', first.cookie)
+                .expect(200)
+        })
+
+        it('lets two logins run side by side (two tabs)', async () => {
+            const first = await start()
+            const second = await start()
+            expect(first.id).not.toBe(second.id)
+            for (const tab of [second, first]) {
+                const page = await http()
+                    .get('/oidc/interaction/' + tab.id)
+                    .set('Cookie', [first.cookie, second.cookie].join('; '))
+                    .expect(200)
+                const done = await http()
+                    .post(actionOf(page.text))
+                    .set('Cookie', [first.cookie, second.cookie].join('; '))
+                    .type('form')
+                    .send({ csrf: csrfOf(page.text), email: 'alice@example.com', password: PASSWORD })
+                    .expect(303)
+                expect(new URL(done.headers.location as string).searchParams.get('code')).toBeTruthy()
+            }
+        })
+
+        it('is removed after the login and a copy of it cannot log in again (no replay)', async () => {
+            const { response, page, startCookie } = await login('alice@example.com')
+            expect(response.status).toBe(303)
+            expect(loginCookieHeader(response)).toMatch(/Expires=Thu, 01 Jan 1970/)
+            const replay = await http()
+                .post(actionOf(page.text))
+                .set('Cookie', startCookie)
+                .type('form')
+                .send({ csrf: csrfOf(page.text), email: 'alice@example.com', password: PASSWORD })
+                .expect(400)
+            expect(sessionCookie(replay)).toBe('')
+        })
+
+        it('a copy cannot be replayed after the organisation choice either', async () => {
+            const { response, cookie } = await login('bob@example.com')
+            const send = () =>
+                http()
+                    .post(actionOf(response.text))
+                    .set('Cookie', cookie)
+                    .type('form')
+                    .send({ csrf: csrfOf(response.text), tenant: ids.acme })
+            await send().expect(303)
+            await send().expect(400)
         })
     })
 
@@ -430,12 +532,13 @@ describe('OpenID Connect (e2e)', () => {
 
     describe('multi-tenant', () => {
         it('lets a member of several tenants choose, and puts that tenant in the tokens', async () => {
-            const { response, verifier } = await login('bob@example.com')
+            const { response, verifier, cookie } = await login('bob@example.com')
             expect(response.status).toBe(200)
             expect(response.text).toContain('Acme')
             expect(response.text).toContain('Globex')
             const choice = await http()
                 .post(actionOf(response.text))
+                .set('Cookie', cookie)
                 .type('form')
                 .send({ csrf: csrfOf(response.text), tenant: ids.globex })
                 .expect(303)
@@ -449,10 +552,11 @@ describe('OpenID Connect (e2e)', () => {
         })
 
         it('never lets a user pick a tenant they do not belong to', async () => {
-            const { response } = await login('bob@example.com')
+            const { response, cookie } = await login('bob@example.com')
             const other = store.addTenant('initech', 'Initech')
             const choice = await http()
                 .post(actionOf(response.text))
+                .set('Cookie', cookie)
                 .type('form')
                 .send({ csrf: csrfOf(response.text), tenant: other.id })
                 .expect(200)
@@ -550,11 +654,17 @@ describe('OpenID Connect (e2e)', () => {
             const start = await authorize({ code_challenge: challenge, ...extra }).expect(303)
             const location = new URL(start.headers.location as string)
             expect(location.origin + location.pathname).toBe(LOGIN_UI)
-            return { id: location.searchParams.get('interaction') ?? '', verifier, location }
+            return {
+                id: location.searchParams.get('interaction') ?? '',
+                verifier,
+                location,
+                cookie: loginCookie(start)
+            }
         }
 
-        const json = (call: request.Test) =>
-            call.set('Accept', 'application/json').set('Origin', 'http://localhost:3000')
+        /** As the frontend calls it: fetch with credentials, so the browser sends the login cookie along. */
+        const json = (call: request.Test, cookie = '') =>
+            call.set('Accept', 'application/json').set('Origin', 'http://localhost:3000').set('Cookie', cookie)
 
         it('sends the browser to the login page of the frontend, with the language', async () => {
             const { id, location } = await startAtFrontend({ ui_locales: 'fr' })
@@ -563,8 +673,8 @@ describe('OpenID Connect (e2e)', () => {
         })
 
         it('gives the frontend the details of the login, with CORS for the frontend origin', async () => {
-            const { id } = await startAtFrontend({ login_hint: 'alice@example.com' })
-            const response = await json(http().get('/oidc/interaction/' + id)).expect(200)
+            const { id, cookie } = await startAtFrontend({ login_hint: 'alice@example.com' })
+            const response = await json(http().get('/oidc/interaction/' + id), cookie).expect(200)
             expect(response.body).toMatchObject({
                 step: 'login',
                 clientName: 'Frontend',
@@ -576,9 +686,9 @@ describe('OpenID Connect (e2e)', () => {
         })
 
         it('answers a wrong password with a translated JSON error', async () => {
-            const { id } = await startAtFrontend()
-            const { csrf } = (await json(http().get('/oidc/interaction/' + id))).body as { csrf: string }
-            const response = await json(http().post('/oidc/interaction/' + id + '/login'))
+            const { id, cookie } = await startAtFrontend()
+            const { csrf } = (await json(http().get('/oidc/interaction/' + id), cookie)).body as { csrf: string }
+            const response = await json(http().post('/oidc/interaction/' + id + '/login'), cookie)
                 .set('Accept-Language', 'nl')
                 .send({ csrf, email: 'alice@example.com', password: 'wrong-password' })
                 .expect(401)
@@ -590,9 +700,9 @@ describe('OpenID Connect (e2e)', () => {
         })
 
         it('logs in with JSON: session cookie plus where the browser goes next, then the code works', async () => {
-            const { id, verifier } = await startAtFrontend()
-            const { csrf } = (await json(http().get('/oidc/interaction/' + id))).body as { csrf: string }
-            const response = await json(http().post('/oidc/interaction/' + id + '/login'))
+            const { id, verifier, cookie } = await startAtFrontend()
+            const { csrf } = (await json(http().get('/oidc/interaction/' + id), cookie)).body as { csrf: string }
+            const response = await json(http().post('/oidc/interaction/' + id + '/login'), cookie)
                 .send({ csrf, email: 'alice@example.com', password: PASSWORD })
                 .expect(200)
             expect(response.body.status).toBe('redirect')
@@ -603,14 +713,14 @@ describe('OpenID Connect (e2e)', () => {
         })
 
         it('lets the frontend show the organisation choice', async () => {
-            const { id, verifier } = await startAtFrontend()
-            const { csrf } = (await json(http().get('/oidc/interaction/' + id))).body as { csrf: string }
-            const choice = await json(http().post('/oidc/interaction/' + id + '/login'))
+            const { id, verifier, cookie } = await startAtFrontend()
+            const { csrf } = (await json(http().get('/oidc/interaction/' + id), cookie)).body as { csrf: string }
+            const choice = await json(http().post('/oidc/interaction/' + id + '/login'), cookie)
                 .send({ csrf, email: 'bob@example.com', password: PASSWORD })
                 .expect(200)
             expect(choice.body.status).toBe('choose-tenant')
             expect((choice.body.tenants as { name: string }[]).map(tenant => tenant.name)).toEqual(['Acme', 'Globex'])
-            const done = await json(http().post('/oidc/interaction/' + id + '/tenant'))
+            const done = await json(http().post('/oidc/interaction/' + id + '/tenant'), loginCookie(choice))
                 .send({ csrf: choice.body.csrf, tenant: ids.globex })
                 .expect(200)
             const code = new URL(done.body.location as string).searchParams.get('code') ?? ''
@@ -620,8 +730,9 @@ describe('OpenID Connect (e2e)', () => {
 
         it('answers 410 for an unknown or expired login, and refuses a wrong CSRF token', async () => {
             await json(http().get('/oidc/interaction/does-not-exist')).expect(410)
-            const { id } = await startAtFrontend()
-            const response = await json(http().post('/oidc/interaction/' + id + '/login'))
+            const { id, cookie } = await startAtFrontend()
+            await json(http().get('/oidc/interaction/' + id)).expect(410)
+            const response = await json(http().post('/oidc/interaction/' + id + '/login'), cookie)
                 .send({ csrf: 'forged', email: 'alice@example.com', password: PASSWORD })
                 .expect(410)
             expect(response.body.status).toBe('expired')
