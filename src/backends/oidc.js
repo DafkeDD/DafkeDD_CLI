@@ -14,7 +14,8 @@ import { basename } from 'node:path'
 
 export const TEMPLATE_DIR = fileURLToPath(new URL('../../templates/backend-oidc/', import.meta.url))
 export const ISSUER_PATH = '/oidc'
-export const DEMO_PORT = 4400
+export const FRONTEND_CALLBACK = 'http://localhost:3000/api/auth/callback'
+export const LOGIN_UI_URL = 'http://localhost:3000/login'
 export const SESSION_COOKIE = 'oidc_session'
 
 export const PACKAGES = {
@@ -24,8 +25,7 @@ export const PACKAGES = {
 
 export const SCRIPTS = {
     'test:db': 'vitest run --config ./vitest.config.db.ts',
-    'oidc:user': 'node scripts/oidc-user.mjs',
-    'oidc:demo': 'node scripts/oidc-demo.mjs'
+    'oidc:user': 'node scripts/oidc-user.mjs'
 }
 
 /** Texts of the login pages (namespace "oidc"). Every language needs the same keys (checked by the tests). */
@@ -148,7 +148,7 @@ export const generatePassword = () => randomBytes(12).toString('base64url')
 export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
 /** Questions after choosing the OpenID Connect server: name of the first tenant and email of its admin. */
-export async function ask({ projectDir = process.cwd(), prompts }) {
+export async function ask({ projectDir = process.cwd(), prompts, hasFrontend = false }) {
     const tenantName = (
         await prompts.input({
             message: 'Naam van de eerste organisatie (tenant):',
@@ -170,7 +170,9 @@ export async function ask({ projectDir = process.cwd(), prompts }) {
         adminEmail,
         adminPassword,
         adminPasswordHash: await hashPassword(adminPassword),
-        masterKey: randomBytes(32).toString('hex')
+        masterKey: randomBytes(32).toString('hex'),
+        // With a frontend the login pages live there (port 3000), not in the API
+        loginUi: hasFrontend
     }
 }
 
@@ -187,6 +189,12 @@ export function envLines(oidc, { port, example = false }) {
         '# Encrypts the private signing keys in the database: 64 hex characters, never commit it, keep a backup.',
         "# Generate one: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
         `OIDC_MASTER_KEY=${example ? 'change-me-to-64-hex-characters' : oidc.masterKey}`,
+        ...(oidc.loginUi
+            ? [
+                  '# The login page of the frontend: /oidc/authorize sends the browser there (leave empty for the HTML page of the API)',
+                  `OIDC_LOGIN_UI_URL=${LOGIN_UI_URL}`
+              ]
+            : []),
         '# Maximum login attempts per minute, per IP address and per email address',
         'OIDC_LOGIN_RATE_LIMIT=10',
         '# The first tenant and its admin: created at the first start when there are no users yet.',
@@ -250,7 +258,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         tag: 'oidc',
         summary:
             'Start a login (authorization code flow, PKCE S256 required). Redirects (303) to the login page, or straight back to the client when the browser is already logged in.',
-        curl: `curl -i 'http://localhost:${port}/oidc/authorize?client_id=demo&redirect_uri=http%3A%2F%2Flocalhost%3A${DEMO_PORT}%2Fcallback&response_type=code&scope=openid%20profile%20email%20tenant&state=xyz&nonce=abc&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256'`,
+        curl: `curl -i 'http://localhost:${port}/oidc/authorize?client_id=frontend&redirect_uri=${encodeURIComponent(FRONTEND_CALLBACK)}&response_type=code&scope=openid%20profile%20email%20tenant&state=xyz&nonce=abc&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256'`,
         query: [
             ['client_id', 'required', 'A registered client (config/oidc-clients.json)'],
             ['redirect_uri', 'required', 'Exactly one of the registered redirect URIs'],
@@ -332,8 +340,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
             example: {
                 grant_type: 'authorization_code',
                 code: 'code-from-the-redirect',
-                redirect_uri: `http://localhost:${DEMO_PORT}/callback`,
-                client_id: 'demo',
+                redirect_uri: FRONTEND_CALLBACK,
+                client_id: 'frontend',
                 code_verifier: 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'
             },
             fields: [

@@ -4,7 +4,7 @@
  * controllers appears here and in Swagger (/docs).
  */
 
-import { endpoints as oidcEndpoints, DEMO_PORT } from './oidc.js'
+import { endpoints as oidcEndpoints } from './oidc.js'
 
 const fence = '```'
 const json = value => JSON.stringify(value, null, 2)
@@ -278,6 +278,7 @@ export function backendReadme({
                       '(generated)',
                       'scrypt hash of the temporary password the CLI showed once'
                   ],
+                  ['OIDC_LOGIN_UI_URL', '(empty)', 'Login page of the frontend; empty means the HTML page of the API'],
                   ['OIDC_CLIENTS_FILE', 'config/oidc-clients.json', 'The registered clients (optional)']
               ]
             : [])
@@ -297,8 +298,7 @@ export function backendReadme({
         ...(oidc
             ? [
                   ['npm run test:db', 'Tests against the real PostgreSQL: tenant isolation (RLS) and storage'],
-                  ['npm run oidc:user', 'Add a user to a tenant (see "OpenID Connect")'],
-                  ['npm run oidc:demo', `A small client to try the login on http://localhost:${DEMO_PORT}`]
+                  ['npm run oidc:user', 'Add a user to a tenant (see "OpenID Connect")']
               ]
             : []),
         ...(database?.mode === 'docker'
@@ -442,8 +442,10 @@ finds all endpoints there.
 
 1. Start the API (\`npm run start:dev\`). The first start creates the tables, the signing keys, the clients of
    \`config/oidc-clients.json\` and the first tenant with its admin (the email and temporary password the CLI showed).
-2. \`npm run oidc:demo\` and open **http://localhost:${DEMO_PORT}**: a small client (\`scripts/oidc-demo.mjs\`, no
-   dependencies) redirects you to the login page, exchanges the code and shows the verified ID token and the userinfo.
+2. With the Next.js frontend: start it (\`npm run dev\` in \`./frontend\`) and open **http://localhost:3000**. "Log in" goes
+   through this server and comes back to the frontend; \`/profile\` shows the user, the tenant and what the API answered.
+   The login page itself is the page \`/login\` of the frontend (\`OIDC_LOGIN_UI_URL\`), which talks to the JSON variant of
+   \`/oidc/interaction/...\`. Without a frontend the API shows its own HTML login page.
 3. Add users: \`npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme --roles admin\` (creates the tenant
    when it does not exist; prints a random password once, or use \`--password\`).
 
@@ -451,8 +453,9 @@ finds all endpoints there.
 
 1. The client sends the browser to \`/oidc/authorize\` with \`client_id\`, an exact registered \`redirect_uri\`,
    \`scope=openid ...\`, \`state\`, \`nonce\` and a PKCE \`code_challenge\` (S256, **required for every client**).
-2. The server stores the request (10 minutes) and shows the login page \`/oidc/interaction/<id>\` in the language of the
-   browser (or \`ui_locales\`). Email and password are checked (scrypt); attempts are limited per IP and per email.
+2. The server stores the request (10 minutes) and sends the browser to the login page: \`/login?interaction=<id>\` of
+   the frontend when \`OIDC_LOGIN_UI_URL\` is set, otherwise its own page \`/oidc/interaction/<id>\`, in the language of
+   the browser (or \`ui_locales\`). Email and password are checked (scrypt); attempts are limited per IP and per email.
 3. A user that belongs to several tenants chooses one (or \`tenant_hint\` decides). Users without an active tenant cannot
    log in.
 4. The browser gets the \`oidc_session\` cookie (httpOnly, SameSite=Lax, Path=/oidc, 12 hours) and is sent back to the

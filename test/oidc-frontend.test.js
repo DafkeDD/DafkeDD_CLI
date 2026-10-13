@@ -1,0 +1,163 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { files, uiFiles, withApi, LOCALES } from '../src/frontends/nextjs.js'
+import { envLocal, OIDC_MESSAGES, oidcFrontendFiles } from '../src/frontends/oidc.js'
+import { frontendReadme } from '../src/frontends/docs.js'
+import { main } from '../src/index.js'
+import * as backendOidc from '../src/backends/oidc.js'
+
+const templates = oidcFrontendFiles({ apiPort: 4000 })
+const API = { port: 4000, oidc: true }
+
+test('the frontend login files are copied with the API port filled in', () => {
+    for (const rel of [
+        'src/lib/oidc.ts',
+        'src/lib/session.ts',
+        'src/app/api/auth/login/route.ts',
+        'src/app/api/auth/callback/route.ts',
+        'src/app/api/auth/logout/route.ts',
+        'src/app/[locale]/login/page.tsx',
+        'src/app/[locale]/profile/page.tsx',
+        'src/components/oidc-login.tsx',
+        'src/components/session-links.tsx'
+    ]) {
+        assert.ok(templates[rel], rel)
+    }
+    for (const [rel, content] of Object.entries(templates)) assert.ok(!/__[A-Z_]+__/.test(content), rel)
+    assert.match(templates['src/lib/oidc.ts'], /http:\/\/localhost:4000\/oidc/)
+})
+
+test('the frontend uses no OIDC or JWT library and never sends tokens to the browser', () => {
+    for (const [rel, content] of Object.entries(templates)) {
+        const imports = [...content.matchAll(/from '([^']+)'/g)].map(match => match[1])
+        for (const library of ['jose', 'openid-client', 'next-auth', 'jsonwebtoken', '@auth/core']) {
+            assert.ok(!imports.includes(library), `${rel} imports ${library}`)
+        }
+    }
+    // client components never touch the session or the tokens
+    for (const rel of ['src/components/oidc-login.tsx']) {
+        assert.ok(!templates[rel].includes('accessToken'), rel)
+        assert.ok(!templates[rel].includes('@/lib/oidc'), rel)
+    }
+})
+
+test('the login checks state, iss, nonce, at_hash and the ID token signature, with PKCE S256', () => {
+    const lib = templates['src/lib/oidc.ts']
+    const callback = templates['src/app/api/auth/callback/route.ts']
+    assert.match(lib, /code_challenge_method: 'S256'/)
+    assert.match(lib, /claims\.nonce !== nonce/)
+    assert.match(lib, /claims\.at_hash !== atHash/)
+    assert.match(lib, /claims\.aud !== OIDC_CLIENT_ID/)
+    assert.match(lib, /head\.alg !== 'RS256'/)
+    assert.match(callback, /params\.get\('state'\) !== flow\.state/)
+    assert.match(callback, /params\.get\('iss'\) !== OIDC_ISSUER/)
+})
+
+test('cookies are httpOnly and encrypted (AES-256-GCM, purpose bound), returnTo stays on this site', () => {
+    const lib = templates['src/lib/oidc.ts']
+    assert.match(lib, /httpOnly: true/)
+    assert.match(lib, /aes-256-gcm/)
+    assert.match(lib, /setAAD\(Buffer\.from\(purpose\)\)/)
+    assert.match(lib, /!value\.startsWith\('\/\/'\)/)
+    assert.match(templates['src/app/api/auth/logout/route.ts'], /export function POST/)
+})
+
+test('every text exists in all four languages, and every text the code uses exists', () => {
+    const keys = Object.keys(OIDC_MESSAGES.en).sort()
+    for (const locale of LOCALES) assert.deepEqual(Object.keys(OIDC_MESSAGES[locale]).sort(), keys, locale)
+    const used = new Set()
+    for (const content of Object.values(templates)) {
+        for (const match of content.matchAll(/\bt\('(\w+)'/g)) used.add(match[1])
+    }
+    for (const key of used) assert.ok(keys.includes(key), `missing text ${key}`)
+    for (const key of keys) assert.ok(used.has(key), `unused text ${key}`)
+})
+
+for (const ui of [true, false]) {
+    test(`withApi with the OIDC server (${ui ? 'DafkeDD UI' : 'plain'}): login files, texts and session links`, () => {
+        const all = withApi({ ...files, ...(ui ? uiFiles : {}) }, API, { ui })
+        assert.ok(all['src/app/api/auth/callback/route.ts'])
+        assert.ok(!all['src/components/auth-links.tsx'], 'not the simple login')
+        for (const locale of LOCALES) {
+            assert.deepEqual(JSON.parse(all[`messages/${locale}.json`]).Oidc, OIDC_MESSAGES[locale])
+        }
+        const page = all['src/app/[locale]/page.tsx']
+        assert.match(page, /import \{ Suspense, use \} from 'react'/)
+        assert.match(page, /<Suspense fallback=\{null\}>\s*<SessionLinks \/>\s*<\/Suspense>/)
+    })
+}
+
+test('withApi without the OIDC server adds none of it', () => {
+    const all = withApi({ ...files }, { port: 4000 }, { ui: false })
+    assert.ok(!all['src/lib/oidc.ts'])
+    assert.ok(!JSON.parse(all['messages/en.json']).Oidc)
+})
+
+test('.env.local: issuer, client and a random 64-hex AUTH_SECRET', () => {
+    const one = envLocal({ apiPort: 4000 })
+    const two = envLocal({ apiPort: 4000 })
+    assert.match(one, /^OIDC_ISSUER=http:\/\/localhost:4000\/oidc$/m)
+    assert.match(one, /^OIDC_CLIENT_ID=frontend$/m)
+    assert.match(one, /^AUTH_SECRET=[0-9a-f]{64}$/m)
+    assert.notEqual(one, two)
+})
+
+test('the frontend client and its callback match what the backend registers', () => {
+    const clients = JSON.parse(
+        backendOidc.oidcFiles({ usersTable: 'shopusers', database: 'shop', port: 4000 })['config/oidc-clients.json']
+    ).clients
+    const frontend = clients.find(client => client.clientId === 'frontend')
+    assert.deepEqual(frontend.redirectUris, ['http://localhost:3000/api/auth/callback'])
+    assert.equal(frontend.type, 'public')
+    assert.match(templates['src/lib/oidc.ts'], /'\/api\/auth\/callback'/)
+    assert.ok(!clients.some(client => client.clientId === 'demo'), 'no demo client on another port')
+})
+
+test('the backend sends the browser to the login page of the frontend only when there is a frontend', () => {
+    const answers = { tenantName: 'A', adminEmail: 'a@b.co', adminPasswordHash: 'x', masterKey: 'ab'.repeat(32) }
+    assert.match(
+        backendOidc.envLines({ ...answers, loginUi: true }, { port: 4000 }),
+        /^OIDC_LOGIN_UI_URL=http:\/\/localhost:3000\/login$/m
+    )
+    assert.ok(!backendOidc.envLines({ ...answers, loginUi: false }, { port: 4000 }).includes('OIDC_LOGIN_UI_URL'))
+})
+
+test('the frontend README documents the OIDC login only when it is installed', () => {
+    const readme = frontendReadme({ ui: 'none', api: API })
+    for (const text of [
+        '## Login (OpenID Connect)',
+        '/api/auth/login',
+        '/api/auth/callback',
+        '/profile',
+        'AUTH_SECRET',
+        'getSession()'
+    ])
+        assert.ok(readme.includes(text), text)
+    assert.ok(!frontendReadme({ ui: 'none', api: { port: 4000 } }).includes('OpenID Connect'))
+})
+
+test('index: the frontend learns that the backend is an OIDC server', async () => {
+    const events = []
+    const item = (id, dir, answers) => ({
+        id,
+        label: id,
+        dir,
+        ask: async () => answers,
+        steps: async ctx => {
+            events.push(ctx.api)
+            return []
+        }
+    })
+    await main({
+        projectDir: '/tmp/none',
+        prompts: { select: async c => (c.message.includes('frontend') ? 'fe' : 'be') },
+        ask: async () => null,
+        registry: { fe: item('fe', 'frontend', { ui: 'none' }) },
+        backendRegistry: {
+            be: { ...item('be', 'backend', { auth: false, oidc: { tenantName: 'A' } }), api: { port: 4000 } }
+        },
+        execute: async () => {},
+        log: () => {}
+    })
+    assert.deepEqual(events[0], { port: 4000, auth: false, oidc: true })
+})

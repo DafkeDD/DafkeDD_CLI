@@ -55,7 +55,6 @@ test('the backend gets the OIDC server, its tests, scripts and the multi-tenant 
         'src/tenants/tenant-members.service.ts',
         'config/oidc-clients.json',
         'scripts/oidc-user.mjs',
-        'scripts/oidc-demo.mjs',
         'test/oidc.e2e-spec.ts',
         'test/tenant-isolation.db-spec.ts',
         'vitest.config.db.ts',
@@ -175,6 +174,7 @@ test('nestjs.ask with "OIDC server" asks the OIDC questions and returns them', a
     assert.equal(result.auth, false)
     assert.equal(result.oidc.adminEmail, 'boss@example.com')
     assert.equal(result.oidc.tenantName, 'Shop')
+    assert.equal(result.oidc.loginUi, true, 'with a frontend the login page lives there')
 })
 
 test('buildFiles refuses the OIDC server without a database, or together with the simple login', () => {
@@ -226,6 +226,5 @@ test('the summary shows the tenant, the admin and the temporary password once; n
     assert.ok(summary.includes(ANSWERS.tenantName))
     const next = nestjs.next(answers).join('\n')
     assert.match(next, /oidc\/\.well-known\/openid-configuration/)
-    assert.match(next, /npm run oidc:demo/)
     assert.match(next, /npm run oidc:user/)
 })

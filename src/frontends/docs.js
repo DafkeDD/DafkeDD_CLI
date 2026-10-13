@@ -107,6 +107,41 @@ translated). A validation error (400) has a list of messages; \`ApiError.message
 The example page has a **status card** (\`src/components/api-status.tsx\`) that shows whether the API is reachable, the
 language it answered in and, with a database, whether the database works.
 `)
+        if (api.oidc) {
+            parts.push(`
+## Login (OpenID Connect)
+
+The backend is the login server (OpenID Connect) of this project, and this frontend is both its login page and an
+application that logs in through it. Everything runs on **http://localhost:3000**; tokens never reach the browser.
+
+| Path | What it does |
+| --- | --- |
+| \`/api/auth/login\` | Starts a login: state, nonce and a PKCE verifier go into an encrypted cookie, then to the login server |
+| \`/login?interaction=<id>\` | The login page of the login server (email, password, organisation choice), shown by this frontend |
+| \`/api/auth/callback\` | Back from the login server: checks state and \`iss\`, exchanges the code, verifies the ID token |
+| \`/profile\` | Protected: name, email, organisation, roles, and whether the API accepts the access token |
+| \`/api/auth/logout\` | POST: logs out of this frontend (the session of the login server stays) |
+
+**Flow**: "Log in" → \`/api/auth/login\` → the API (\`/oidc/authorize\`) → \`/login?interaction=...\` (this frontend talks to
+\`/oidc/interaction/...\` of the API with \`fetch\` and \`credentials: 'include'\`) → back to the API → \`/api/auth/callback\`
+→ the page you came from. A next login of the same browser skips the password (single sign-on).
+
+**Session**: an httpOnly cookie \`app_session\`, encrypted with \`AUTH_SECRET\` (AES-256-GCM), with the name, email,
+organisation (tenant) and the access token, valid as long as the access token (10 minutes). After that \`/profile\` logs
+in again without a password.
+
+**Use it**: in a server component \`const session = await getSession()\` (\`src/lib/session.ts\`); call your API with
+\`Authorization: Bearer \${session.accessToken}\`. The organisation is \`session.tenant\` (\`id\`, \`name\`, \`roles\`). Never
+trust a tenant id from the browser.
+
+**Settings** (\`.env.local\`, generated, never committed): \`OIDC_ISSUER\`, \`OIDC_CLIENT_ID\` (\`frontend\`, registered in
+\`backend/config/oidc-clients.json\`), \`APP_URL\` and \`AUTH_SECRET\` (64 hex characters). For production: HTTPS, your
+real \`APP_URL\` (and the matching redirect URI in the backend), a new \`AUTH_SECRET\`.
+
+Texts are in the \`Oidc\` namespace of the message files; the code is in \`src/lib/oidc.ts\` (only \`node:crypto\` and
+\`fetch\`, no OIDC library).
+`)
+        }
         if (api.auth) {
             parts.push(`
 ## Login pages

@@ -236,7 +236,9 @@ export class OidcService implements OnApplicationBootstrap {
             userId: null,
             expiresAt: new Date(Date.now() + OIDC.INTERACTION_SECONDS * 1000)
         })
-        const location = new URL(this.config.issuer + '/interaction/' + id)
+        const ui = this.config.loginUiUrl
+        const location = new URL(ui ?? this.config.issuer + '/interaction/' + id)
+        if (ui) location.searchParams.set('interaction', id)
         const locale = params.uiLocales[0]
         if (locale) location.searchParams.set('lang', locale)
         return { kind: 'redirect', location: location.toString() }

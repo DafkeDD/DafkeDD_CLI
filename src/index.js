@@ -69,7 +69,13 @@ export async function main({
             ? await frontend.steps({
                   projectDir,
                   answers,
-                  api: backend ? { ...backend.api, auth: Boolean(backendAnswers.auth) } : null
+                  api: backend
+                      ? {
+                            ...backend.api,
+                            auth: Boolean(backendAnswers.auth),
+                            ...(backendAnswers.oidc ? { oidc: true } : {})
+                        }
+                      : null
               })
             : []),
         ...(backend ? await backend.steps({ projectDir, answers: backendAnswers }) : []),

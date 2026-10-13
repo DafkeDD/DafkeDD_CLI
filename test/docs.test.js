@@ -247,7 +247,7 @@ test('the README of an OIDC backend explains the login server, multi-tenancy and
     for (const text of [
         '## OpenID Connect (login server)',
         '/oidc/.well-known/openid-configuration',
-        'npm run oidc:demo',
+        'OIDC_LOGIN_UI_URL',
         'npm run oidc:user',
         'npm run test:db',
         'PKCE',

@@ -5,6 +5,7 @@ import { select } from '@inquirer/prompts'
 import { run } from '../runner.js'
 import { AUTH_MESSAGES, authFiles } from './auth.js'
 import { frontendReadme } from './docs.js'
+import { envLocal, OIDC_MESSAGES, oidcFrontendFiles } from './oidc.js'
 
 export const DIR = 'frontend'
 export const LOCALES = ['en', 'nl', 'fr', 'de']
@@ -821,14 +822,20 @@ const replaceOnce = (text, from, to) => {
 
 /** Adds the backend connection to a set of frontend files: API client, status card, texts and the card on the page. */
 export function withApi(fileMap, api, { ui }) {
-    const result = { ...fileMap, ...apiFiles(api), ...(api.auth ? authFiles() : {}) }
+    const result = {
+        ...fileMap,
+        ...apiFiles(api),
+        ...(api.auth ? authFiles() : {}),
+        ...(api.oidc ? oidcFrontendFiles({ apiPort: api.port }) : {})
+    }
     for (const locale of LOCALES) {
         result[`messages/${locale}.json`] =
             JSON.stringify(
                 {
                     ...MESSAGES[locale],
                     ApiStatus: API_MESSAGES[locale],
-                    ...(api.auth ? { Auth: AUTH_MESSAGES[locale] } : {})
+                    ...(api.auth ? { Auth: AUTH_MESSAGES[locale] } : {}),
+                    ...(api.oidc ? { Oidc: OIDC_MESSAGES[locale] } : {})
                 },
                 null,
                 2
@@ -851,6 +858,20 @@ export function withApi(fileMap, api, { ui }) {
             "import { ApiStatus } from '@/components/api-status';\nimport { AuthLinks } from '@/components/auth-links';\n"
         )
         content = replaceOnce(content, '      <ApiStatus />\n', '      <ApiStatus />\n      <AuthLinks />\n')
+    }
+    if (api.oidc) {
+        content = replaceOnce(
+            content,
+            "import { ApiStatus } from '@/components/api-status';\n",
+            "import { ApiStatus } from '@/components/api-status';\nimport { SessionLinks } from '@/components/session-links';\n"
+        )
+        // The session is read per request: inside Suspense the rest of the page can still be prerendered
+        content = replaceOnce(content, "import { use } from 'react';\n", "import { Suspense, use } from 'react';\n")
+        content = replaceOnce(
+            content,
+            '      <ApiStatus />\n',
+            '      <ApiStatus />\n      <Suspense fallback={null}>\n        <SessionLinks />\n      </Suspense>\n'
+        )
     }
     result[page] = content
     return result
@@ -1008,6 +1029,8 @@ export const nextjs = {
                         'README.md',
                         frontendReadme({ ui: answers?.ui ?? 'none', api, locales: LOCALES, apiPort: api?.port })
                     )
+                    // Login through the OIDC server: where it is, and the secret of the session cookie (never committed)
+                    if (api?.oidc) await write(root, '.env.local', envLocal({ apiPort: api.port }))
                     await patchNextConfig(root)
                     if (withUi) await write(root, 'src/app/globals.css', UI_GLOBALS_CSS)
                     else await patchGlobalsCss(root)

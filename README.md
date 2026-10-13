@@ -251,15 +251,21 @@ password for that admin **once** at the end.
 - **Security**: scrypt passwords, the same error and timing for an unknown email, login rate limit per IP and per email,
   exact redirect URIs (https, http only on localhost), `iss` in every redirect (RFC 9207), client authentication with
   `client_secret_basic`, `client_secret_post` or none (public clients with PKCE), codes and session ids only as hashes.
-- **Try it**: `npm run oidc:demo` starts a tiny client on http://localhost:4400 that logs in and shows the verified ID
-  token and the userinfo. `npm run oidc:user -- --email ... --tenant ...` adds users.
+- **Login in the frontend (port 3000)**: with the Next.js frontend there is no extra page or port. The frontend shows
+  the login page of the OIDC server (`/login`, four languages, organisation choice) and logs in through it with PKCE
+  (`/api/auth/login`, `/api/auth/callback`): the tokens stay on the server, the session is an encrypted httpOnly cookie
+  (`AUTH_SECRET` in `.env.local`). The home page shows "Log in" or who is logged in and in which organisation;
+  `/profile` shows the user, the roles and whether the API accepted the access token. A second login needs no password
+  (single sign-on). Without a frontend the API shows its own simple HTML login page.
+- **Users**: `npm run oidc:user -- --email ... --tenant ...` adds users and organisations.
 - **Tests**: unit tests (JOSE, PKCE with the RFC 7636 vector, keys, migrations, pages), end-to-end tests of the whole
   flow in memory (`npm run test:e2e`) and `npm run test:db` against the real PostgreSQL (isolation between tenants,
   codes used once, the first admin). Checked with the independent libraries `openid-client` and `jose` as client.
-- **Not yet** (next phases): refresh tokens, logout, revocation, introspection, MFA, admin API and UI, the frontend
-  login via the OIDC server.
+- **Not yet** (next phases): refresh tokens, logout at the OIDC server, revocation, introspection, MFA, registration,
+  admin API and UI.
 
-The TypeScript files of this feature live as real files in `templates/backend-oidc` (see Development).
+The TypeScript files of this feature live as real files in `templates/backend-oidc` and `templates/frontend-oidc` (see
+Development).
 
 ### Simple login and register (test pages)
 
@@ -367,6 +373,8 @@ src/backends/nestjs.js   # NestJS backend (+ database, login)
 src/backends/oidc.js     # own OpenID Connect server: questions, .env, docs, copies templates/backend-oidc
 src/backends/docs.js     # generated backend documentation (every endpoint)
 templates/backend-oidc/  # TypeScript of the OIDC server, copied into ./backend (placeholders like __USERS_TABLE__)
+templates/frontend-oidc/ # login page, login routes and profile of the frontend (OIDC), copied into ./frontend
+src/frontends/oidc.js    # texts and .env.local of the frontend login, copies templates/frontend-oidc
 test/                    # test suite (node:test)
 scripts/                 # test runner and git hook setup
 .githooks/               # pre-push hook
@@ -399,6 +407,10 @@ git switch developer
 
 ## Changelog
 
+- **0.20.0**: the login of the own OIDC server moves into the frontend on port 3000: login page (`/login`) and
+  organisation choice in the frontend (JSON variant of the interaction endpoints, `OIDC_LOGIN_UI_URL`), login with PKCE
+  through route handlers, encrypted session cookie, profile page, "Log in" / "Signed in as" on the home page. The demo
+  client on port 4400 is gone. Checked in a real browser (Next.js 16, PostgreSQL 18), including single sign-on.
 - **0.19.0**: phase 1 of the own OpenID Connect server: the login question now offers an own OIDC server (multi-tenant,
   PostgreSQL Row-Level Security, migrations, encrypted signing keys, discovery, JWKS, authorize with mandatory PKCE,
   login page in four languages, organisation choice, token, userinfo, demo client and user script), with unit,

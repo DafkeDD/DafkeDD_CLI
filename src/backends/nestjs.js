@@ -822,7 +822,7 @@ export const nestjs = {
                 { name: 'Geen login', value: 'none' }
             ]
         })
-        const oidcAnswers = how === 'oidc' ? await oidc.ask({ projectDir, prompts }) : null
+        const oidcAnswers = how === 'oidc' ? await oidc.ask({ projectDir, prompts, hasFrontend }) : null
         return { database, auth: how === 'simple', oidc: oidcAnswers }
     },
 
@@ -840,7 +840,7 @@ export const nestjs = {
             ...(answers?.oidc
                 ? [
                       `OIDC: http://localhost:${PORT}/oidc/.well-known/openid-configuration`,
-                      `npm run oidc:demo   (test the login: http://localhost:${oidc.DEMO_PORT})`,
+                      ...(answers.oidc.loginUi ? ['Log in: http://localhost:3000/login'] : []),
                       'npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme   (add a user)'
                   ]
                 : [])

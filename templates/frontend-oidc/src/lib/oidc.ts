@@ -1,0 +1,226 @@
+import {
+    createCipheriv,
+    createDecipheriv,
+    createHash,
+    createPublicKey,
+    type JsonWebKey,
+    randomBytes,
+    verify
+} from 'node:crypto'
+
+/**
+ * Login through the OpenID Connect server of the backend (authorization code flow with PKCE), on the server side of
+ * Next.js only: the browser never sees a token. Tokens and the session live in an encrypted, httpOnly cookie.
+ * Only node:crypto and fetch: no OIDC or JWT library.
+ */
+export const OIDC_ISSUER = (process.env.OIDC_ISSUER ?? 'http://localhost:__API_PORT__/oidc').replace(/\/+$/, '')
+export const OIDC_CLIENT_ID = process.env.OIDC_CLIENT_ID ?? 'frontend'
+export const APP_URL = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/+$/, '')
+export const REDIRECT_URI = APP_URL + '/api/auth/callback'
+
+export const SESSION_COOKIE = 'app_session'
+export const FLOW_COOKIE = 'app_oidc'
+export const FLOW_SECONDS = 10 * 60
+
+export interface Tenant {
+    id: string
+    name: string
+    roles: string[]
+}
+
+/** What the session cookie holds. */
+export interface Session {
+    sub: string
+    name: string
+    email: string
+    tenant: Tenant
+    accessToken: string
+    /** When the access token expires (milliseconds). After that the user logs in again, without a password (SSO). */
+    expiresAt: number
+}
+
+/** A login in progress (between /api/auth/login and /api/auth/callback). */
+export interface Flow {
+    state: string
+    nonce: string
+    verifier: string
+    returnTo: string
+}
+
+interface Discovery {
+    issuer: string
+    authorization_endpoint: string
+    token_endpoint: string
+    userinfo_endpoint: string
+    jwks_uri: string
+}
+
+const b64url = (buffer: Buffer) => buffer.toString('base64url')
+
+export const cookieOptions = (maxAgeSeconds: number, path = '/') => ({
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: process.env.NODE_ENV === 'production',
+    path,
+    maxAge: maxAgeSeconds
+})
+
+/** The 32-byte key of AUTH_SECRET (.env.local) that encrypts the cookies. */
+function secret(): Buffer {
+    const hex = process.env.AUTH_SECRET ?? ''
+    if (!/^[0-9a-f]{64}$/i.test(hex)) throw new Error('AUTH_SECRET must be 64 hexadecimal characters (see .env.local)')
+    return Buffer.from(hex, 'hex')
+}
+
+/** Encrypts (AES-256-GCM) a value for a cookie. `purpose` is bound to it, so a flow cookie is never a session. */
+export function seal(value: object, purpose: string): string {
+    const iv = randomBytes(12)
+    const cipher = createCipheriv('aes-256-gcm', secret(), iv)
+    cipher.setAAD(Buffer.from(purpose))
+    const data = Buffer.concat([cipher.update(JSON.stringify(value), 'utf8'), cipher.final()])
+    return [b64url(iv), b64url(cipher.getAuthTag()), b64url(data)].join('.')
+}
+
+/** Decrypts a cookie value; null when it is missing, changed or encrypted with another secret. */
+export function unseal<T>(sealed: string | undefined, purpose: string): T | null {
+    const [iv, tag, data] = (sealed ?? '').split('.')
+    if (!iv || !tag || !data) return null
+    try {
+        const decipher = createDecipheriv('aes-256-gcm', secret(), Buffer.from(iv, 'base64url'))
+        decipher.setAAD(Buffer.from(purpose))
+        decipher.setAuthTag(Buffer.from(tag, 'base64url'))
+        return JSON.parse(
+            Buffer.concat([decipher.update(Buffer.from(data, 'base64url')), decipher.final()]).toString('utf8')
+        ) as T
+    } catch {
+        return null
+    }
+}
+
+/** Only relative paths of this app, never another site (open redirect). */
+export function safeReturnTo(value: string | null | undefined): string {
+    return value && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\') ? value : '/'
+}
+
+export function newFlow(returnTo: string): Flow & { challenge: string } {
+    const verifier = b64url(randomBytes(32))
+    return {
+        state: b64url(randomBytes(16)),
+        nonce: b64url(randomBytes(16)),
+        verifier,
+        challenge: b64url(createHash('sha256').update(verifier).digest()),
+        returnTo: safeReturnTo(returnTo)
+    }
+}
+
+let discovered: { at: number; value: Promise<Discovery> } | null = null
+
+/** The discovery document of the issuer, cached for 5 minutes. */
+export function discovery(): Promise<Discovery> {
+    if (!discovered || Date.now() - discovered.at > 5 * 60_000) {
+        const value = fetch(OIDC_ISSUER + '/.well-known/openid-configuration', { cache: 'no-store' }).then(
+            async response => {
+                if (!response.ok) throw new Error('Discovery failed: ' + response.status)
+                const document = (await response.json()) as Discovery
+                if (document.issuer !== OIDC_ISSUER) throw new Error('The discovery document is of another issuer')
+                return document
+            }
+        )
+        value.catch(() => {
+            discovered = null
+        })
+        discovered = { at: Date.now(), value }
+    }
+    return discovered.value
+}
+
+export async function authorizationUrl(flow: Flow & { challenge: string }, locale: string): Promise<string> {
+    const url = new URL((await discovery()).authorization_endpoint)
+    url.search = new URLSearchParams({
+        client_id: OIDC_CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        response_type: 'code',
+        scope: 'openid profile email tenant',
+        state: flow.state,
+        nonce: flow.nonce,
+        code_challenge: flow.challenge,
+        code_challenge_method: 'S256',
+        ui_locales: locale
+    }).toString()
+    return url.toString()
+}
+
+type Jwk = JsonWebKey & { kid?: string; alg?: string }
+let keyCache: { at: number; keys: Jwk[] } | null = null
+
+async function signingKey(kid: string) {
+    for (const fresh of [false, true]) {
+        if (fresh || !keyCache || Date.now() - keyCache.at > 5 * 60_000) {
+            const response = await fetch((await discovery()).jwks_uri, { cache: 'no-store' })
+            if (!response.ok) throw new Error('JWKS failed: ' + response.status)
+            keyCache = { at: Date.now(), keys: ((await response.json()) as { keys: Jwk[] }).keys }
+        }
+        const key = keyCache.keys.find(candidate => candidate.kid === kid)
+        if (key) return key
+    }
+    throw new Error('Unknown signing key')
+}
+
+/** Checks the ID token: RS256 signature with the JWKS, issuer, audience, expiry, nonce and at_hash. */
+export async function verifyIdToken(
+    idToken: string,
+    nonce: string,
+    accessToken: string
+): Promise<{ sub: string; tenant: Tenant }> {
+    const [header, payload, signature] = idToken.split('.')
+    if (!header || !payload || !signature) throw new Error('Malformed ID token')
+    const head = JSON.parse(Buffer.from(header, 'base64url').toString('utf8')) as { alg?: string; kid?: string }
+    if (head.alg !== 'RS256' || !head.kid) throw new Error('Unexpected ID token algorithm')
+    const jwk = await signingKey(head.kid)
+    if (jwk.alg !== 'RS256') throw new Error('The key does not fit the ID token')
+    const valid = verify(
+        'sha256',
+        Buffer.from(header + '.' + payload),
+        createPublicKey({ key: jwk, format: 'jwk' }),
+        Buffer.from(signature, 'base64url')
+    )
+    if (!valid) throw new Error('Invalid ID token signature')
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Record<string, unknown>
+    const now = Math.floor(Date.now() / 1000)
+    if (claims.iss !== OIDC_ISSUER) throw new Error('Wrong issuer')
+    if (claims.aud !== OIDC_CLIENT_ID) throw new Error('Wrong audience')
+    if (typeof claims.exp !== 'number' || claims.exp < now - 30) throw new Error('ID token expired')
+    if (claims.nonce !== nonce) throw new Error('Wrong nonce')
+    const atHash = b64url(createHash('sha256').update(accessToken).digest().subarray(0, 16))
+    if (claims.at_hash !== atHash) throw new Error('The access token does not belong to the ID token')
+    if (typeof claims.sub !== 'string') throw new Error('Missing subject')
+    return { sub: claims.sub, tenant: claims.tenant as Tenant }
+}
+
+/** Exchanges the code for tokens (public client: client_id + code_verifier, no secret). */
+export async function exchangeCode(code: string, verifier: string) {
+    const response = await fetch((await discovery()).token_endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: REDIRECT_URI,
+            client_id: OIDC_CLIENT_ID,
+            code_verifier: verifier
+        }),
+        cache: 'no-store'
+    })
+    const body = (await response.json()) as Record<string, unknown>
+    if (!response.ok) throw new Error(`Token request failed: ${String(body.error)}`)
+    return body as { access_token: string; id_token: string; expires_in: number }
+}
+
+/** Claims of the user from the userinfo endpoint (also proves the access token works). */
+export async function userinfo(accessToken: string): Promise<Record<string, unknown> | null> {
+    const response = await fetch((await discovery()).userinfo_endpoint, {
+        headers: { Authorization: 'Bearer ' + accessToken, Accept: 'application/json' },
+        cache: 'no-store'
+    })
+    return response.ok ? ((await response.json()) as Record<string, unknown>) : null
+}

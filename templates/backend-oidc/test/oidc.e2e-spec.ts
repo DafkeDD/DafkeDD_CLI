@@ -15,11 +15,13 @@ import { configureApp } from '../src/setup.js'
 
 process.env.OIDC_MASTER_KEY ??= randomBytes(32).toString('hex')
 process.env.OIDC_LOGIN_RATE_LIMIT = '1000'
+// The HTML login page of the API, whatever .env says (the frontend login page is tested separately below)
+process.env.OIDC_LOGIN_UI_URL = ''
 
 const ISSUER = 'http://localhost:__PORT__/oidc'
 const AUDIENCE = 'http://localhost:__PORT__'
-const CLIENT = 'demo'
-const REDIRECT = 'http://localhost:4400/callback'
+const CLIENT = 'frontend'
+const REDIRECT = 'http://localhost:3000/api/auth/callback'
 const PASSWORD = 'correct-horse-battery'
 
 /** Texts of the login pages in every language (from src/i18n/<language>/oidc.json). */
@@ -199,7 +201,7 @@ describe('OpenID Connect (e2e)', () => {
 
         it('shows an error page (no redirect) for a redirect_uri that is not registered exactly', async () => {
             await authorize({
-                redirect_uri: 'http://localhost:4400/callback/',
+                redirect_uri: REDIRECT + '/',
                 code_challenge: pkce().challenge
             }).expect(400)
             await authorize({
@@ -231,7 +233,7 @@ describe('OpenID Connect (e2e)', () => {
         it('refuses parameters that are sent twice', async () => {
             const response = await http()
                 .get(
-                    '/oidc/authorize?client_id=demo&redirect_uri=' +
+                    '/oidc/authorize?client_id=frontend&redirect_uri=' +
                         encodeURIComponent(REDIRECT) +
                         '&scope=openid&scope=email&response_type=code&code_challenge_method=S256&code_challenge=' +
                         pkce().challenge
@@ -344,7 +346,7 @@ describe('OpenID Connect (e2e)', () => {
         it('refuses a wrong code_verifier, a wrong redirect_uri and an unknown code', async () => {
             for (const [extra, verifierOk] of [
                 [{}, false],
-                [{ redirect_uri: 'http://localhost:4400/other' }, true]
+                [{ redirect_uri: 'http://localhost:3000/other' }, true]
             ] as const) {
                 const { response, verifier } = await login('alice@example.com')
                 const code = new URL(response.headers.location as string).searchParams.get('code') ?? ''
@@ -530,6 +532,99 @@ describe('OpenID Connect (e2e)', () => {
                 .get('/oidc/userinfo')
                 .set('Authorization', 'Bearer ' + tokens.body.id_token)
                 .expect(401)
+        })
+    })
+
+    describe('login page of the frontend (JSON)', () => {
+        const LOGIN_UI = 'http://localhost:3000/login'
+        beforeAll(() => {
+            process.env.OIDC_LOGIN_UI_URL = LOGIN_UI
+        })
+        afterAll(() => {
+            process.env.OIDC_LOGIN_UI_URL = ''
+        })
+
+        /** Starts a login and returns the interaction id the frontend gets in ?interaction=. */
+        async function startAtFrontend(extra: Record<string, string> = {}) {
+            const { verifier, challenge } = pkce()
+            const start = await authorize({ code_challenge: challenge, ...extra }).expect(303)
+            const location = new URL(start.headers.location as string)
+            expect(location.origin + location.pathname).toBe(LOGIN_UI)
+            return { id: location.searchParams.get('interaction') ?? '', verifier, location }
+        }
+
+        const json = (call: request.Test) =>
+            call.set('Accept', 'application/json').set('Origin', 'http://localhost:3000')
+
+        it('sends the browser to the login page of the frontend, with the language', async () => {
+            const { id, location } = await startAtFrontend({ ui_locales: 'fr' })
+            expect(id).toMatch(/^[A-Za-z0-9_-]{43}$/)
+            expect(location.searchParams.get('lang')).toBe('fr')
+        })
+
+        it('gives the frontend the details of the login, with CORS for the frontend origin', async () => {
+            const { id } = await startAtFrontend({ login_hint: 'alice@example.com' })
+            const response = await json(http().get('/oidc/interaction/' + id)).expect(200)
+            expect(response.body).toMatchObject({
+                step: 'login',
+                clientName: 'Frontend',
+                loginHint: 'alice@example.com'
+            })
+            expect(response.body.csrf).toMatch(/^[A-Za-z0-9_-]{43}$/)
+            expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000')
+            expect(response.headers['access-control-allow-credentials']).toBe('true')
+        })
+
+        it('answers a wrong password with a translated JSON error', async () => {
+            const { id } = await startAtFrontend()
+            const { csrf } = (await json(http().get('/oidc/interaction/' + id))).body as { csrf: string }
+            const response = await json(http().post('/oidc/interaction/' + id + '/login'))
+                .set('Accept-Language', 'nl')
+                .send({ csrf, email: 'alice@example.com', password: 'wrong-password' })
+                .expect(401)
+            expect(response.body).toEqual({
+                status: 'error',
+                error: 'INVALID_CREDENTIALS',
+                message: MESSAGES.nl?.INVALID_CREDENTIALS
+            })
+        })
+
+        it('logs in with JSON: session cookie plus where the browser goes next, then the code works', async () => {
+            const { id, verifier } = await startAtFrontend()
+            const { csrf } = (await json(http().get('/oidc/interaction/' + id))).body as { csrf: string }
+            const response = await json(http().post('/oidc/interaction/' + id + '/login'))
+                .send({ csrf, email: 'alice@example.com', password: PASSWORD })
+                .expect(200)
+            expect(response.body.status).toBe('redirect')
+            expect(sessionCookie(response)).toContain('HttpOnly')
+            const location = new URL(response.body.location as string)
+            expect(location.origin + location.pathname).toBe(REDIRECT)
+            await exchange(location.searchParams.get('code') ?? '', verifier).expect(200)
+        })
+
+        it('lets the frontend show the organisation choice', async () => {
+            const { id, verifier } = await startAtFrontend()
+            const { csrf } = (await json(http().get('/oidc/interaction/' + id))).body as { csrf: string }
+            const choice = await json(http().post('/oidc/interaction/' + id + '/login'))
+                .send({ csrf, email: 'bob@example.com', password: PASSWORD })
+                .expect(200)
+            expect(choice.body.status).toBe('choose-tenant')
+            expect((choice.body.tenants as { name: string }[]).map(tenant => tenant.name)).toEqual(['Acme', 'Globex'])
+            const done = await json(http().post('/oidc/interaction/' + id + '/tenant'))
+                .send({ csrf: choice.body.csrf, tenant: ids.globex })
+                .expect(200)
+            const code = new URL(done.body.location as string).searchParams.get('code') ?? ''
+            const tokens = await exchange(code, verifier).expect(200)
+            expect(decodeUnverified(tokens.body.access_token)?.tenant).toMatchObject({ id: ids.globex })
+        })
+
+        it('answers 410 for an unknown or expired login, and refuses a wrong CSRF token', async () => {
+            await json(http().get('/oidc/interaction/does-not-exist')).expect(410)
+            const { id } = await startAtFrontend()
+            const response = await json(http().post('/oidc/interaction/' + id + '/login'))
+                .send({ csrf: 'forged', email: 'alice@example.com', password: PASSWORD })
+                .expect(410)
+            expect(response.body.status).toBe('expired')
         })
     })
 

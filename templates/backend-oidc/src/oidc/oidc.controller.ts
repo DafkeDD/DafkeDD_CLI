@@ -18,6 +18,10 @@ import { loginPage, messagePage, sendPage, tenantPage, type Translate } from './
 
 type Params = Record<string, unknown>
 
+/** The login page of the frontend asks for JSON; the server's own HTML page posts forms. */
+const wantsJson = (request: Request): boolean =>
+    request.method === 'GET' ? request.accepts(['html', 'json']) === 'json' : Boolean(request.is('application/json'))
+
 const translator =
     (i18n: I18nContext): Translate =>
     (key, args) =>
@@ -62,10 +66,16 @@ export class OidcController {
     }
 
     @Get('interaction/:id')
-    @ApiOperation({ summary: 'The login page (HTML) of a running authorization request' })
-    @ApiProduces('text/html')
-    @ApiOkResponse({ description: 'The login form' })
-    @ApiBadRequestResponse({ description: 'The login request expired: an HTML page' })
+    @ApiOperation({
+        summary:
+            'A running login: the HTML login page, or with Accept: application/json the details for the login page of the frontend'
+    })
+    @ApiProduces('text/html', 'application/json')
+    @ApiOkResponse({ description: 'The login form, or { step, clientName, csrf, loginHint }' })
+    @ApiResponse({
+        status: 410,
+        description: 'The login request expired (HTML page or { status: "expired", message })'
+    })
     async interaction(
         @Param('id') id: string,
         @Req() request: Request,
@@ -74,6 +84,15 @@ export class OidcController {
     ) {
         const t = translator(i18n)
         const found = await this.oidc.findInteraction(id)
+        if (wantsJson(request)) {
+            if (!found) return this.json(response, 410, { status: 'expired', message: t('oidc.EXPIRED') })
+            return this.json(response, 200, {
+                step: 'login',
+                clientName: found.client.name,
+                csrf: found.interaction.csrf,
+                loginHint: found.interaction.params.loginHint ?? ''
+            })
+        }
         if (!found) return this.expired(response, i18n)
         const page = loginPage(t, {
             action: this.action(id, 'login', request),
@@ -89,8 +108,10 @@ export class OidcController {
     }
 
     @Post('interaction/:id/login')
-    @ApiOperation({ summary: 'Submit the login form (email and password, form-encoded). Rate limited.' })
-    @ApiProduces('text/html')
+    @ApiOperation({
+        summary: 'Submit email and password (form-encoded from the HTML page, or JSON from the frontend). Rate limited.'
+    })
+    @ApiProduces('text/html', 'application/json')
     @ApiResponse({ status: 303, description: 'Logged in: back to the client with a code' })
     @ApiOkResponse({ description: 'The login form again with a translated error, or the organisation choice' })
     async login(
@@ -107,8 +128,10 @@ export class OidcController {
     }
 
     @Post('interaction/:id/tenant')
-    @ApiOperation({ summary: 'Submit the organisation choice (form-encoded) when the user belongs to several tenants' })
-    @ApiProduces('text/html')
+    @ApiOperation({
+        summary: 'Submit the organisation choice (form-encoded or JSON) when the user belongs to several tenants'
+    })
+    @ApiProduces('text/html', 'application/json')
     @ApiResponse({ status: 303, description: 'Back to the client with a code' })
     async tenant(
         @Param('id') id: string,
@@ -192,6 +215,7 @@ export class OidcController {
 
     private loginAnswer(id: string, result: LoginResult, request: Request, response: Response, i18n: I18nContext) {
         const t = translator(i18n)
+        if (wantsJson(request)) return this.loginJson(result, response, t)
         switch (result.kind) {
             case 'expired':
                 return this.expired(response, i18n)
@@ -225,16 +249,54 @@ export class OidcController {
                     })
                 })
             case 'done':
-                response.cookie(OIDC.SESSION_COOKIE, result.sessionId, {
-                    httpOnly: true,
-                    sameSite: 'lax',
-                    secure: this.config.secureCookies,
-                    path: OIDC.COOKIE_PATH,
-                    maxAge: OIDC.SESSION_SECONDS * 1000
-                })
+                this.setSessionCookie(response, result.sessionId)
                 response.set('Cache-Control', 'no-store').redirect(HttpStatus.SEE_OTHER, result.location)
                 return
         }
+    }
+
+    /**
+     * The same answers as JSON, for the login page of the frontend. The browser stores the session cookie of this
+     * server from the response (fetch with credentials: 'include'), then goes to `location`.
+     */
+    private loginJson(result: LoginResult, response: Response, t: Translate) {
+        switch (result.kind) {
+            case 'expired':
+                return this.json(response, 410, { status: 'expired', message: t('oidc.EXPIRED') })
+            case 'no-tenant':
+                return this.json(response, 403, { status: 'no-tenant', message: t('oidc.NO_TENANT') })
+            case 'form': {
+                const tooMany = result.errorKey === 'oidc.TOO_MANY_ATTEMPTS'
+                return this.json(response, tooMany ? 429 : 401, {
+                    status: 'error',
+                    error: tooMany ? 'TOO_MANY_ATTEMPTS' : 'INVALID_CREDENTIALS',
+                    message: t(result.errorKey)
+                })
+            }
+            case 'choose-tenant':
+                return this.json(response, 200, {
+                    status: 'choose-tenant',
+                    csrf: result.interaction.csrf,
+                    tenants: result.memberships.map(membership => ({ id: membership.tenantId, name: membership.name }))
+                })
+            case 'done':
+                this.setSessionCookie(response, result.sessionId)
+                return this.json(response, 200, { status: 'redirect', location: result.location })
+        }
+    }
+
+    private setSessionCookie(response: Response, sessionId: string) {
+        response.cookie(OIDC.SESSION_COOKIE, sessionId, {
+            httpOnly: true,
+            sameSite: 'lax',
+            secure: this.config.secureCookies,
+            path: OIDC.COOKIE_PATH,
+            maxAge: OIDC.SESSION_SECONDS * 1000
+        })
+    }
+
+    private json(response: Response, status: number, body: Record<string, unknown>) {
+        response.status(status).set('Cache-Control', 'no-store').json(body)
     }
 
     private expired(response: Response, i18n: I18nContext) {

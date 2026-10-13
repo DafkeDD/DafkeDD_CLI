@@ -35,6 +35,15 @@ export class OidcConfig {
         return this.config.get<string>('OIDC_AUDIENCE') ?? 'http://localhost:__PORT__'
     }
 
+    /**
+     * The login page of the frontend (for example http://localhost:3000/login). When set, /oidc/authorize sends the
+     * browser there with ?interaction=<id>, and that page talks to the JSON variant of the interaction endpoints.
+     * When not set, the server shows its own HTML login page.
+     */
+    get loginUiUrl(): string | null {
+        return this.config.get<string>('OIDC_LOGIN_UI_URL') || null
+    }
+
     get secureCookies(): boolean {
         return this.config.get<string>('NODE_ENV') === 'production'
     }
