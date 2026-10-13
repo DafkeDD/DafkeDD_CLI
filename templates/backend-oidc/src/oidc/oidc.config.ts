@@ -36,6 +36,12 @@ export const OIDC = {
     ACR_PASSWORD: 'loa1',
     /** Password and a second factor (authenticator app or recovery code). */
     ACR_MFA: 'loa2',
+    /** The Belgian eID with its PIN: something you have (the card) and something you know (the PIN). */
+    ACR_EID: 'loa4',
+    /** How the eID login proves who the user is (RFC 8176): smart card, PIN, and so multi-factor. */
+    EID_AMR: ['sc', 'pin', 'mfa'],
+    /** An eID challenge (nonce) is valid for 5 minutes. */
+    EID_CHALLENGE_SECONDS: 5 * 60,
     /** Lifetimes of the links in emails. */
     VERIFY_EMAIL_SECONDS: 24 * 60 * 60,
     RESET_PASSWORD_SECONDS: 60 * 60,
@@ -88,9 +94,39 @@ export class OidcConfig {
         return (this.config.get<string>('OIDC_MFA') ?? 'required') !== 'optional'
     }
 
-    /** OIDC_REGISTRATION=closed: nobody can create an account; people only join through an invitation. */
+    /**
+     * OIDC_REGISTRATION: `open` (the default): with a password or with the eID; `eid`: only with the eID; `closed`:
+     * nobody can create an account, people only join through an invitation.
+     */
+    get registration(): 'open' | 'eid' | 'closed' {
+        const value = this.config.get<string>('OIDC_REGISTRATION') ?? 'open'
+        return value === 'eid' || value === 'closed' ? value : 'open'
+    }
+
+    /** Can someone create an account themselves (in any way)? */
     get registrationOpen(): boolean {
-        return (this.config.get<string>('OIDC_REGISTRATION') ?? 'open') !== 'closed'
+        return this.registration !== 'closed'
+    }
+
+    /**
+     * Login with the Belgian eID (OIDC_EID): `off` (the default), `on` (real cards: the Belgian root CAs and an OCSP
+     * check), or `test` (also the test cards of the DafkeDD eID bridge with --mock, without OCSP; never in production).
+     */
+    get eid(): 'off' | 'on' | 'test' {
+        const value = this.config.get<string>('OIDC_EID') ?? 'off'
+        return value === 'on' || value === 'test' ? value : 'off'
+    }
+
+    /**
+     * The website that asks for the eID PIN: the bridge signs its origin, and the server only accepts that one. By
+     * default the origin of APP_URL (the login page of the frontend); OIDC_EID_ORIGIN overrides it.
+     */
+    get eidOrigin(): string {
+        return new URL(this.config.get<string>('OIDC_EID_ORIGIN') || this.appUrl).origin
+    }
+
+    get production(): boolean {
+        return this.config.get<string>('NODE_ENV') === 'production'
     }
 
     get secureCookies(): boolean {

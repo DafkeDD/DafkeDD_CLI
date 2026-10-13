@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { confirm, input, password, select } from '@inquirer/prompts'
+import { EID_MOCK_PIN } from '../eid.js'
 import { run } from '../runner.js'
 import { PRETTIERRC } from '../frontends/nextjs.js'
 import { databases } from '../databases/index.js'
@@ -863,6 +864,11 @@ export const nestjs = {
                           ? ['Log in: http://localhost:3000/login  |  register: http://localhost:3000/register']
                           : []),
                       `npm run mail:dev    (Mailpit in Docker: every mail at ${oidc.MAILPIT_URL}; SMTP settings in .env)`,
+                      ...(answers.oidc.loginUi
+                          ? [
+                                `eID: npm run eid:mock in ./frontend (virtual card reader, PIN ${EID_MOCK_PIN}), or a real card with the DafkeDD eID program`
+                            ]
+                          : []),
                       'npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme --role admin   (add a user)'
                   ]
                 : [])
@@ -886,6 +892,10 @@ export const nestjs = {
             auth.push({
                 ok: true,
                 text: `OIDC-server ingesteld: superadmin ${answers.oidc.adminEmail}, tijdelijk wachtwoord ${answers.oidc.adminPassword} (enkel nu getoond). Bij de eerste login stel je tweestapsverificatie in (QR-code); organisaties maak je aan op http://localhost:3000/admin`
+            })
+            auth.push({
+                ok: true,
+                text: `Inloggen en registreren met de Belgische eID staat aan (OIDC_EID=test: ook de testkaart van npm run eid:mock, pincode ${EID_MOCK_PIN}; zet OIDC_EID=on in productie)`
             })
         }
         if (db.mode === 'docker') return [{ ok: true, text: `PostgreSQL (Docker) ingesteld: ${where}` }, ...auth]

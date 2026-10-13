@@ -288,6 +288,60 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         expect(await store.createUser({ ...account, email: 'New@Example.com' })).toBeNull()
     })
 
+    it('links one eID per account and one account per eID, also registering at the same time', async () => {
+        const store = new PgOidcStore(database)
+        const account = (email: string) => ({
+            email,
+            name: 'Jan',
+            passwordHash: null,
+            emailVerified: false,
+            locale: 'nl'
+        })
+        const eid = { type: 'eid' as const, valueHash: 'hash-' + randomUUID() }
+        // Two registrations with the same eID at the same time: one account, one tenant
+        const tenantsBefore = (await store.listTenants()).length
+        const results = await Promise.all([
+            store.registerWithIdentifier(account('jan1@example.com'), { name: 'Jan BV', slug: 'jan-bv' }, eid),
+            store.registerWithIdentifier(account('jan2@example.com'), { name: 'Jan BV', slug: 'jan-bv' }, eid)
+        ])
+        const created = results.filter(result => result !== null && typeof result === 'object')
+        expect(created).toHaveLength(1)
+        expect(results).toContain('identifier-taken')
+        expect((await store.listTenants()).length).toBe(tenantsBefore + 1)
+        const jan = (await store.findUserByIdentifier('eid', eid.valueHash))!
+        expect(jan).toMatchObject({ name: 'Jan', passwordHash: null })
+        expect(
+            await store.findMemberRole(created[0] && typeof created[0] === 'object' ? created[0].tenant.id : '', jan.id)
+        ).toBe('admin')
+        // A taken email address: nothing is created, the eID stays free
+        const other = { type: 'eid' as const, valueHash: 'hash-' + randomUUID() }
+        expect(
+            await store.registerWithIdentifier(account('JAN1@example.com'), { name: 'X', slug: 'x-y' }, other)
+        ).toBeNull()
+        expect(await store.findUserByIdentifier('eid', other.valueHash)).toBeNull()
+
+        expect(await store.linkIdentifier(user.ada, 'eid', eid.valueHash)).toBe('taken')
+        expect(await store.linkIdentifier(jan.id, 'eid', eid.valueHash)).toBe('ok')
+        expect(await store.linkIdentifier(jan.id, 'eid', other.valueHash)).toBe('exists')
+        // Two links for one account at the same time: only one wins
+        const kim = (await store.createUser({ ...account('kim@example.com'), passwordHash: 'x' }))!
+        const links = await Promise.all([
+            store.linkIdentifier(kim.id, 'eid', 'hash-' + randomUUID()),
+            store.linkIdentifier(kim.id, 'eid', 'hash-' + randomUUID())
+        ])
+        expect([...links].sort()).toEqual(['exists', 'ok'])
+
+        await store.touchIdentifier('eid', eid.valueHash)
+        expect((await store.findIdentifier(jan.id, 'eid'))?.lastUsedAt).toBeInstanceOf(Date)
+        expect(await store.unlinkIdentifier(jan.id, 'eid')).toBe(true)
+        expect(await store.unlinkIdentifier(jan.id, 'eid')).toBe(false)
+        expect(await store.findUserByIdentifier('eid', eid.valueHash)).toBeNull()
+        // Never readable for the tenant role
+        await expect(database.withTenant(tenant.a, db => db.query('SELECT * FROM user_identifiers'))).rejects.toThrow(
+            /permission denied/
+        )
+    })
+
     it('keeps at least one admin per tenant and one superadmin, also with changes at the same time', async () => {
         const store = new PgOidcStore(database)
         const created = await store.register(

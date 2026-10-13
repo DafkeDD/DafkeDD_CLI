@@ -21,6 +21,8 @@ export interface Interaction {
     enrolling: boolean
     /** How the user proved who they are so far (RFC 8176): ["pwd"], or ["pwd", "otp", "mfa"] after the second factor. */
     amr: string[]
+    /** The nonce that was given to the eID bridge for this login (used once), or null. */
+    eidNonce: string | null
     /** Milliseconds since 1970. */
     expiresAt: number
 }
@@ -45,6 +47,7 @@ export function sealInteraction(interaction: Interaction, key: Buffer): string {
         m: interaction.mfaPending,
         n: interaction.enrolling,
         a: interaction.amr,
+        x: interaction.eidNonce,
         e: interaction.expiresAt
     }
     return encrypt(JSON.stringify(data), key, context(interaction.id))
@@ -66,6 +69,7 @@ export function openInteraction(
             m?: boolean
             n?: boolean
             a?: string[]
+            x?: string | null
             e: number
         }
         if (typeof data.e !== 'number' || data.e <= now || typeof data.c !== 'string') return null
@@ -77,6 +81,7 @@ export function openInteraction(
             mfaPending: data.m === true,
             enrolling: data.n === true,
             amr: Array.isArray(data.a) ? data.a : [],
+            eidNonce: typeof data.x === 'string' ? data.x : null,
             expiresAt: data.e
         }
     } catch {

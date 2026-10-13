@@ -14,6 +14,9 @@ export const BUTTON =
     'inline-flex h-11 items-center justify-center rounded-xl bg-[var(--accent,#171717)] px-5 text-sm font-semibold text-[var(--accent-fg,#ffffff)] disabled:opacity-60 dark:bg-[var(--accent,#ededed)] dark:text-[var(--accent-fg,#0a0a0a)]'
 export const SECONDARY =
     'inline-flex h-9 items-center justify-center rounded-lg border border-black/15 px-3 text-xs font-semibold hover:border-[var(--accent,#6366f1)] disabled:opacity-60 dark:border-white/20'
+/** A second choice next to BUTTON, as big (for example "Log in with eID"). */
+export const OUTLINE =
+    'inline-flex h-11 items-center justify-center rounded-xl border border-black/15 px-5 text-sm font-semibold hover:border-[var(--accent,#6366f1)] disabled:opacity-60 dark:border-white/20'
 export const LINK = 'font-semibold underline underline-offset-2'
 
 export function Page({ children, wide = false }: { children: ReactNode; wide?: boolean }) {

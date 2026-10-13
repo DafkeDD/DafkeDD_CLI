@@ -25,6 +25,7 @@ const interaction = (overrides: Partial<Interaction> = {}): Interaction => ({
     mfaPending: false,
     enrolling: false,
     amr: [],
+    eidNonce: null,
     expiresAt: Date.now() + 60_000,
     ...overrides
 })
@@ -33,6 +34,11 @@ describe('login cookie (interaction)', () => {
     it('opens what it sealed', () => {
         const original = interaction({ userId: 'user-1', mfaPending: true, amr: ['pwd'] })
         expect(openInteraction(original.id, sealInteraction(original, key), key)).toEqual(original)
+    })
+
+    it('keeps the nonce of an eID login', () => {
+        const original = interaction({ eidNonce: randomToken() })
+        expect(openInteraction(original.id, sealInteraction(original, key), key)?.eidNonce).toBe(original.eidNonce)
     })
 
     it('refuses another id, a changed cookie, another key and a missing cookie', () => {

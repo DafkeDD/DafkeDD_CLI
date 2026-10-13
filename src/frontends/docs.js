@@ -22,7 +22,7 @@ ${fence}bash
 npm run dev      # development server
 npm run build    # production build
 npm run lint     # ESLint
-npm run format   # Prettier (format:check only checks)
+npm run format   # Prettier (format:check only checks)${api?.oidc ? '\nnpm run eid:mock # virtual eID card reader for the eID login (PIN 1234)' : ''}
 ${fence}
 
 ## Structure
@@ -121,15 +121,15 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | \`/api/auth/callback\` | Back from the login server: checks state and \`iss\`, exchanges the code, verifies the ID token |
 | \`/profile\` | Protected: name, email, organisation, role, and whether the API accepts the access token |
 | \`/api/auth/logout\` | POST: logs out of this frontend (the session of the login server stays) |
-| \`/register\` | Create an account and a new organisation (you become its admin); a confirmation email follows |
+| \`/register\` | Create an account and a new organisation (you become its admin), with a password or with the Belgian eID; a confirmation email follows |
 | \`/verify-email?token=\` | The link in the confirmation email: confirms the address, then you can log in |
 | \`/forgot-password\` | Ask for a link to choose a new password |
 | \`/reset-password?token=\` | The link in that email: a new password (the link works once; you are logged out everywhere) |
 | \`/invite?token=\` | The link in an invitation: join the organisation, or create your account for it |
-| \`/security\` | Two-step verification of the own account: status, recovery codes left, new recovery codes |
+| \`/security\` | Two-step verification of the own account (status, recovery codes left, new recovery codes) and the eID (link, unlink) |
 | \`/members\` | Admins: the members of the organisation with who is online, invite by email, open invitations (send again, withdraw), change roles (user, admin), disable or enable, remove |
 | \`/admin\` | Superadmins: every organisation (create, suspend), and who is superadmin |
-| \`/api/backend/...\` | Route handler: calls \`/tenants/current/...\`, \`/admin/...\` and \`/me/mfa\` of the API with the access token of the session (the token stays on the server; changes only from pages of this app) |
+| \`/api/backend/...\` | Route handler: calls \`/tenants/current/...\`, \`/admin/...\`, \`/me/mfa\` and \`/me/eid\` of the API with the access token of the session (the token stays on the server; changes only from pages of this app) |
 
 **Flow**: "Log in" → \`/api/auth/login\` → the API (\`/oidc/authorize\`) → \`/login?interaction=...\` (this frontend talks to
 \`/oidc/interaction/...\` of the API with \`fetch\` and \`credentials: 'include'\`, so the browser sends the encrypted
@@ -152,6 +152,16 @@ again on every call, from the database.
 
 **Two-step verification** is required: after the password the login page asks the code of the authenticator app; the
 first time it shows the QR code (\`src/components/mfa-ui.tsx\`) and then the recovery codes, before the login goes on.
+
+**Belgian eID** (\`src/components/eid.tsx\`, with \`@dafkedd/eid/react\` of https://github.com/DafkeDD/DafkeDD_EID): "Log
+in with eID" on the login page, the tab "With eID" on \`/register\` and "Link eID" on \`/security\`. Only after that
+click the page contacts the DafkeDD eID program on the PC (http://127.0.0.1:47820), and it tells the user what is
+missing: the program (with a download link), a card reader, or the card. The user types the PIN on the page; the card
+signs a nonce of the API, and only that signature goes to the API (the card is not read, the PIN never leaves the PC).
+During development \`npm run eid:mock\` starts the program with a virtual reader and test card (PIN \`1234\`), allowed
+to log in on http://localhost:3000. In production users install the program once
+(https://github.com/DafkeDD/DafkeDD_EID/releases/latest), allowed for your origin
+(\`dafke-eid install --auth-origin https://app.example.com\`).
 
 **Accounts** (\`src/components/account-forms.tsx\`): the pages call \`/oidc/account/...\` of the API directly (no session
 needed) with the language of the page, so errors and emails are translated. The emails link to \`APP_URL\` of the

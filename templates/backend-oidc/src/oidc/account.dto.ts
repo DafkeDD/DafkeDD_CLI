@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator'
+import { IsEmail, IsIn, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator'
 import { i18nValidationMessage } from 'nestjs-i18n'
 import { OIDC } from './oidc.config.js'
 import { TENANT_ROLES, type TenantRole } from './store/oidc.store.js'
@@ -9,6 +9,7 @@ const minLength = { message: i18nValidationMessage('validation.MIN_LENGTH') }
 const maxLength = { message: i18nValidationMessage('validation.MAX_LENGTH') }
 const isEmail = { message: i18nValidationMessage('validation.IS_EMAIL') }
 const isIn = { message: i18nValidationMessage('validation.IS_IN') }
+const isObject = { message: i18nValidationMessage('validation.IS_OBJECT') }
 
 export class RegisterDto {
     @ApiProperty({ example: 'Ada Lovelace' })
@@ -89,4 +90,33 @@ export class MemberStatusDto {
     @ApiProperty({ enum: ['active', 'disabled'], example: 'disabled' })
     @IsIn(['active', 'disabled'], isIn)
     status!: 'active' | 'disabled'
+}
+
+/** The answer of the eID bridge after the PIN, with the challenge the server gave out for it. */
+export class EidTokenDto {
+    @ApiProperty({ description: 'The challenge of POST /oidc/account/eid/challenge or POST /me/eid/challenge' })
+    @IsString(isString)
+    @MaxLength(1000, maxLength)
+    challenge!: string
+
+    @ApiProperty({
+        description:
+            'The token of the eID bridge (useEidLogin().login() in @dafkedd/eid/react): the card signed the nonce',
+        type: Object
+    })
+    @IsObject(isObject)
+    token!: Record<string, unknown>
+}
+
+export class RegisterEidDto extends EidTokenDto {
+    @ApiProperty({ example: 'jan@example.com' })
+    @IsEmail({}, isEmail)
+    @MaxLength(254, maxLength)
+    email!: string
+
+    @ApiProperty({ example: 'Acme', description: 'Name of the new organisation; the new account becomes its admin' })
+    @IsString(isString)
+    @MinLength(2, minLength)
+    @MaxLength(100, maxLength)
+    organisation!: string
 }

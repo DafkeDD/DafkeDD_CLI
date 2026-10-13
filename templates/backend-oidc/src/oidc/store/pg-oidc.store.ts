@@ -8,7 +8,9 @@ import type {
     AuthorizationCode,
     BootstrapAdmin,
     ChangeResult,
+    IdentifierType,
     Invitation,
+    LinkResult,
     MemberStatus,
     Membership,
     MfaState,
@@ -20,7 +22,8 @@ import type {
     StoredUser,
     Tenant,
     TenantMember,
-    TenantRole
+    TenantRole,
+    UserIdentifier
 } from './oidc.store.js'
 
 const USERS = '"' + USERS_TABLE + '"'
@@ -54,6 +57,12 @@ const insertUser = async (db: Queryable, account: NewAccount) =>
             [account.email, account.emailVerified, account.name, account.locale, account.passwordHash]
         )
     ).rows[0] ?? null
+const IDENTIFIER_COLUMNS =
+    'type, value_hash AS "valueHash", user_id AS "userId", created_at AS "createdAt", last_used_at AS "lastUsedAt"'
+
+/** Rolls back registerWithIdentifier when the identifier belongs to an account already. */
+class IdentifierTaken extends Error {}
+
 const CLIENT_COLUMNS =
     'client_id AS "clientId", name, type, secret_hash AS "secretHash", redirect_uris AS "redirectUris", ' +
     'post_logout_redirect_uris AS "postLogoutRedirectUris", grant_types AS "grantTypes", scopes, first_party AS "firstParty"'
@@ -256,6 +265,89 @@ export class PgOidcStore implements OidcStore {
             ])
             return { user, tenant: created }
         })
+    }
+
+    async registerWithIdentifier(
+        account: NewAccount,
+        tenant: { name: string; slug: string },
+        identifier: { type: IdentifierType; valueHash: string }
+    ) {
+        await this.database.ready()
+        try {
+            return await this.database.transaction(async db => {
+                const user = await insertUser(db, account)
+                if (!user) return null
+                const linked = await db.query(
+                    `INSERT INTO user_identifiers (type, value_hash, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING 1`,
+                    [identifier.type, identifier.valueHash, user.id]
+                )
+                if (linked.rows.length === 0) throw new IdentifierTaken()
+                const created = await insertTenant(db, tenant.name, tenant.slug)
+                await db.query(`INSERT INTO tenant_members (tenant_id, user_id, role) VALUES ($1, $2, 'admin')`, [
+                    created.id,
+                    user.id
+                ])
+                return { user, tenant: created }
+            })
+        } catch (error) {
+            if (error instanceof IdentifierTaken) return 'identifier-taken' as const
+            throw error
+        }
+    }
+
+    // ---------------------------------------------------------------- identifiers (eID)
+
+    async findUserByIdentifier(type: IdentifierType, valueHash: string) {
+        const rows = await this.query<StoredUser>(
+            `SELECT ${USER_COLUMNS} FROM ${USERS}
+        WHERE id = (SELECT user_id FROM user_identifiers WHERE type = $1 AND value_hash = $2)`,
+            [type, valueHash]
+        )
+        return rows[0] ?? null
+    }
+
+    async findIdentifier(userId: string, type: IdentifierType) {
+        const rows = await this.query<UserIdentifier>(
+            `SELECT ${IDENTIFIER_COLUMNS} FROM user_identifiers WHERE user_id = $1 AND type = $2`,
+            [userId, type]
+        )
+        return rows[0] ?? null
+    }
+
+    async linkIdentifier(userId: string, type: IdentifierType, valueHash: string): Promise<LinkResult> {
+        await this.database.ready()
+        return this.database.transaction(async db => {
+            // Locks the account: two links at the same time cannot give it two eIDs
+            await db.query(`SELECT 1 FROM ${USERS} WHERE id = $1 FOR UPDATE`, [userId])
+            const { rows } = await db.query<{ userId: string; valueHash: string }>(
+                `SELECT user_id AS "userId", value_hash AS "valueHash" FROM user_identifiers
+          WHERE type = $1 AND (value_hash = $2 OR user_id = $3)`,
+                [type, valueHash, userId]
+            )
+            const owner = rows.find(row => row.valueHash === valueHash)
+            if (owner) return owner.userId === userId ? 'ok' : 'taken'
+            if (rows.length > 0) return 'exists'
+            const inserted = await db.query(
+                `INSERT INTO user_identifiers (type, value_hash, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING 1`,
+                [type, valueHash, userId]
+            )
+            return inserted.rows.length > 0 ? 'ok' : 'taken'
+        })
+    }
+
+    async unlinkIdentifier(userId: string, type: IdentifierType) {
+        const rows = await this.query(`DELETE FROM user_identifiers WHERE user_id = $1 AND type = $2 RETURNING 1`, [
+            userId,
+            type
+        ])
+        return rows.length > 0
+    }
+
+    async touchIdentifier(type: IdentifierType, valueHash: string) {
+        await this.query(`UPDATE user_identifiers SET last_used_at = now() WHERE type = $1 AND value_hash = $2`, [
+            type,
+            valueHash
+        ])
     }
 
     async createUser(account: NewAccount) {

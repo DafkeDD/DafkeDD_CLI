@@ -11,6 +11,7 @@ import {
     sealAccountToken
 } from './account-token.js'
 import { sha256 } from './crypto.js'
+import { EidService } from './eid.service.js'
 import { LoginLimiter } from './login-limiter.js'
 import { OIDC, OidcConfig, slugify } from './oidc.config.js'
 import { hashPassword } from './password.js'
@@ -26,7 +27,7 @@ const PAGES: Record<AccountTokenKind, string> = {
 const normalize = (email: string) => email.trim().toLowerCase()
 
 /** A fingerprint of the password hash: a reset link stops working as soon as the password changed. */
-const fingerprint = (user: StoredUser) => sha256(user.passwordHash).slice(0, 32)
+const fingerprint = (user: StoredUser) => sha256(user.passwordHash ?? 'no password').slice(0, 32)
 
 /**
  * Accounts: registration, email verification, forgotten passwords and invitations. Answers never reveal whether an
@@ -40,7 +41,8 @@ export class AccountService {
         private readonly config: OidcConfig,
         private readonly mail: MailService,
         private readonly limiter: LoginLimiter,
-        private readonly i18n: I18nService
+        private readonly i18n: I18nService,
+        private readonly eid: EidService
     ) {}
 
     private get key() {
@@ -75,7 +77,8 @@ export class AccountService {
         lang: string,
         ip: string
     ) {
-        if (!this.config.registrationOpen) throw new AppException('oidc.REGISTRATION_CLOSED', HttpStatus.FORBIDDEN)
+        if (this.config.registration !== 'open')
+            throw new AppException('oidc.REGISTRATION_CLOSED', HttpStatus.FORBIDDEN)
         const email = normalize(input.email)
         this.limit(ip, email)
         const created = await this.store.register(
@@ -88,19 +91,102 @@ export class AccountService {
             },
             { name: input.organisation.trim(), slug: slugify(input.organisation) }
         )
-        if (created) {
-            await this.sendVerification(created.user, lang)
-        } else {
-            // The address has an account already: tell its owner, not the person who filled in the form
-            const existing = await this.store.findUserByEmail(email)
-            if (existing)
-                await this.send('exists', email, existing.locale ?? lang, {
-                    name: existing.name,
-                    app: this.config.appName,
-                    link: this.config.appUrl + '/forgot-password'
-                })
-        }
+        if (created) await this.sendVerification(created.user, lang)
+        else await this.tellOwner(email, lang)
         return { status: 'check-email' as const }
+    }
+
+    /** The address has an account already: tell its owner, not the person who filled in the form. */
+    private async tellOwner(email: string, lang: string) {
+        const existing = await this.store.findUserByEmail(email)
+        if (existing)
+            await this.send('exists', email, existing.locale ?? lang, {
+                name: existing.name,
+                app: this.config.appName,
+                link: this.config.appUrl + '/forgot-password'
+            })
+    }
+
+    /** Which ways of registering are open (for the registration page). */
+    registrationOptions() {
+        return { password: this.config.registration === 'open', eid: this.config.registrationOpen && this.eid.enabled }
+    }
+
+    /** A challenge for registering with the eID (the nonce goes to the bridge). */
+    eidChallenge(ip: string) {
+        this.eid.assertEnabled()
+        if (!this.limiter.allow(['eid-challenge:' + ip]))
+            throw new AppException('oidc.TOO_MANY_ATTEMPTS', HttpStatus.TOO_MANY_REQUESTS)
+        return this.eid.challenge('register')
+    }
+
+    /**
+     * A new account with the eID: the name comes from the card, there is no password (the eID is the login; a password
+     * can be chosen later with "forgot password"). The email address must still be verified. An eID can belong to one
+     * account only (409 oidc.EID_ALREADY_LINKED); an email address that has an account gets the same answer as with
+     * a password (its owner gets an email).
+     */
+    async registerWithEid(
+        input: { challenge: string; token: unknown; email: string; organisation: string },
+        lang: string,
+        ip: string
+    ) {
+        if (!this.config.registrationOpen) throw new AppException('oidc.REGISTRATION_CLOSED', HttpStatus.FORBIDDEN)
+        this.eid.assertEnabled()
+        const email = normalize(input.email)
+        this.limit(ip, email)
+        const nonce = this.eid.openChallenge(input.challenge, 'register')
+        const person = await this.eid.verify(input.token, nonce)
+        const created = await this.store.registerWithIdentifier(
+            { email, name: person.name, passwordHash: null, emailVerified: false, locale: lang },
+            { name: input.organisation.trim(), slug: slugify(input.organisation) },
+            { type: 'eid', valueHash: person.valueHash }
+        )
+        if (created === 'identifier-taken') throw new AppException('oidc.EID_ALREADY_LINKED', HttpStatus.CONFLICT)
+        if (created) await this.sendVerification(created.user, lang)
+        else await this.tellOwner(email, lang)
+        return { status: 'check-email' as const, name: person.name }
+    }
+
+    // ---------------------------------------------------------------- eID of the logged in account
+
+    async eidStatus(userId: string) {
+        const [identifier, user] = await Promise.all([
+            this.store.findIdentifier(userId, 'eid'),
+            this.store.findUserById(userId)
+        ])
+        return {
+            enabled: this.eid.enabled,
+            linked: Boolean(identifier),
+            linkedAt: identifier?.createdAt ?? null,
+            lastUsedAt: identifier?.lastUsedAt ?? null,
+            // Without a password the eID is the only way to log in: it cannot be unlinked
+            hasPassword: Boolean(user?.passwordHash)
+        }
+    }
+
+    linkChallenge(userId: string) {
+        return this.eid.challenge('link', userId)
+    }
+
+    /** Links the eID of the challenge to this account, so it can log in with it. */
+    async linkEid(userId: string, input: { challenge: string; token: unknown }) {
+        this.eid.assertEnabled()
+        if (!this.limiter.allow(['eid-link:' + userId]))
+            throw new AppException('oidc.TOO_MANY_ATTEMPTS', HttpStatus.TOO_MANY_REQUESTS)
+        const nonce = this.eid.openChallenge(input.challenge, 'link', userId)
+        const person = await this.eid.verify(input.token, nonce)
+        const result = await this.store.linkIdentifier(userId, 'eid', person.valueHash)
+        if (result === 'taken') throw new AppException('oidc.EID_ALREADY_LINKED', HttpStatus.CONFLICT)
+        if (result === 'exists') throw new AppException('oidc.EID_OTHER_LINKED', HttpStatus.CONFLICT)
+        return this.eidStatus(userId)
+    }
+
+    async unlinkEid(userId: string) {
+        const user = await this.store.findUserById(userId)
+        if (!user?.passwordHash) throw new AppException('oidc.EID_ONLY_LOGIN', HttpStatus.CONFLICT)
+        await this.store.unlinkIdentifier(userId, 'eid')
+        return this.eidStatus(userId)
     }
 
     private async sendVerification(user: StoredUser, lang: string) {

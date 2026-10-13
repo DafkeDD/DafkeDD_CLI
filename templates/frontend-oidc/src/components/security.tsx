@@ -1,8 +1,9 @@
 'use client'
 
-import { type FormEvent, useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { BUTTON, CARD, Heading, INPUT, LoginButton, Notice } from '@/components/account-ui'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
+import { BUTTON, CARD, Heading, INPUT, LoginButton, Notice, SECONDARY } from '@/components/account-ui'
+import { EidBridge, EidPin, type EidToken } from '@/components/eid'
 import { MfaQr, RecoveryCodes } from '@/components/mfa-ui'
 import { type Answer, useBackend } from '@/lib/account'
 
@@ -22,6 +23,8 @@ export function Security() {
     const [error, setError] = useState('')
     const [expired, setExpired] = useState(false)
     const [busy, setBusy] = useState(false)
+    // Logs in with the eID only (no password): the card and its PIN are the two steps already
+    const [eidOnly, setEidOnly] = useState(false)
 
     function show(result: Answer) {
         if (result.status === 401) setExpired(true)
@@ -33,6 +36,11 @@ export function Security() {
         backend('me/mfa')
             .then(show)
             .catch(() => setError(t('offline')))
+        backend('me/eid')
+            .then(result =>
+                setEidOnly(result.status === 200 && result.body.linked === true && result.body.hasPassword === false)
+            )
+            .catch(() => undefined)
         // once when the page opens
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
@@ -99,6 +107,8 @@ export function Security() {
                 <div role='status' className='text-sm font-semibold text-green-700 dark:text-green-400'>
                     {t('mfaOn')} · {t('recoveryLeft', { count: status.recoveryCodesLeft })}
                 </div>
+            ) : eidOnly ? (
+                <Notice tone='success'>{t('mfaByEid')}</Notice>
             ) : (
                 <Notice tone='error'>{t('mfaOff')}</Notice>
             )}
@@ -123,7 +133,7 @@ export function Security() {
                 </form>
             )}
 
-            {status && !status.enabled && !setup && (
+            {status && !status.enabled && !eidOnly && !setup && (
                 <button type='button' disabled={busy} className={BUTTON} onClick={() => void startSetup()}>
                     {t('setupMfa')}
                 </button>
@@ -137,6 +147,92 @@ export function Security() {
                         {t('mfaSubmit')}
                     </button>
                 </form>
+            )}
+        </section>
+    )
+}
+
+type EidStatus = { enabled: boolean; linked: boolean; linkedAt: string | null; hasPassword: boolean }
+
+/**
+ * /security: the Belgian eID of the own account (GET/POST/DELETE /me/eid through /api/backend). Linked, the account
+ * can log in with the card and its PIN. Hidden when the login server has no eID login (OIDC_EID=off).
+ */
+export function EidSecurity() {
+    const t = useTranslations('Oidc')
+    const locale = useLocale()
+    const backend = useBackend()
+    const [status, setStatus] = useState<EidStatus | null>(null)
+    const [linking, setLinking] = useState(false)
+    const [error, setError] = useState('')
+    const [busy, setBusy] = useState(false)
+    const challenge = useRef('')
+
+    useEffect(() => {
+        backend('me/eid')
+            .then(result => {
+                if (result.status === 200) setStatus(result.body as unknown as EidStatus)
+            })
+            .catch(() => undefined)
+        // once when the page opens
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    async function nonce(): Promise<string | { error: string }> {
+        const result = await backend('me/eid/challenge', 'POST')
+        if (result.status !== 200) return { error: result.message || t('offline') }
+        challenge.current = String(result.body.challenge)
+        return String(result.body.nonce)
+    }
+
+    async function link(token: EidToken): Promise<string | null> {
+        const result = await backend('me/eid', 'POST', { challenge: challenge.current, token })
+        if (result.status !== 200) return result.message || t('eidFailed')
+        setStatus(result.body as unknown as EidStatus)
+        setLinking(false)
+        return null
+    }
+
+    async function unlink() {
+        setBusy(true)
+        setError('')
+        const result = await backend('me/eid', 'DELETE').catch(() => null)
+        if (result?.status === 200) setStatus(result.body as unknown as EidStatus)
+        else setError(result?.message || t('offline'))
+        setBusy(false)
+    }
+
+    if (!status?.enabled) return null
+    return (
+        <section className={CARD}>
+            <Heading title={t('eidSecurityTitle')} text={status.linked ? t('eidLinked') : t('eidNotLinked')} />
+            {status.linked && status.linkedAt && (
+                <div role='status' className='text-sm font-semibold text-green-700 dark:text-green-400'>
+                    {t('eidLinkedSince', { date: new Date(status.linkedAt).toLocaleDateString(locale) })}
+                </div>
+            )}
+            {error && <Notice tone='error'>{error}</Notice>}
+            {status.linked ? (
+                status.hasPassword ? (
+                    <button
+                        type='button'
+                        disabled={busy}
+                        className={SECONDARY + ' self-start'}
+                        onClick={() => void unlink()}
+                    >
+                        {t('eidUnlink')}
+                    </button>
+                ) : (
+                    <p className='text-sm opacity-80'>{t('eidOnlyLogin')}</p>
+                )
+            ) : linking ? (
+                <EidBridge>
+                    <EidPin submitLabel={t('eidLinkSubmit')} getNonce={nonce} onToken={link} />
+                </EidBridge>
+            ) : (
+                <button type='button' className={BUTTON} onClick={() => setLinking(true)}>
+                    {t('eidLink')}
+                </button>
             )}
         </section>
     )

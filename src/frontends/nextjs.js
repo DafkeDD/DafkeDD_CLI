@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { select } from '@inquirer/prompts'
+import { EID_MOCK_SCRIPT, EID_PACKAGE } from '../eid.js'
 import { run } from '../runner.js'
 import { AUTH_MESSAGES, authFiles } from './auth.js'
 import { frontendReadme } from './docs.js'
@@ -1032,6 +1033,16 @@ export const nextjs = {
                 weight: 2,
                 run: () => exec('npm', ['install', 'react-icons@latest'], { cwd: root })
             },
+            // Login with the Belgian eID: the React hooks of DafkeDD eID (from its release on GitHub)
+            ...(api?.oidc
+                ? [
+                      {
+                          title: 'DafkeDD eID installeren',
+                          weight: 1,
+                          run: () => exec('npm', ['install', EID_PACKAGE], { cwd: root })
+                      }
+                  ]
+                : []),
             {
                 title: 'Prettier installeren',
                 weight: 2,
@@ -1129,6 +1140,8 @@ export const nextjs = {
                     const pkgPath = path.join(root, 'package.json')
                     const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'))
                     pkg.scripts = { ...pkg.scripts, format: 'prettier --write .', 'format:check': 'prettier --check .' }
+                    // A virtual card reader with a test eID (PIN 1234) that may log in on this frontend
+                    if (api?.oidc) pkg.scripts['eid:mock'] = EID_MOCK_SCRIPT
                     await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
 
                     await exec('npx', ['--no-install', 'prettier', '--write', '.'], { cwd: root })

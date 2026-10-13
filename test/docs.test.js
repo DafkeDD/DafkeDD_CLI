@@ -72,7 +72,7 @@ for (const [name, variant] of Object.entries(VARIANTS)) {
     test(`(${name}) the README shows body, example, response and errors of each endpoint`, () => {
         const readme = filesOf(variant)['README.md']
         for (const endpoint of endpoints(optionsOf(variant))) {
-            const start = readme.indexOf(`### ${endpoint.method} ${endpoint.path}`)
+            const start = readme.indexOf(`### ${endpoint.method} ${endpoint.path}\n`)
             const next = readme.indexOf('\n### ', start + 1)
             const section = readme.slice(start, next === -1 ? undefined : next)
             assert.ok(endpoint.summary.length > 10)

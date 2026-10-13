@@ -33,7 +33,12 @@ const LOGIN_ERRORS: Record<string, { status: number; error: string }> = {
     'oidc.INVALID_CREDENTIALS': { status: 401, error: 'INVALID_CREDENTIALS' },
     'oidc.TOO_MANY_ATTEMPTS': { status: 429, error: 'TOO_MANY_ATTEMPTS' },
     'oidc.EMAIL_NOT_VERIFIED': { status: 403, error: 'EMAIL_NOT_VERIFIED' },
-    'oidc.MFA_INVALID_CODE': { status: 401, error: 'MFA_INVALID_CODE' }
+    'oidc.MFA_INVALID_CODE': { status: 401, error: 'MFA_INVALID_CODE' },
+    'oidc.ACCOUNT_DISABLED': { status: 403, error: 'ACCOUNT_DISABLED' },
+    'oidc.EID_INVALID': { status: 401, error: 'EID_INVALID' },
+    'oidc.EID_EXPIRED': { status: 400, error: 'EID_EXPIRED' },
+    'oidc.EID_NOT_LINKED': { status: 404, error: 'EID_NOT_LINKED' },
+    'oidc.EID_UNAVAILABLE': { status: 503, error: 'EID_UNAVAILABLE' }
 }
 const loginError = (key: string) => LOGIN_ERRORS[key] ?? { status: 401, error: 'INVALID_CREDENTIALS' }
 
@@ -90,7 +95,7 @@ export class OidcController {
             'A running login: the HTML login page, or with Accept: application/json the details for the login page of the frontend'
     })
     @ApiProduces('text/html', 'application/json')
-    @ApiOkResponse({ description: 'The login form, or { step, clientName, csrf, loginHint }' })
+    @ApiOkResponse({ description: 'The login form, or { step, clientName, registration, eid, csrf, loginHint }' })
     @ApiResponse({
         status: 410,
         description: 'The login request expired (HTML page or { status: "expired", message })'
@@ -109,6 +114,8 @@ export class OidcController {
                 step: 'login',
                 clientName: found.client.name,
                 registration: this.config.registrationOpen,
+                // Login with the Belgian eID is available (OIDC_EID=on or test)
+                eid: this.config.eid !== 'off',
                 csrf: found.interaction.csrf,
                 loginHint: found.interaction.params.loginHint ?? ''
             })
@@ -144,6 +151,56 @@ export class OidcController {
         const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
         const allowed = this.limiter.allow(['ip:' + (request.ip ?? 'unknown'), 'email:' + email])
         const result = await this.oidc.login(id, this.interactionCookie(request, id), body, allowed)
+        this.loginAnswer(id, result, request, response, i18n)
+    }
+
+    @Post('interaction/:id/eid/challenge')
+    @ApiOperation({
+        summary:
+            'Log in with the Belgian eID, step 1 (JSON { csrf }): a nonce for the eID bridge, kept in the login cookie (used once)'
+    })
+    @ApiOkResponse({ description: '{ status: "eid-challenge", nonce }' })
+    @ApiResponse({ status: 404, description: 'oidc.EID_DISABLED (OIDC_EID=off)' })
+    @ApiResponse({ status: 410, description: 'The login request expired' })
+    async eidChallenge(
+        @Param('id') id: string,
+        @Req() request: Request,
+        @Res() response: Response,
+        @I18n() i18n: I18nContext
+    ) {
+        const result = await this.oidc.eidChallenge(
+            id,
+            this.interactionCookie(request, id),
+            (request.body ?? {}) as Params
+        )
+        this.loginAnswer(id, result, request, response, i18n)
+    }
+
+    @Post('interaction/:id/eid')
+    @ApiOperation({
+        summary:
+            'Log in with the Belgian eID, step 2 (JSON { csrf, token }): the token of the bridge after the PIN. Counts as two-step verification (acr loa4). Rate limited.'
+    })
+    @ApiOkResponse({ description: '{ status: "redirect", location } or the organisation choice' })
+    @ApiResponse({
+        status: 401,
+        description:
+            'EID_INVALID (signature, origin, nonce or certificate) or 404 EID_NOT_LINKED (no account has this eID)'
+    })
+    @ApiResponse({ status: 503, description: 'EID_UNAVAILABLE: the OCSP service of the eID could not be reached' })
+    async eidLogin(
+        @Param('id') id: string,
+        @Req() request: Request,
+        @Res() response: Response,
+        @I18n() i18n: I18nContext
+    ) {
+        const allowed = this.limiter.allow(['ip:' + (request.ip ?? 'unknown'), 'eid:' + id])
+        const result = await this.oidc.eidLogin(
+            id,
+            this.interactionCookie(request, id),
+            (request.body ?? {}) as Params,
+            allowed
+        )
         this.loginAnswer(id, result, request, response, i18n)
     }
 
@@ -300,8 +357,8 @@ export class OidcController {
 
     private loginAnswer(id: string, result: LoginResult, request: Request, response: Response, i18n: I18nContext) {
         const t = translator(i18n)
-        if ('cookie' in result) this.setInteractionCookie(response, result.cookie)
-        if (wantsJson(request)) return this.loginJson(result, response, t)
+        if ('cookie' in result && result.cookie) this.setInteractionCookie(response, result.cookie)
+        if (wantsJson(request) || result.kind === 'eid-challenge') return this.loginJson(result, response, t)
         switch (result.kind) {
             case 'expired':
                 return this.expired(response, i18n)
@@ -430,6 +487,8 @@ export class OidcController {
                     // A superadmin can also continue without an organisation: { tenant: "platform" }
                     platform: result.platform
                 })
+            case 'eid-challenge':
+                return this.json(response, 200, { status: 'eid-challenge', nonce: result.nonce })
             case 'done':
                 this.setSessionCookie(response, result.sessionId)
                 return this.json(response, 200, { status: 'redirect', location: result.location })

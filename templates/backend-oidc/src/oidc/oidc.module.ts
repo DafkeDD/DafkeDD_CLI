@@ -3,6 +3,8 @@ import { AccessGuard } from '../access/access.js'
 import { MailModule } from '../mail/mail.module.js'
 import { AccountController } from './account.controller.js'
 import { AccountService } from './account.service.js'
+import { EidController } from './eid.controller.js'
+import { EidService } from './eid.service.js'
 import { KeysService } from './keys.service.js'
 import { LoginLimiter } from './login-limiter.js'
 import { MfaController } from './mfa.controller.js'
@@ -17,17 +19,18 @@ import { WellKnownController } from './well-known.controller.js'
 /** The OpenID Connect server: /oidc/..., /oidc/account/... and /.well-known/oauth-authorization-server/oidc. */
 @Module({
     imports: [MailModule],
-    controllers: [OidcController, AccountController, MfaController, WellKnownController],
+    controllers: [OidcController, AccountController, MfaController, EidController, WellKnownController],
     providers: [
         OidcConfig,
         OidcService,
         AccountService,
         MfaService,
+        EidService,
         KeysService,
         LoginLimiter,
         AccessGuard,
         { provide: OIDC_STORE, useClass: PgOidcStore }
     ],
-    exports: [OidcService, AccountService, MfaService, KeysService, OidcConfig, AccessGuard, OIDC_STORE]
+    exports: [OidcService, AccountService, MfaService, EidService, KeysService, OidcConfig, AccessGuard, OIDC_STORE]
 })
 export class OidcModule {}

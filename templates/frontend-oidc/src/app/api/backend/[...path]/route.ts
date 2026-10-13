@@ -3,9 +3,9 @@ import { API_URL } from '@/lib/api'
 import { APP_URL } from '@/lib/oidc'
 import { getSession } from '@/lib/session'
 
-/** Only these parts of the API can be called through this route: members, the platform, the own two-step verification
+/** Only these parts of the API can be called through this route: members, the platform, the own two-step verification, the eID
  * and the heartbeat (who is online). */
-const ALLOWED = /^(tenants\/current\/|admin\/|me\/mfa|me\/heartbeat$)[A-Za-z0-9/_-]*$/
+const ALLOWED = /^(tenants\/current\/|admin\/|me\/mfa|me\/eid|me\/heartbeat$)[A-Za-z0-9/_-]*$/
 
 /**
  * Calls the protected API for the browser: adds the access token of the session (Authorization: Bearer) on the server.

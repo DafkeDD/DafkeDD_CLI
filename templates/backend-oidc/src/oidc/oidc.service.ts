@@ -7,6 +7,7 @@ import { PKCE_CHALLENGE, PKCE_VERIFIER, pkceChallenge, randomToken, safeEqual, s
 import { type Interaction, interactionKey, openInteraction, sealInteraction } from './interaction.js'
 import { halfHash, JoseError, signJwt, verifyJwt } from './jose.js'
 import { AppException } from '../common/app.exception.js'
+import { EidService } from './eid.service.js'
 import { KeysService } from './keys.service.js'
 import { MFA_AMR, MfaService, type MfaSetup, type SecondFactor } from './mfa.service.js'
 import { OAuthError } from './oauth.error.js'
@@ -43,7 +44,14 @@ export type AuthorizeResult =
 
 export type LoginResult =
     | { kind: 'expired' }
-    | { kind: 'form'; interaction: Interaction; client: OidcClient; errorKey: string; email: string }
+    | {
+          kind: 'form'
+          interaction: Interaction
+          client: OidcClient
+          errorKey: string
+          email: string
+          cookie?: InteractionCookie
+      }
     | { kind: 'no-tenant'; cookie: InteractionCookie }
     | {
           kind: 'choose-tenant'
@@ -64,6 +72,8 @@ export type LoginResult =
           errorKey?: string
       }
     | { kind: 'recovery-codes'; interaction: Interaction; recoveryCodes: string[]; cookie: InteractionCookie }
+    /** A nonce for the eID bridge (JSON only). */
+    | { kind: 'eid-challenge'; nonce: string; cookie: InteractionCookie }
 
 export interface TokenResponse {
     access_token: string
@@ -95,6 +105,7 @@ export class OidcService implements OnApplicationBootstrap {
         @Inject(OIDC_STORE) private readonly store: OidcStore,
         private readonly keys: KeysService,
         private readonly mfa: MfaService,
+        private readonly eid: EidService,
         private readonly config: OidcConfig,
         private readonly env: ConfigService
     ) {}
@@ -182,7 +193,7 @@ export class OidcService implements OnApplicationBootstrap {
             userinfo_signing_alg_values_supported: ['none'],
             token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
             code_challenge_methods_supported: ['S256'],
-            acr_values_supported: [OIDC.ACR_PASSWORD, OIDC.ACR_MFA],
+            acr_values_supported: [OIDC.ACR_PASSWORD, OIDC.ACR_MFA, ...(this.eid.enabled ? [OIDC.ACR_EID] : [])],
             claims_supported: [
                 'sub',
                 'iss',
@@ -266,6 +277,7 @@ export class OidcService implements OnApplicationBootstrap {
             mfaPending: false,
             enrolling: false,
             amr: [],
+            eidNonce: null,
             expiresAt: Date.now() + OIDC.INTERACTION_SECONDS * 1000
         })
         if (sealed.length > OIDC.MAX_INTERACTION_COOKIE) {
@@ -361,8 +373,8 @@ export class OidcService implements OnApplicationBootstrap {
         if (params.prompt.includes('login') || params.prompt.includes('select_account')) return null
         const session = await this.store.findSession(sha256(sessionId))
         if (!session) return null
-        // A session from before two-step verification was required does not count any more
-        if (this.config.mfaRequired && session.acr !== OIDC.ACR_MFA) return null
+        // A session from before two-step verification was required does not count any more (the eID counts as two steps)
+        if (this.config.mfaRequired && session.acr !== OIDC.ACR_MFA && session.acr !== OIDC.ACR_EID) return null
         if (params.maxAge !== null && Date.now() - session.authTime.getTime() > params.maxAge * 1000) return null
         const user = await this.store.findUserById(session.userId)
         if (user?.status !== 'active') return null
@@ -419,6 +431,61 @@ export class OidcService implements OnApplicationBootstrap {
         }
         return this.authenticated(
             { ...interaction, userId: user.id, mfaPending: false, enrolling: false, amr: ['pwd'] },
+            user
+        )
+    }
+
+    /**
+     * Logging in with the eID, step 1: a nonce for the bridge. It is kept in the login cookie and can be used once.
+     */
+    async eidChallenge(id: string, sealed: string | undefined, form: Params): Promise<LoginResult> {
+        const found = await this.findInteraction(id, sealed)
+        if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
+            return { kind: 'expired' }
+        this.eid.assertEnabled()
+        const nonce = this.eid.nonce()
+        const next = { ...found.interaction, eidNonce: nonce }
+        return { kind: 'eid-challenge', nonce, cookie: { id, value: this.seal(next) } }
+    }
+
+    /**
+     * Logging in with the eID, step 2: the token of the bridge (the card signed the nonce after the PIN). The card and
+     * its PIN are two factors, so no code of the authenticator app follows (acr loa4, amr sc pin mfa).
+     */
+    async eidLogin(id: string, sealed: string | undefined, form: Params, allowed: boolean): Promise<LoginResult> {
+        const found = await this.findInteraction(id, sealed)
+        if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
+            return { kind: 'expired' }
+        this.eid.assertEnabled()
+        const { client } = found
+        // The nonce works once: the cookie forgets it, whatever the outcome
+        const interaction = { ...found.interaction, eidNonce: null }
+        const cookie = { id, value: this.seal(interaction) }
+        const refused = (errorKey: string): LoginResult => ({
+            kind: 'form',
+            interaction,
+            client,
+            errorKey,
+            email: '',
+            cookie
+        })
+        if (!allowed) return refused('oidc.TOO_MANY_ATTEMPTS')
+        if (!found.interaction.eidNonce) return refused('oidc.EID_EXPIRED')
+
+        let person
+        try {
+            person = await this.eid.verify(form.token, found.interaction.eidNonce)
+        } catch (error) {
+            if (error instanceof AppException) return refused(error.key)
+            throw error
+        }
+        const user = await this.store.findUserByIdentifier('eid', person.valueHash)
+        if (!user) return refused('oidc.EID_NOT_LINKED')
+        if (user.status !== 'active') return refused('oidc.ACCOUNT_DISABLED')
+        if (!user.emailVerified) return refused('oidc.EMAIL_NOT_VERIFIED')
+        await this.store.touchIdentifier('eid', person.valueHash)
+        return this.authenticated(
+            { ...interaction, userId: user.id, mfaPending: false, enrolling: false, amr: [...OIDC.EID_AMR] },
             user
         )
     }
@@ -555,7 +622,11 @@ export class OidcService implements OnApplicationBootstrap {
             userId: user.id,
             tenantId: membership?.tenantId ?? null,
             authTime: now,
-            acr: interaction.amr.includes('mfa') ? OIDC.ACR_MFA : OIDC.ACR_PASSWORD,
+            acr: interaction.amr.includes('sc')
+                ? OIDC.ACR_EID
+                : interaction.amr.includes('mfa')
+                  ? OIDC.ACR_MFA
+                  : OIDC.ACR_PASSWORD,
             amr: interaction.amr.length ? interaction.amr : ['pwd'],
             expiresAt: new Date(now.getTime() + OIDC.SESSION_SECONDS * 1000)
         }

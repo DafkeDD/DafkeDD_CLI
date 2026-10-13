@@ -3,7 +3,9 @@ import type {
     AuthorizationCode,
     BootstrapAdmin,
     ChangeResult,
+    IdentifierType,
     Invitation,
+    LinkResult,
     MemberStatus,
     Membership,
     MfaState,
@@ -15,7 +17,8 @@ import type {
     StoredUser,
     Tenant,
     TenantMember,
-    TenantRole
+    TenantRole,
+    UserIdentifier
 } from './oidc.store.js'
 
 /** In-memory store with the same behaviour as PgOidcStore. Used by the tests; never in production. */
@@ -30,6 +33,7 @@ export class MemoryOidcStore implements OidcStore {
     sessions = new Map<string, Session>()
     mfa = new Map<string, MfaState>()
     codes = new Map<string, AuthorizationCode & { usedAt: Date | null }>()
+    identifiers: UserIdentifier[] = []
 
     /** Test helper: adds a user (and memberships). */
     addUser(
@@ -152,6 +156,49 @@ export class MemoryOidcStore implements OidcStore {
         const created = this.addTenant(this.freeSlug(tenant.slug), tenant.name)
         this.addMembership(created.id, user.id, 'admin')
         return { user, tenant: created }
+    }
+
+    async registerWithIdentifier(
+        account: NewAccount,
+        tenant: { name: string; slug: string },
+        identifier: { type: IdentifierType; valueHash: string }
+    ) {
+        if (this.identifiers.some(row => row.type === identifier.type && row.valueHash === identifier.valueHash))
+            return 'identifier-taken' as const
+        const created = await this.register(account, tenant)
+        if (created) await this.linkIdentifier(created.user.id, identifier.type, identifier.valueHash)
+        return created
+    }
+
+    // ---------------------------------------------------------------- identifiers (eID)
+
+    async findUserByIdentifier(type: IdentifierType, valueHash: string) {
+        const row = this.identifiers.find(item => item.type === type && item.valueHash === valueHash)
+        return row ? ((await this.findUserById(row.userId)) ?? null) : null
+    }
+
+    async findIdentifier(userId: string, type: IdentifierType) {
+        const row = this.identifiers.find(item => item.userId === userId && item.type === type)
+        return row ? { ...row } : null
+    }
+
+    async linkIdentifier(userId: string, type: IdentifierType, valueHash: string): Promise<LinkResult> {
+        const owner = this.identifiers.find(item => item.type === type && item.valueHash === valueHash)
+        if (owner) return owner.userId === userId ? 'ok' : 'taken'
+        if (this.identifiers.some(item => item.userId === userId && item.type === type)) return 'exists'
+        this.identifiers.push({ type, valueHash, userId, createdAt: new Date(), lastUsedAt: null })
+        return 'ok'
+    }
+
+    async unlinkIdentifier(userId: string, type: IdentifierType) {
+        const before = this.identifiers.length
+        this.identifiers = this.identifiers.filter(item => !(item.userId === userId && item.type === type))
+        return this.identifiers.length < before
+    }
+
+    async touchIdentifier(type: IdentifierType, valueHash: string) {
+        const row = this.identifiers.find(item => item.type === type && item.valueHash === valueHash)
+        if (row) row.lastUsedAt = new Date()
     }
 
     async createUser(account: NewAccount) {

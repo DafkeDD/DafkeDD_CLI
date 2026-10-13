@@ -3,7 +3,8 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
-import { BUTTON, CARD, INPUT, LINK, roleLabel } from '@/components/account-ui'
+import { BUTTON, CARD, INPUT, LINK, OUTLINE, roleLabel } from '@/components/account-ui'
+import { EidBridge, EidPin, type EidToken } from '@/components/eid'
 import { MfaQr, RecoveryCodes } from '@/components/mfa-ui'
 import { useAccountApi } from '@/lib/account'
 import { API_URL } from '@/lib/api'
@@ -11,7 +12,14 @@ import { API_URL } from '@/lib/api'
 type Tenant = { id: string; name: string; role?: 'user' | 'admin' }
 type State =
     | { step: 'loading' }
-    | { step: 'login'; clientName: string; csrf: string; loginHint: string; registration: boolean }
+    | {
+          step: 'login' | 'eid'
+          clientName: string
+          csrf: string
+          loginHint: string
+          registration: boolean
+          eid: boolean
+      }
     | { step: 'tenant'; csrf: string; tenants: Tenant[]; platform: boolean }
     | { step: 'mfa'; csrf: string }
     | { step: 'mfa-setup'; csrf: string; secret: string; qrSvg: string }
@@ -29,6 +37,8 @@ type Answer = {
     clientName?: string
     loginHint?: string
     registration?: boolean
+    eid?: boolean
+    nonce?: string
     secret?: string
     qrSvg?: string
     recoveryCodes?: string[]
@@ -83,7 +93,8 @@ export function OidcLogin({ interaction }: { interaction: string }) {
                         clientName: answer.clientName ?? '',
                         csrf: answer.csrf,
                         loginHint: answer.loginHint ?? '',
-                        registration: answer.registration !== false
+                        registration: answer.registration !== false,
+                        eid: answer.eid === true
                     })
                 } else {
                     setState({ step: 'fatal', message: answer.message ?? t('offline') })
@@ -170,6 +181,27 @@ export function OidcLogin({ interaction }: { interaction: string }) {
         setResent(false)
         await account('resend-verification', { email: unverified }).catch(() => null)
         setResent(true)
+    }
+
+    /** Step 1 of the eID login: a nonce from the login server (kept in its login cookie, used once). */
+    async function eidNonce(): Promise<string | { error: string }> {
+        if (state.step !== 'eid') return { error: t('eidFailed') }
+        const { status, answer } = await call('/eid/challenge', { csrf: state.csrf })
+        if (status === 200 && answer.nonce) return answer.nonce
+        if (status === 410) handle(status, answer)
+        return { error: answer.message ?? t('eidFailed') }
+    }
+
+    /** Step 2: the token of the card. Logged in: on to the organisation choice or back to the application. */
+    async function eidSubmit(token: EidToken): Promise<string | null> {
+        if (state.step !== 'eid') return t('eidFailed')
+        const { status, answer } = await call('/eid', { csrf: state.csrf, token })
+        // Logged in (or the login expired): the same handling as after the password
+        if (['redirect', 'choose-tenant', 'no-tenant', 'expired'].includes(answer.status ?? '')) {
+            handle(status, answer)
+            return null
+        }
+        return answer.message ?? t('eidFailed')
     }
 
     if (state.step === 'loading') return <p className='text-sm opacity-70'>{t('busy')}</p>
@@ -305,6 +337,30 @@ export function OidcLogin({ interaction }: { interaction: string }) {
         )
     }
 
+    if (state.step === 'eid') {
+        return (
+            <section className={CARD}>
+                <div className='flex flex-col gap-1.5'>
+                    <h1 className='text-2xl font-bold tracking-tight'>{t('eidTitle')}</h1>
+                    <p className='text-sm opacity-80'>{t('eidText')}</p>
+                </div>
+                <EidBridge>
+                    <EidPin submitLabel={t('eidSubmit')} getNonce={eidNonce} onToken={eidSubmit} />
+                </EidBridge>
+                <div className='flex flex-wrap items-center justify-between gap-2 text-sm'>
+                    <button type='button' className={LINK} onClick={() => setState({ ...state, step: 'login' })}>
+                        {t('eidBack')}
+                    </button>
+                    {state.registration && (
+                        <Link href='/register' className={LINK}>
+                            {t('register')}
+                        </Link>
+                    )}
+                </div>
+            </section>
+        )
+    }
+
     return (
         <form key='login' onSubmit={onLogin} className={CARD}>
             <div className='flex flex-col gap-1.5'>
@@ -350,6 +406,25 @@ export function OidcLogin({ interaction }: { interaction: string }) {
             <button type='submit' disabled={busy} className={BUTTON}>
                 {busy ? t('busy') : t('submit')}
             </button>
+            {state.eid && (
+                <>
+                    <div className='flex items-center gap-3 text-xs uppercase opacity-60'>
+                        <span className='h-px flex-1 bg-current opacity-30' />
+                        {t('or')}
+                        <span className='h-px flex-1 bg-current opacity-30' />
+                    </div>
+                    <button
+                        type='button'
+                        className={OUTLINE}
+                        onClick={() => {
+                            setError(null)
+                            setState({ ...state, step: 'eid' })
+                        }}
+                    >
+                        {t('eidLogin')}
+                    </button>
+                </>
+            )}
             <div className='flex flex-wrap items-center justify-between gap-2 text-sm'>
                 <Link href='/forgot-password' className={LINK}>
                     {t('forgotPassword')}

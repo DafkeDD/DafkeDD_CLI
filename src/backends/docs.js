@@ -294,7 +294,17 @@ export function backendReadme({
                   [
                       'OIDC_REGISTRATION',
                       'open',
-                      '`open`: anyone can create an account (with a new organisation); `closed`: only by invitation'
+                      '`open`: anyone can create an account (with a new organisation, password or eID); `eid`: only with the eID; `closed`: only by invitation'
+                  ],
+                  [
+                      'OIDC_EID',
+                      'test',
+                      'Login with the Belgian eID: `off`, `on` (real cards, Belgian root CAs, OCSP) or `test` (also the virtual card of `npm run eid:mock`; refused in production)'
+                  ],
+                  [
+                      'OIDC_EID_ORIGIN',
+                      '(origin of APP_URL)',
+                      'The website that asks for the PIN (the bridge signs its origin); only when it is not APP_URL'
                   ],
                   ['APP_URL', origin, 'The frontend: the links in emails open its pages'],
                   ['APP_NAME', '(project name)', 'Name of the application in emails'],
@@ -480,6 +490,8 @@ finds all endpoints there.
 4. Or add users from the command line: \`npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme --role
    admin\` (creates the tenant when it does not exist; prints a random password once, or use \`--password\`; add
    \`--superadmin\` for a platform administrator; \`--email ... --reset-mfa\` resets two-step verification).
+5. Log in with the **Belgian eID**: start the virtual card reader with \`npm run eid:mock\` in \`./frontend\` (PIN
+   \`1234\`), then choose "Register" > "With eID" or "Log in with eID" (see "Belgian eID" below).
 
 ### How a login works (authorization code flow with PKCE)
 
@@ -488,7 +500,8 @@ finds all endpoints there.
 2. The server keeps the request in an encrypted login cookie (10 minutes, see below) and sends the browser to the login
    page: \`/login?interaction=<id>\` of the frontend when \`OIDC_LOGIN_UI_URL\` is set, otherwise its own page
    \`/oidc/interaction/<id>\`, in the language of the browser (or \`ui_locales\`). Email and password are checked
-   (scrypt); attempts are limited per IP and per email. Then the **second step**: the 6-digit code of the authenticator
+   (scrypt), or the **Belgian eID** with its PIN (no second step needed, see below); attempts are limited per IP and per
+   email. Then the **second step**: the 6-digit code of the authenticator
    app (or a recovery code). An account without two-step verification sets it up right there (QR code), before it gets
    a session.
 3. Only an account with a verified email address can log in (said only after the right password, so it reveals
@@ -501,7 +514,7 @@ finds all endpoints there.
 
 | Token | Format | Lifetime | Contents |
 | --- | --- | --- | --- |
-| ID token | JWT, RS256, \`aud\` = client | 5 minutes | \`sub\`, \`auth_time\`, \`nonce\`, \`acr\` (\`loa1\`), \`amr\` (\`pwd\`), \`sid\`, \`at_hash\`, \`tenant\`, \`superadmin\` |
+| ID token | JWT, RS256, \`aud\` = client | 5 minutes | \`sub\`, \`auth_time\`, \`nonce\`, \`acr\` (\`loa2\` password and code, \`loa4\` eID), \`amr\`, \`sid\`, \`at_hash\`, \`tenant\`, \`superadmin\` |
 | Access token | JWT, ES256, \`typ: at+jwt\` (RFC 9068), \`aud\` = \`OIDC_AUDIENCE\` | 10 minutes | \`sub\`, \`client_id\`, \`scope\`, \`tenant\`, \`superadmin\` |
 
 The \`tenant\` claim is \`{ "id": "...", "name": "Acme", "role": "admin" }\`: the tenant the user chose, with the role
@@ -568,6 +581,39 @@ and demos.
   recovery code). A browser session from before two-step verification was required does not count: it logs in again.
 - Turning on ends the other sessions of the account; with \`required\` it can never be turned off
   (\`POST /me/mfa/disable\` answers 403 \`oidc.MFA_REQUIRED\`).
+
+### Belgian eID (card reader and PIN)
+
+Log in and register with the Belgian eID, like the federal login (CSAM) and Corilus Passport: the card and its PIN are
+two factors, so an eID login needs no password and no authenticator code. It uses the **DafkeDD eID** library
+(\`@dafkedd/eid\`, installed from https://github.com/DafkeDD/DafkeDD_EID) and the DafkeDD eID program (the *bridge*) on
+the PC of the user, which talks to the card reader on http://127.0.0.1:47820.
+
+| Step | What happens |
+| --- | --- |
+| 1. Nonce | The login page asks \`POST /oidc/interaction/<id>/eid/challenge\`: 32 random bytes, kept in the login cookie (registration and linking get an encrypted challenge of 5 minutes instead). |
+| 2. PIN | The user types the PIN on the page; the bridge gives it to the card, which signs the nonce and the **origin of the page** (Web eID format). The PIN never reaches the server. |
+| 3. Check | \`POST /oidc/interaction/<id>/eid\` with the token. \`src/oidc/eid.service.ts\` checks the signature, the origin (\`APP_URL\`), the nonce (once), the certificate chain up to the Belgian root CAs and the **OCSP** status (fail closed: no answer = no login). |
+| 4. Account | The national register number of the certificate is turned into an **HMAC-SHA256** (key derived from \`OIDC_MASTER_KEY\`) and looked up in \`user_identifiers\`. The number itself is never stored. |
+| 5. Login | As after password and code: organisation choice, session, tokens with \`acr: "loa4"\` and \`amr: ["sc", "pin", "mfa"]\`. |
+
+| Flow | How |
+| --- | --- |
+| Register with eID | \`POST /oidc/account/eid/challenge\`, then \`POST /oidc/account/register-eid\` with the token, an email address and an organisation. The **name comes from the card**; there is no password. The email address must still be verified. One eID, one account (409 \`oidc.EID_ALREADY_LINKED\`). |
+| Link to an existing account | On \`/security\` of the frontend (\`/me/eid/challenge\` and \`POST /me/eid\`): from then on the account logs in with password **or** eID. |
+| Unlink | \`DELETE /me/eid\`; not when the account has no password (its eID is its only login: choose a password first with "forgot password"). |
+| Password later | "Forgot password" works for an eID account too; then it can log in both ways (the password login asks the authenticator code as usual). |
+
+- \`OIDC_EID=test\` (development, in \`.env\`) also trusts the test certificates of the virtual card
+  (\`npm run eid:mock\` in the frontend: \`dafke-eid --mock --auth-origin http://localhost:3000\`, PIN 1234) and skips
+  OCSP. The API refuses to start with \`test\` and \`NODE_ENV=production\`: use \`on\` there.
+- **Users** install the DafkeDD eID program once (https://github.com/DafkeDD/DafkeDD_EID/releases/latest, Windows setup
+  and macOS). It only lets websites ask a PIN that are in its list: install it with
+  \`dafke-eid install --auth-origin https://app.example.com\` (or build the setup with your origin built in). The login
+  page shows what is missing: the program, a card reader or the card.
+- The hash in \`user_identifiers\` depends on \`OIDC_MASTER_KEY\`: another key means every eID has to be linked again.
+  The national register number is personal data with legal rules for its use in Belgium: check with your DPO that
+  your application may use it as a login key.
 
 ### Accounts: registration, email verification, forgotten password, invitations
 
@@ -666,10 +712,11 @@ ${fence}
 
 | Table | Contents | Tenant (RLS) |
 | --- | --- | --- |
-| users table (database name + \`users\`) | Accounts: email (unique, case-insensitive), verified or not, name, scrypt hash, status, \`is_superadmin\`, two-step verification (encrypted secret, last used step, hashed recovery codes) | no: one account can be in several tenants |
+| users table (database name + \`users\`) | Accounts: email (unique, case-insensitive), verified or not, name, scrypt hash (empty for an eID-only account), status, \`is_superadmin\`, two-step verification (encrypted secret, last used step, hashed recovery codes) | no: one account can be in several tenants |
 | \`tenants\` | Organisations: \`slug\`, name, status (\`active\` or \`suspended\`) | yes |
 | \`tenant_members\` | Which user is in which tenant: role (\`user\` or \`admin\`), status (\`active\` or \`disabled\`), last seen | yes |
 | \`tenant_invitations\` | Open invitations (email, role, who invited, expiry) | yes |
+| \`user_identifiers\` | Linked eIDs: an HMAC of the national register number per account (one eID per account, one account per eID), linked and last used | no |
 | \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\`) | no |
 | \`oidc_signing_keys\` | Signing keys (private part encrypted) | no |
 | \`oidc_sessions\` | Browser sessions (hash of the cookie, and of the login that created it); no tenant for a platform login | yes |

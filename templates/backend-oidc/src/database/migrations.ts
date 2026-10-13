@@ -168,5 +168,26 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_members TO ${role};
 GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_invitations TO ${role};
 GRANT SELECT (id, email, name, locale, email_verified) ON ${users} TO ${role};
 `
+    },
+    {
+        id: 2,
+        name: 'login with the Belgian eID',
+        sql: `
+-- An account registered with the eID has no password until it chooses one (forgot password).
+ALTER TABLE ${users} ALTER COLUMN password_hash DROP NOT NULL;
+
+-- Other ways to recognise a person. eid: an HMAC-SHA256 of the national register number with a key derived from
+-- OIDC_MASTER_KEY: the number itself is never stored, and without the key the hash says nothing.
+-- Not tenant data (an account can belong to several tenants), so no Row-Level Security; the tenant role has no access.
+CREATE TABLE user_identifiers (
+  type text NOT NULL CHECK (type IN ('eid')),
+  value_hash text NOT NULL,
+  user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_used_at timestamptz,
+  PRIMARY KEY (type, value_hash),
+  UNIQUE (user_id, type)
+);
+`
     }
 ]

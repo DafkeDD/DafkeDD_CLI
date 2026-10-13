@@ -10,7 +10,8 @@ export interface StoredUser {
     emailVerified: boolean
     name: string
     locale: string | null
-    passwordHash: string
+    /** null: the account logs in with its eID only (it was registered with the eID and never chose a password). */
+    passwordHash: string | null
     status: 'active' | 'disabled'
     /** Platform administrator: admin of every tenant. */
     isSuperadmin: boolean
@@ -76,13 +77,31 @@ export interface Invitation {
     expiresAt: Date
 }
 
+/**
+ * A way to recognise a person outside email and password. `eid`: the Belgian eID; `valueHash` is an HMAC of the national
+ * register number (key derived from OIDC_MASTER_KEY), so the number itself is never stored.
+ */
+export type IdentifierType = 'eid'
+
+export interface UserIdentifier {
+    type: IdentifierType
+    valueHash: string
+    userId: string
+    createdAt: Date
+    lastUsedAt: Date | null
+}
+
+/** Linking an identifier: `taken` when it belongs to another account, `exists` when this account has another one. */
+export type LinkResult = 'ok' | 'taken' | 'exists'
+
 /** Result of a change that must never leave a tenant without an admin, or the platform without a superadmin. */
 export type ChangeResult = 'ok' | 'not-found' | 'last-admin'
 
 export interface NewAccount {
     email: string
     name: string
-    passwordHash: string
+    /** null: an account that logs in with its eID only. */
+    passwordHash: string | null
     emailVerified: boolean
     locale: string | null
 }
@@ -179,6 +198,15 @@ export interface OidcStore {
         account: NewAccount,
         tenant: { name: string; slug: string }
     ): Promise<{ user: StoredUser; tenant: Tenant } | null>
+    /**
+     * Registration with an identifier (the eID): like register, and the identifier is linked in the same transaction.
+     * `identifier-taken` (nothing changed) when it belongs to an account already.
+     */
+    registerWithIdentifier(
+        account: NewAccount,
+        tenant: { name: string; slug: string },
+        identifier: { type: IdentifierType; valueHash: string }
+    ): Promise<{ user: StoredUser; tenant: Tenant } | null | 'identifier-taken'>
     /** A new account without a tenant (an accepted invitation). Null when the email address is taken. */
     createUser(account: NewAccount): Promise<StoredUser | null>
     setEmailVerified(userId: string): Promise<void>
@@ -188,6 +216,15 @@ export interface OidcStore {
     listSuperadmins(): Promise<StoredUser[]>
     /** Ends every session of a user (after a password reset, or turning on two-factor authentication). */
     endUserSessions(userId: string): Promise<void>
+
+    // ---------------------------------------------------------------- identifiers (eID)
+
+    findUserByIdentifier(type: IdentifierType, valueHash: string): Promise<StoredUser | null>
+    findIdentifier(userId: string, type: IdentifierType): Promise<UserIdentifier | null>
+    linkIdentifier(userId: string, type: IdentifierType, valueHash: string): Promise<LinkResult>
+    unlinkIdentifier(userId: string, type: IdentifierType): Promise<boolean>
+    /** Records a login with the identifier. */
+    touchIdentifier(type: IdentifierType, valueHash: string): Promise<void>
 
     // ---------------------------------------------------------------- two-factor authentication
 

@@ -247,9 +247,10 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
 - **Multi-tenant**: one account can belong to several tenants (it chooses one at login, or `tenant_hint` decides). Every
   table with tenant data has PostgreSQL **Row-Level Security**: `DatabaseService.withTenant()` runs queries as a
   separate role (`<database>_tenant`) that only sees the rows of that tenant, even without a `WHERE`.
-- **Database**: the users table (always `<database>users`), `tenants`, `tenant_members` and four `oidc_*` tables
-  (clients, signing keys, sessions, codes), created by numbered migrations (checksum, advisory lock) at start. A running
-  login is not a table: it is an encrypted, httpOnly cookie per login (10 minutes, no replay).
+- **Database**: the users table (always `<database>users`), `tenants`, `tenant_members`, `tenant_invitations`,
+  `user_identifiers` (linked eIDs) and four `oidc_*` tables (clients, signing keys, sessions, codes), created by
+  numbered migrations (checksum, advisory lock) at start. A running login is not a table: it is an encrypted, httpOnly
+  cookie per login (10 minutes, no replay).
 - **Security**: scrypt passwords, the same error and timing for an unknown email, login rate limit per IP and per email,
   exact redirect URIs (https, http only on localhost), `iss` in every redirect (RFC 9207), client authentication with
   `client_secret_basic`, `client_secret_post` or none (public clients with PKCE), codes and session ids only as hashes.
@@ -263,6 +264,13 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   (TOTP, RFC 6238, own code). The first login shows a QR code and then ten recovery codes; every code works once. A
   superadmin (or `npm run oidc:user -- --email ... --reset-mfa`) resets it when a phone is lost. `OIDC_MFA=required` is
   the default.
+- **Belgian eID**: log in and register with the eID card and its PIN (like CSAM and Corilus Passport), with
+  [DafkeDD eID](https://github.com/DafkeDD/DafkeDD_EID) (`@dafkedd/eid`, installed from its GitHub release in the
+  backend and the frontend). The card signs a nonce of the server; the server checks the signature, the origin, the
+  certificate chain up to the Belgian root CAs and OCSP. Counts as two-step verification (`acr: loa4`). Registration
+  takes the name from the card and needs no password; existing accounts link their eID on `/security`. Only an HMAC of
+  the national register number is stored (`user_identifiers`). Users run the DafkeDD eID program on their PC; during
+  development `npm run eid:mock` in `./frontend` starts a virtual card reader (PIN 1234, `OIDC_EID=test`).
 - **Roles**: `user` and `admin` per organisation, `superadmin` for the whole platform (admin of every organisation, also
   new ones). The first account is superadmin. `@Access('admin')` / `@Access('superadmin')` protect endpoints; the role
   is checked in the database on every request. An organisation always keeps an admin, the platform a superadmin. A
@@ -390,6 +398,7 @@ src/frontends/nextjs.js  # Next.js + Tailwind + next-intl + react-icons + Pretti
 src/backends/nestjs.js   # NestJS backend (+ database, login)
 src/backends/oidc.js     # own OpenID Connect server: questions, .env, docs, copies templates/backend-oidc
 src/backends/docs.js     # generated backend documentation (every endpoint)
+src/eid.js               # DafkeDD eID: the release that is installed and the virtual card reader script
 templates/backend-oidc/  # TypeScript of the OIDC server, copied into ./backend (placeholders like __USERS_TABLE__)
 templates/frontend-oidc/ # login page, login routes and profile of the frontend (OIDC), copied into ./frontend
 src/frontends/oidc.js    # texts and .env.local of the frontend login, copies templates/frontend-oidc
@@ -424,6 +433,14 @@ git switch developer
 ```
 
 ## Changelog
+
+- **0.25.0**: log in and register with the Belgian eID through [DafkeDD eID](https://github.com/DafkeDD/DafkeDD_EID)
+  (installed from its GitHub release): "Log in with eID" on the login page (card + PIN, `acr: loa4`, no authenticator
+  code needed), registration with the eID (name from the card, no password), linking and unlinking on `/security`,
+  `OIDC_EID` (`off`, `on`, `test`) and `OIDC_REGISTRATION=eid`. Migration 2: `user_identifiers` (HMAC of the national
+  register number) and an optional password. The page tells the user when the eID program, the card reader or the card
+  is missing; `npm run eid:mock` gives a virtual card reader for development. Endpoints, tests (virtual card, real
+  PostgreSQL) and docs.
 
 - **0.24.0**: the superadmin needs no organisation: the CLI no longer asks for one, the first login goes to the platform
   (`/admin`, a token without a tenant), and with organisations the choice offers "Platform management". "Open" on the

@@ -5,14 +5,23 @@ import {
     ApiConflictResponse,
     ApiForbiddenResponse,
     ApiOkResponse,
+    ApiNotFoundResponse,
     ApiOperation,
     ApiQuery,
     ApiTags,
-    ApiTooManyRequestsResponse
+    ApiTooManyRequestsResponse,
+    ApiUnauthorizedResponse
 } from '@nestjs/swagger'
 import type { Request } from 'express'
 import { I18n, I18nContext } from 'nestjs-i18n'
-import { AcceptInvitationDto, EmailDto, RegisterDto, ResetPasswordDto, TokenDto } from './account.dto.js'
+import {
+    AcceptInvitationDto,
+    EmailDto,
+    RegisterDto,
+    RegisterEidDto,
+    ResetPasswordDto,
+    TokenDto
+} from './account.dto.js'
 import { AccountService } from './account.service.js'
 
 const ip = (request: Request) => request.ip ?? 'unknown'
@@ -33,10 +42,46 @@ export class AccountController {
             'Create an account and a new organisation (the account becomes its admin). Sends a verification email. Always answers the same, also when the email address has an account (its owner gets an email instead).'
     })
     @ApiAcceptedResponse({ description: '{ status: "check-email" }' })
-    @ApiForbiddenResponse({ description: 'oidc.REGISTRATION_CLOSED (OIDC_REGISTRATION=closed)' })
+    @ApiForbiddenResponse({ description: 'oidc.REGISTRATION_CLOSED (OIDC_REGISTRATION=closed or eid)' })
     @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS' })
     register(@Body() body: RegisterDto, @Req() request: Request, @I18n() i18n: I18nContext) {
         return this.accounts.register(body, i18n.lang, ip(request))
+    }
+
+    @Get('registration')
+    @ApiOperation({ summary: 'Which ways of registering are open: with a password, with the Belgian eID' })
+    @ApiOkResponse({ description: '{ password, eid }' })
+    registration() {
+        return this.accounts.registrationOptions()
+    }
+
+    @Post('eid/challenge')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({
+        summary:
+            'Start registering with the Belgian eID: a nonce for the eID bridge and an encrypted challenge to send back (valid 5 minutes)'
+    })
+    @ApiOkResponse({ description: '{ challenge, nonce, expiresAt }' })
+    @ApiNotFoundResponse({ description: 'oidc.EID_DISABLED (OIDC_EID=off)' })
+    @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS' })
+    eidChallenge(@Req() request: Request) {
+        return this.accounts.eidChallenge(ip(request))
+    }
+
+    @Post('register-eid')
+    @HttpCode(HttpStatus.ACCEPTED)
+    @ApiOperation({
+        summary:
+            'Create an account with the Belgian eID and a new organisation. The name comes from the card; no password. Sends a verification email.'
+    })
+    @ApiAcceptedResponse({ description: '{ status: "check-email", name }' })
+    @ApiBadRequestResponse({ description: 'oidc.EID_EXPIRED: the challenge expired or is invalid' })
+    @ApiUnauthorizedResponse({ description: 'oidc.EID_INVALID: the token of the bridge is not valid' })
+    @ApiForbiddenResponse({ description: 'oidc.REGISTRATION_CLOSED' })
+    @ApiConflictResponse({ description: 'oidc.EID_ALREADY_LINKED: this eID belongs to an account already' })
+    @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS' })
+    registerWithEid(@Body() body: RegisterEidDto, @Req() request: Request, @I18n() i18n: I18nContext) {
+        return this.accounts.registerWithEid(body, i18n.lang, ip(request))
     }
 
     @Post('verify-email')

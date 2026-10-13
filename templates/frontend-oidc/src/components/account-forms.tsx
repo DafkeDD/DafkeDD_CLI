@@ -3,7 +3,19 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
-import { BUTTON, CARD, Field, Heading, LINK, LoginButton, LoginLink, Notice, roleLabel } from '@/components/account-ui'
+import {
+    BUTTON,
+    CARD,
+    Field,
+    Heading,
+    LINK,
+    LoginButton,
+    LoginLink,
+    Notice,
+    roleLabel,
+    SECONDARY
+} from '@/components/account-ui'
+import { EidBridge, EidPin, type EidToken } from '@/components/eid'
 import { useAccountApi } from '@/lib/account'
 
 const PASSWORD = { minLength: 12, maxLength: 128 }
@@ -23,13 +35,57 @@ function CheckEmail({ email }: { email: string }) {
     )
 }
 
-/** /register: a new account and a new organisation; the account becomes its admin. */
+const TAB =
+    SECONDARY +
+    ' flex-1 aria-pressed:border-[var(--accent,#6366f1)] aria-pressed:bg-black/5 dark:aria-pressed:bg-white/10'
+
+/**
+ * /register: a new account and a new organisation; the account becomes its admin. With a password, or with the
+ * Belgian eID (name from the card, no password) when the login server allows it (GET /oidc/account/registration).
+ */
 export function Register() {
     const t = useTranslations('Oidc')
     const api = useAccountApi()
     const [error, setError] = useState('')
     const [busy, setBusy] = useState(false)
     const [sentTo, setSentTo] = useState('')
+    const [options, setOptions] = useState({ password: true, eid: false })
+    const [method, setMethod] = useState<'password' | 'eid'>('password')
+    const challenge = useRef('')
+
+    useEffect(() => {
+        api('registration')
+            .then(result => {
+                if (result.status !== 200) return
+                const open = { password: result.body.password !== false, eid: result.body.eid === true }
+                setOptions(open)
+                if (!open.password && open.eid) setMethod('eid')
+            })
+            .catch(() => undefined)
+        // once when the page opens
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    /** eID, step 1: a challenge of the login server; its nonce goes to the card. */
+    async function eidNonce(): Promise<string | { error: string }> {
+        const result = await api('eid/challenge', {})
+        if (result.status !== 200) return { error: result.message || t('offline') }
+        challenge.current = String(result.body.challenge)
+        return String(result.body.nonce)
+    }
+
+    /** eID, step 2: the account, with the token of the card. */
+    async function eidRegister(token: EidToken, values: Record<string, string>): Promise<string | null> {
+        const result = await api('register-eid', {
+            challenge: challenge.current,
+            token,
+            email: values.email,
+            organisation: values.organisation
+        })
+        if (result.status !== 202) return result.message || t('eidFailed')
+        setSentTo(values.email ?? '')
+        return null
+    }
 
     async function onSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -53,43 +109,85 @@ export function Register() {
     }
 
     if (sentTo) return <CheckEmail email={sentTo} />
+    const organisationField = (
+        <Field
+            label={t('organisation')}
+            hint={t('organisationHint')}
+            name='organisation'
+            required
+            minLength={2}
+            maxLength={100}
+            autoComplete='organization'
+        />
+    )
     return (
         <section className={CARD}>
-            <form onSubmit={onSubmit} className='flex flex-col gap-5'>
-                <Heading title={t('registerTitle')} text={t('registerSubtitle')} />
-                <Field label={t('name')} name='name' required minLength={2} maxLength={100} autoComplete='name' />
-                <Field label={t('email')} name='email' type='email' required maxLength={254} autoComplete='email' />
-                <Field
-                    label={t('organisation')}
-                    hint={t('organisationHint')}
-                    name='organisation'
-                    required
-                    minLength={2}
-                    maxLength={100}
-                    autoComplete='organization'
-                />
-                <Field
-                    label={t('password')}
-                    hint={t('passwordHint')}
-                    name='password'
-                    type='password'
-                    required
-                    autoComplete='new-password'
-                    {...PASSWORD}
-                />
-                <Field
-                    label={t('passwordRepeat')}
-                    name='repeat'
-                    type='password'
-                    required
-                    autoComplete='new-password'
-                    {...PASSWORD}
-                />
-                {error && <Notice tone='error'>{error}</Notice>}
-                <button type='submit' disabled={busy} className={BUTTON}>
-                    {busy ? t('busy') : t('registerSubmit')}
-                </button>
-            </form>
+            <Heading title={t('registerTitle')} text={t('registerSubtitle')} />
+            {options.password && options.eid && (
+                <div className='flex gap-2' role='group'>
+                    <button
+                        type='button'
+                        className={TAB}
+                        aria-pressed={method === 'password'}
+                        onClick={() => setMethod('password')}
+                    >
+                        {t('passwordTab')}
+                    </button>
+                    <button
+                        type='button'
+                        className={TAB}
+                        aria-pressed={method === 'eid'}
+                        onClick={() => setMethod('eid')}
+                    >
+                        {t('eidTab')}
+                    </button>
+                </div>
+            )}
+            {method === 'eid' ? (
+                <>
+                    <p className='text-sm opacity-80'>{t('eidRegisterText')}</p>
+                    <EidBridge>
+                        <EidPin submitLabel={t('eidRegisterSubmit')} getNonce={eidNonce} onToken={eidRegister}>
+                            <Field
+                                label={t('email')}
+                                name='email'
+                                type='email'
+                                required
+                                maxLength={254}
+                                autoComplete='email'
+                            />
+                            {organisationField}
+                        </EidPin>
+                    </EidBridge>
+                </>
+            ) : (
+                <form onSubmit={onSubmit} className='flex flex-col gap-5'>
+                    <Field label={t('name')} name='name' required minLength={2} maxLength={100} autoComplete='name' />
+                    <Field label={t('email')} name='email' type='email' required maxLength={254} autoComplete='email' />
+                    {organisationField}
+                    <Field
+                        label={t('password')}
+                        hint={t('passwordHint')}
+                        name='password'
+                        type='password'
+                        required
+                        autoComplete='new-password'
+                        {...PASSWORD}
+                    />
+                    <Field
+                        label={t('passwordRepeat')}
+                        name='repeat'
+                        type='password'
+                        required
+                        autoComplete='new-password'
+                        {...PASSWORD}
+                    />
+                    {error && <Notice tone='error'>{error}</Notice>}
+                    <button type='submit' disabled={busy} className={BUTTON}>
+                        {busy ? t('busy') : t('registerSubmit')}
+                    </button>
+                </form>
+            )}
             {/* Outside the form above: a form may not contain another form */}
             <div className='flex flex-wrap items-center gap-1.5 text-sm'>
                 <span className='opacity-80'>{t('haveAccount')}</span>

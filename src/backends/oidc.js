@@ -11,6 +11,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomBytes, scrypt } from 'node:crypto'
 import { basename } from 'node:path'
+import { EID_PACKAGE } from '../eid.js'
 
 export const TEMPLATE_DIR = fileURLToPath(new URL('../../templates/backend-oidc/', import.meta.url))
 export const ISSUER_PATH = '/oidc'
@@ -20,7 +21,7 @@ export const APP_URL = 'http://localhost:3000'
 export const SESSION_COOKIE = 'oidc_session'
 
 export const PACKAGES = {
-    dependencies: ['cookie-parser@latest', 'nodemailer@latest', 'qrcode@latest'],
+    dependencies: ['cookie-parser@latest', 'nodemailer@latest', 'qrcode@latest', EID_PACKAGE],
     devDependencies: ['@types/cookie-parser@latest', '@types/nodemailer@latest', '@types/qrcode@latest']
 }
 
@@ -35,10 +36,19 @@ export const SCRIPTS = {
 
 /** Extra validation messages (namespace "validation") used by the account and admin endpoints. */
 export const VALIDATION = {
-    en: { IS_IN: '{property} must be one of: {constraints.0}' },
-    nl: { IS_IN: '{property} moet een van deze waarden zijn: {constraints.0}' },
-    fr: { IS_IN: "{property} doit être l'une de ces valeurs : {constraints.0}" },
-    de: { IS_IN: '{property} muss einer dieser Werte sein: {constraints.0}' }
+    en: { IS_IN: '{property} must be one of: {constraints.0}', IS_OBJECT: '{property} must be an object' },
+    nl: {
+        IS_IN: '{property} moet een van deze waarden zijn: {constraints.0}',
+        IS_OBJECT: '{property} moet een object zijn'
+    },
+    fr: {
+        IS_IN: "{property} doit être l'une de ces valeurs : {constraints.0}",
+        IS_OBJECT: '{property} doit être un objet'
+    },
+    de: {
+        IS_IN: '{property} muss einer dieser Werte sein: {constraints.0}',
+        IS_OBJECT: '{property} muss ein Objekt sein'
+    }
 }
 
 /** Texts of the account emails (namespace "mail"). Every language needs the same keys (checked by the tests). */
@@ -148,6 +158,16 @@ export const MAIL_MESSAGES = {
 /** Texts of the login pages (namespace "oidc"). Every language needs the same keys (checked by the tests). */
 export const MESSAGES = {
     en: {
+        ACCOUNT_DISABLED: 'This account is disabled.',
+        EID_DISABLED: 'Logging in with the eID is not available on this server.',
+        EID_INVALID: 'The eID could not be verified. Please try again.',
+        EID_EXPIRED: 'The eID request expired. Please try again.',
+        EID_NOT_LINKED:
+            'No account is linked to this eID. Register with your eID, or log in with your password and link it under Security.',
+        EID_UNAVAILABLE: 'The validity of the eID cannot be checked right now. Please try again in a moment.',
+        EID_ALREADY_LINKED: 'This eID is already linked to an account.',
+        EID_OTHER_LINKED: 'Another eID is linked to your account. Unlink it first.',
+        EID_ONLY_LOGIN: 'Your eID is your only way to log in. Choose a password first (forgot password).',
         PLATFORM_CHOICE: 'Platform management (no organisation)',
         INVITATION_NOT_FOUND: 'This invitation was not found (accepted, withdrawn or expired).',
         MFA_SETUP_TITLE: 'Set up two-step verification',
@@ -196,6 +216,16 @@ export const MESSAGES = {
         ACCOUNT_DETAILS_NEEDED: 'Fill in your name and a password to create your account.'
     },
     nl: {
+        ACCOUNT_DISABLED: 'Dit account is uitgeschakeld.',
+        EID_DISABLED: 'Inloggen met de eID is niet beschikbaar op deze server.',
+        EID_INVALID: 'De eID kon niet gecontroleerd worden. Probeer het opnieuw.',
+        EID_EXPIRED: 'De eID-aanvraag is verlopen. Probeer het opnieuw.',
+        EID_NOT_LINKED:
+            'Er is geen account gekoppeld aan deze eID. Registreer met je eID, of log in met je wachtwoord en koppel ze bij Beveiliging.',
+        EID_UNAVAILABLE: 'De geldigheid van de eID kan nu niet gecontroleerd worden. Probeer het zo meteen opnieuw.',
+        EID_ALREADY_LINKED: 'Deze eID is al aan een account gekoppeld.',
+        EID_OTHER_LINKED: 'Er is al een andere eID aan je account gekoppeld. Ontkoppel die eerst.',
+        EID_ONLY_LOGIN: 'Je eID is je enige manier om in te loggen. Kies eerst een wachtwoord (wachtwoord vergeten).',
         PLATFORM_CHOICE: 'Platformbeheer (geen organisatie)',
         INVITATION_NOT_FOUND: 'Deze uitnodiging werd niet gevonden (aanvaard, ingetrokken of verlopen).',
         MFA_SETUP_TITLE: 'Tweestapsverificatie instellen',
@@ -244,6 +274,18 @@ export const MESSAGES = {
         ACCOUNT_DETAILS_NEEDED: 'Vul je naam en een wachtwoord in om je account aan te maken.'
     },
     fr: {
+        ACCOUNT_DISABLED: 'Ce compte est désactivé.',
+        EID_DISABLED: "La connexion avec l'eID n'est pas disponible sur ce serveur.",
+        EID_INVALID: "L'eID n'a pas pu être vérifiée. Veuillez réessayer.",
+        EID_EXPIRED: 'La demande eID a expiré. Veuillez réessayer.',
+        EID_NOT_LINKED:
+            "Aucun compte n'est lié à cette eID. Inscrivez-vous avec votre eID, ou connectez-vous avec votre mot de passe et liez-la dans Sécurité.",
+        EID_UNAVAILABLE:
+            "La validité de l'eID ne peut pas être vérifiée pour le moment. Veuillez réessayer dans un instant.",
+        EID_ALREADY_LINKED: 'Cette eID est déjà liée à un compte.',
+        EID_OTHER_LINKED: "Une autre eID est liée à votre compte. Déliez-la d'abord.",
+        EID_ONLY_LOGIN:
+            "Votre eID est votre seul moyen de connexion. Choisissez d'abord un mot de passe (mot de passe oublié).",
         PLATFORM_CHOICE: 'Gestion de la plateforme (sans organisation)',
         INVITATION_NOT_FOUND: 'Cette invitation est introuvable (acceptée, retirée ou expirée).',
         MFA_SETUP_TITLE: 'Configurer la vérification en deux étapes',
@@ -297,6 +339,18 @@ export const MESSAGES = {
         ACCOUNT_DETAILS_NEEDED: 'Indiquez votre nom et un mot de passe pour créer votre compte.'
     },
     de: {
+        ACCOUNT_DISABLED: 'Dieses Konto ist deaktiviert.',
+        EID_DISABLED: 'Die Anmeldung mit der eID ist auf diesem Server nicht verfügbar.',
+        EID_INVALID: 'Die eID konnte nicht geprüft werden. Bitte versuche es erneut.',
+        EID_EXPIRED: 'Die eID-Anfrage ist abgelaufen. Bitte versuche es erneut.',
+        EID_NOT_LINKED:
+            'Mit dieser eID ist kein Konto verknüpft. Registriere dich mit deiner eID, oder melde dich mit deinem Passwort an und verknüpfe sie unter Sicherheit.',
+        EID_UNAVAILABLE:
+            'Die Gültigkeit der eID kann gerade nicht geprüft werden. Bitte versuche es gleich noch einmal.',
+        EID_ALREADY_LINKED: 'Diese eID ist bereits mit einem Konto verknüpft.',
+        EID_OTHER_LINKED: 'Mit deinem Konto ist bereits eine andere eID verknüpft. Hebe diese Verknüpfung zuerst auf.',
+        EID_ONLY_LOGIN:
+            'Deine eID ist deine einzige Anmeldemöglichkeit. Wähle zuerst ein Passwort (Passwort vergessen).',
         PLATFORM_CHOICE: 'Plattformverwaltung (keine Organisation)',
         INVITATION_NOT_FOUND: 'Diese Einladung wurde nicht gefunden (angenommen, zurückgezogen oder abgelaufen).',
         MFA_SETUP_TITLE: 'Zwei-Schritt-Verifizierung einrichten',
@@ -440,8 +494,12 @@ export function envLines(oidc, { port, example = false }) {
         '# Two-step verification (authenticator app): required for every account (set up at the first login).',
         '# Only for tests or demos: optional',
         'OIDC_MFA=required',
-        '# open: anyone can create an account (with a new organisation); closed: only by invitation',
+        '# open: anyone can create an account (with a new organisation, password or eID); eid: only with the eID;',
+        '# closed: only by invitation',
         'OIDC_REGISTRATION=open',
+        '# Login with the Belgian eID (through the DafkeDD eID bridge on the PC of the user): off, on (real cards,',
+        '# with OCSP) or test (also the virtual card of the bridge: npm run eid:mock in the frontend; never in production)',
+        `OIDC_EID=${example ? 'on' : 'test'}`,
         '',
         '# Accounts: links in emails go to the pages of the frontend (/verify-email, /reset-password, /invite)',
         `APP_URL=${APP_URL}`,
@@ -485,6 +543,24 @@ const ACCESS = level => [
 ]
 const PASSWORD_RULE = 'required, 12 to 128 characters'
 const CHECK_EMAIL = { status: 202, example: { status: 'check-email' } }
+const EID_DISABLED = [404, 'oidc.EID_DISABLED']
+/** The token of the DafkeDD eID bridge after the PIN (shortened). */
+const EID_TOKEN = {
+    unverifiedCertificate: 'MIIDezCCAmOg…',
+    algorithm: 'ES384',
+    signature: 'Mz9k…',
+    format: 'web-eid:1.0',
+    appVersion: 'https://github.com/DafkeDD/DafkeDD_EID'
+}
+const EID_CHALLENGE = {
+    challenge: 'v1.eid-challenge…',
+    nonce: 'q8Xz…44 characters…',
+    expiresAt: '2026-10-14T09:05:00.000Z'
+}
+const EID_TOKEN_FIELDS = [
+    ['challenge', 'string', 'required, from the challenge endpoint (valid 5 minutes)'],
+    ['token', 'object', 'required, the answer of the eID bridge after the PIN (`useEidLogin().login()`)']
+]
 
 /** The documentation of every OpenID Connect endpoint (used for the README; the tests compare it with the controllers). */
 export const endpoints = ({ port = 4000 } = {}) => [
@@ -580,6 +656,35 @@ export const endpoints = ({ port = 4000 } = {}) => [
         },
         response: null,
         errors: []
+    },
+    {
+        method: 'POST',
+        path: '/oidc/interaction/:id/eid/challenge',
+        tag: 'oidc',
+        summary:
+            'Log in with the Belgian eID, step 1 (JSON, from the login page of the frontend): a nonce for the DafkeDD eID bridge. The login cookie remembers it; it works once.',
+        body: {
+            example: { csrf: 'from-the-page' },
+            fields: [['csrf', 'string', 'required, from GET /oidc/interaction/:id']]
+        },
+        response: { status: 200, example: { status: 'eid-challenge', nonce: 'q8Xz…44 characters…' } },
+        errors: [EID_DISABLED]
+    },
+    {
+        method: 'POST',
+        path: '/oidc/interaction/:id/eid',
+        tag: 'oidc',
+        summary:
+            'Log in with the Belgian eID, step 2: the token of the bridge (the card signed the nonce after the PIN). Counts as two-step verification: acr `loa4`, amr `sc pin mfa`. Errors as JSON { status: "error", error }: EID_INVALID (401), EID_EXPIRED (400), EID_NOT_LINKED (404), EID_UNAVAILABLE (503, OCSP), EMAIL_NOT_VERIFIED (403). Rate limited.',
+        body: {
+            example: { csrf: 'from-the-page', token: EID_TOKEN },
+            fields: [
+                ['csrf', 'string', 'required, from GET /oidc/interaction/:id'],
+                ['token', 'object', 'required, the answer of the eID bridge after the PIN']
+            ]
+        },
+        response: { status: 200, example: { status: 'redirect', location: FRONTEND_CALLBACK + '?code=…&state=…' } },
+        errors: [EID_DISABLED]
     },
     {
         method: 'POST',
@@ -727,6 +832,55 @@ export const endpoints = ({ port = 4000 } = {}) => [
         },
         response: CHECK_EMAIL,
         errors: [BAD_REQUEST, [403, 'oidc.REGISTRATION_CLOSED'], TOO_MANY]
+    },
+    {
+        method: 'GET',
+        path: '/oidc/account/registration',
+        tag: 'account',
+        summary:
+            'Which ways of registering are open: with a password (OIDC_REGISTRATION=open) and with the Belgian eID (OIDC_EID on or test, registration not closed).',
+        response: { status: 200, example: { password: true, eid: true } },
+        errors: []
+    },
+    {
+        method: 'POST',
+        path: '/oidc/account/eid/challenge',
+        tag: 'account',
+        summary:
+            'Start registering with the Belgian eID: a nonce for the eID bridge and an encrypted challenge to send back with its token (valid 5 minutes). Rate limited.',
+        response: { status: 200, example: EID_CHALLENGE },
+        errors: [EID_DISABLED, TOO_MANY]
+    },
+    {
+        method: 'POST',
+        path: '/oidc/account/register-eid',
+        tag: 'account',
+        summary:
+            'Create an account with the Belgian eID and a new organisation (the account becomes its admin). The name comes from the card; there is no password. Only an HMAC of the national register number is stored. The email address must still be verified. Rate limited.',
+        body: {
+            example: {
+                challenge: EID_CHALLENGE.challenge,
+                token: EID_TOKEN,
+                email: 'jan@example.com',
+                organisation: 'Acme'
+            },
+            fields: [
+                ...EID_TOKEN_FIELDS,
+                ['email', 'string', 'required, a valid email address (at most 254)'],
+                ['organisation', 'string', 'required, 2 to 100 characters: the name of the new tenant']
+            ]
+        },
+        response: { status: 202, example: { status: 'check-email', name: 'Jan Specimen' } },
+        errors: [
+            BAD_REQUEST,
+            [400, 'oidc.EID_EXPIRED'],
+            [401, 'oidc.EID_INVALID'],
+            [403, 'oidc.REGISTRATION_CLOSED'],
+            EID_DISABLED,
+            [409, 'oidc.EID_ALREADY_LINKED'],
+            TOO_MANY,
+            [503, 'oidc.EID_UNAVAILABLE']
+        ]
     },
     {
         method: 'POST',
@@ -1125,6 +1279,81 @@ export const endpoints = ({ port = 4000 } = {}) => [
             [400, 'oidc.MFA_INVALID_CODE'],
             [401, 'errors.UNAUTHORIZED'],
             [429, 'oidc.TOO_MANY_ATTEMPTS']
+        ]
+    },
+    // ---------------------------------------------------------------- the eID of the own account
+    {
+        method: 'GET',
+        path: '/me/eid',
+        tag: 'eID',
+        summary:
+            'Is a Belgian eID linked to the logged in account? `enabled`: the server has eID login; `hasPassword`: false when the eID is the only login.',
+        bearer: true,
+        response: {
+            status: 200,
+            example: {
+                enabled: true,
+                linked: true,
+                linkedAt: '2026-10-14T09:00:00.000Z',
+                lastUsedAt: null,
+                hasPassword: true
+            }
+        },
+        errors: [[401, 'errors.UNAUTHORIZED']]
+    },
+    {
+        method: 'POST',
+        path: '/me/eid/challenge',
+        tag: 'eID',
+        summary:
+            'Start linking an eID: a nonce for the eID bridge and an encrypted challenge, for this account only (5 minutes).',
+        bearer: true,
+        response: { status: 200, example: EID_CHALLENGE },
+        errors: [[401, 'errors.UNAUTHORIZED'], EID_DISABLED]
+    },
+    {
+        method: 'POST',
+        path: '/me/eid',
+        tag: 'eID',
+        summary:
+            'Link the eID: the challenge and the token of the bridge after the PIN. Then the account can log in with it.',
+        bearer: true,
+        body: { example: { challenge: EID_CHALLENGE.challenge, token: EID_TOKEN }, fields: EID_TOKEN_FIELDS },
+        response: {
+            status: 200,
+            example: {
+                enabled: true,
+                linked: true,
+                linkedAt: '2026-10-14T09:00:00.000Z',
+                lastUsedAt: null,
+                hasPassword: true
+            }
+        },
+        errors: [
+            BAD_REQUEST,
+            [400, 'oidc.EID_EXPIRED'],
+            [401, 'oidc.EID_INVALID'],
+            EID_DISABLED,
+            [409, 'oidc.EID_ALREADY_LINKED'],
+            [409, 'oidc.EID_OTHER_LINKED'],
+            TOO_MANY,
+            [503, 'oidc.EID_UNAVAILABLE']
+        ]
+    },
+    {
+        method: 'DELETE',
+        path: '/me/eid',
+        tag: 'eID',
+        summary:
+            'Unlink the eID. Not for an account without a password: its eID is its only login (choose a password first).',
+        bearer: true,
+        response: {
+            status: 200,
+            example: { enabled: true, linked: false, linkedAt: null, lastUsedAt: null, hasPassword: true }
+        },
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [409, 'oidc.EID_ONLY_LOGIN']
         ]
     }
 ]
