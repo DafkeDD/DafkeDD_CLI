@@ -143,7 +143,11 @@ export const OIDC_MESSAGES = {
         openInvitations: 'Open invitations',
         invitedBy: 'Invited by {name} · valid until {until}',
         withdraw: 'Withdraw',
-        withdrawn: 'Invitation withdrawn.'
+        withdrawn: 'Invitation withdrawn.',
+        openTenant: 'Open',
+        platformChoice: 'Platform management (no organisation)',
+        chooseOrganisation: 'You are logged in without an organisation. Open one on the Platform page.',
+        noTenantsYet: 'There are no organisations yet. Create the first one below.'
     },
     nl: {
         signIn: 'Inloggen',
@@ -276,7 +280,11 @@ export const OIDC_MESSAGES = {
         openInvitations: 'Openstaande uitnodigingen',
         invitedBy: 'Uitgenodigd door {name} · geldig tot {until}',
         withdraw: 'Intrekken',
-        withdrawn: 'Uitnodiging ingetrokken.'
+        withdrawn: 'Uitnodiging ingetrokken.',
+        openTenant: 'Openen',
+        platformChoice: 'Platformbeheer (geen organisatie)',
+        chooseOrganisation: 'Je bent ingelogd zonder organisatie. Open er een op de pagina Platform.',
+        noTenantsYet: 'Er zijn nog geen organisaties. Maak hieronder de eerste aan.'
     },
     fr: {
         signIn: 'Se connecter',
@@ -411,7 +419,11 @@ export const OIDC_MESSAGES = {
         openInvitations: 'Invitations en attente',
         invitedBy: "Invité par {name} · valable jusqu'au {until}",
         withdraw: 'Retirer',
-        withdrawn: 'Invitation retirée.'
+        withdrawn: 'Invitation retirée.',
+        openTenant: 'Ouvrir',
+        platformChoice: 'Gestion de la plateforme (sans organisation)',
+        chooseOrganisation: 'Vous êtes connecté sans organisation. Ouvrez-en une sur la page Plateforme.',
+        noTenantsYet: "Il n'y a pas encore d'organisation. Créez la première ci-dessous."
     },
     de: {
         signIn: 'Anmelden',
@@ -545,7 +557,11 @@ export const OIDC_MESSAGES = {
         openInvitations: 'Offene Einladungen',
         invitedBy: 'Eingeladen von {name} · gültig bis {until}',
         withdraw: 'Zurückziehen',
-        withdrawn: 'Einladung zurückgezogen.'
+        withdrawn: 'Einladung zurückgezogen.',
+        openTenant: 'Öffnen',
+        platformChoice: 'Plattformverwaltung (keine Organisation)',
+        chooseOrganisation: 'Du bist ohne Organisation angemeldet. Öffne eine auf der Seite Plattform.',
+        noTenantsYet: 'Es gibt noch keine Organisationen. Lege unten die erste an.'
     }
 }
 

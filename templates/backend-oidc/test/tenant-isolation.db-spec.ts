@@ -228,22 +228,51 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         expect(keys.filter(item => item.status === 'active').map(item => item.kid)).toEqual(['k3'])
     })
 
-    it('creates the first admin only once', async () => {
+    it('creates the superadmin only once, without an organisation', async () => {
         const store = new PgOidcStore(database)
-        const admin = {
-            email: 'root@example.com',
-            name: 'Root',
-            passwordHash: 'x',
-            tenantName: 'Root',
-            tenantSlug: 'root'
-        }
+        const admin = { email: 'root@example.com', name: 'Root', passwordHash: 'x' }
+        const tenantsBefore = (await store.listTenants()).length
         expect(await store.bootstrapAdmin(admin)).toBe(false) // there are users already
         await database.query(`DELETE FROM ${users}`)
         expect(await store.bootstrapAdmin(admin)).toBe(true)
         expect(await store.bootstrapAdmin(admin)).toBe(false)
-        const memberships = await store.listMemberships((await store.findUserByEmail('ROOT@example.com'))?.id ?? '')
-        expect(memberships).toEqual([expect.objectContaining({ slug: 'root', role: 'admin' })])
-        expect((await store.findUserByEmail('root@example.com'))?.isSuperadmin).toBe(true)
+        const root = await store.findUserByEmail('ROOT@example.com')
+        expect(root?.isSuperadmin).toBe(true)
+        expect(await store.listMemberships(root?.id ?? '')).toEqual([])
+        expect((await store.listTenants()).length).toBe(tenantsBefore)
+
+        // A platform login of the superadmin: a session and a code without a tenant
+        const session = {
+            idHash: randomBytes(16).toString('hex'),
+            interactionHash: randomBytes(16).toString('hex'),
+            userId: root?.id ?? '',
+            tenantId: null,
+            authTime: new Date(),
+            acr: 'loa2',
+            amr: ['pwd', 'otp', 'mfa'],
+            expiresAt: new Date(Date.now() + 60_000)
+        }
+        expect(await store.createSession(session)).toBe(true)
+        expect((await store.findSession(session.idHash))?.tenantId).toBeNull()
+        await store.createCode({
+            codeHash: randomBytes(16).toString('hex'),
+            clientId: 'test',
+            userId: root?.id ?? '',
+            tenantId: null,
+            sessionHash: session.idHash,
+            redirectUri: 'http://localhost/cb',
+            scope: 'openid',
+            nonce: null,
+            codeChallenge: 'x'.repeat(43),
+            authTime: new Date(),
+            acr: 'loa2',
+            amr: ['pwd'],
+            expiresAt: new Date(Date.now() + 60_000)
+        })
+        // Never reachable for the tenant role
+        await expect(
+            database.withTenant(tenant.a, db => db.query('SELECT 1 FROM oidc_codes WHERE tenant_id IS NULL'))
+        ).rejects.toThrow(/permission denied/)
     })
 
     it('registers an account with its own tenant in one go, with a free slug and a unique email address', async () => {

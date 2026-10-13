@@ -232,8 +232,8 @@ With a database the CLI asks _"Add a login?"_:
 
 The backend becomes an **OpenID Connect provider** (phases 1 and 2 of the plan): other applications let their users log
 in here and receive signed tokens. Everything is our own TypeScript code on `node:crypto`: no OIDC, OAuth or JWT
-library. The CLI also asks the name of the first organisation (tenant) and the email address of its first admin (the
-**superadmin**); it shows a temporary password **once** at the end.
+library. The CLI only asks the email address of the **superadmin**; it shows a temporary password **once** at the end.
+No organisation is created: the superadmin logs in to the platform (`/admin`) and creates organisations there.
 
 - **Endpoints** (`/oidc/...`): discovery, JWKS, authorize (authorization code flow, **PKCE S256 required**, no implicit
   flow), the login page (four languages, CSRF token, strict Content-Security-Policy, no JavaScript), the organisation
@@ -265,7 +265,8 @@ library. The CLI also asks the name of the first organisation (tenant) and the e
   the default.
 - **Roles**: `user` and `admin` per organisation, `superadmin` for the whole platform (admin of every organisation, also
   new ones). The first account is superadmin. `@Access('admin')` / `@Access('superadmin')` protect endpoints; the role
-  is checked in the database on every request. An organisation always keeps an admin, the platform a superadmin.
+  is checked in the database on every request. An organisation always keeps an admin, the platform a superadmin. A
+  superadmin needs no organisation: it logs in to the platform and opens any organisation without a new password.
 - **Accounts**: registration (a new organisation, you become its admin), email verification, forgotten password (the
   link works once), and for superadmins every organisation on `/admin`.
 - **Management** (`/members`, "Management" in the header): admins invite people by email, see open invitations (send
@@ -424,6 +425,9 @@ git switch developer
 
 ## Changelog
 
+- **0.24.0**: the superadmin needs no organisation: the CLI no longer asks for one, the first login goes to the platform
+  (`/admin`, a token without a tenant), and with organisations the choice offers "Platform management". "Open" on the
+  platform page switches organisation with the same session (no new password or code; also `tenant_hint`).
 - **0.23.0**: management for admins: disable and enable members (no login, no API, sessions end at once), who is online
   and "last seen" (heartbeat from the frontend), open invitations in `tenant_invitations` (send again, withdraw), and a
   "Management" / "Platform" / "Profile" navigation in the header.

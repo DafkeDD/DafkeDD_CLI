@@ -111,18 +111,15 @@ export class OidcConfig {
         return Buffer.from(hex, 'hex')
     }
 
-    /** The first tenant and its admin, created when the users table is still empty. */
+    /** The superadmin, created when the users table is still empty (it needs no organisation). */
     bootstrapAdmin(): BootstrapAdmin | null {
         const email = this.config.get<string>('OIDC_BOOTSTRAP_ADMIN_EMAIL')
         const passwordHash = this.config.get<string>('OIDC_BOOTSTRAP_ADMIN_PASSWORD_HASH')
         if (!email || !passwordHash) return null
-        const tenantName = this.config.get<string>('OIDC_BOOTSTRAP_TENANT') ?? 'My organisation'
         return {
             email: email.trim().toLowerCase(),
-            name: this.config.get<string>('OIDC_BOOTSTRAP_ADMIN_NAME') ?? 'Admin',
-            passwordHash,
-            tenantName,
-            tenantSlug: slugify(tenantName)
+            name: this.config.get<string>('OIDC_BOOTSTRAP_ADMIN_NAME') ?? 'Superadmin',
+            passwordHash
         }
     }
 }

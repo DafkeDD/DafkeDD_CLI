@@ -133,16 +133,7 @@ export class MemoryOidcStore implements OidcStore {
 
     async bootstrapAdmin(admin: BootstrapAdmin) {
         if (this.users.length > 0) return false
-        const tenant =
-            this.tenants.find(existing => existing.slug === admin.tenantSlug) ??
-            this.addTenant(admin.tenantSlug, admin.tenantName)
-        const user = this.addUser({
-            email: admin.email,
-            name: admin.name,
-            passwordHash: admin.passwordHash,
-            isSuperadmin: true
-        })
-        this.addMembership(tenant.id, user.id, 'admin')
+        this.addUser({ email: admin.email, name: admin.name, passwordHash: admin.passwordHash, isSuperadmin: true })
         return true
     }
 

@@ -26,6 +26,8 @@ import {
 const DUMMY_HASH = await hashPassword('not-a-real-password')
 
 const PROMPTS = ['none', 'login', 'consent', 'select_account']
+/** tenant (choice) or tenant_hint for a login of a superadmin without an organisation: platform management. */
+export const PLATFORM = 'platform'
 const MAX_STATE = 1024
 const MAX_NONCE = 512
 
@@ -43,7 +45,14 @@ export type LoginResult =
     | { kind: 'expired' }
     | { kind: 'form'; interaction: Interaction; client: OidcClient; errorKey: string; email: string }
     | { kind: 'no-tenant'; cookie: InteractionCookie }
-    | { kind: 'choose-tenant'; interaction: Interaction; memberships: Membership[]; cookie: InteractionCookie }
+    | {
+          kind: 'choose-tenant'
+          interaction: Interaction
+          memberships: Membership[]
+          /** A superadmin can also log in without an organisation (platform management). */
+          platform: boolean
+          cookie: InteractionCookie
+      }
     | { kind: 'done'; location: string; sessionId: string; cookie: InteractionCookie }
     | { kind: 'mfa'; interaction: Interaction; client: OidcClient; cookie: InteractionCookie; errorKey?: string }
     | {
@@ -113,7 +122,7 @@ export class OidcService implements OnApplicationBootstrap {
         await this.keys.ensure()
         const admin = this.config.bootstrapAdmin()
         if (admin && (await this.store.bootstrapAdmin(admin))) {
-            this.logger.log(`Created the first tenant "${admin.tenantName}" and its admin ${admin.email}`)
+            this.logger.log(`Created the superadmin ${admin.email}`)
         }
         await this.store.deleteExpired(new Date())
     }
@@ -357,11 +366,15 @@ export class OidcService implements OnApplicationBootstrap {
         if (params.maxAge !== null && Date.now() - session.authTime.getTime() > params.maxAge * 1000) return null
         const user = await this.store.findUserById(session.userId)
         if (user?.status !== 'active') return null
-        const membership = (await this.memberships(user)).find(item => item.tenantId === session.tenantId)
-        if (!membership) return null
-        if (params.tenantHint && params.tenantHint !== membership.tenantId && params.tenantHint !== membership.slug)
-            return null
-        return { session, user, membership }
+        // The session proves who the user is; the tenant comes from tenant_hint (switching organisation without a new
+        // password and code), or else from the session. No tenant: a platform login, only for superadmins.
+        const hint = params.tenantHint
+        const wanted = hint ?? session.tenantId ?? PLATFORM
+        if (wanted === PLATFORM) return user.isSuperadmin ? { session, user, membership: null } : null
+        const membership = (await this.memberships(user)).find(
+            item => item.tenantId === wanted || (hint !== null && item.slug === wanted)
+        )
+        return membership ? { session, user, membership } : null
     }
 
     // ------------------------------------------------------------------ login pages
@@ -475,19 +488,32 @@ export class OidcService implements OnApplicationBootstrap {
         return this.authenticated(interaction, user)
     }
 
-    /** The user proved who they are: finish in their only (or the hinted) tenant, or let them choose one. */
+    /**
+     * The user proved who they are: finish in their only (or the hinted) tenant, or let them choose one. A superadmin
+     * needs no organisation: without any (a new server) the login goes straight to the platform; otherwise the choice
+     * also offers "Platform" (tenant_hint=platform skips it).
+     */
     private async authenticated(interaction: Interaction, user: StoredUser): Promise<LoginResult> {
         const id = interaction.id
+        const hint = interaction.params.tenantHint
+        if (user.isSuperadmin && hint === PLATFORM) return this.finish(interaction, user, null)
         const memberships = await this.memberships(user)
-        const hinted = memberships.find(
-            item => item.tenantId === interaction.params.tenantHint || item.slug === interaction.params.tenantHint
-        )
-        const only = memberships.length === 1 ? memberships[0] : undefined
+        const hinted = memberships.find(item => item.tenantId === hint || item.slug === hint)
+        const only = memberships.length === 1 && !user.isSuperadmin ? memberships[0] : undefined
         const membership = hinted ?? only
         if (membership) return this.finish(interaction, user, membership)
-        if (memberships.length === 0) return { kind: 'no-tenant', cookie: { id, value: null } }
+        if (memberships.length === 0)
+            return user.isSuperadmin
+                ? this.finish(interaction, user, null)
+                : { kind: 'no-tenant', cookie: { id, value: null } }
         // Remember the user in the cookie while they choose an organisation
-        return { kind: 'choose-tenant', interaction, memberships, cookie: { id, value: this.seal(interaction) } }
+        return {
+            kind: 'choose-tenant',
+            interaction,
+            memberships,
+            platform: user.isSuperadmin,
+            cookie: { id, value: this.seal(interaction) }
+        }
     }
 
     async chooseTenant(id: string, sealed: string | undefined, form: Params): Promise<LoginResult> {
@@ -498,10 +524,17 @@ export class OidcService implements OnApplicationBootstrap {
         const user = interaction.userId ? await this.store.findUserById(interaction.userId) : null
         // Only after the password and (when it is on) the second factor
         if (user?.status !== 'active' || interaction.mfaPending) return { kind: 'expired' }
+        if (form.tenant === PLATFORM && user.isSuperadmin) return this.finish(interaction, user, null)
         const memberships = await this.memberships(user)
         const membership = memberships.find(item => item.tenantId === form.tenant)
         if (!membership)
-            return { kind: 'choose-tenant', interaction, memberships, cookie: { id, value: sealed ?? null } }
+            return {
+                kind: 'choose-tenant',
+                interaction,
+                memberships,
+                platform: user.isSuperadmin,
+                cookie: { id, value: sealed ?? null }
+            }
         return this.finish(interaction, user, membership)
     }
 
@@ -509,14 +542,18 @@ export class OidcService implements OnApplicationBootstrap {
      * Logged in: a new session (never reuse an old id), a code, and back to the client. The session remembers the
      * login, so a copy of the login cookie cannot log in a second time.
      */
-    private async finish(interaction: Interaction, user: StoredUser, membership: Membership): Promise<LoginResult> {
+    private async finish(
+        interaction: Interaction,
+        user: StoredUser,
+        membership: Membership | null
+    ): Promise<LoginResult> {
         const sessionId = randomToken()
         const now = new Date()
         const session: Session = {
             idHash: sha256(sessionId),
             interactionHash: sha256(interaction.id),
             userId: user.id,
-            tenantId: membership.tenantId,
+            tenantId: membership?.tenantId ?? null,
             authTime: now,
             acr: interaction.amr.includes('mfa') ? OIDC.ACR_MFA : OIDC.ACR_PASSWORD,
             amr: interaction.amr.length ? interaction.amr : ['pwd'],
@@ -524,7 +561,7 @@ export class OidcService implements OnApplicationBootstrap {
         }
         if (!(await this.store.createSession(session))) return { kind: 'expired' }
         // Logged in: online for the admins of the tenant
-        await this.store.touchMember(membership.tenantId, user.id).catch(() => undefined)
+        if (membership) await this.store.touchMember(membership.tenantId, user.id).catch(() => undefined)
         const result = await this.issueCode(interaction.params, session, user, membership)
         return {
             kind: 'done',
@@ -538,14 +575,14 @@ export class OidcService implements OnApplicationBootstrap {
         params: AuthorizationParams,
         session: Session,
         user: StoredUser,
-        membership: Membership
+        membership: Membership | null
     ): Promise<AuthorizeResult> {
         const code = randomToken()
         await this.store.createCode({
             codeHash: sha256(code),
             clientId: params.clientId,
             userId: user.id,
-            tenantId: membership.tenantId,
+            tenantId: membership?.tenantId ?? null,
             sessionHash: session.idHash,
             redirectUri: params.redirectUri,
             scope: params.scope.join(' '),
@@ -603,13 +640,18 @@ export class OidcService implements OnApplicationBootstrap {
             throw new OAuthError('invalid_grant', 'The code_verifier does not match the code_challenge')
         }
         const user = await this.store.findUserById(grant.userId)
-        const membership = user
-            ? (await this.memberships(user)).find(item => item.tenantId === grant.tenantId)
-            : undefined
-        if (user?.status !== 'active' || !membership) throw invalid
+        if (user?.status !== 'active') throw invalid
+        // No tenant: a platform login, only for superadmins
+        const membership =
+            grant.tenantId === null
+                ? null
+                : (await this.memberships(user)).find(item => item.tenantId === grant.tenantId)
+        if (membership === undefined || (membership === null && !user.isSuperadmin)) throw invalid
 
         const now = Math.floor(Date.now() / 1000)
-        const tenant = { id: membership.tenantId, name: membership.name, role: membership.role }
+        const tenantClaim = membership
+            ? { tenant: { id: membership.tenantId, name: membership.name, role: membership.role } }
+            : {}
         const superadmin = user.isSuperadmin ? { superadmin: true } : {}
         const accessKey = await this.keys.signingKey('ES256')
         const accessToken = signJwt(
@@ -624,7 +666,7 @@ export class OidcService implements OnApplicationBootstrap {
                 jti: randomUUID(),
                 auth_time: Math.floor(grant.authTime.getTime() / 1000),
                 acr: grant.acr,
-                tenant,
+                ...tenantClaim,
                 ...superadmin
             },
             { alg: 'ES256', kid: accessKey.kid, typ: 'at+jwt' },
@@ -644,7 +686,7 @@ export class OidcService implements OnApplicationBootstrap {
                 amr: grant.amr,
                 sid: grant.sessionHash.slice(0, 32),
                 at_hash: halfHash(accessToken),
-                ...(grant.scope.split(' ').includes('tenant') ? { tenant, ...superadmin } : {})
+                ...(grant.scope.split(' ').includes('tenant') ? { ...tenantClaim, ...superadmin } : {})
             },
             { alg: 'RS256', kid: idKey.kid, typ: 'JWT' },
             idKey.privateKey

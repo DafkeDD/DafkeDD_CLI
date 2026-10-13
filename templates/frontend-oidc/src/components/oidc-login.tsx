@@ -12,7 +12,7 @@ type Tenant = { id: string; name: string; role?: 'user' | 'admin' }
 type State =
     | { step: 'loading' }
     | { step: 'login'; clientName: string; csrf: string; loginHint: string; registration: boolean }
-    | { step: 'tenant'; csrf: string; tenants: Tenant[] }
+    | { step: 'tenant'; csrf: string; tenants: Tenant[]; platform: boolean }
     | { step: 'mfa'; csrf: string }
     | { step: 'mfa-setup'; csrf: string; secret: string; qrSvg: string }
     | { step: 'recovery-codes'; csrf: string; codes: string[] }
@@ -32,6 +32,7 @@ type Answer = {
     secret?: string
     qrSvg?: string
     recoveryCodes?: string[]
+    platform?: boolean
 }
 
 const CHOICE =
@@ -123,7 +124,12 @@ export function OidcLogin({ interaction }: { interaction: string }) {
             return
         }
         if (answer.status === 'choose-tenant' && answer.csrf) {
-            setState({ step: 'tenant', csrf: answer.csrf, tenants: answer.tenants ?? [] })
+            setState({
+                step: 'tenant',
+                csrf: answer.csrf,
+                tenants: answer.tenants ?? [],
+                platform: answer.platform === true
+            })
         } else if (status === 403 && answer.error === 'EMAIL_NOT_VERIFIED') {
             setError(answer.message ?? null)
             setUnverified(email)
@@ -267,6 +273,18 @@ export function OidcLogin({ interaction }: { interaction: string }) {
                     />
                 )}
                 <div className='flex max-h-96 flex-col gap-2.5 overflow-y-auto'>
+                    {state.platform && (
+                        // A superadmin can also continue without an organisation: platform management
+                        <button
+                            type='button'
+                            disabled={busy}
+                            className={CHOICE}
+                            onClick={() => void submit('/tenant', { csrf: state.csrf, tenant: 'platform' })}
+                        >
+                            <span>{t('platformChoice')}</span>
+                            <span className='text-xs font-medium opacity-60'>{t('superadmin')}</span>
+                        </button>
+                    )}
                     {shown.map(tenant => (
                         <button
                             key={tenant.id}

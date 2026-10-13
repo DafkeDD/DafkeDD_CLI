@@ -4,10 +4,10 @@ import { Access, Auth, type AuthContext } from '../access/access.js'
 import { MfaCodeDto } from './mfa.dto.js'
 import { MfaService } from './mfa.service.js'
 
-/** Two-factor authentication of the logged in account (any member, with the access token). */
+/** Two-factor authentication of the logged in account (also a superadmin without an organisation). */
 @ApiTags('two-factor authentication')
 @Controller('me/mfa')
-@Access()
+@Access('account')
 export class MfaController {
     constructor(private readonly mfa: MfaService) {}
 

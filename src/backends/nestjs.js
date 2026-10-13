@@ -885,7 +885,7 @@ export const nestjs = {
         if (answers?.oidc) {
             auth.push({
                 ok: true,
-                text: `OIDC-server ingesteld: tenant "${answers.oidc.tenantName}", superadmin ${answers.oidc.adminEmail}, tijdelijk wachtwoord ${answers.oidc.adminPassword} (enkel nu getoond). Bij de eerste login stel je tweestapsverificatie in (QR-code)`
+                text: `OIDC-server ingesteld: superadmin ${answers.oidc.adminEmail}, tijdelijk wachtwoord ${answers.oidc.adminPassword} (enkel nu getoond). Bij de eerste login stel je tweestapsverificatie in (QR-code); organisaties maak je aan op http://localhost:3000/admin`
             })
         }
         if (db.mode === 'docker') return [{ ok: true, text: `PostgreSQL (Docker) ingesteld: ${where}` }, ...auth]

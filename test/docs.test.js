@@ -17,7 +17,6 @@ const DB = {
 }
 
 const OIDC = {
-    tenantName: 'Acme',
     adminEmail: 'admin@example.com',
     adminPassword: 'TempPassword123',
     adminPasswordHash: 'scrypt$32768$aa$bb',

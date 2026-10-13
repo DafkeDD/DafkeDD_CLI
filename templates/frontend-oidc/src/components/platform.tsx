@@ -101,6 +101,8 @@ export function Platform({ me }: { me: string }) {
             <h2 className='text-base font-semibold'>{t('tenantsTitle')}</h2>
             {!tenants ? (
                 <p className='text-sm opacity-70'>{t('busy')}</p>
+            ) : tenants.length === 0 ? (
+                <p className='text-sm opacity-80'>{t('noTenantsYet')}</p>
             ) : (
                 <ul className='flex flex-col divide-y divide-black/10 dark:divide-white/10'>
                     {tenants.map(tenant => (
@@ -121,6 +123,16 @@ export function Platform({ me }: { me: string }) {
                             >
                                 {tenant.status === 'active' ? t('active') : t('suspended')}
                             </span>
+                            {tenant.status === 'active' && (
+                                // Into this organisation (its members): with the open session, no new password or code
+                                <form action='/api/auth/login' method='get'>
+                                    <input type='hidden' name='tenant' value={tenant.id} />
+                                    <input type='hidden' name='returnTo' value='/members' />
+                                    <button type='submit' className={SECONDARY}>
+                                        {t('openTenant')}
+                                    </button>
+                                </form>
+                            )}
                             <button
                                 type='button'
                                 disabled={busy}

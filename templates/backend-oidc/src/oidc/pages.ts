@@ -137,13 +137,20 @@ export function recoveryCodesPage(t: Translate, options: { action: string; csrf:
     }
 }
 
-export function tenantPage(t: Translate, options: { action: string; csrf: string; memberships: Membership[] }) {
-    const buttons = options.memberships
-        .map(
-            membership =>
-                `<button class="choice" type="submit" name="tenant" value="${escapeHtml(membership.tenantId)}">${escapeHtml(membership.name)}</button>`
-        )
-        .join('')
+export function tenantPage(
+    t: Translate,
+    options: { action: string; csrf: string; memberships: Membership[]; platform?: boolean }
+) {
+    const buttons =
+        (options.platform
+            ? `<button class="choice" type="submit" name="tenant" value="platform">${escapeHtml(t('oidc.PLATFORM_CHOICE'))}</button>`
+            : '') +
+        options.memberships
+            .map(
+                membership =>
+                    `<button class="choice" type="submit" name="tenant" value="${escapeHtml(membership.tenantId)}">${escapeHtml(membership.name)}</button>`
+            )
+            .join('')
     return {
         title: t('oidc.TENANT_TITLE'),
         body:

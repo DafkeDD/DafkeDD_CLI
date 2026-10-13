@@ -233,21 +233,11 @@ export class PgOidcStore implements OidcStore {
             await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['oidc-bootstrap'])
             const existing = await db.query(`SELECT 1 FROM ${USERS} LIMIT 1`)
             if (existing.rows.length > 0) return false
-            const tenant = await db.query<{ id: string }>(
-                `INSERT INTO tenants (slug, name) VALUES ($1, $2)
-         ON CONFLICT (slug) DO UPDATE SET name = tenants.name RETURNING id`,
-                [admin.tenantSlug, admin.tenantName]
-            )
-            // The first user is the superadmin of the platform, and admin of the first tenant
-            const user = await db.query<{ id: string }>(
-                `INSERT INTO ${USERS} (email, email_verified, name, password_hash, is_superadmin)
-         VALUES ($1, true, $2, $3, true) RETURNING id`,
+            // The first user is the superadmin of the platform: no organisation needed, it creates them on /admin
+            await db.query(
+                `INSERT INTO ${USERS} (email, email_verified, name, password_hash, is_superadmin) VALUES ($1, true, $2, $3, true)`,
                 [admin.email, admin.name, admin.passwordHash]
             )
-            await db.query(`INSERT INTO tenant_members (tenant_id, user_id, role) VALUES ($1, $2, 'admin')`, [
-                tenant.rows[0]?.id,
-                user.rows[0]?.id
-            ])
             return true
         })
     }

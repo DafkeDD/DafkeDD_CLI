@@ -365,7 +365,8 @@ export class OidcController {
                     ...tenantPage(t, {
                         action: this.action(id, 'tenant', request),
                         csrf: result.interaction.csrf,
-                        memberships: result.memberships
+                        memberships: result.memberships,
+                        platform: result.platform
                     })
                 })
             case 'done':
@@ -425,7 +426,9 @@ export class OidcController {
                         id: membership.tenantId,
                         name: membership.name,
                         role: membership.role
-                    }))
+                    })),
+                    // A superadmin can also continue without an organisation: { tenant: "platform" }
+                    platform: result.platform
                 })
             case 'done':
                 this.setSessionCookie(response, result.sessionId)

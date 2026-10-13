@@ -274,8 +274,11 @@ export function backendReadme({
                       'Encrypts the private signing keys in the database. 64 hex characters; keep it secret and backed up'
                   ],
                   ['OIDC_LOGIN_RATE_LIMIT', '10', 'Login attempts per minute, per IP address and per email address'],
-                  ['OIDC_BOOTSTRAP_TENANT', '(your answer)', 'Name of the first tenant, created at the first start'],
-                  ['OIDC_BOOTSTRAP_ADMIN_EMAIL', '(your answer)', 'Email address of the first admin'],
+                  [
+                      'OIDC_BOOTSTRAP_ADMIN_EMAIL',
+                      '(your answer)',
+                      'Email address of the superadmin, created at the first start'
+                  ],
                   [
                       'OIDC_BOOTSTRAP_ADMIN_PASSWORD_HASH',
                       '(generated)',
@@ -463,13 +466,15 @@ finds all endpoints there.
 ### Try it
 
 1. Start Mailpit (\`npm run mail:dev\`, needs Docker) and the API (\`npm run start:dev\`). The first start creates the
-   tables, the signing keys, the clients of \`config/oidc-clients.json\` and the first tenant with its admin: the
-   **superadmin** (the email and temporary password the CLI showed).
+   tables, the signing keys, the clients of \`config/oidc-clients.json\` and the **superadmin** (the email and temporary
+   password the CLI showed). There is no organisation yet: the superadmin needs none.
 2. With the Next.js frontend: start it (\`npm run dev\` in \`./frontend\`) and open **http://localhost:3000**. "Log in" goes
    through this server and comes back to the frontend; \`/profile\` shows the user, the tenant and what the API answered.
    The login page itself is the page \`/login\` of the frontend (\`OIDC_LOGIN_UI_URL\`), which talks to the JSON variant of
    \`/oidc/interaction/...\`. Without a frontend the API shows its own HTML login page.
-3. Log in: the first login asks you to set up **two-step verification** (scan the QR code with an authenticator app).
+3. Log in as superadmin: the first login asks you to set up **two-step verification** (scan the QR code with an
+   authenticator app). Without organisations you land on the platform (\`/admin\`): create the first organisation there,
+   with the email of its admin, who gets an invitation.
    Create an account on **http://localhost:3000/register**: the email with the confirmation link arrives in Mailpit
    (**http://localhost:8025**). Invite colleagues on \`/members\`; as superadmin, manage every organisation on \`/admin\`.
 4. Or add users from the command line: \`npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme --role
@@ -510,7 +515,7 @@ header or the URL.
 | --- | --- | --- |
 | \`user\` | \`tenant_members.role\` | Use the application in the tenants they belong to |
 | \`admin\` | \`tenant_members.role\` | Everything in **their own** tenant: invite people (and see, resend or withdraw open invitations), change roles, disable or enable members, remove members, see who is online |
-| \`superadmin\` | \`is_superadmin\` on the account | Admin of **every** tenant (also new ones, without a membership row); create and suspend tenants; grant superadmin |
+| \`superadmin\` | \`is_superadmin\` on the account | Admin of **every** tenant (also new ones, without a membership row), or logged in without one (platform); create and suspend tenants; grant superadmin |
 
 - **Disabled** members (\`tenant_members.status\`) stay members but cannot log in to that tenant or use its API; their
   sessions in that tenant end at once. An admin enables them again with one click.
@@ -519,7 +524,11 @@ header or the URL.
   last 2 minutes; the members list also shows "last seen".
 - **Open invitations** live in \`tenant_invitations\` (Row-Level Security per tenant) until they are accepted, withdrawn or
   expire: admins see them, send them again (a new link, 7 more days) or withdraw them (the link stops working).
-- The first account (the admin the CLI created) is superadmin. Registration never makes a superadmin: only
+- The first account (the one the CLI created) is superadmin, **without an organisation**: it logs in to the platform
+  (a token without a \`tenant\` claim, \`superadmin: true\`), creates organisations on \`/admin\` and opens any of them
+  with \`tenant_hint\` (no new password or code: the session proves who it is). With organisations its login offers
+  "Platform management" next to them (\`tenant: "platform"\` in the choice, or \`tenant_hint=platform\`). A platform
+  token only reaches \`@Access('superadmin')\` and \`@Access('account')\` (the own two-step verification) routes. Registration never makes a superadmin: only
   \`npm run oidc:user -- ... --superadmin\` or another superadmin (\`POST /admin/superadmins\`).
 - A tenant always keeps at least one admin, and the platform at least one superadmin (checked under a database lock, so
   two changes at the same moment cannot both remove the last one).
@@ -663,7 +672,7 @@ ${fence}
 | \`tenant_invitations\` | Open invitations (email, role, who invited, expiry) | yes |
 | \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\`) | no |
 | \`oidc_signing_keys\` | Signing keys (private part encrypted) | no |
-| \`oidc_sessions\` | Browser sessions (hash of the cookie, and of the login that created it) | yes |
+| \`oidc_sessions\` | Browser sessions (hash of the cookie, and of the login that created it); no tenant for a platform login | yes |
 | \`oidc_codes\` | Authorization codes (hash, once, 60 seconds) | yes |
 | \`schema_migrations\` | Which migration ran, with a checksum | no |
 

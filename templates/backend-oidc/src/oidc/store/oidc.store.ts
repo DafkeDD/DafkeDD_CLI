@@ -131,7 +131,8 @@ export interface Session {
     /** sha256 of the login (interaction) that created the session: a login can create only one session. */
     interactionHash: string
     userId: string
-    tenantId: string
+    /** null: a platform session of a superadmin, without an organisation. */
+    tenantId: string | null
     authTime: Date
     acr: string
     amr: string[]
@@ -142,7 +143,8 @@ export interface AuthorizationCode {
     codeHash: string
     clientId: string
     userId: string
-    tenantId: string
+    /** null: a platform login of a superadmin. */
+    tenantId: string | null
     sessionHash: string
     redirectUri: string
     scope: string
@@ -154,12 +156,11 @@ export interface AuthorizationCode {
     expiresAt: Date
 }
 
+/** The first account of a new server: the superadmin. It needs no organisation; it creates them on /admin. */
 export interface BootstrapAdmin {
     email: string
     name: string
     passwordHash: string
-    tenantName: string
-    tenantSlug: string
 }
 
 export interface OidcStore {
@@ -264,7 +265,7 @@ export interface OidcStore {
     /** Marks the code as used and returns it; null when it does not exist, expired or was used before. */
     consumeCode(codeHash: string): Promise<AuthorizationCode | null>
 
-    /** Creates the first tenant and its admin, only when there are no users at all. Returns true when it did. */
+    /** Creates the first account as superadmin, only when there are no users at all. Returns true when it did. */
     bootstrapAdmin(admin: BootstrapAdmin): Promise<boolean>
     /** Removes expired codes and invitations, and sessions that ended at least an hour ago (longer than a login cookie). */
     deleteExpired(now: Date): Promise<void>

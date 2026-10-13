@@ -148,6 +148,7 @@ export const MAIL_MESSAGES = {
 /** Texts of the login pages (namespace "oidc"). Every language needs the same keys (checked by the tests). */
 export const MESSAGES = {
     en: {
+        PLATFORM_CHOICE: 'Platform management (no organisation)',
         INVITATION_NOT_FOUND: 'This invitation was not found (accepted, withdrawn or expired).',
         MFA_SETUP_TITLE: 'Set up two-step verification',
         MFA_SETUP_TEXT:
@@ -195,6 +196,7 @@ export const MESSAGES = {
         ACCOUNT_DETAILS_NEEDED: 'Fill in your name and a password to create your account.'
     },
     nl: {
+        PLATFORM_CHOICE: 'Platformbeheer (geen organisatie)',
         INVITATION_NOT_FOUND: 'Deze uitnodiging werd niet gevonden (aanvaard, ingetrokken of verlopen).',
         MFA_SETUP_TITLE: 'Tweestapsverificatie instellen',
         MFA_SETUP_TEXT:
@@ -242,6 +244,7 @@ export const MESSAGES = {
         ACCOUNT_DETAILS_NEEDED: 'Vul je naam en een wachtwoord in om je account aan te maken.'
     },
     fr: {
+        PLATFORM_CHOICE: 'Gestion de la plateforme (sans organisation)',
         INVITATION_NOT_FOUND: 'Cette invitation est introuvable (acceptée, retirée ou expirée).',
         MFA_SETUP_TITLE: 'Configurer la vérification en deux étapes',
         MFA_SETUP_TEXT:
@@ -294,6 +297,7 @@ export const MESSAGES = {
         ACCOUNT_DETAILS_NEEDED: 'Indiquez votre nom et un mot de passe pour créer votre compte.'
     },
     de: {
+        PLATFORM_CHOICE: 'Plattformverwaltung (keine Organisation)',
         INVITATION_NOT_FOUND: 'Diese Einladung wurde nicht gefunden (angenommen, zurückgezogen oder abgelaufen).',
         MFA_SETUP_TITLE: 'Zwei-Schritt-Verifizierung einrichten',
         MFA_SETUP_TEXT:
@@ -383,18 +387,14 @@ export const generatePassword = () => randomBytes(12).toString('base64url')
 
 export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
-/** Questions after choosing the OpenID Connect server: name of the first tenant and email of its admin. */
+/**
+ * Question after choosing the OpenID Connect server: the email address of the superadmin. No organisation is needed:
+ * the superadmin creates them on /admin (or people register their own).
+ */
 export async function ask({ projectDir = process.cwd(), prompts, hasFrontend = false }) {
-    const tenantName = (
-        await prompts.input({
-            message: 'Naam van de eerste organisatie (tenant):',
-            default: basename(projectDir),
-            validate: value => (value.trim().length >= 2 && value.trim().length <= 100) || 'Gebruik 2 tot 100 tekens'
-        })
-    ).trim()
     const adminEmail = (
         await prompts.input({
-            message: 'E-mailadres van de eerste beheerder (superadmin, beheert alle organisaties):',
+            message: 'E-mailadres van de superadmin (beheert het platform en alle organisaties):',
             validate: value => EMAIL_PATTERN.test(value.trim()) || 'Geef een geldig e-mailadres op'
         })
     )
@@ -402,7 +402,6 @@ export async function ask({ projectDir = process.cwd(), prompts, hasFrontend = f
         .toLowerCase()
     const adminPassword = generatePassword()
     return {
-        tenantName,
         adminEmail,
         adminPassword,
         adminPasswordHash: await hashPassword(adminPassword),
@@ -435,8 +434,7 @@ export function envLines(oidc, { port, example = false }) {
             : []),
         '# Maximum login attempts per minute, per IP address and per email address',
         'OIDC_LOGIN_RATE_LIMIT=10',
-        '# The first tenant and its admin: created at the first start when there are no users yet.',
-        `OIDC_BOOTSTRAP_TENANT=${quote(oidc.tenantName)}`,
+        '# The superadmin: created at the first start when there are no users yet (it needs no organisation).',
         `OIDC_BOOTSTRAP_ADMIN_EMAIL=${example ? 'admin@example.com' : oidc.adminEmail}`,
         `OIDC_BOOTSTRAP_ADMIN_PASSWORD_HASH=${example ? "''" : quote(oidc.adminPasswordHash)}`,
         '# Two-step verification (authenticator app): required for every account (set up at the first login).',

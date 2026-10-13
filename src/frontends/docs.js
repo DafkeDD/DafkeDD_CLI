@@ -145,7 +145,9 @@ everyone who is logged in, and sends the heartbeat (\`src/components/presence.ts
 visible) that shows them as online to their admins.
 
 **Roles**: \`session.tenant.role\` is \`user\` or \`admin\` (of the chosen organisation); \`session.superadmin\` is \`true\`
-for platform administrators (admin of every organisation). Use them to show or hide things; the API checks the role
+for platform administrators (admin of every organisation). \`session.tenant\` is \`null\` when a superadmin logged in
+without an organisation; \`/api/auth/login?tenant=<id>&returnTo=/members\` (the "Open" button on \`/admin\`) switches
+organisation without a new password or code. Use them to show or hide things; the API checks the role
 again on every call, from the database.
 
 **Two-step verification** is required: after the password the login page asks the code of the authenticator app; the

@@ -17,12 +17,19 @@ import { OAuthError } from '../oidc/oauth.error.js'
 import { OidcService } from '../oidc/oidc.service.js'
 import { OIDC_STORE, type OidcStore, type TenantRole } from '../oidc/store/oidc.store.js'
 
-/** The three levels: user < admin (of the tenant in the token) < superadmin (of the whole platform). */
-export type AccessLevel = 'user' | 'admin' | 'superadmin'
+/**
+ * The levels: user < admin (of the tenant in the token) < superadmin (of the whole platform). `account` is any
+ * logged in account, also a superadmin who logged in without an organisation (for the own two-step verification).
+ */
+export type AccessLevel = 'account' | 'user' | 'admin' | 'superadmin'
 
 /** Who calls the API: from the verified access token, with the role as it is in the database right now. */
 export interface AuthContext {
     userId: string
+    /**
+     * The tenant of the token. Empty for a platform login of a superadmin (no organisation): such a token only reaches
+     * routes with @Access('account') or @Access('superadmin').
+     */
     tenantId: string
     tenantName: string
     role: TenantRole
@@ -62,21 +69,27 @@ export class AccessGuard implements CanActivate {
         }
         const tenant = claims.tenant as { id?: unknown; name?: unknown } | undefined
         const user = typeof claims.sub === 'string' ? await this.store.findUserById(claims.sub) : null
-        if (user?.status !== 'active' || typeof tenant?.id !== 'string')
-            throw new AppException('errors.UNAUTHORIZED', HttpStatus.UNAUTHORIZED)
+        if (user?.status !== 'active') throw new AppException('errors.UNAUTHORIZED', HttpStatus.UNAUTHORIZED)
 
         const forbidden = new AppException('errors.FORBIDDEN', HttpStatus.FORBIDDEN)
-        const found = await this.store.findTenant(tenant.id)
-        if (found?.status !== 'active') throw forbidden
-        const role: TenantRole | null = user.isSuperadmin ? 'admin' : await this.store.findMemberRole(found.id, user.id)
-        if (!role) throw forbidden
-
         const needed =
             this.reflector.getAllAndOverride<AccessLevel | undefined>(LEVEL, [
                 context.getHandler(),
                 context.getClass()
             ]) ?? 'user'
         if (needed === 'superadmin' && !user.isSuperadmin) throw forbidden
+
+        // A platform login (superadmin without an organisation): only the account and the platform
+        if (typeof tenant?.id !== 'string') {
+            if (!user.isSuperadmin || (needed !== 'account' && needed !== 'superadmin')) throw forbidden
+            request.auth = { userId: user.id, tenantId: '', tenantName: '', role: 'admin', superadmin: true }
+            return true
+        }
+
+        const found = await this.store.findTenant(tenant.id)
+        if (found?.status !== 'active') throw forbidden
+        const role: TenantRole | null = user.isSuperadmin ? 'admin' : await this.store.findMemberRole(found.id, user.id)
+        if (!role) throw forbidden
         if (needed === 'admin' && role !== 'admin') throw forbidden
 
         await this.touch(found.id, user.id)
@@ -102,8 +115,9 @@ export class AccessGuard implements CanActivate {
 }
 
 /**
- * Protects a controller or a route: `@Access()` any member, `@Access('admin')` admins of the tenant (and superadmins),
- * `@Access('superadmin')` superadmins only. Adds the Bearer authentication and the 401/403 answers to Swagger.
+ * Protects a controller or a route: `@Access()` any member of the tenant in the token, `@Access('admin')` admins of the
+ * tenant (and superadmins), `@Access('superadmin')` superadmins only, `@Access('account')` any logged in account (also
+ * without an organisation). Adds the Bearer authentication and the 401/403 answers to Swagger.
  */
 export const Access = (level: AccessLevel = 'user') =>
     applyDecorators(
@@ -111,7 +125,9 @@ export const Access = (level: AccessLevel = 'user') =>
         UseGuards(AccessGuard),
         ApiBearerAuth(),
         ApiUnauthorizedResponse({ description: 'errors.UNAUTHORIZED: no or an invalid/expired access token' }),
-        ApiForbiddenResponse({ description: `errors.FORBIDDEN: not ${level === 'user' ? 'a member' : level}` })
+        ApiForbiddenResponse({
+            description: `errors.FORBIDDEN: ${level === 'account' ? 'the account is blocked' : 'not ' + (level === 'user' ? 'a member' : level)}`
+        })
     )
 
 /** The caller of a route protected with @Access(). */

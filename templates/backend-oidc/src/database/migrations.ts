@@ -116,7 +116,8 @@ CREATE TABLE oidc_sessions (
   id_hash text PRIMARY KEY,
   interaction_hash text NOT NULL UNIQUE,
   user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
-  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  -- NULL: a platform session of a superadmin, without an organisation (invisible for the tenant role)
+  tenant_id uuid REFERENCES tenants (id) ON DELETE CASCADE,
   auth_time timestamptz NOT NULL,
   acr text NOT NULL,
   amr text[] NOT NULL,
@@ -129,7 +130,7 @@ CREATE TABLE oidc_codes (
   code_hash text PRIMARY KEY,
   client_id text NOT NULL REFERENCES oidc_clients (client_id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
-  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  tenant_id uuid REFERENCES tenants (id) ON DELETE CASCADE,
   session_hash text NOT NULL,
   redirect_uri text NOT NULL,
   scope text NOT NULL,

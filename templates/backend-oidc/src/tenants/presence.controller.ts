@@ -5,7 +5,7 @@ import { Access } from '../access/access.js'
 /** "I am here": the frontend sends this every minute while a page is open (who is online). */
 @ApiTags('tenant members')
 @Controller('me')
-@Access()
+@Access('account')
 export class PresenceController {
     @Post('heartbeat')
     @HttpCode(HttpStatus.NO_CONTENT)

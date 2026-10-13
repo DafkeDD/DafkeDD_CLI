@@ -132,7 +132,7 @@ test('the frontend client and its callback match what the backend registers', ()
 })
 
 test('the backend sends the browser to the login page of the frontend only when there is a frontend', () => {
-    const answers = { tenantName: 'A', adminEmail: 'a@b.co', adminPasswordHash: 'x', masterKey: 'ab'.repeat(32) }
+    const answers = { adminEmail: 'a@b.co', adminPasswordHash: 'x', masterKey: 'ab'.repeat(32) }
     assert.match(
         backendOidc.envLines({ ...answers, loginUi: true }, { port: 4000 }),
         /^OIDC_LOGIN_UI_URL=http:\/\/localhost:3000\/login$/m
@@ -172,7 +172,7 @@ test('index: the frontend learns that the backend is an OIDC server', async () =
         ask: async () => null,
         registry: { fe: item('fe', 'frontend', { ui: 'none' }) },
         backendRegistry: {
-            be: { ...item('be', 'backend', { auth: false, oidc: { tenantName: 'A' } }), api: { port: 4000 } }
+            be: { ...item('be', 'backend', { auth: false, oidc: { adminEmail: 'a@b.co' } }), api: { port: 4000 } }
         },
         execute: async () => {},
         log: () => {}

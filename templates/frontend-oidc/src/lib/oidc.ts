@@ -34,7 +34,8 @@ export interface Session {
     sub: string
     name: string
     email: string
-    tenant: Tenant
+    /** null: a superadmin who logged in without an organisation (platform management). */
+    tenant: Tenant | null
     /** Platform administrator: admin of every tenant. */
     superadmin: boolean
     accessToken: string
@@ -137,7 +138,15 @@ export function discovery(): Promise<Discovery> {
     return discovered.value
 }
 
-export async function authorizationUrl(flow: Flow & { challenge: string }, locale: string): Promise<string> {
+/**
+ * The login request. `tenant` (an id, a slug or "platform") picks the organisation: with an open session of the login
+ * server that switches organisation without a new password or code.
+ */
+export async function authorizationUrl(
+    flow: Flow & { challenge: string },
+    locale: string,
+    tenant?: string | null
+): Promise<string> {
     const url = new URL((await discovery()).authorization_endpoint)
     url.search = new URLSearchParams({
         client_id: OIDC_CLIENT_ID,
@@ -148,7 +157,8 @@ export async function authorizationUrl(flow: Flow & { challenge: string }, local
         nonce: flow.nonce,
         code_challenge: flow.challenge,
         code_challenge_method: 'S256',
-        ui_locales: locale
+        ui_locales: locale,
+        ...(tenant ? { tenant_hint: tenant } : {})
     }).toString()
     return url.toString()
 }
@@ -174,7 +184,7 @@ export async function verifyIdToken(
     idToken: string,
     nonce: string,
     accessToken: string
-): Promise<{ sub: string; tenant: Tenant; superadmin: boolean }> {
+): Promise<{ sub: string; tenant: Tenant | null; superadmin: boolean }> {
     const [header, payload, signature] = idToken.split('.')
     if (!header || !payload || !signature) throw new Error('Malformed ID token')
     const head = JSON.parse(Buffer.from(header, 'base64url').toString('utf8')) as { alg?: string; kid?: string }
@@ -197,7 +207,8 @@ export async function verifyIdToken(
     const atHash = b64url(createHash('sha256').update(accessToken).digest().subarray(0, 16))
     if (claims.at_hash !== atHash) throw new Error('The access token does not belong to the ID token')
     if (typeof claims.sub !== 'string') throw new Error('Missing subject')
-    return { sub: claims.sub, tenant: claims.tenant as Tenant, superadmin: claims.superadmin === true }
+    const tenant = (claims.tenant as Tenant | undefined) ?? null
+    return { sub: claims.sub, tenant, superadmin: claims.superadmin === true }
 }
 
 /** Exchanges the code for tokens (public client: client_id + code_verifier, no secret). */

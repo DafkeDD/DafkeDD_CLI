@@ -13,7 +13,8 @@ export async function SessionLinks() {
             {session ? (
                 <>
                     <span>
-                        {t('signedInAs', { name: session.name || session.email })} · {session.tenant.name}
+                        {t('signedInAs', { name: session.name || session.email })} ·{' '}
+                        {session.tenant?.name ?? t('platformTitle')}
                     </span>
                     <Link href='/profile' className='font-semibold underline'>
                         {t('profile')}

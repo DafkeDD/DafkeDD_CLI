@@ -17,7 +17,6 @@ const DB = {
 }
 
 const ANSWERS = {
-    tenantName: "Acme's Café",
     adminEmail: 'admin@example.com',
     adminPassword: 'TempPassword123',
     adminPasswordHash: 'scrypt$32768$aa$bb',
@@ -159,6 +158,15 @@ test('the API docs explain the login cookie and no longer list a table for runni
     assert.doesNotMatch(Object.values(files).join('\n'), /oidc_interactions/)
 })
 
+test('the superadmin needs no organisation: platform logins and a platform choice', () => {
+    const service = templates['src/oidc/oidc.service.ts']
+    assert.match(service, /export const PLATFORM = 'platform'/)
+    assert.match(service, /user\.isSuperadmin\s*\? this\.finish\(interaction, user, null\)/)
+    assert.match(templates['src/database/migrations.ts'], /-- NULL: a platform session/)
+    assert.match(templates['src/access/access.ts'], /needed !== 'account' && needed !== 'superadmin'/)
+    for (const locale of LOCALES) assert.ok(oidc.MESSAGES[locale].PLATFORM_CHOICE, locale)
+})
+
 test('two-step verification is required by default, with our own TOTP and the RFC test vectors', () => {
     assert.match(files['.env'], /^OIDC_MFA=required$/m)
     const totp = templates['src/oidc/totp.ts']
@@ -197,7 +205,7 @@ test('.env gets the generated master key and admin; .env.example only placeholde
     assert.ok(files['.env'].includes(`OIDC_MASTER_KEY=${ANSWERS.masterKey}`))
     assert.ok(files['.env'].includes('OIDC_BOOTSTRAP_ADMIN_EMAIL=admin@example.com'))
     assert.ok(files['.env'].includes(`OIDC_BOOTSTRAP_ADMIN_PASSWORD_HASH='${ANSWERS.adminPasswordHash}'`))
-    assert.ok(files['.env'].includes("OIDC_BOOTSTRAP_TENANT='Acmes Café'"), 'quotes in the name cannot break .env')
+    assert.ok(!files['.env'].includes('OIDC_BOOTSTRAP_TENANT'), 'the superadmin needs no organisation')
     for (const secret of [ANSWERS.masterKey, ANSWERS.adminPasswordHash, ANSWERS.adminPassword]) {
         assert.ok(!files['.env.example'].includes(secret))
     }
@@ -206,20 +214,22 @@ test('.env gets the generated master key and admin; .env.example only placeholde
 
 // ---------------------------------------------------------------- the questions
 
-test('ask: tenant name and admin email, a random temporary password and its scrypt hash, a random master key', async () => {
+test('ask: only the superadmin email (no organisation), a random temporary password and its hash, a master key', async () => {
     const asked = []
     const prompts = {
         input: async config => {
             asked.push(config)
-            return config.message.includes('E-mail') ? '  Admin@Example.COM ' : ' Acme '
+            return '  Admin@Example.COM '
         }
     }
     const answers = await oidc.ask({ projectDir: '/projects/acme', prompts })
-    assert.equal(answers.tenantName, 'Acme')
+    assert.equal(asked.length, 1, 'one question')
+    assert.match(asked[0].message, /superadmin/)
+    assert.equal(answers.tenantName, undefined)
     assert.equal(answers.adminEmail, 'admin@example.com')
-    assert.equal(asked[0].default, 'acme')
-    assert.equal(asked[1].validate('nope'), 'Geef een geldig e-mailadres op')
-    assert.equal(asked[1].validate('ada@example.com'), true)
+    assert.equal(answers.appName, 'acme')
+    assert.equal(asked[0].validate('nope'), 'Geef een geldig e-mailadres op')
+    assert.equal(asked[0].validate('ada@example.com'), true)
     assert.match(answers.masterKey, /^[0-9a-f]{64}$/)
     assert.ok(answers.adminPassword.length >= 16)
     const [scheme, cost, salt, hash] = answers.adminPasswordHash.split('$')
@@ -245,7 +255,6 @@ test('nestjs.ask with "OIDC server" asks the OIDC questions and returns them', a
     const result = await nestjs.ask({ hasFrontend: true, prompts, registry })
     assert.equal(result.auth, false)
     assert.equal(result.oidc.adminEmail, 'boss@example.com')
-    assert.equal(result.oidc.tenantName, 'Shop')
     assert.equal(result.oidc.loginUi, true, 'with a frontend the login page lives there')
 })
 
@@ -287,7 +296,7 @@ test('steps: installs cookie-parser, adds the OIDC scripts and passes the answer
     await fs.rm(projectDir, { recursive: true, force: true })
 })
 
-test('the summary shows the tenant, the admin and the temporary password once; next shows how to try it', () => {
+test('the summary shows the superadmin and the temporary password once; next shows how to try it', () => {
     const answers = { database: DB, auth: false, oidc: ANSWERS }
     const summary = nestjs
         .summary(answers)
@@ -295,7 +304,8 @@ test('the summary shows the tenant, the admin and the temporary password once; n
         .join('\n')
     assert.ok(summary.includes(ANSWERS.adminEmail))
     assert.ok(summary.includes(ANSWERS.adminPassword))
-    assert.ok(summary.includes(ANSWERS.tenantName))
+    assert.match(summary, /superadmin/)
+    assert.match(summary, /\/admin/)
     const next = nestjs.next(answers).join('\n')
     assert.match(next, /oidc\/\.well-known\/openid-configuration/)
     assert.match(next, /npm run oidc:user/)

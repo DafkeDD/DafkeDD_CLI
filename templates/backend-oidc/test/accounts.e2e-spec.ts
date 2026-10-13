@@ -551,6 +551,7 @@ describe('Accounts, roles and the platform (e2e)', () => {
             const { response } = await login('root@example.com')
             expect(response.status).toBe(200)
             for (const name of ['Acme', 'Globex', 'Initech Labs']) expect(response.text).toContain(name)
+            expect(response.text).toContain('value="platform"')
             const tokens = await accessToken('root@example.com', 'globex')
             const claims = decodeUnverified(tokens.access_token)
             expect(claims?.tenant).toMatchObject({ id: ids.globex, role: 'admin' })
@@ -600,6 +601,135 @@ describe('Accounts, roles and the platform (e2e)', () => {
                 .set(bearer(root))
                 .send({ status: 'active' })
                 .expect(404)
+        })
+
+        it('logs in without an organisation (platform): only the platform and the own account, no tenant API', async () => {
+            const tokens = await accessToken('root@example.com', 'platform')
+            const claims = decodeUnverified(tokens.access_token)
+            expect(claims?.tenant).toBeUndefined()
+            expect(claims?.superadmin).toBe(true)
+            expect(decodeUnverified(tokens.id_token)?.tenant).toBeUndefined()
+            await http().get('/admin/tenants').set(bearer(tokens.access_token)).expect(200)
+            await http().get('/me/mfa').set(bearer(tokens.access_token)).expect(200)
+            await http().get('/tenants/current/members').set(bearer(tokens.access_token)).expect(403)
+            // A normal member cannot ask for the platform: it gets its own organisation
+            const alice = await accessToken('alice@example.com', 'platform')
+            expect(decodeUnverified(alice.access_token)?.tenant).toMatchObject({ id: ids.acme })
+        })
+
+        it('switches organisation with the same session: no new password or code (tenant_hint)', async () => {
+            const { response } = await login('root@example.com', PASSWORD, { tenant_hint: 'platform' })
+            const session =
+                ((response.headers['set-cookie'] as unknown as string[]) ?? [])
+                    .find(c => c.startsWith('oidc_session='))
+                    ?.split(';')[0] ?? ''
+            const silent = async (hint: string) => {
+                const verifier = randomBytes(32).toString('base64url')
+                const answer = await http()
+                    .get(
+                        '/oidc/authorize?' +
+                            new URLSearchParams({
+                                client_id: 'frontend',
+                                redirect_uri: REDIRECT,
+                                response_type: 'code',
+                                scope: 'openid tenant',
+                                code_challenge: pkceChallenge(verifier),
+                                code_challenge_method: 'S256',
+                                prompt: 'none',
+                                tenant_hint: hint
+                            }).toString()
+                    )
+                    .set('Cookie', session)
+                    .expect(303)
+                const code = new URL(answer.headers.location as string).searchParams.get('code') ?? ''
+                const tokens = await http()
+                    .post('/oidc/token')
+                    .type('form')
+                    .send({
+                        grant_type: 'authorization_code',
+                        code,
+                        redirect_uri: REDIRECT,
+                        client_id: 'frontend',
+                        code_verifier: verifier
+                    })
+                    .expect(200)
+                return decodeUnverified(tokens.body.access_token as string)
+            }
+            expect((await silent('globex'))?.tenant).toMatchObject({ id: ids.globex, role: 'admin' })
+            expect((await silent('acme'))?.tenant).toMatchObject({ id: ids.acme })
+            expect((await silent('platform'))?.tenant).toBeUndefined()
+        })
+
+        it('a new server: the superadmin needs no organisation and logs in straight to the platform', async () => {
+            const empty = new MemoryOidcStore()
+            empty.addUser({
+                email: 'first@example.com',
+                name: 'First',
+                passwordHash: await hashPassword(PASSWORD),
+                isSuperadmin: true
+            })
+            const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+                .overrideProvider(DatabaseService)
+                .useValue({ ping: vi.fn().mockResolvedValue(true), query: vi.fn().mockResolvedValue({ rows: [] }) })
+                .overrideProvider(OIDC_STORE)
+                .useValue(empty)
+                .overrideProvider(MailService)
+                .useValue({ send: async () => true })
+                .compile()
+            const fresh = moduleRef.createNestApplication()
+            configureApp(fresh)
+            await fresh.init()
+            try {
+                const client = () => request(fresh.getHttpServer())
+                const verifier = randomBytes(32).toString('base64url')
+                const start = await client()
+                    .get(
+                        '/oidc/authorize?' +
+                            new URLSearchParams({
+                                client_id: 'frontend',
+                                redirect_uri: REDIRECT,
+                                response_type: 'code',
+                                scope: 'openid profile email tenant',
+                                code_challenge: pkceChallenge(verifier),
+                                code_challenge_method: 'S256'
+                            }).toString()
+                    )
+                    .expect(303)
+                const location = new URL(start.headers.location as string)
+                const cookie = ((start.headers['set-cookie'] as unknown as string[]) ?? [])[0]?.split(';')[0] ?? ''
+                const page = await client().get(location.pathname).set('Cookie', cookie).expect(200)
+                const csrf = /name="csrf" value="([^"]+)"/.exec(page.text)?.[1] ?? ''
+                const done = await client()
+                    .post(location.pathname + '/login')
+                    .set('Cookie', cookie)
+                    .type('form')
+                    .send({ csrf, email: 'first@example.com', password: PASSWORD })
+                    .expect(303)
+                const code = new URL(done.headers.location as string).searchParams.get('code') ?? ''
+                const tokens = await client()
+                    .post('/oidc/token')
+                    .type('form')
+                    .send({
+                        grant_type: 'authorization_code',
+                        code,
+                        redirect_uri: REDIRECT,
+                        client_id: 'frontend',
+                        code_verifier: verifier
+                    })
+                    .expect(200)
+                const token = tokens.body.access_token as string
+                expect(decodeUnverified(token)?.tenant).toBeUndefined()
+                // Creates the first organisation on the platform
+                await client().get('/admin/tenants').set(bearer(token)).expect(200)
+                const created = await client()
+                    .post('/admin/tenants')
+                    .set(bearer(token))
+                    .send({ name: 'First Co' })
+                    .expect(201)
+                expect(created.body.tenant).toMatchObject({ name: 'First Co' })
+            } finally {
+                await fresh.close()
+            }
         })
 
         it('grants and revokes superadmin, but never the last one', async () => {

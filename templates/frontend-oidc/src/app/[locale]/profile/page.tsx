@@ -37,8 +37,13 @@ async function Profile() {
     const rows = [
         [t('name'), session.name],
         [t('email'), session.email],
-        [t('organisation'), session.tenant.name],
-        [t('role'), roleLabel(t, session.tenant.role) + (session.superadmin ? ' · ' + t('superadmin') : '')],
+        [t('organisation'), session.tenant?.name ?? t('platformTitle')],
+        [
+            t('role'),
+            [session.tenant ? roleLabel(t, session.tenant.role) : null, session.superadmin ? t('superadmin') : null]
+                .filter(Boolean)
+                .join(' · ')
+        ],
         [t('validUntil'), format.dateTime(new Date(session.expiresAt), { timeStyle: 'short' })]
     ]
 
@@ -57,7 +62,7 @@ async function Profile() {
                 <Link href='/security' className={LINK}>
                     {t('securityTitle')}
                 </Link>
-                {session.tenant.role === 'admin' && (
+                {session.tenant?.role === 'admin' && (
                     <Link href='/members' className={LINK}>
                         {t('manageMembers')}
                     </Link>
