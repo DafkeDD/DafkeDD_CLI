@@ -509,9 +509,16 @@ header or the URL.
 | Level | Stored in | May |
 | --- | --- | --- |
 | \`user\` | \`tenant_members.role\` | Use the application in the tenants they belong to |
-| \`admin\` | \`tenant_members.role\` | Everything in **their own** tenant: invite people, change roles, remove members |
+| \`admin\` | \`tenant_members.role\` | Everything in **their own** tenant: invite people (and see, resend or withdraw open invitations), change roles, disable or enable members, remove members, see who is online |
 | \`superadmin\` | \`is_superadmin\` on the account | Admin of **every** tenant (also new ones, without a membership row); create and suspend tenants; grant superadmin |
 
+- **Disabled** members (\`tenant_members.status\`) stay members but cannot log in to that tenant or use its API; their
+  sessions in that tenant end at once. An admin enables them again with one click.
+- **Who is online**: every API request (and the heartbeat \`POST /me/heartbeat\` the frontend sends every minute while a
+  page is open) writes \`tenant_members.last_seen_at\`, at most once a minute. A member is online after activity in the
+  last 2 minutes; the members list also shows "last seen".
+- **Open invitations** live in \`tenant_invitations\` (Row-Level Security per tenant) until they are accepted, withdrawn or
+  expire: admins see them, send them again (a new link, 7 more days) or withdraw them (the link stops working).
 - The first account (the admin the CLI created) is superadmin. Registration never makes a superadmin: only
   \`npm run oidc:user -- ... --superadmin\` or another superadmin (\`POST /admin/superadmins\`).
 - A tenant always keeps at least one admin, and the platform at least one superadmin (checked under a database lock, so
@@ -652,7 +659,8 @@ ${fence}
 | --- | --- | --- |
 | users table (database name + \`users\`) | Accounts: email (unique, case-insensitive), verified or not, name, scrypt hash, status, \`is_superadmin\`, two-step verification (encrypted secret, last used step, hashed recovery codes) | no: one account can be in several tenants |
 | \`tenants\` | Organisations: \`slug\`, name, status (\`active\` or \`suspended\`) | yes |
-| \`tenant_members\` | Which user is in which tenant, with the role \`user\` or \`admin\` | yes |
+| \`tenant_members\` | Which user is in which tenant: role (\`user\` or \`admin\`), status (\`active\` or \`disabled\`), last seen | yes |
+| \`tenant_invitations\` | Open invitations (email, role, who invited, expiry) | yes |
 | \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\`) | no |
 | \`oidc_signing_keys\` | Signing keys (private part encrypted) | no |
 | \`oidc_sessions\` | Browser sessions (hash of the cookie, and of the login that created it) | yes |

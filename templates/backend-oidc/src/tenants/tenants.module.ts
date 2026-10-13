@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { OidcModule } from '../oidc/oidc.module.js'
 import { MembersController } from './members.controller.js'
 import { PlatformController } from './platform.controller.js'
+import { PresenceController } from './presence.controller.js'
 
 /**
  * Managing tenants: the members of the own tenant (admins) and every tenant of the platform (superadmins). Member data
@@ -9,6 +10,6 @@ import { PlatformController } from './platform.controller.js'
  */
 @Module({
     imports: [OidcModule],
-    controllers: [MembersController, PlatformController]
+    controllers: [MembersController, PlatformController, PresenceController]
 })
 export class TenantsModule {}

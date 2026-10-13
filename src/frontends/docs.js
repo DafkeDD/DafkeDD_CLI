@@ -127,7 +127,7 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | \`/reset-password?token=\` | The link in that email: a new password (the link works once; you are logged out everywhere) |
 | \`/invite?token=\` | The link in an invitation: join the organisation, or create your account for it |
 | \`/security\` | Two-step verification of the own account: status, recovery codes left, new recovery codes |
-| \`/members\` | Admins: the members of the organisation, invite by email, change roles (user, admin), remove |
+| \`/members\` | Admins: the members of the organisation with who is online, invite by email, open invitations (send again, withdraw), change roles (user, admin), disable or enable, remove |
 | \`/admin\` | Superadmins: every organisation (create, suspend), and who is superadmin |
 | \`/api/backend/...\` | Route handler: calls \`/tenants/current/...\`, \`/admin/...\` and \`/me/mfa\` of the API with the access token of the session (the token stays on the server; changes only from pages of this app) |
 
@@ -139,6 +139,10 @@ login cookie of the API along) → back to the API → \`/api/auth/callback\`
 **Session**: an httpOnly cookie \`app_session\`, encrypted with \`AUTH_SECRET\` (AES-256-GCM), with the name, email,
 organisation (tenant) with the role, whether the user is superadmin, and the access token, valid as long as the access
 token (10 minutes). After that \`/profile\` logs in again without a password.
+
+**Header**: \`src/components/header-nav.tsx\` shows "Management" (admins), "Platform" (superadmins) and "Profile" for
+everyone who is logged in, and sends the heartbeat (\`src/components/presence.tsx\`, every minute while the page is
+visible) that shows them as online to their admins.
 
 **Roles**: \`session.tenant.role\` is \`user\` or \`admin\` (of the chosen organisation); \`session.superadmin\` is \`true\`
 for platform administrators (admin of every organisation). Use them to show or hide things; the API checks the role

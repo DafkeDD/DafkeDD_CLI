@@ -8,6 +8,8 @@ import type {
     AuthorizationCode,
     BootstrapAdmin,
     ChangeResult,
+    Invitation,
+    MemberStatus,
     Membership,
     MfaState,
     NewAccount,
@@ -26,6 +28,8 @@ const USER_COLUMNS =
     'id, email, email_verified AS "emailVerified", name, locale, password_hash AS "passwordHash", status, ' +
     'is_superadmin AS "isSuperadmin", totp_enabled AS "mfaEnabled"'
 const TENANT_COLUMNS = 'id, slug, name, status, created_at AS "createdAt"'
+const INVITATION_COLUMNS =
+    'id, tenant_id AS "tenantId", email, role, invited_by AS "invitedBy", created_at AS "createdAt", expires_at AS "expiresAt"'
 
 /** A slug that is still free: the wanted one, or the wanted one with a short random suffix. */
 const slugCandidate = (slug: string, attempt: number) =>
@@ -89,7 +93,7 @@ export class PgOidcStore implements OidcStore {
         return this.query<Membership>(
             `SELECT t.id AS "tenantId", t.slug, t.name, m.role
          FROM tenant_members m JOIN tenants t ON t.id = m.tenant_id
-        WHERE m.user_id = $1 AND t.status = 'active'
+        WHERE m.user_id = $1 AND m.status = 'active' AND t.status = 'active'
         ORDER BY t.name`,
             [userId]
         )
@@ -395,10 +399,32 @@ export class PgOidcStore implements OidcStore {
 
     async findMemberRole(tenantId: string, userId: string) {
         const rows = await this.query<{ role: TenantRole }>(
-            'SELECT role FROM tenant_members WHERE tenant_id = $1 AND user_id = $2',
+            "SELECT role FROM tenant_members WHERE tenant_id = $1 AND user_id = $2 AND status = 'active'",
             [tenantId, userId]
         )
         return rows[0]?.role ?? null
+    }
+
+    async findMember(tenantId: string, userId: string) {
+        const rows = await this.query<{ role: TenantRole; status: MemberStatus }>(
+            'SELECT role, status FROM tenant_members WHERE tenant_id = $1 AND user_id = $2',
+            [tenantId, userId]
+        )
+        return rows[0] ?? null
+    }
+
+    async touchMember(tenantId: string, userId: string) {
+        await this.query('UPDATE tenant_members SET last_seen_at = now() WHERE tenant_id = $1 AND user_id = $2', [
+            tenantId,
+            userId
+        ])
+    }
+
+    async endTenantSessions(tenantId: string, userId: string) {
+        await this.query(
+            'UPDATE oidc_sessions SET expires_at = least(expires_at, now()) WHERE tenant_id = $1 AND user_id = $2',
+            [tenantId, userId]
+        )
     }
 
     async addMember(tenantId: string, userId: string, role: TenantRole) {
@@ -419,7 +445,8 @@ export class PgOidcStore implements OidcStore {
         await this.database.ready()
         return this.database.withTenant(tenantId, async db => {
             const { rows } = await db.query<TenantMember>(
-                `SELECT m.user_id AS "userId", u.name, u.email, u.email_verified AS "emailVerified", m.role
+                `SELECT m.user_id AS "userId", u.name, u.email, u.email_verified AS "emailVerified", m.role, m.status,
+                m.last_seen_at AS "lastSeenAt"
            FROM tenant_members m JOIN ${USERS} u ON u.id = m.user_id
           ORDER BY lower(u.name), u.email`
             )
@@ -439,7 +466,13 @@ export class PgOidcStore implements OidcStore {
         )
     }
 
-    /** Locks the members of the tenant, refuses to remove its last admin, then applies `change`. */
+    async setMemberStatus(tenantId: string, userId: string, status: MemberStatus) {
+        return this.changeMember(tenantId, userId, status === 'disabled', db =>
+            db.query('UPDATE tenant_members SET status = $2 WHERE user_id = $1', [userId, status])
+        )
+    }
+
+    /** Locks the members of the tenant, refuses to lose its last active admin, then applies `change`. */
     private async changeMember(
         tenantId: string,
         userId: string,
@@ -448,20 +481,84 @@ export class PgOidcStore implements OidcStore {
     ): Promise<ChangeResult> {
         await this.database.ready()
         return this.database.withTenant(tenantId, async db => {
-            const { rows } = await db.query<{ userId: string; role: TenantRole }>(
-                'SELECT user_id AS "userId", role FROM tenant_members FOR UPDATE'
+            const { rows } = await db.query<{ userId: string; role: TenantRole; status: MemberStatus }>(
+                'SELECT user_id AS "userId", role, status FROM tenant_members FOR UPDATE'
             )
             const target = rows.find(row => row.userId === userId)
             if (!target) return 'not-found'
-            const admins = rows.filter(row => row.role === 'admin').length
-            if (losesAdmin && target.role === 'admin' && admins === 1) return 'last-admin'
+            const isActiveAdmin = (row: { role: TenantRole; status: MemberStatus }) =>
+                row.role === 'admin' && row.status === 'active'
+            const admins = rows.filter(isActiveAdmin).length
+            if (losesAdmin && isActiveAdmin(target) && admins === 1) return 'last-admin'
             await change(db)
             return 'ok'
+        })
+    }
+
+    // ---------------------------------------------------------------- invitations (Row-Level Security)
+
+    async saveInvitation(invitation: Omit<Invitation, 'id' | 'createdAt' | 'invitedByName'>) {
+        await this.database.ready()
+        return this.database.withTenant(invitation.tenantId, async db => {
+            const { rows } = await db.query<Invitation>(
+                `INSERT INTO tenant_invitations (tenant_id, email, role, invited_by, expires_at) VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (tenant_id, lower(email)) DO UPDATE
+           SET role = EXCLUDED.role, invited_by = EXCLUDED.invited_by, expires_at = EXCLUDED.expires_at, created_at = now()
+         RETURNING ${INVITATION_COLUMNS}`,
+                [invitation.tenantId, invitation.email, invitation.role, invitation.invitedBy, invitation.expiresAt]
+            )
+            const row = rows[0]
+            if (!row) throw new Error('The invitation was not saved')
+            return row
+        })
+    }
+
+    async listInvitations(tenantId: string) {
+        await this.database.ready()
+        return this.database.withTenant(tenantId, async db => {
+            const { rows } = await db.query<Invitation>(
+                `SELECT i.id, i.tenant_id AS "tenantId", i.email, i.role, i.invited_by AS "invitedBy",
+                i.created_at AS "createdAt", i.expires_at AS "expiresAt", u.name AS "invitedByName"
+           FROM tenant_invitations i LEFT JOIN ${USERS} u ON u.id = i.invited_by
+          WHERE i.expires_at > now() ORDER BY i.created_at DESC`
+            )
+            return rows
+        })
+    }
+
+    async findInvitation(tenantId: string, id: string) {
+        await this.database.ready()
+        return this.database.withTenant(tenantId, async db => {
+            const { rows } = await db.query<Invitation>(
+                `SELECT ${INVITATION_COLUMNS} FROM tenant_invitations WHERE id = $1 AND expires_at > now()`,
+                [id]
+            )
+            return rows[0] ?? null
+        })
+    }
+
+    async renewInvitation(tenantId: string, id: string, expiresAt: Date) {
+        await this.database.ready()
+        return this.database.withTenant(tenantId, async db => {
+            const { rows } = await db.query<Invitation>(
+                `UPDATE tenant_invitations SET expires_at = $2 WHERE id = $1 RETURNING ${INVITATION_COLUMNS}`,
+                [id, expiresAt]
+            )
+            return rows[0] ?? null
+        })
+    }
+
+    async deleteInvitation(tenantId: string, id: string) {
+        await this.database.ready()
+        return this.database.withTenant(tenantId, async db => {
+            const result = await db.query('DELETE FROM tenant_invitations WHERE id = $1', [id])
+            return (result.rowCount ?? 0) > 0
         })
     }
 
     async deleteExpired(now: Date) {
         await this.query(`DELETE FROM oidc_sessions WHERE expires_at <= $1::timestamptz - interval '1 hour'`, [now])
         await this.query('DELETE FROM oidc_codes WHERE expires_at <= $1', [now])
+        await this.query('DELETE FROM tenant_invitations WHERE expires_at <= $1', [now])
     }
 }

@@ -69,6 +69,7 @@ test('the backend gets the OIDC server, its tests, scripts and the multi-tenant 
         'src/oidc/totp.spec.ts',
         'src/oidc/mfa.service.ts',
         'src/oidc/mfa.controller.ts',
+        'src/tenants/presence.controller.ts',
         'config/oidc-clients.json',
         'scripts/oidc-user.mjs',
         'test/oidc.e2e-spec.ts',
@@ -128,7 +129,7 @@ test('the e2e spec checks the login page in all four languages', () => {
 
 test('every table with tenant data has Row-Level Security in the migration', () => {
     const sql = templates['src/database/migrations.ts']
-    for (const table of ['tenants', 'tenant_members', 'oidc_sessions', 'oidc_codes']) {
+    for (const table of ['tenants', 'tenant_members', 'tenant_invitations', 'oidc_sessions', 'oidc_codes']) {
         assert.ok(sql.includes(`\${isolate('${table}'`), table)
     }
     assert.match(sql, /ENABLE ROW LEVEL SECURITY/)

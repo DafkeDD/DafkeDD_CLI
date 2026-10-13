@@ -14,7 +14,7 @@ import { sha256 } from './crypto.js'
 import { LoginLimiter } from './login-limiter.js'
 import { OIDC, OidcConfig, slugify } from './oidc.config.js'
 import { hashPassword } from './password.js'
-import { OIDC_STORE, type OidcStore, type StoredUser, type TenantRole } from './store/oidc.store.js'
+import { type Invitation, OIDC_STORE, type OidcStore, type StoredUser, type TenantRole } from './store/oidc.store.js'
 
 /** Pages of the frontend that the links in emails open. */
 const PAGES: Record<AccountTokenKind, string> = {
@@ -160,7 +160,10 @@ export class AccountService {
 
     // ---------------------------------------------------------------- invitations
 
-    /** Sends an invitation for a tenant. `inviter` must be admin of that tenant or superadmin (checked by the caller). */
+    /**
+     * Invites someone to a tenant (or renews the open invitation for that address). `inviter` must be admin of that
+     * tenant or superadmin (checked by the caller).
+     */
     async invite(
         inviter: { userId: string; name: string },
         tenant: { id: string; name: string },
@@ -169,31 +172,67 @@ export class AccountService {
     ) {
         const email = normalize(input.email)
         const existing = await this.store.findUserByEmail(email)
-        if (existing && (await this.store.findMemberRole(tenant.id, existing.id)))
+        if (existing && (await this.store.findMember(tenant.id, existing.id)))
             throw new AppException('oidc.ALREADY_MEMBER', HttpStatus.CONFLICT)
-        await this.send('invite', email, existing?.locale ?? lang, {
-            name: existing?.name ?? email,
-            app: this.config.appName,
-            tenant: tenant.name,
-            inviter: inviter.name,
-            role: String(this.i18n.t(`mail.ROLE_${input.role}`, { lang: existing?.locale ?? lang })),
-            link: this.link(
-                'invite',
-                { tenantId: tenant.id, email, role: input.role, invitedBy: inviter.userId },
-                OIDC.INVITATION_SECONDS
-            )
+        const invitation = await this.store.saveInvitation({
+            tenantId: tenant.id,
+            email,
+            role: input.role,
+            invitedBy: inviter.userId,
+            expiresAt: new Date(Date.now() + OIDC.INVITATION_SECONDS * 1000)
         })
-        return { status: 'invited' as const, email }
+        await this.sendInvitation(invitation, inviter.name, tenant.name, lang)
+        return { status: 'invited' as const, email, id: invitation.id }
     }
 
-    /** An invitation that can still be accepted: the tenant is active and the inviter may still invite. */
+    /** Sends an open invitation again, valid for 7 more days. */
+    async resendInvitation(inviterName: string, tenant: { id: string; name: string }, id: string, lang: string) {
+        const invitation = await this.store.renewInvitation(
+            tenant.id,
+            id,
+            new Date(Date.now() + OIDC.INVITATION_SECONDS * 1000)
+        )
+        if (!invitation) throw new AppException('oidc.INVITATION_NOT_FOUND', HttpStatus.NOT_FOUND)
+        await this.sendInvitation(invitation, inviterName, tenant.name, lang)
+        return { status: 'invited' as const, email: invitation.email, id: invitation.id }
+    }
+
+    private async sendInvitation(invitation: Invitation, inviterName: string, tenantName: string, lang: string) {
+        const existing = await this.store.findUserByEmail(invitation.email)
+        const language = existing?.locale ?? lang
+        await this.send('invite', invitation.email, language, {
+            name: existing?.name ?? invitation.email,
+            app: this.config.appName,
+            tenant: tenantName,
+            inviter: inviterName,
+            role: String(this.i18n.t(`mail.ROLE_${invitation.role}`, { lang: language })),
+            link: this.link(
+                'invite',
+                {
+                    tenantId: invitation.tenantId,
+                    invitationId: invitation.id,
+                    email: invitation.email,
+                    role: invitation.role,
+                    invitedBy: invitation.invitedBy ?? ''
+                },
+                Math.max(1, Math.floor((invitation.expiresAt.getTime() - Date.now()) / 1000))
+            )
+        })
+    }
+
+    /**
+     * An invitation that can still be accepted: it was not withdrawn (its row exists), the tenant is active and the
+     * inviter may still invite.
+     */
     private async openInvitation(token: unknown) {
         const data = openAccountToken('invite', token, this.key)
         if (!data) this.invalidLink()
-        const [tenant, inviter] = await Promise.all([
+        const [row, tenant, inviter] = await Promise.all([
+            this.store.findInvitation(data.tenantId, data.invitationId),
             this.store.findTenant(data.tenantId),
             this.store.findUserById(data.invitedBy)
         ])
+        if (row?.email.toLowerCase() !== data.email.toLowerCase()) this.invalidLink()
         const allowed =
             inviter?.status === 'active' &&
             (inviter.isSuperadmin || (await this.store.findMemberRole(data.tenantId, inviter.id)) === 'admin')
@@ -237,6 +276,7 @@ export class AccountService {
             await this.store.setEmailVerified(user.id)
         }
         await this.store.addMember(tenant.id, user.id, data.role)
+        await this.store.deleteInvitation(tenant.id, data.invitationId)
         return { status: 'accepted' as const, tenantName: tenant.name, accountExists }
     }
 }

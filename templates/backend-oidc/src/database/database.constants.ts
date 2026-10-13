@@ -8,4 +8,4 @@ export const USERS_TABLE = '__USERS_TABLE__'
 export const TENANT_ROLE = '__TENANT_ROLE__'
 
 /** Tables with customer data: each has a tenant id and a Row-Level Security policy (checked by the tests). */
-export const TENANT_TABLES = ['tenants', 'tenant_members', 'oidc_sessions', 'oidc_codes'] as const
+export const TENANT_TABLES = ['tenants', 'tenant_members', 'tenant_invitations', 'oidc_sessions', 'oidc_codes'] as const

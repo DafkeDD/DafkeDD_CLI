@@ -63,10 +63,26 @@ CREATE TABLE tenant_members (
   user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
   -- user: uses the application; admin: manages this tenant (members, invitations, settings)
   role text NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  -- disabled: still a member, but cannot log in to this tenant or use its API (an admin can enable it again)
+  status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+  -- The last request of the member in this tenant (who is online), at most once a minute
+  last_seen_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, user_id)
 );
 CREATE INDEX tenant_members_user_idx ON tenant_members (user_id);
+
+-- Invitations that were not accepted yet (an accepted or withdrawn invitation is deleted)
+CREATE TABLE tenant_invitations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  email text NOT NULL,
+  role text NOT NULL CHECK (role IN ('user', 'admin')),
+  invited_by uuid REFERENCES ${users} (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL
+);
+CREATE UNIQUE INDEX tenant_invitations_email_key ON tenant_invitations (tenant_id, lower(email));
 
 CREATE TABLE oidc_clients (
   client_id text PRIMARY KEY,
@@ -142,11 +158,13 @@ END
 $$;
 ${isolate('tenants', 'id')}
 ${isolate('tenant_members', 'tenant_id')}
+${isolate('tenant_invitations', 'tenant_id')}
 ${isolate('oidc_sessions', 'tenant_id')}
 ${isolate('oidc_codes', 'tenant_id')}
 
 GRANT SELECT, UPDATE ON tenants TO ${role};
 GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_members TO ${role};
+GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_invitations TO ${role};
 GRANT SELECT (id, email, name, locale, email_verified) ON ${users} TO ${role};
 `
     }

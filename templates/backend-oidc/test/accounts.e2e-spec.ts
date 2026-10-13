@@ -311,13 +311,103 @@ describe('Accounts, roles and the platform (e2e)', () => {
             expect(forbidden.body.error).toBe('errors.FORBIDDEN')
         })
 
-        it('lists the members with their role for an admin', async () => {
+        it('lists the members with role, status and who is online for an admin', async () => {
             const alice = await accessToken('alice@example.com')
             const response = await http().get('/tenants/current/members').set(bearer(alice.access_token)).expect(200)
             expect(response.body).toEqual([
-                { userId: ids.alice, name: 'Alice', email: 'alice@example.com', emailVerified: true, role: 'admin' },
-                { userId: ids.bob, name: 'Bob', email: 'bob@example.com', emailVerified: true, role: 'user' }
+                expect.objectContaining({
+                    userId: ids.alice,
+                    name: 'Alice',
+                    email: 'alice@example.com',
+                    role: 'admin',
+                    status: 'active',
+                    online: true
+                }),
+                expect.objectContaining({
+                    userId: ids.bob,
+                    name: 'Bob',
+                    email: 'bob@example.com',
+                    role: 'user',
+                    status: 'active'
+                })
             ])
+            expect(new Date(response.body[0].lastSeenAt as string).getTime()).toBeGreaterThan(Date.now() - 60_000)
+            // A member who was active more than two minutes ago is no longer online
+            const bob = store.members.find(member => member.userId === ids.bob && member.tenantId === ids.acme)
+            if (bob) bob.lastSeenAt = new Date(Date.now() - 3 * 60_000)
+            const later = await http().get('/tenants/current/members').set(bearer(alice.access_token)).expect(200)
+            expect(later.body[1]).toMatchObject({ userId: ids.bob, online: false })
+            await http().post('/me/heartbeat').set(bearer(alice.access_token)).expect(204)
+            await http().post('/me/heartbeat').expect(401)
+        })
+
+        it('disables a member at once (no API, no login, sessions end) and enables it again', async () => {
+            const tenant = store.addTenant('trio', 'Trio')
+            const boss = store.addUser({
+                email: 'boss@trio.com',
+                name: 'Boss',
+                passwordHash: await hashPassword(PASSWORD)
+            })
+            const worker = store.addUser({
+                email: 'worker@trio.com',
+                name: 'Worker',
+                passwordHash: await hashPassword(PASSWORD)
+            })
+            store.addMembership(tenant.id, boss.id, 'admin')
+            store.addMembership(tenant.id, worker.id, 'admin')
+            const bossToken = (await accessToken('boss@trio.com')).access_token
+            const workerToken = (await accessToken('worker@trio.com')).access_token
+            const status = (id: string) => '/tenants/current/members/' + id + '/status'
+
+            await http().patch(status(worker.id)).set(bearer(bossToken)).send({ status: 'disabled' }).expect(200)
+            // Same token, but disabled: no access any more, and no login to this tenant
+            await http().get('/tenants/current/members').set(bearer(workerToken)).expect(403)
+            expect((await login('worker@trio.com')).response.status).toBe(403)
+            const listed = await http().get('/tenants/current/members').set(bearer(bossToken)).expect(200)
+            expect(listed.body).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ userId: worker.id, status: 'disabled', online: false })
+                ])
+            )
+            // The last active admin cannot disable itself
+            const last = await http()
+                .patch(status(boss.id))
+                .set(bearer(bossToken))
+                .send({ status: 'disabled' })
+                .expect(409)
+            expect(last.body.error).toBe('oidc.LAST_ADMIN')
+            await http().patch(status(worker.id)).set(bearer(bossToken)).send({ status: 'paused' }).expect(400)
+
+            await http().patch(status(worker.id)).set(bearer(bossToken)).send({ status: 'active' }).expect(200)
+            expect((await login('worker@trio.com')).response.status).toBe(303)
+        })
+
+        it('shows open invitations, sends them again and withdraws them', async () => {
+            const alice = (await accessToken('alice@example.com')).access_token
+            const invited = await http()
+                .post('/tenants/current/invitations')
+                .set(bearer(alice))
+                .send({ email: 'Jane@Example.com', role: 'admin' })
+                .expect(202)
+            const id = invited.body.id as string
+            const list = await http().get('/tenants/current/invitations').set(bearer(alice)).expect(200)
+            expect(list.body[0]).toMatchObject({ id, email: 'jane@example.com', role: 'admin', invitedByName: 'Alice' })
+            const first = mailTo('jane@example.com').token
+
+            await http().post(`/tenants/current/invitations/${id}/resend`).set(bearer(alice)).expect(202)
+            expect(outbox.filter(mail => mail.to === 'jane@example.com')).toHaveLength(2)
+            const second = mailTo('jane@example.com').token
+            expect(second).not.toBe(first)
+            await http().get('/oidc/account/invitation').query({ token: second }).expect(200)
+
+            await http().delete(`/tenants/current/invitations/${id}`).set(bearer(alice)).expect(204)
+            // Withdrawn: both links stop working
+            for (const token of [first, second])
+                await http().get('/oidc/account/invitation').query({ token }).expect(400)
+            expect((await http().get('/tenants/current/invitations').set(bearer(alice)).expect(200)).body).toEqual([])
+            const gone = await http().post(`/tenants/current/invitations/${id}/resend`).set(bearer(alice)).expect(404)
+            expect(gone.body.error).toBe('oidc.INVITATION_NOT_FOUND')
+            await http().delete(`/tenants/current/invitations/${id}`).set(bearer(alice)).expect(404)
         })
 
         it('invites someone new: the link creates a verified account in the tenant', async () => {
@@ -349,6 +439,10 @@ describe('Accounts, roles and the platform (e2e)', () => {
             expect(accepted.body).toEqual({ status: 'accepted', tenantName: 'Acme', accountExists: false })
             const frank = await accessToken('frank@example.com')
             expect(decodeUnverified(frank.access_token)?.tenant).toMatchObject({ id: ids.acme, role: 'user' })
+            // Accepted: no longer open, and the link works only once
+            const open = await http().get('/tenants/current/invitations').set(bearer(alice.access_token)).expect(200)
+            expect((open.body as { email: string }[]).some(item => item.email === 'frank@example.com')).toBe(false)
+            await http().get('/oidc/account/invitation').query({ token }).expect(400)
         })
 
         it('invites an existing account, which joins without a new password; members cannot be invited twice', async () => {

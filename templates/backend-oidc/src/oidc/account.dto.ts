@@ -84,3 +84,9 @@ export class RoleDto {
     @IsIn(TENANT_ROLES, isIn)
     role!: TenantRole
 }
+
+export class MemberStatusDto {
+    @ApiProperty({ enum: ['active', 'disabled'], example: 'disabled' })
+    @IsIn(['active', 'disabled'], isIn)
+    status!: 'active' | 'disabled'
+}

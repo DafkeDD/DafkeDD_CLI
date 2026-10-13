@@ -31,6 +31,9 @@ export interface AuthContext {
 
 const LEVEL = 'access-level'
 
+/** "Last seen" of a member is written at most once a minute (who is online). */
+const TOUCH_MS = 60_000
+
 /**
  * Checks the Bearer access token of this OIDC server and the level of the caller. The token says who the caller is
  * and in which tenant; the role and the superadmin flag are read from the database on every request, so taking a role
@@ -38,6 +41,8 @@ const LEVEL = 'access-level'
  */
 @Injectable()
 export class AccessGuard implements CanActivate {
+    private readonly touched = new Map<string, number>()
+
     constructor(
         private readonly oidc: OidcService,
         @Inject(OIDC_STORE) private readonly store: OidcStore,
@@ -74,6 +79,7 @@ export class AccessGuard implements CanActivate {
         if (needed === 'superadmin' && !user.isSuperadmin) throw forbidden
         if (needed === 'admin' && role !== 'admin') throw forbidden
 
+        await this.touch(found.id, user.id)
         request.auth = {
             userId: user.id,
             tenantId: found.id,
@@ -82,6 +88,16 @@ export class AccessGuard implements CanActivate {
             superadmin: user.isSuperadmin
         }
         return true
+    }
+
+    /** Records the activity of a member, at most once a minute per member (it never fails the request). */
+    private async touch(tenantId: string, userId: string) {
+        const key = tenantId + ':' + userId
+        const now = Date.now()
+        if (now - (this.touched.get(key) ?? 0) < TOUCH_MS) return
+        if (this.touched.size > 10_000) this.touched.clear()
+        this.touched.set(key, now)
+        await this.store.touchMember(tenantId, userId).catch(() => undefined)
     }
 }
 

@@ -129,7 +129,21 @@ export const OIDC_MESSAGES = {
         resetMfa: 'Reset 2FA',
         resetMfaText:
             'Removes two-step verification of this person (phone lost); they set it up again at the next login.',
-        resetMfaDone: 'Two-step verification was reset.'
+        resetMfaDone: 'Two-step verification was reset.',
+        management: 'Management',
+        online: 'Online',
+        neverSeen: 'Never logged in',
+        lastSeen: 'Last seen {time}',
+        disabled: 'Disabled',
+        disable: 'Disable',
+        enable: 'Enable',
+        disabledDone: 'Disabled: this person can no longer log in to the organisation.',
+        enabledDone: 'Enabled again.',
+        membersSummary: '{count, plural, one {# member} other {# members}} · {online} online',
+        openInvitations: 'Open invitations',
+        invitedBy: 'Invited by {name} · valid until {until}',
+        withdraw: 'Withdraw',
+        withdrawn: 'Invitation withdrawn.'
     },
     nl: {
         signIn: 'Inloggen',
@@ -248,7 +262,21 @@ export const OIDC_MESSAGES = {
         resetMfa: '2FA resetten',
         resetMfaText:
             'Verwijdert de tweestapsverificatie van deze persoon (telefoon kwijt); bij de volgende login stelt die het opnieuw in.',
-        resetMfaDone: 'Tweestapsverificatie werd gereset.'
+        resetMfaDone: 'Tweestapsverificatie werd gereset.',
+        management: 'Beheer',
+        online: 'Online',
+        neverSeen: 'Nog nooit ingelogd',
+        lastSeen: 'Laatst gezien {time}',
+        disabled: 'Uitgeschakeld',
+        disable: 'Uitschakelen',
+        enable: 'Inschakelen',
+        disabledDone: 'Uitgeschakeld: deze persoon kan niet meer inloggen bij de organisatie.',
+        enabledDone: 'Weer ingeschakeld.',
+        membersSummary: '{count, plural, one {# lid} other {# leden}} · {online} online',
+        openInvitations: 'Openstaande uitnodigingen',
+        invitedBy: 'Uitgenodigd door {name} · geldig tot {until}',
+        withdraw: 'Intrekken',
+        withdrawn: 'Uitnodiging ingetrokken.'
     },
     fr: {
         signIn: 'Se connecter',
@@ -369,7 +397,21 @@ export const OIDC_MESSAGES = {
         resetMfa: 'Réinitialiser la 2FA',
         resetMfaText:
             'Supprime la vérification en deux étapes de cette personne (téléphone perdu) ; elle la configure à nouveau à la prochaine connexion.',
-        resetMfaDone: 'La vérification en deux étapes a été réinitialisée.'
+        resetMfaDone: 'La vérification en deux étapes a été réinitialisée.',
+        management: 'Gestion',
+        online: 'En ligne',
+        neverSeen: 'Jamais connecté',
+        lastSeen: 'Vu {time}',
+        disabled: 'Désactivé',
+        disable: 'Désactiver',
+        enable: 'Activer',
+        disabledDone: "Désactivé : cette personne ne peut plus se connecter à l'organisation.",
+        enabledDone: 'Réactivé.',
+        membersSummary: '{count, plural, one {# membre} other {# membres}} · {online} en ligne',
+        openInvitations: 'Invitations en attente',
+        invitedBy: "Invité par {name} · valable jusqu'au {until}",
+        withdraw: 'Retirer',
+        withdrawn: 'Invitation retirée.'
     },
     de: {
         signIn: 'Anmelden',
@@ -489,7 +531,21 @@ export const OIDC_MESSAGES = {
         resetMfa: '2FA zurücksetzen',
         resetMfaText:
             'Entfernt die Zwei-Schritt-Verifizierung dieser Person (Telefon verloren); sie richtet sie bei der nächsten Anmeldung neu ein.',
-        resetMfaDone: 'Die Zwei-Schritt-Verifizierung wurde zurückgesetzt.'
+        resetMfaDone: 'Die Zwei-Schritt-Verifizierung wurde zurückgesetzt.',
+        management: 'Verwaltung',
+        online: 'Online',
+        neverSeen: 'Noch nie angemeldet',
+        lastSeen: 'Zuletzt gesehen {time}',
+        disabled: 'Deaktiviert',
+        disable: 'Deaktivieren',
+        enable: 'Aktivieren',
+        disabledDone: 'Deaktiviert: Diese Person kann sich nicht mehr bei der Organisation anmelden.',
+        enabledDone: 'Wieder aktiviert.',
+        membersSummary: '{count, plural, one {# Mitglied} other {# Mitglieder}} · {online} online',
+        openInvitations: 'Offene Einladungen',
+        invitedBy: 'Eingeladen von {name} · gültig bis {until}',
+        withdraw: 'Zurückziehen',
+        withdrawn: 'Einladung zurückgezogen.'
     }
 }
 

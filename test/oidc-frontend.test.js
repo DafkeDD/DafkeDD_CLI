@@ -35,7 +35,9 @@ test('the frontend login files are copied with the API port filled in', () => {
         'src/components/platform.tsx',
         'src/components/mfa-ui.tsx',
         'src/components/security.tsx',
-        'src/lib/account.ts'
+        'src/lib/account.ts',
+        'src/components/header-nav.tsx',
+        'src/components/presence.tsx'
     ]) {
         assert.ok(templates[rel], rel)
     }
@@ -193,3 +195,13 @@ test('the QR code is shown as an image, never inserted as HTML', () => {
     for (const [rel, content] of Object.entries(templates)) assert.ok(!content.includes('dangerouslySetInnerHTML'), rel)
     assert.match(templates['src/components/mfa-ui.tsx'], /data:image\/svg\+xml/)
 })
+
+for (const ui of [true, false]) {
+    test(`the layout gets the header navigation with the heartbeat, inside Suspense (${ui ? 'DafkeDD UI' : 'plain'})`, () => {
+        const layout = withApi({ ...files, ...(ui ? uiFiles : {}) }, API, { ui })['src/app/[locale]/layout.tsx']
+        assert.match(layout, /import \{ HeaderNav \} from '@\/components\/header-nav';/)
+        assert.match(layout, /<Suspense fallback=\{null\}>\s*<HeaderNav \/>\s*<\/Suspense>/)
+        assert.match(templates['src/components/header-nav.tsx'], /<Presence \/>/)
+        assert.match(templates['src/components/presence.tsx'], /me\/heartbeat/)
+    })
+}

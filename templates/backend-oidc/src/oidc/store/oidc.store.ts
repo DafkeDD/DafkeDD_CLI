@@ -50,12 +50,30 @@ export interface Tenant {
     members?: number
 }
 
+export type MemberStatus = 'active' | 'disabled'
+
 export interface TenantMember {
     userId: string
     name: string
     email: string
     emailVerified: boolean
     role: TenantRole
+    status: MemberStatus
+    /** The last request of this member in this tenant (null: never). */
+    lastSeenAt: Date | null
+}
+
+/** An invitation that was not accepted yet. */
+export interface Invitation {
+    id: string
+    tenantId: string
+    email: string
+    role: TenantRole
+    invitedBy: string | null
+    /** Name of the person who invited (only filled in by listInvitations). */
+    invitedByName?: string | null
+    createdAt: Date
+    expiresAt: Date
 }
 
 /** Result of a change that must never leave a tenant without an admin, or the platform without a superadmin. */
@@ -191,8 +209,10 @@ export interface OidcStore {
     /** A new tenant; the slug gets a suffix when it exists already. */
     createTenant(name: string, slug: string): Promise<Tenant>
     setTenantStatus(id: string, status: Tenant['status']): Promise<boolean>
-    /** The role of a user in a tenant (only rows in tenant_members), or null. */
+    /** The role of an active member of a tenant (only rows in tenant_members), or null (no member, or disabled). */
     findMemberRole(tenantId: string, userId: string): Promise<TenantRole | null>
+    /** The membership row (also when disabled), or null. */
+    findMember(tenantId: string, userId: string): Promise<{ role: TenantRole; status: MemberStatus } | null>
     /** Adds a member; an existing member keeps the higher of both roles. */
     addMember(tenantId: string, userId: string, role: TenantRole): Promise<void>
     /** The members of one tenant. PgOidcStore runs this with Row-Level Security (DatabaseService.withTenant). */
@@ -201,6 +221,24 @@ export interface OidcStore {
     setMemberRole(tenantId: string, userId: string, role: TenantRole): Promise<ChangeResult>
     /** Removes a member. A tenant always keeps at least one admin (checked under a lock). */
     removeMember(tenantId: string, userId: string): Promise<ChangeResult>
+    /** Disables or enables a member. A tenant always keeps at least one active admin. */
+    setMemberStatus(tenantId: string, userId: string, status: MemberStatus): Promise<ChangeResult>
+    /** Records that a member is active right now (who is online). */
+    touchMember(tenantId: string, userId: string): Promise<void>
+    /** Ends the sessions of a user in one tenant (after disabling or removing the member). */
+    endTenantSessions(tenantId: string, userId: string): Promise<void>
+
+    // ---------------------------------------------------------------- invitations (Row-Level Security)
+
+    /** Creates an invitation, or renews the open one for the same email address (new role, inviter and expiry). */
+    saveInvitation(invitation: Omit<Invitation, 'id' | 'createdAt' | 'invitedByName'>): Promise<Invitation>
+    /** Open invitations of a tenant that did not expire, newest first, with the name of the inviter. */
+    listInvitations(tenantId: string): Promise<Invitation[]>
+    /** An open invitation that did not expire, or null. */
+    findInvitation(tenantId: string, id: string): Promise<Invitation | null>
+    /** A new expiry (sending the invitation again); null when it does not exist (any more). */
+    renewInvitation(tenantId: string, id: string, expiresAt: Date): Promise<Invitation | null>
+    deleteInvitation(tenantId: string, id: string): Promise<boolean>
 
     findClient(clientId: string): Promise<OidcClient | null>
     upsertClient(client: OidcClient): Promise<void>
@@ -228,6 +266,6 @@ export interface OidcStore {
 
     /** Creates the first tenant and its admin, only when there are no users at all. Returns true when it did. */
     bootstrapAdmin(admin: BootstrapAdmin): Promise<boolean>
-    /** Removes expired codes, and sessions that ended at least an hour ago (longer than a login cookie lives). */
+    /** Removes expired codes and invitations, and sessions that ended at least an hour ago (longer than a login cookie). */
     deleteExpired(now: Date): Promise<void>
 }

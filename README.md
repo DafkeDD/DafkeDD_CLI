@@ -267,8 +267,10 @@ library. The CLI also asks the name of the first organisation (tenant) and the e
   new ones). The first account is superadmin. `@Access('admin')` / `@Access('superadmin')` protect endpoints; the role
   is checked in the database on every request. An organisation always keeps an admin, the platform a superadmin.
 - **Accounts**: registration (a new organisation, you become its admin), email verification, forgotten password (the
-  link works once), invitations by email (`/members`), and for superadmins every organisation on `/admin`. The links are
-  encrypted tokens: no extra tables. Answers never reveal which addresses have an account.
+  link works once), and for superadmins every organisation on `/admin`.
+- **Management** (`/members`, "Management" in the header): admins invite people by email, see open invitations (send
+  again, withdraw), change roles, disable or enable members, remove them, and see who is online and when someone was
+  last seen. The links are encrypted tokens: no extra tables. Answers never reveal which addresses have an account.
 - **Email**: `nodemailer` over SMTP (`SMTP_*` in `.env`, fill in your own for production). During development
   `npm run mail:dev` starts Mailpit in Docker: every email on http://localhost:8025. Texts in four languages.
 - **Users**: `npm run oidc:user -- --email ... --tenant ... --role admin` adds users and organisations (`--superadmin`,
@@ -422,6 +424,9 @@ git switch developer
 
 ## Changelog
 
+- **0.23.0**: management for admins: disable and enable members (no login, no API, sessions end at once), who is online
+  and "last seen" (heartbeat from the frontend), open invitations in `tenant_invitations` (send again, withdraw), and a
+  "Management" / "Platform" / "Profile" navigation in the header.
 - **0.22.0**: phase 2 of the own OIDC server. **Two-step verification is required** for every account (TOTP with a QR
   code, own RFC 6238 code, recovery codes, every code once, set up at the first login, reset by a superadmin). Roles
   `user`, `admin` (of an organisation) and `superadmin` (of the platform; the first account). Registration with a new

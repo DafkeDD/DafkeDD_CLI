@@ -8,12 +8,13 @@ import type { TenantRole } from './store/oidc.store.js'
  *
  * - verify: valid while the account still has that email address.
  * - reset: holds a fingerprint of the current password hash, so it works only once: a new password changes the hash.
- * - invite: checked again when accepted (the tenant must be active, the inviter must still be allowed to invite).
+ * - invite: points to a row of tenant_invitations; withdrawing the invitation deletes the row, so the link stops working.
+ *   Checked again when accepted (the tenant must be active, the inviter must still be allowed to invite).
  */
 export interface AccountTokens {
     verify: { userId: string; email: string }
     reset: { userId: string; fingerprint: string }
-    invite: { tenantId: string; email: string; role: TenantRole; invitedBy: string }
+    invite: { tenantId: string; invitationId: string; email: string; role: TenantRole; invitedBy: string }
 }
 export type AccountTokenKind = keyof AccountTokens
 

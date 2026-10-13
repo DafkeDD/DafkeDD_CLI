@@ -523,6 +523,8 @@ export class OidcService implements OnApplicationBootstrap {
             expiresAt: new Date(now.getTime() + OIDC.SESSION_SECONDS * 1000)
         }
         if (!(await this.store.createSession(session))) return { kind: 'expired' }
+        // Logged in: online for the admins of the tenant
+        await this.store.touchMember(membership.tenantId, user.id).catch(() => undefined)
         const result = await this.issueCode(interaction.params, session, user, membership)
         return {
             kind: 'done',

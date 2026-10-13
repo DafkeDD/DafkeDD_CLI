@@ -367,6 +367,65 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         expect(await store.getMfa(id)).toEqual({ secret: null, enabled: false, lastStep: null, recoveryCodes: [] })
     })
 
+    it('disables members, keeps an active admin, records who was online and keeps invitations per tenant', async () => {
+        const store = new PgOidcStore(database)
+        const account = (email: string) => ({
+            email,
+            name: email,
+            passwordHash: 'x',
+            emailVerified: true,
+            locale: null
+        })
+        const created = await store.register(account('chief@example.com'), { name: 'Status Co', slug: 'status-co' })
+        const tenantId = created?.tenant.id ?? ''
+        const chief = created?.user.id ?? ''
+        const helper = (await store.createUser(account('helper@example.com')))?.id ?? ''
+        await store.addMember(tenantId, helper, 'user')
+
+        expect(await store.setMemberStatus(tenantId, chief, 'disabled')).toBe('last-admin')
+        expect(await store.setMemberStatus(tenantId, helper, 'disabled')).toBe('ok')
+        expect(await store.findMemberRole(tenantId, helper)).toBeNull()
+        expect(await store.findMember(tenantId, helper)).toEqual({ role: 'user', status: 'disabled' })
+        expect(await store.listMemberships(helper)).toEqual([])
+        // A disabled admin does not count as the active admin
+        await store.setMemberRole(tenantId, helper, 'admin')
+        expect(await store.setMemberStatus(tenantId, chief, 'disabled')).toBe('last-admin')
+        expect(await store.setMemberStatus(tenantId, helper, 'active')).toBe('ok')
+        expect(await store.listMemberships(helper)).toHaveLength(1)
+
+        await store.touchMember(tenantId, helper)
+        const members = await store.listMembers(tenantId)
+        expect(members.find(member => member.userId === helper)?.lastSeenAt).toBeInstanceOf(Date)
+        expect(members.find(member => member.userId === chief)?.lastSeenAt).toBeNull()
+
+        const expiresAt = new Date(Date.now() + 60_000)
+        const first = await store.saveInvitation({
+            tenantId,
+            email: 'new@x.com',
+            role: 'user',
+            invitedBy: chief,
+            expiresAt
+        })
+        const again = await store.saveInvitation({
+            tenantId,
+            email: 'NEW@x.com',
+            role: 'admin',
+            invitedBy: chief,
+            expiresAt
+        })
+        expect(again.id).toBe(first.id)
+        expect(await store.listInvitations(tenantId)).toEqual([
+            expect.objectContaining({ id: first.id, role: 'admin', invitedByName: 'chief@example.com' })
+        ])
+        // Row-Level Security: another tenant sees nothing of it
+        expect(await store.listInvitations(tenant.a)).toEqual([])
+        expect(await store.findInvitation(tenant.a, first.id)).toBeNull()
+        expect(await store.deleteInvitation(tenant.a, first.id)).toBe(false)
+        expect((await store.renewInvitation(tenantId, first.id, new Date(Date.now() + 120_000)))?.id).toBe(first.id)
+        expect(await store.deleteInvitation(tenantId, first.id)).toBe(true)
+        expect(await store.findInvitation(tenantId, first.id)).toBeNull()
+    })
+
     it('the tenant role exists and owns nothing', async () => {
         const { rows } = await database.query<{ owned: number }>(
             `SELECT count(*)::int AS owned FROM pg_class c JOIN pg_roles r ON r.oid = c.relowner WHERE r.rolname = $1`,

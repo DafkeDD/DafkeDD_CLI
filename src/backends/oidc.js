@@ -148,6 +148,7 @@ export const MAIL_MESSAGES = {
 /** Texts of the login pages (namespace "oidc"). Every language needs the same keys (checked by the tests). */
 export const MESSAGES = {
     en: {
+        INVITATION_NOT_FOUND: 'This invitation was not found (accepted, withdrawn or expired).',
         MFA_SETUP_TITLE: 'Set up two-step verification',
         MFA_SETUP_TEXT:
             'Two-step verification is required. Scan this QR code with an authenticator app (for example Google Authenticator, Microsoft Authenticator or 1Password) and enter the 6-digit code it shows.',
@@ -194,6 +195,7 @@ export const MESSAGES = {
         ACCOUNT_DETAILS_NEEDED: 'Fill in your name and a password to create your account.'
     },
     nl: {
+        INVITATION_NOT_FOUND: 'Deze uitnodiging werd niet gevonden (aanvaard, ingetrokken of verlopen).',
         MFA_SETUP_TITLE: 'Tweestapsverificatie instellen',
         MFA_SETUP_TEXT:
             'Tweestapsverificatie is verplicht. Scan deze QR-code met een authenticator-app (bijvoorbeeld Google Authenticator, Microsoft Authenticator of 1Password) en geef de code van 6 cijfers die de app toont.',
@@ -240,6 +242,7 @@ export const MESSAGES = {
         ACCOUNT_DETAILS_NEEDED: 'Vul je naam en een wachtwoord in om je account aan te maken.'
     },
     fr: {
+        INVITATION_NOT_FOUND: 'Cette invitation est introuvable (acceptée, retirée ou expirée).',
         MFA_SETUP_TITLE: 'Configurer la vérification en deux étapes',
         MFA_SETUP_TEXT:
             "La vérification en deux étapes est obligatoire. Scannez ce code QR avec une application d'authentification (par exemple Google Authenticator, Microsoft Authenticator ou 1Password) et saisissez le code à 6 chiffres affiché.",
@@ -291,6 +294,7 @@ export const MESSAGES = {
         ACCOUNT_DETAILS_NEEDED: 'Indiquez votre nom et un mot de passe pour créer votre compte.'
     },
     de: {
+        INVITATION_NOT_FOUND: 'Diese Einladung wurde nicht gefunden (angenommen, zurückgezogen oder abgelaufen).',
         MFA_SETUP_TITLE: 'Zwei-Schritt-Verifizierung einrichten',
         MFA_SETUP_TEXT:
             'Die Zwei-Schritt-Verifizierung ist Pflicht. Scanne diesen QR-Code mit einer Authenticator-App (zum Beispiel Google Authenticator, Microsoft Authenticator oder 1Password) und gib den 6-stelligen Code ein, den sie anzeigt.',
@@ -472,6 +476,7 @@ const DISCOVERY_EXAMPLE = port => ({
 
 const TENANT = { id: '6b1d7c4e-0f1a-4c55-9e1e-2b9c1f3d8a10', name: 'Acme', role: 'admin' }
 const USER_ID = '1fb82908-476c-4460-951a-0fae1f01fcc6'
+const INVITATION_ID = '9d2c4e7a-3b1f-4c8e-a5d6-0e7f8a9b1c2d'
 const TOKEN = 'v1.Qm9u…'
 const BAD_REQUEST = [400, 'errors.BAD_REQUEST']
 const INVALID_LINK = [400, 'oidc.INVALID_LINK']
@@ -818,12 +823,21 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/tenants/current/members',
         tag: 'tenant members',
         summary:
-            'The members of the tenant of the access token, with their role. For admins of that tenant (and superadmins).',
+            'The members of the tenant of the access token: role, status (active or disabled), online (a request in the last 2 minutes) and last seen. For admins of that tenant (and superadmins).',
         bearer: true,
         response: {
             status: 200,
             example: [
-                { userId: USER_ID, name: 'Ada Lovelace', email: 'ada@example.com', emailVerified: true, role: 'admin' }
+                {
+                    userId: USER_ID,
+                    name: 'Ada Lovelace',
+                    email: 'ada@example.com',
+                    emailVerified: true,
+                    role: 'admin',
+                    status: 'active',
+                    lastSeenAt: '2026-10-13T09:41:00.000Z',
+                    online: true
+                }
             ]
         },
         errors: ACCESS('admin')
@@ -841,7 +855,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 ['role', 'string', '`user` or `admin`']
             ]
         },
-        response: { status: 202, example: { status: 'invited', email: 'bob@example.com' } },
+        response: { status: 202, example: { status: 'invited', email: 'bob@example.com', id: INVITATION_ID } },
         errors: [BAD_REQUEST, ...ACCESS('admin'), [409, 'oidc.ALREADY_MEMBER']]
     },
     {
@@ -864,6 +878,74 @@ export const endpoints = ({ port = 4000 } = {}) => [
         pathExample: `/tenants/current/members/${USER_ID}`,
         response: null,
         errors: [...ACCESS('admin'), [404, 'oidc.MEMBER_NOT_FOUND'], [409, 'oidc.LAST_ADMIN']]
+    },
+    {
+        method: 'PATCH',
+        path: '/tenants/current/members/:userId/status',
+        tag: 'tenant members',
+        summary:
+            'Disable a member (cannot log in to this tenant or use its API; its sessions end at once) or enable it again. The tenant always keeps an active admin.',
+        bearer: true,
+        pathExample: `/tenants/current/members/${USER_ID}/status`,
+        body: { example: { status: 'disabled' }, fields: [['status', 'string', '`active` or `disabled`']] },
+        response: { status: 200, example: { userId: USER_ID, status: 'disabled' } },
+        errors: [BAD_REQUEST, ...ACCESS('admin'), [404, 'oidc.MEMBER_NOT_FOUND'], [409, 'oidc.LAST_ADMIN']]
+    },
+    {
+        method: 'GET',
+        path: '/tenants/current/invitations',
+        tag: 'tenant members',
+        summary: 'The open invitations of the tenant (not accepted, not withdrawn, not expired), newest first.',
+        bearer: true,
+        response: {
+            status: 200,
+            example: [
+                {
+                    id: INVITATION_ID,
+                    tenantId: TENANT.id,
+                    email: 'bob@example.com',
+                    role: 'user',
+                    invitedBy: USER_ID,
+                    invitedByName: 'Ada Lovelace',
+                    createdAt: '2026-10-13T09:00:00.000Z',
+                    expiresAt: '2026-10-20T09:00:00.000Z'
+                }
+            ]
+        },
+        errors: ACCESS('admin')
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/invitations/:id/resend',
+        tag: 'tenant members',
+        summary: 'Send an open invitation again: a new link, valid for 7 more days.',
+        bearer: true,
+        pathExample: `/tenants/current/invitations/${INVITATION_ID}/resend`,
+        response: { status: 202, example: { status: 'invited', email: 'bob@example.com', id: INVITATION_ID } },
+        errors: [...ACCESS('admin'), [404, 'oidc.INVITATION_NOT_FOUND']]
+    },
+    {
+        method: 'DELETE',
+        path: '/tenants/current/invitations/:id',
+        tag: 'tenant members',
+        summary: 'Withdraw an open invitation: the link in the email stops working. Answers 204.',
+        bearer: true,
+        pathExample: `/tenants/current/invitations/${INVITATION_ID}`,
+        response: null,
+        errors: [...ACCESS('admin'), [404, 'oidc.INVITATION_NOT_FOUND']]
+    },
+    {
+        method: 'POST',
+        path: '/me/heartbeat',
+        tag: 'tenant members',
+        summary:
+            'The logged in member is active: online for the admins of the tenant (the frontend sends it every minute while a page is open). Answers 204.',
+        bearer: true,
+        response: null,
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [403, 'errors.FORBIDDEN', 'not a member']
+        ]
     },
     // ---------------------------------------------------------------- the platform (superadmins)
     {

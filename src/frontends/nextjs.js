@@ -874,7 +874,36 @@ export function withApi(fileMap, api, { ui }) {
         )
     }
     result[page] = content
+    if (api.oidc) result['src/app/[locale]/layout.tsx'] = withHeaderNav(result['src/app/[locale]/layout.tsx'], { ui })
     return result
+}
+
+/**
+ * Adds the header navigation of the login (Management, Platform, Profile, and the heartbeat for "who is online") to the
+ * layout. It reads the session per request, so it sits inside Suspense.
+ */
+function withHeaderNav(layout, { ui }) {
+    let content = replaceOnce(
+        layout,
+        "import type { ReactNode } from 'react';\n",
+        "import { Suspense, type ReactNode } from 'react';\n"
+    )
+    content = replaceOnce(
+        content,
+        "import { LocaleSwitcher } from '@/components/locale-switcher';\n",
+        "import { HeaderNav } from '@/components/header-nav';\nimport { LocaleSwitcher } from '@/components/locale-switcher';\n"
+    )
+    return ui
+        ? replaceOnce(
+              content,
+              '              </div>\n            </header>\n',
+              '              </div>\n              <Suspense fallback={null}>\n                <HeaderNav />\n              </Suspense>\n            </header>\n'
+          )
+        : replaceOnce(
+              content,
+              '          <header className="flex justify-end gap-2 p-4">\n',
+              '          <header className="flex justify-end gap-2 p-4">\n            <Suspense fallback={null}>\n              <HeaderNav />\n            </Suspense>\n'
+          )
 }
 
 // next.config.ts van create-next-app bevat o.a. de Tailwind-koppeling: nooit overschrijven, enkel next-intl toevoegen.

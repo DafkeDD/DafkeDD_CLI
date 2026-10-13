@@ -3,6 +3,8 @@ import type {
     AuthorizationCode,
     BootstrapAdmin,
     ChangeResult,
+    Invitation,
+    MemberStatus,
     Membership,
     MfaState,
     NewAccount,
@@ -20,7 +22,9 @@ import type {
 export class MemoryOidcStore implements OidcStore {
     users: StoredUser[] = []
     tenants: Tenant[] = []
-    members: { tenantId: string; userId: string; role: TenantRole }[] = []
+    members: { tenantId: string; userId: string; role: TenantRole; status: MemberStatus; lastSeenAt: Date | null }[] =
+        []
+    invitations: Invitation[] = []
     clients = new Map<string, OidcClient>()
     keys: StoredKey[] = []
     sessions = new Map<string, Session>()
@@ -54,7 +58,7 @@ export class MemoryOidcStore implements OidcStore {
 
     /** Test helper: makes a user a member of a tenant. */
     addMembership(tenantId: string, userId: string, role: TenantRole = 'user') {
-        this.members.push({ tenantId, userId, role })
+        this.members.push({ tenantId, userId, role, status: 'active', lastSeenAt: null })
     }
 
     async findUserByEmail(email: string) {
@@ -69,7 +73,7 @@ export class MemoryOidcStore implements OidcStore {
         return this.members
             .flatMap(member => {
                 const tenant = this.tenants.find(candidate => candidate.id === member.tenantId)
-                return member.userId === userId && tenant?.status === 'active'
+                return member.userId === userId && member.status === 'active' && tenant?.status === 'active'
                     ? [{ tenantId: tenant.id, slug: tenant.slug, name: tenant.name, role: member.role }]
                     : []
             })
@@ -272,8 +276,81 @@ export class MemoryOidcStore implements OidcStore {
         return Boolean(tenant)
     }
 
+    private member(tenantId: string, userId: string) {
+        return this.members.find(member => member.tenantId === tenantId && member.userId === userId)
+    }
+
     async findMemberRole(tenantId: string, userId: string) {
-        return this.members.find(member => member.tenantId === tenantId && member.userId === userId)?.role ?? null
+        const member = this.member(tenantId, userId)
+        return member?.status === 'active' ? member.role : null
+    }
+
+    async findMember(tenantId: string, userId: string) {
+        const member = this.member(tenantId, userId)
+        return member ? { role: member.role, status: member.status } : null
+    }
+
+    async touchMember(tenantId: string, userId: string) {
+        const member = this.member(tenantId, userId)
+        if (member) member.lastSeenAt = new Date()
+    }
+
+    async endTenantSessions(tenantId: string, userId: string) {
+        const now = new Date()
+        for (const session of this.sessions.values())
+            if (session.tenantId === tenantId && session.userId === userId && session.expiresAt > now)
+                session.expiresAt = now
+    }
+
+    async setMemberStatus(tenantId: string, userId: string, status: MemberStatus) {
+        return this.changeMember(tenantId, userId, status === 'disabled', member => {
+            member.status = status
+        })
+    }
+
+    // ---------------------------------------------------------------- invitations
+
+    async saveInvitation(invitation: Omit<Invitation, 'id' | 'createdAt' | 'invitedByName'>) {
+        const existing = this.invitations.find(
+            item => item.tenantId === invitation.tenantId && item.email.toLowerCase() === invitation.email.toLowerCase()
+        )
+        if (existing) {
+            Object.assign(existing, { ...invitation, createdAt: new Date() })
+            return { ...existing }
+        }
+        const row: Invitation = { ...invitation, id: randomUUID(), createdAt: new Date() }
+        this.invitations.push(row)
+        return { ...row }
+    }
+
+    async listInvitations(tenantId: string) {
+        const now = new Date()
+        return this.invitations
+            .filter(item => item.tenantId === tenantId && item.expiresAt > now)
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+            .map(item => ({
+                ...item,
+                invitedByName: this.users.find(user => user.id === item.invitedBy)?.name ?? null
+            }))
+    }
+
+    async findInvitation(tenantId: string, id: string) {
+        const found = this.invitations.find(item => item.tenantId === tenantId && item.id === id)
+        return found && found.expiresAt > new Date() ? { ...found } : null
+    }
+
+    async renewInvitation(tenantId: string, id: string, expiresAt: Date) {
+        const found = this.invitations.find(item => item.tenantId === tenantId && item.id === id)
+        if (!found) return null
+        found.expiresAt = expiresAt
+        return { ...found }
+    }
+
+    async deleteInvitation(tenantId: string, id: string) {
+        const index = this.invitations.findIndex(item => item.tenantId === tenantId && item.id === id)
+        if (index < 0) return false
+        this.invitations.splice(index, 1)
+        return true
     }
 
     async addMember(tenantId: string, userId: string, role: TenantRole) {
@@ -294,7 +371,9 @@ export class MemoryOidcStore implements OidcStore {
                               name: user.name,
                               email: user.email,
                               emailVerified: user.emailVerified,
-                              role: member.role
+                              role: member.role,
+                              status: member.status,
+                              lastSeenAt: member.lastSeenAt
                           }
                       ]
                     : []
@@ -318,13 +397,14 @@ export class MemoryOidcStore implements OidcStore {
         tenantId: string,
         userId: string,
         losesAdmin: boolean,
-        change: (member: { tenantId: string; userId: string; role: TenantRole }) => void
+        change: (member: MemoryOidcStore['members'][number]) => void
     ): ChangeResult {
         const members = this.members.filter(member => member.tenantId === tenantId)
         const target = members.find(member => member.userId === userId)
         if (!target) return 'not-found'
-        if (losesAdmin && target.role === 'admin' && members.filter(member => member.role === 'admin').length === 1)
-            return 'last-admin'
+        const isActiveAdmin = (member: { role: TenantRole; status: MemberStatus }) =>
+            member.role === 'admin' && member.status === 'active'
+        if (losesAdmin && isActiveAdmin(target) && members.filter(isActiveAdmin).length === 1) return 'last-admin'
         change(target)
         return 'ok'
     }
@@ -333,5 +413,6 @@ export class MemoryOidcStore implements OidcStore {
         const ended = now.getTime() - 60 * 60 * 1000
         for (const [id, session] of this.sessions) if (session.expiresAt.getTime() <= ended) this.sessions.delete(id)
         for (const [id, code] of this.codes) if (code.expiresAt <= now) this.codes.delete(id)
+        this.invitations = this.invitations.filter(item => item.expiresAt > now)
     }
 }
