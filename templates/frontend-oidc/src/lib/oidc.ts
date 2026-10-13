@@ -21,6 +21,13 @@ export const REDIRECT_URI = APP_URL + '/api/auth/callback'
 export const SESSION_COOKIE = 'app_session'
 export const FLOW_COOKIE = 'app_oidc'
 export const FLOW_SECONDS = 10 * 60
+/**
+ * How long the session cookie lives: as long as a session of the login server (12 hours). The access token inside is
+ * renewed with the refresh token when it expires; when that fails (logged out, session ended), the user is logged out.
+ */
+export const SESSION_SECONDS = 12 * 60 * 60
+/** The access token is renewed this long before it expires (milliseconds). */
+export const RENEW_BEFORE_MS = 60_000
 
 /** The tenant of the session, with the role of the user there: user or admin (a superadmin is admin everywhere). */
 export interface Tenant {
@@ -39,8 +46,12 @@ export interface Session {
     /** Platform administrator: admin of every tenant. */
     superadmin: boolean
     accessToken: string
-    /** When the access token expires (milliseconds). After that the user logs in again, without a password (SSO). */
+    /** When the access token expires (milliseconds). Before that, the proxy renews it with the refresh token. */
     expiresAt: number
+    /** Renews the access token (rotated at every use); bound to the session of the login server. */
+    refreshToken: string | null
+    /** The last ID token: it tells the login server who logs out (id_token_hint). */
+    idToken: string
 }
 
 /** A login in progress (between /api/auth/login and /api/auth/callback). */
@@ -57,6 +68,8 @@ interface Discovery {
     token_endpoint: string
     userinfo_endpoint: string
     jwks_uri: string
+    end_session_endpoint: string
+    revocation_endpoint: string
 }
 
 const b64url = (buffer: Buffer) => buffer.toString('base64url')
@@ -179,10 +192,13 @@ async function signingKey(kid: string) {
     throw new Error('Unknown signing key')
 }
 
-/** Checks the ID token: RS256 signature with the JWKS, issuer, audience, expiry, nonce and at_hash. */
+/**
+ * Checks the ID token: RS256 signature with the JWKS, issuer, audience, expiry, nonce and at_hash. After a refresh
+ * there is no nonce (`null`): then the ID token must not have one either.
+ */
 export async function verifyIdToken(
     idToken: string,
-    nonce: string,
+    nonce: string | null,
     accessToken: string
 ): Promise<{ sub: string; tenant: Tenant | null; superadmin: boolean }> {
     const [header, payload, signature] = idToken.split('.')
@@ -203,7 +219,7 @@ export async function verifyIdToken(
     if (claims.iss !== OIDC_ISSUER) throw new Error('Wrong issuer')
     if (claims.aud !== OIDC_CLIENT_ID) throw new Error('Wrong audience')
     if (typeof claims.exp !== 'number' || claims.exp < now - 30) throw new Error('ID token expired')
-    if (claims.nonce !== nonce) throw new Error('Wrong nonce')
+    if ((claims.nonce ?? null) !== nonce) throw new Error('Wrong nonce')
     const atHash = b64url(createHash('sha256').update(accessToken).digest().subarray(0, 16))
     if (claims.at_hash !== atHash) throw new Error('The access token does not belong to the ID token')
     if (typeof claims.sub !== 'string') throw new Error('Missing subject')
@@ -227,7 +243,55 @@ export async function exchangeCode(code: string, verifier: string) {
     })
     const body = (await response.json()) as Record<string, unknown>
     if (!response.ok) throw new Error(`Token request failed: ${String(body.error)}`)
-    return body as { access_token: string; id_token: string; expires_in: number }
+    return body as unknown as TokenSet
+}
+
+export interface TokenSet {
+    access_token: string
+    id_token: string
+    expires_in: number
+    refresh_token?: string
+}
+
+/** New tokens for a refresh token. null when the login server refuses it (logged out, session ended, reused). */
+export async function refreshTokens(refreshToken: string): Promise<TokenSet | null> {
+    const response = await fetch((await discovery()).token_endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken,
+            client_id: OIDC_CLIENT_ID
+        }),
+        cache: 'no-store'
+    })
+    if (response.status === 400 || response.status === 401) return null
+    if (!response.ok) throw new Error('Refresh failed: ' + response.status)
+    return (await response.json()) as TokenSet
+}
+
+/** Revokes the refresh token at the login server (logout). Never fails: the session cookie is deleted anyway. */
+export async function revokeRefreshToken(refreshToken: string): Promise<void> {
+    await fetch((await discovery()).revocation_endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token: refreshToken, token_type_hint: 'refresh_token', client_id: OIDC_CLIENT_ID }),
+        cache: 'no-store'
+    }).catch(() => undefined)
+}
+
+/**
+ * Where the browser goes to log out of the login server too (end_session_endpoint): the ID token says who, and the
+ * login server sends the browser back to this app.
+ */
+export async function endSessionUrl(idToken: string): Promise<string> {
+    const url = new URL((await discovery()).end_session_endpoint)
+    url.search = new URLSearchParams({
+        id_token_hint: idToken,
+        client_id: OIDC_CLIENT_ID,
+        post_logout_redirect_uri: APP_URL
+    }).toString()
+    return url.toString()
 }
 
 /** Claims of the user from the userinfo endpoint (also proves the access token works). */

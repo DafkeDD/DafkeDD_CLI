@@ -23,6 +23,8 @@ export interface Interaction {
     amr: string[]
     /** The nonce that was given to the eID bridge for this login (used once), or null. */
     eidNonce: string | null
+    /** The User-Agent of the browser that started the login (for the list of sessions), shortened. */
+    userAgent: string
     /** Milliseconds since 1970. */
     expiresAt: number
 }
@@ -48,6 +50,7 @@ export function sealInteraction(interaction: Interaction, key: Buffer): string {
         n: interaction.enrolling,
         a: interaction.amr,
         x: interaction.eidNonce,
+        g: interaction.userAgent,
         e: interaction.expiresAt
     }
     return encrypt(JSON.stringify(data), key, context(interaction.id))
@@ -70,6 +73,7 @@ export function openInteraction(
             n?: boolean
             a?: string[]
             x?: string | null
+            g?: string
             e: number
         }
         if (typeof data.e !== 'number' || data.e <= now || typeof data.c !== 'string') return null
@@ -82,6 +86,7 @@ export function openInteraction(
             enrolling: data.n === true,
             amr: Array.isArray(data.a) ? data.a : [],
             eidNonce: typeof data.x === 'string' ? data.x : null,
+            userAgent: typeof data.g === 'string' ? data.g : '',
             expiresAt: data.e
         }
     } catch {

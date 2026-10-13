@@ -68,7 +68,7 @@ test('an eID login is two factors (acr loa4) and also counts when two-step verif
     assert.match(config, /ACR_EID: 'loa4'/)
     assert.match(config, /EID_AMR: \['sc', 'pin', 'mfa'\]/)
     const service = backend['src/oidc/oidc.service.ts']
-    assert.match(service, /session\.acr !== OIDC\.ACR_MFA && session\.acr !== OIDC\.ACR_EID/)
+    assert.match(service, /acr === OIDC\.ACR_MFA \|\| acr === OIDC\.ACR_EID/)
     // The nonce of a login lives in its encrypted cookie and works once
     assert.match(service, /const interaction = \{ \.\.\.found\.interaction, eidNonce: null \}/)
     assert.match(backend['src/oidc/interaction.ts'], /eidNonce: string \| null/)

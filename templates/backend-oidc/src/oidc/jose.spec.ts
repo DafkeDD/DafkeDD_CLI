@@ -77,6 +77,13 @@ describe('jose', () => {
             signJwt(payload, { alg: 'ES256', kid, typ }, ec.privateKey)
         expect(() => verifyJwt(token({ ...claims, exp: now - 60 }), options())).toThrow('expired')
         expect(() => verifyJwt(token({ ...claims, exp: undefined }), options())).toThrow('Missing expiry')
+        // Only for id_token_hint at logout: an expired token still says who, but the signature must be right
+        expect(verifyJwt(token({ ...claims, exp: now - 60 }), options({ ignoreExpiry: true })).payload.sub).toBe(
+            'user-1'
+        )
+        expect(() => verifyJwt(token({ ...claims, exp: undefined }), options({ ignoreExpiry: true }))).toThrow(
+            'Missing expiry'
+        )
         expect(() => verifyJwt(token({ ...claims, iss: 'https://evil.example.com' }), options())).toThrow('issuer')
         expect(() => verifyJwt(token({ ...claims, aud: 'other' }), options())).toThrow('audience')
         expect(() => verifyJwt(token({ ...claims, iat: now + 3600 }), options())).toThrow('future')

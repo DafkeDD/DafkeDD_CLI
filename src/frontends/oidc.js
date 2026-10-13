@@ -182,7 +182,20 @@ export const OIDC_MESSAGES = {
         eidLinkSubmit: 'Link',
         eidUnlink: 'Unlink eID',
         eidOnlyLogin: 'Your eID is your only way to log in. Choose a password first (forgot password) to unlink it.',
-        mfaByEid: 'You log in with your eID (card and PIN): that already counts as two-step verification.'
+        mfaByEid: 'You log in with your eID (card and PIN): that already counts as two-step verification.',
+        sessionsTitle: 'Where you are logged in',
+        sessionsText:
+            'Every browser where your account is logged in. End a session you do not recognise: it stops at once.',
+        thisDevice: 'This device',
+        unknownBrowser: 'Unknown browser',
+        method_eid: 'eID',
+        method_mfa: 'Password and code',
+        method_pwd: 'Password',
+        sessionSince: 'Logged in {date}',
+        sessionLastActive: 'active {date}',
+        sessionEnd: 'End',
+        sessionsEndOthers: 'Log out everywhere else',
+        sessionsEnded: '{count, plural, one {# session ended.} other {# sessions ended.}}'
     },
     nl: {
         signIn: 'Inloggen',
@@ -355,7 +368,20 @@ export const OIDC_MESSAGES = {
         eidUnlink: 'eID ontkoppelen',
         eidOnlyLogin:
             'Je eID is je enige manier om in te loggen. Kies eerst een wachtwoord (wachtwoord vergeten) om ze te ontkoppelen.',
-        mfaByEid: 'Je logt in met je eID (kaart en pincode): dat geldt al als tweestapsverificatie.'
+        mfaByEid: 'Je logt in met je eID (kaart en pincode): dat geldt al als tweestapsverificatie.',
+        sessionsTitle: 'Waar je ingelogd bent',
+        sessionsText:
+            'Elke browser waar je account ingelogd is. Beëindig een sessie die je niet herkent: ze stopt meteen.',
+        thisDevice: 'Dit toestel',
+        unknownBrowser: 'Onbekende browser',
+        method_eid: 'eID',
+        method_mfa: 'Wachtwoord en code',
+        method_pwd: 'Wachtwoord',
+        sessionSince: 'Ingelogd {date}',
+        sessionLastActive: 'actief {date}',
+        sessionEnd: 'Beëindigen',
+        sessionsEndOthers: 'Overal elders uitloggen',
+        sessionsEnded: '{count, plural, one {# sessie beëindigd.} other {# sessies beëindigd.}}'
     },
     fr: {
         signIn: 'Se connecter',
@@ -533,7 +559,20 @@ export const OIDC_MESSAGES = {
         eidOnlyLogin:
             "Votre eID est votre seul moyen de connexion. Choisissez d'abord un mot de passe (mot de passe oublié) pour la délier.",
         mfaByEid:
-            'Vous vous connectez avec votre eID (carte et code PIN) : cela compte déjà comme vérification en deux étapes.'
+            'Vous vous connectez avec votre eID (carte et code PIN) : cela compte déjà comme vérification en deux étapes.',
+        sessionsTitle: 'Où vous êtes connecté',
+        sessionsText:
+            "Chaque navigateur où votre compte est connecté. Terminez une session que vous ne reconnaissez pas : elle s'arrête immédiatement.",
+        thisDevice: 'Cet appareil',
+        unknownBrowser: 'Navigateur inconnu',
+        method_eid: 'eID',
+        method_mfa: 'Mot de passe et code',
+        method_pwd: 'Mot de passe',
+        sessionSince: 'Connecté {date}',
+        sessionLastActive: 'actif {date}',
+        sessionEnd: 'Terminer',
+        sessionsEndOthers: 'Se déconnecter partout ailleurs',
+        sessionsEnded: '{count, plural, one {# session terminée.} other {# sessions terminées.}}'
     },
     de: {
         signIn: 'Anmelden',
@@ -707,7 +746,20 @@ export const OIDC_MESSAGES = {
         eidUnlink: 'eID-Verknüpfung aufheben',
         eidOnlyLogin:
             'Deine eID ist deine einzige Anmeldemöglichkeit. Wähle zuerst ein Passwort (Passwort vergessen), um die Verknüpfung aufzuheben.',
-        mfaByEid: 'Du meldest dich mit deiner eID an (Karte und PIN): Das gilt bereits als Zwei-Schritt-Verifizierung.'
+        mfaByEid: 'Du meldest dich mit deiner eID an (Karte und PIN): Das gilt bereits als Zwei-Schritt-Verifizierung.',
+        sessionsTitle: 'Wo du angemeldet bist',
+        sessionsText:
+            'Jeder Browser, in dem dein Konto angemeldet ist. Beende eine Sitzung, die du nicht erkennst: Sie endet sofort.',
+        thisDevice: 'Dieses Gerät',
+        unknownBrowser: 'Unbekannter Browser',
+        method_eid: 'eID',
+        method_mfa: 'Passwort und Code',
+        method_pwd: 'Passwort',
+        sessionSince: 'Angemeldet {date}',
+        sessionLastActive: 'aktiv {date}',
+        sessionEnd: 'Beenden',
+        sessionsEndOthers: 'Überall sonst abmelden',
+        sessionsEnded: '{count, plural, one {# Sitzung beendet.} other {# Sitzungen beendet.}}'
     }
 }
 

@@ -461,12 +461,12 @@ describe('OpenID Connect (e2e)', () => {
         })
 
         it('refuses other grant types and unknown clients', async () => {
-            const refresh = await http()
+            const other = await http()
                 .post('/oidc/token')
                 .type('form')
-                .send({ grant_type: 'refresh_token', client_id: CLIENT, refresh_token: 'x' })
-            expect(refresh.status).toBe(400)
-            expect(refresh.body.error).toBe('unsupported_grant_type')
+                .send({ grant_type: 'password', client_id: CLIENT, username: 'alice@example.com', password: 'x' })
+            expect(other.status).toBe(400)
+            expect(other.body.error).toBe('unsupported_grant_type')
             const unknown = await http()
                 .post('/oidc/token')
                 .type('form')

@@ -287,8 +287,11 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
 - **Tests**: unit tests (JOSE, PKCE with the RFC 7636 vector, keys, migrations, pages), end-to-end tests of the whole
   flow in memory (`npm run test:e2e`) and `npm run test:db` against the real PostgreSQL (isolation between tenants,
   codes used once, the first admin). Checked with the independent libraries `openid-client` and `jose` as client.
-- **Not yet** (next phases): refresh tokens, logout at the OIDC server, revocation, introspection, passkeys, audit log,
-  licences and payments.
+- **Sessions and logout**: refresh tokens for the frontend (bound to the session, rotated at every use, a stolen copy
+  ends the session), real logout (`end_session_endpoint`: the frontend logs out of the login server too), revocation
+  (RFC 7009) and introspection (RFC 7662). Every token carries its session (`sid`): ending a session stops its tokens at
+  once. `/security` shows where you are logged in and ends one or all other sessions.
+- **Not yet** (next phases): passkeys, audit log, back-channel logout, licences and payments.
 
 The TypeScript files of this feature live as real files in `templates/backend-oidc` and `templates/frontend-oidc` (see
 Development).
@@ -433,6 +436,13 @@ git switch developer
 ```
 
 ## Changelog
+
+- **0.26.0**: sessions and tokens. Refresh tokens (rotation, reuse detection with a grace of 30 seconds, bound to the
+  session; the frontend renews its access token in `src/proxy.ts` and stays logged in for 12 hours), RP-initiated logout
+  (`/oidc/logout`, with a "Log out?" page when no `id_token_hint` is sent), revocation (`/oidc/revoke`), introspection
+  (`/oidc/introspect`, confidential clients), `sid` in every token and a session check on every API call, and
+  `/me/sessions` (list, end one, log out everywhere else) on `/security`. Migration 3: `oidc_refresh_tokens` and a
+  public id, browser and last use per session. Clients get `grantTypes`.
 
 - **0.25.0**: log in and register with the Belgian eID through [DafkeDD eID](https://github.com/DafkeDD/DafkeDD_EID)
   (installed from its GitHub release): "Log in with eID" on the login page (card + PIN, `acr: loa4`, no authenticator

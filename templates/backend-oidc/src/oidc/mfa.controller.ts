@@ -38,7 +38,7 @@ export class MfaController {
     @ApiOkResponse({ description: '{ enabled: true, recoveryCodes }' })
     @ApiBadRequestResponse({ description: 'oidc.MFA_INVALID_CODE or oidc.MFA_SETUP_FIRST' })
     enable(@Auth() auth: AuthContext, @Body() body: MfaCodeDto) {
-        return this.mfa.enable(auth.userId, body.code)
+        return this.mfa.enable(auth.userId, body.code, auth.sessionId || null)
     }
 
     @Post('disable')

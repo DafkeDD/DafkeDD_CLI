@@ -1,7 +1,7 @@
 'use client'
 
 import { type FormEvent, useEffect, useRef, useState } from 'react'
-import { useLocale, useTranslations } from 'next-intl'
+import { useFormatter, useLocale, useTranslations } from 'next-intl'
 import { BUTTON, CARD, Heading, INPUT, LoginButton, Notice, SECONDARY } from '@/components/account-ui'
 import { EidBridge, EidPin, type EidToken } from '@/components/eid'
 import { MfaQr, RecoveryCodes } from '@/components/mfa-ui'
@@ -232,6 +232,153 @@ export function EidSecurity() {
             ) : (
                 <button type='button' className={BUTTON} onClick={() => setLinking(true)}>
                     {t('eidLink')}
+                </button>
+            )}
+        </section>
+    )
+}
+
+type SessionRow = {
+    id: string
+    current: boolean
+    tenant: { id: string; name: string | null } | null
+    userAgent: string | null
+    amr: string[]
+    createdAt: string
+    lastUsedAt: string | null
+}
+
+/** "Chrome · Windows" from a User-Agent: enough to recognise a device, no library needed. */
+export function describeBrowser(userAgent: string | null): string | null {
+    if (!userAgent) return null
+    const browser =
+        [
+            ['Edg/', 'Edge'],
+            ['OPR/', 'Opera'],
+            ['Firefox/', 'Firefox'],
+            ['Chrome/', 'Chrome'],
+            ['Safari/', 'Safari']
+        ].find(([needle]) => userAgent.includes(needle!))?.[1] ?? null
+    const system =
+        [
+            ['iPhone', 'iPhone'],
+            ['iPad', 'iPad'],
+            ['Android', 'Android'],
+            ['Windows', 'Windows'],
+            ['Mac OS X', 'macOS'],
+            ['Linux', 'Linux']
+        ].find(([needle]) => userAgent.includes(needle!))?.[1] ?? null
+    return [browser, system].filter(Boolean).join(' · ') || null
+}
+
+/**
+ * /security: where the account is logged in (GET /me/sessions through /api/backend). End one other session, or all
+ * of them at once; ending a session stops its tokens at once. This device logs out with the normal log out button.
+ */
+export function SessionsSecurity() {
+    const t = useTranslations('Oidc')
+    const format = useFormatter()
+    const backend = useBackend()
+    const [sessions, setSessions] = useState<SessionRow[] | null>(null)
+    // "active 3 minutes ago" is counted from when the list was loaded
+    const [loadedAt, setLoadedAt] = useState(() => new Date())
+    const [error, setError] = useState('')
+    const [notice, setNotice] = useState('')
+    const [busy, setBusy] = useState(false)
+
+    function show(result: Answer | null) {
+        if (result?.status === 200) {
+            setSessions(result.body as unknown as SessionRow[])
+            setLoadedAt(new Date())
+        } else setError(result?.message || t('offline'))
+    }
+
+    useEffect(() => {
+        backend('me/sessions')
+            .then(show)
+            .catch(() => show(null))
+        // once when the page opens
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    async function end(path: string) {
+        setBusy(true)
+        setError('')
+        setNotice('')
+        const result = await backend(path, 'DELETE').catch(() => null)
+        if (result?.status === 200) {
+            setNotice(t('sessionsEnded', { count: Number(result.body.ended ?? 0) }))
+            show(await backend('me/sessions').catch(() => null))
+        } else setError(result?.message || t('offline'))
+        setBusy(false)
+    }
+
+    const method = (amr: string[]) =>
+        amr.includes('sc') ? t('method_eid') : amr.includes('mfa') ? t('method_mfa') : t('method_pwd')
+    const others = (sessions ?? []).filter(session => !session.current).length
+
+    return (
+        <section className={CARD}>
+            <Heading title={t('sessionsTitle')} text={t('sessionsText')} />
+            {error && <Notice tone='error'>{error}</Notice>}
+            {notice && <Notice tone='success'>{notice}</Notice>}
+            {!sessions ? (
+                <p className='text-sm opacity-70'>{t('busy')}</p>
+            ) : (
+                <ul className='flex flex-col gap-3'>
+                    {sessions.map(session => (
+                        <li
+                            key={session.id}
+                            className='flex items-start justify-between gap-3 rounded-xl border border-black/10 p-3 text-sm dark:border-white/15'
+                        >
+                            <div className='flex flex-col gap-0.5'>
+                                <span className='font-semibold'>
+                                    {describeBrowser(session.userAgent) ?? t('unknownBrowser')}
+                                    {session.current && (
+                                        <span className='ml-2 text-xs font-medium text-green-700 dark:text-green-400'>
+                                            {t('thisDevice')}
+                                        </span>
+                                    )}
+                                </span>
+                                <span className='text-xs opacity-70'>
+                                    {session.tenant?.name ?? t('platformTitle')} · {method(session.amr)}
+                                </span>
+                                <span className='text-xs opacity-70'>
+                                    {t('sessionSince', {
+                                        date: format.dateTime(new Date(session.createdAt), {
+                                            dateStyle: 'medium',
+                                            timeStyle: 'short'
+                                        })
+                                    })}
+                                    {session.lastUsedAt &&
+                                        ' · ' +
+                                            t('sessionLastActive', {
+                                                date: format.relativeTime(new Date(session.lastUsedAt), loadedAt)
+                                            })}
+                                </span>
+                            </div>
+                            {!session.current && (
+                                <button
+                                    type='button'
+                                    disabled={busy}
+                                    className={SECONDARY + ' shrink-0'}
+                                    onClick={() => void end('me/sessions/' + session.id)}
+                                >
+                                    {t('sessionEnd')}
+                                </button>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            )}
+            {others > 0 && (
+                <button
+                    type='button'
+                    disabled={busy}
+                    className={SECONDARY + ' self-start'}
+                    onClick={() => void end('me/sessions')}
+                >
+                    {t('sessionsEndOthers')}
                 </button>
             )}
         </section>

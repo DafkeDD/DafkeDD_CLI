@@ -360,8 +360,8 @@ describe('Accounts, roles and the platform (e2e)', () => {
             const status = (id: string) => '/tenants/current/members/' + id + '/status'
 
             await http().patch(status(worker.id)).set(bearer(bossToken)).send({ status: 'disabled' }).expect(200)
-            // Same token, but disabled: no access any more, and no login to this tenant
-            await http().get('/tenants/current/members').set(bearer(workerToken)).expect(403)
+            // Same token, but disabled: its session ended, so no access any more, and no login to this tenant
+            await http().get('/tenants/current/members').set(bearer(workerToken)).expect(401)
             expect((await login('worker@trio.com')).response.status).toBe(403)
             const listed = await http().get('/tenants/current/members').set(bearer(bossToken)).expect(200)
             expect(listed.body).toEqual(

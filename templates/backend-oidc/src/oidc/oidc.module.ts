@@ -14,23 +14,46 @@ import { OidcController } from './oidc.controller.js'
 import { OidcService } from './oidc.service.js'
 import { OIDC_STORE } from './store/oidc.store.js'
 import { PgOidcStore } from './store/pg-oidc.store.js'
+import { SessionsController } from './sessions.controller.js'
+import { SessionsService } from './sessions.service.js'
+import { TokensService } from './tokens.service.js'
 import { WellKnownController } from './well-known.controller.js'
 
 /** The OpenID Connect server: /oidc/..., /oidc/account/... and /.well-known/oauth-authorization-server/oidc. */
 @Module({
     imports: [MailModule],
-    controllers: [OidcController, AccountController, MfaController, EidController, WellKnownController],
+    controllers: [
+        OidcController,
+        AccountController,
+        MfaController,
+        EidController,
+        SessionsController,
+        WellKnownController
+    ],
     providers: [
         OidcConfig,
         OidcService,
         AccountService,
         MfaService,
         EidService,
+        TokensService,
+        SessionsService,
         KeysService,
         LoginLimiter,
         AccessGuard,
         { provide: OIDC_STORE, useClass: PgOidcStore }
     ],
-    exports: [OidcService, AccountService, MfaService, EidService, KeysService, OidcConfig, AccessGuard, OIDC_STORE]
+    exports: [
+        OidcService,
+        TokensService,
+        SessionsService,
+        AccountService,
+        MfaService,
+        EidService,
+        KeysService,
+        OidcConfig,
+        AccessGuard,
+        OIDC_STORE
+    ]
 })
 export class OidcModule {}

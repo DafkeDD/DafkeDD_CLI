@@ -167,3 +167,24 @@ export function messagePage(t: Translate, titleKey: string, textKey: string) {
         body: `<h1>${escapeHtml(t(titleKey))}</h1><p class="muted">${escapeHtml(t(textKey))}</p>`
     }
 }
+
+/** "Log out?": the browser has a session, but the request did not prove which user the client logs out. */
+export function logoutPage(
+    t: Translate,
+    options: { action: string; csrf: string; clientName?: string; fields: Record<string, string> }
+) {
+    const hidden = Object.entries({ ...options.fields, csrf: options.csrf, confirm: 'yes' })
+        .map(([name, value]) => `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}">`)
+        .join('')
+    const text = options.clientName
+        ? t('oidc.LOGOUT_TEXT_CLIENT', { client: options.clientName })
+        : t('oidc.LOGOUT_TEXT')
+    return {
+        title: t('oidc.LOGOUT_TITLE'),
+        body:
+            `<h1>${escapeHtml(t('oidc.LOGOUT_TITLE'))}</h1>` +
+            `<p class="muted">${escapeHtml(text)}</p>` +
+            `<form method="post" action="${escapeHtml(options.action)}">${hidden}` +
+            `<button type="submit">${escapeHtml(t('oidc.LOGOUT_SUBMIT'))}</button></form>`
+    }
+}

@@ -9,10 +9,13 @@ import type {
     MemberStatus,
     Membership,
     MfaState,
+    RefreshToken,
+    RotateResult,
     NewAccount,
     OidcClient,
     OidcStore,
     Session,
+    SessionSummary,
     StoredKey,
     StoredUser,
     Tenant,
@@ -30,9 +33,10 @@ export class MemoryOidcStore implements OidcStore {
     invitations: Invitation[] = []
     clients = new Map<string, OidcClient>()
     keys: StoredKey[] = []
-    sessions = new Map<string, Session>()
+    sessions = new Map<string, Session & { createdAt: Date; lastUsedAt: Date | null }>()
+    refreshTokens = new Map<string, RefreshToken>()
     mfa = new Map<string, MfaState>()
-    codes = new Map<string, AuthorizationCode & { usedAt: Date | null }>()
+    codes = new Map<string, AuthorizationCode & { usedAt: Date | null; refreshFamily?: string }>()
     identifiers: UserIdentifier[] = []
 
     /** Test helper: adds a user (and memberships). */
@@ -110,8 +114,96 @@ export class MemoryOidcStore implements OidcStore {
     async createSession(session: Session) {
         for (const existing of this.sessions.values())
             if (existing.interactionHash === session.interactionHash) return false
-        this.sessions.set(session.idHash, { ...session })
+        this.sessions.set(session.idHash, { ...session, createdAt: new Date(), lastUsedAt: null })
         return true
+    }
+
+    private activeSession(id: string) {
+        const now = new Date()
+        return [...this.sessions.values()].find(session => session.id === id && session.expiresAt > now)
+    }
+
+    async findSessionById(id: string) {
+        return this.activeSession(id) ?? null
+    }
+
+    async touchSession(id: string) {
+        const session = this.activeSession(id)
+        if (session) session.lastUsedAt = new Date()
+    }
+
+    async listUserSessions(userId: string): Promise<SessionSummary[]> {
+        const now = new Date()
+        return [...this.sessions.values()]
+            .filter(session => session.userId === userId && session.expiresAt > now)
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+            .map(session => ({
+                id: session.id,
+                tenantId: session.tenantId,
+                tenantName: this.tenants.find(tenant => tenant.id === session.tenantId)?.name ?? null,
+                userAgent: session.userAgent,
+                acr: session.acr,
+                amr: session.amr,
+                authTime: session.authTime,
+                createdAt: session.createdAt,
+                lastUsedAt: session.lastUsedAt,
+                expiresAt: session.expiresAt
+            }))
+    }
+
+    async endUserSession(userId: string, id: string) {
+        const session = this.activeSession(id)
+        if (session?.userId !== userId) return false
+        session.expiresAt = new Date()
+        return true
+    }
+
+    async endOtherUserSessions(userId: string, keepId: string | null) {
+        const now = new Date()
+        let ended = 0
+        for (const session of this.sessions.values())
+            if (session.userId === userId && session.id !== keepId && session.expiresAt > now) {
+                session.expiresAt = now
+                ended++
+            }
+        return ended
+    }
+
+    // ---------------------------------------------------------------- refresh tokens
+
+    async createRefreshToken(token: Omit<RefreshToken, 'usedAt' | 'revokedAt'>) {
+        this.refreshTokens.set(token.tokenHash, { ...token, usedAt: null, revokedAt: null })
+    }
+
+    async findRefreshToken(tokenHash: string) {
+        const token = this.refreshTokens.get(tokenHash)
+        return token ? { ...token } : null
+    }
+
+    async rotateRefreshToken(
+        tokenHash: string,
+        next: { tokenHash: string; scope: string; expiresAt: Date },
+        graceMs: number
+    ): Promise<RotateResult> {
+        const token = this.refreshTokens.get(tokenHash)
+        const now = new Date()
+        if (!token || token.revokedAt || token.expiresAt <= now) return { status: 'invalid' }
+        if (token.usedAt && now.getTime() - token.usedAt.getTime() > graceMs) {
+            await this.revokeRefreshFamily(token.familyId)
+            return { status: 'reused', token: { ...token } }
+        }
+        token.usedAt ??= now
+        // Within the grace period the successor exists already (the same one): keep it as it is
+        const existing = this.refreshTokens.get(next.tokenHash)
+        if (existing?.revokedAt) return { status: 'invalid' }
+        const successor: RefreshToken = existing ?? { ...token, ...next, usedAt: null, revokedAt: null }
+        this.refreshTokens.set(next.tokenHash, successor)
+        return { status: 'ok', token: { ...successor } }
+    }
+
+    async revokeRefreshFamily(familyId: string) {
+        const now = new Date()
+        for (const token of this.refreshTokens.values()) if (token.familyId === familyId) token.revokedAt ??= now
     }
 
     async findSession(idHash: string) {
@@ -133,6 +225,16 @@ export class MemoryOidcStore implements OidcStore {
         if (!code || code.usedAt || code.expiresAt <= new Date()) return null
         code.usedAt = new Date()
         return { ...code, usedAt: undefined }
+    }
+
+    async setCodeRefreshFamily(codeHash: string, familyId: string) {
+        const code = this.codes.get(codeHash)
+        if (code) code.refreshFamily = familyId
+    }
+
+    async usedCodeRefreshFamily(codeHash: string) {
+        const code = this.codes.get(codeHash)
+        return code?.usedAt ? (code.refreshFamily ?? null) : null
     }
 
     async bootstrapAdmin(admin: BootstrapAdmin) {
@@ -451,6 +553,7 @@ export class MemoryOidcStore implements OidcStore {
         const ended = now.getTime() - 60 * 60 * 1000
         for (const [id, session] of this.sessions) if (session.expiresAt.getTime() <= ended) this.sessions.delete(id)
         for (const [id, code] of this.codes) if (code.expiresAt <= now) this.codes.delete(id)
+        for (const [hash, token] of this.refreshTokens) if (token.expiresAt <= now) this.refreshTokens.delete(hash)
         this.invitations = this.invitations.filter(item => item.expiresAt > now)
     }
 }

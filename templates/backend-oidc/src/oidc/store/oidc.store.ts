@@ -146,6 +146,8 @@ export interface AuthorizationParams {
 }
 
 export interface Session {
+    /** Public id (uuid): the `sid` claim of the tokens and the id on /me/sessions. Never the cookie value. */
+    id: string
     idHash: string
     /** sha256 of the login (interaction) that created the session: a login can create only one session. */
     interactionHash: string
@@ -156,7 +158,46 @@ export interface Session {
     acr: string
     amr: string[]
     expiresAt: Date
+    /** The browser that started the session (User-Agent, at most 300 characters). */
+    userAgent: string | null
 }
+
+/** An active session as the account itself sees it (/me/sessions). */
+export interface SessionSummary {
+    id: string
+    tenantId: string | null
+    tenantName: string | null
+    userAgent: string | null
+    acr: string
+    amr: string[]
+    authTime: Date
+    createdAt: Date
+    lastUsedAt: Date | null
+    expiresAt: Date
+}
+
+/** A refresh token (only its sha256), bound to a session and a client. */
+export interface RefreshToken {
+    tokenHash: string
+    /** Every rotation stays in the family of the first token: reuse of an old one ends the whole family. */
+    familyId: string
+    sessionId: string
+    clientId: string
+    userId: string
+    /** null: a platform login of a superadmin. */
+    tenantId: string | null
+    scope: string
+    expiresAt: Date
+    usedAt: Date | null
+    revokedAt: Date | null
+}
+
+/**
+ * Using a refresh token: `ok` with the new token; `reused` when an old token came back after the grace period (the
+ * family is revoked); `invalid` when it is unknown, expired or revoked.
+ */
+export type RotateResult =
+    { status: 'ok'; token: RefreshToken } | { status: 'reused'; token: RefreshToken } | { status: 'invalid' }
 
 export interface AuthorizationCode {
     codeHash: string
@@ -295,12 +336,42 @@ export interface OidcStore {
     createSession(session: Session): Promise<boolean>
     /** Only sessions that did not expire. */
     findSession(idHash: string): Promise<Session | null>
+    /** By its public id (the sid claim); only sessions that did not expire. */
+    findSessionById(id: string): Promise<Session | null>
+    /** Records that the session was used (the access token reached the API, or a refresh). */
+    touchSession(id: string): Promise<void>
+    /** The active sessions of an account, newest first, with the name of their tenant. */
+    listUserSessions(userId: string): Promise<SessionSummary[]>
+    /** Ends one session of this account; false when it is not (or no longer) an active session of it. */
+    endUserSession(userId: string, id: string): Promise<boolean>
+    /** Ends every session of the account except `keepId`; returns how many ended. */
+    endOtherUserSessions(userId: string, keepId: string | null): Promise<number>
+
+    // ---------------------------------------------------------------- refresh tokens
+
+    createRefreshToken(token: Omit<RefreshToken, 'usedAt' | 'revokedAt'>): Promise<void>
+    findRefreshToken(tokenHash: string): Promise<RefreshToken | null>
+    /**
+     * Uses a refresh token once and stores its successor (same family, session, client, user and tenant), under a lock.
+     * The successor is derived from the token, so a token used before gives the SAME successor again within `graceMs`
+     * (two requests of the same browser at once): never a second chain. Later it is reuse: the family is revoked.
+     */
+    rotateRefreshToken(
+        tokenHash: string,
+        next: { tokenHash: string; scope: string; expiresAt: Date },
+        graceMs: number
+    ): Promise<RotateResult>
+    revokeRefreshFamily(familyId: string): Promise<void>
     /** Ends a session. The row stays a while (see deleteExpired), so its login cannot be replayed. */
     endSession(idHash: string): Promise<void>
 
     createCode(code: AuthorizationCode): Promise<void>
     /** Marks the code as used and returns it; null when it does not exist, expired or was used before. */
     consumeCode(codeHash: string): Promise<AuthorizationCode | null>
+    /** Remembers the refresh token family a code gave. */
+    setCodeRefreshFamily(codeHash: string, familyId: string): Promise<void>
+    /** The refresh token family of a code that was used already (null: unknown, unused or none). */
+    usedCodeRefreshFamily(codeHash: string): Promise<string | null>
 
     /** Creates the first account as superadmin, only when there are no users at all. Returns true when it did. */
     bootstrapAdmin(admin: BootstrapAdmin): Promise<boolean>

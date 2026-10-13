@@ -14,10 +14,13 @@ import type {
     MemberStatus,
     Membership,
     MfaState,
+    RefreshToken,
+    RotateResult,
     NewAccount,
     OidcClient,
     OidcStore,
     Session,
+    SessionSummary,
     StoredKey,
     StoredUser,
     Tenant,
@@ -62,6 +65,16 @@ const IDENTIFIER_COLUMNS =
 
 /** Rolls back registerWithIdentifier when the identifier belongs to an account already. */
 class IdentifierTaken extends Error {}
+
+/** A uuid as PostgreSQL accepts it: anything else can never be a session id (and would make the query fail). */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const SESSION_COLUMNS =
+    'id, id_hash AS "idHash", interaction_hash AS "interactionHash", user_id AS "userId", tenant_id AS "tenantId", ' +
+    'auth_time AS "authTime", acr, amr, expires_at AS "expiresAt", user_agent AS "userAgent"'
+const REFRESH_COLUMNS =
+    'token_hash AS "tokenHash", family_id AS "familyId", session_id AS "sessionId", client_id AS "clientId", ' +
+    'user_id AS "userId", tenant_id AS "tenantId", scope, expires_at AS "expiresAt", used_at AS "usedAt", revoked_at AS "revokedAt"'
 
 const CLIENT_COLUMNS =
     'client_id AS "clientId", name, type, secret_hash AS "secretHash", redirect_uris AS "redirectUris", ' +
@@ -171,8 +184,8 @@ export class PgOidcStore implements OidcStore {
 
     async createSession(session: Session) {
         const rows = await this.query<{ id_hash: string }>(
-            `INSERT INTO oidc_sessions (id_hash, interaction_hash, user_id, tenant_id, auth_time, acr, amr, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `INSERT INTO oidc_sessions (id, id_hash, interaction_hash, user_id, tenant_id, auth_time, acr, amr, expires_at, user_agent)
+         VALUES ($9, $1, $2, $3, $4, $5, $6, $7, $8, $10)
          ON CONFLICT (interaction_hash) DO NOTHING RETURNING id_hash`,
             [
                 session.idHash,
@@ -182,7 +195,9 @@ export class PgOidcStore implements OidcStore {
                 session.authTime,
                 session.acr,
                 session.amr,
-                session.expiresAt
+                session.expiresAt,
+                session.id,
+                session.userAgent
             ]
         )
         return rows.length === 1
@@ -190,12 +205,142 @@ export class PgOidcStore implements OidcStore {
 
     async findSession(idHash: string) {
         const rows = await this.query<Session>(
-            `SELECT id_hash AS "idHash", interaction_hash AS "interactionHash", user_id AS "userId", tenant_id AS "tenantId", auth_time AS "authTime", acr, amr,
-              expires_at AS "expiresAt"
-         FROM oidc_sessions WHERE id_hash = $1 AND expires_at > now()`,
+            `SELECT ${SESSION_COLUMNS} FROM oidc_sessions WHERE id_hash = $1 AND expires_at > now()`,
             [idHash]
         )
         return rows[0] ?? null
+    }
+
+    async findSessionById(id: string) {
+        if (!UUID.test(id)) return null
+        const rows = await this.query<Session>(
+            `SELECT ${SESSION_COLUMNS} FROM oidc_sessions WHERE id = $1 AND expires_at > now()`,
+            [id]
+        )
+        return rows[0] ?? null
+    }
+
+    async touchSession(id: string) {
+        if (!UUID.test(id)) return
+        await this.query('UPDATE oidc_sessions SET last_used_at = now() WHERE id = $1 AND expires_at > now()', [id])
+    }
+
+    async listUserSessions(userId: string) {
+        return this.query<SessionSummary>(
+            `SELECT s.id, s.tenant_id AS "tenantId", t.name AS "tenantName", s.user_agent AS "userAgent", s.acr, s.amr,
+              s.auth_time AS "authTime", s.created_at AS "createdAt", s.last_used_at AS "lastUsedAt",
+              s.expires_at AS "expiresAt"
+         FROM oidc_sessions s LEFT JOIN tenants t ON t.id = s.tenant_id
+        WHERE s.user_id = $1 AND s.expires_at > now()
+        ORDER BY s.created_at DESC`,
+            [userId]
+        )
+    }
+
+    async endUserSession(userId: string, id: string) {
+        if (!UUID.test(id)) return false
+        const rows = await this.query(
+            'UPDATE oidc_sessions SET expires_at = now() WHERE id = $1 AND user_id = $2 AND expires_at > now() RETURNING 1',
+            [id, userId]
+        )
+        return rows.length > 0
+    }
+
+    async endOtherUserSessions(userId: string, keepId: string | null) {
+        const rows = await this.query(
+            `UPDATE oidc_sessions SET expires_at = now()
+        WHERE user_id = $1 AND expires_at > now() AND ($2::uuid IS NULL OR id <> $2::uuid) RETURNING 1`,
+            [userId, keepId !== null && UUID.test(keepId) ? keepId : null]
+        )
+        return rows.length
+    }
+
+    // ---------------------------------------------------------------- refresh tokens
+
+    async createRefreshToken(token: Omit<RefreshToken, 'usedAt' | 'revokedAt'>) {
+        await this.query(
+            `INSERT INTO oidc_refresh_tokens (token_hash, family_id, session_id, client_id, user_id, tenant_id, scope, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+                token.tokenHash,
+                token.familyId,
+                token.sessionId,
+                token.clientId,
+                token.userId,
+                token.tenantId,
+                token.scope,
+                token.expiresAt
+            ]
+        )
+    }
+
+    async findRefreshToken(tokenHash: string) {
+        const rows = await this.query<RefreshToken>(
+            `SELECT ${REFRESH_COLUMNS} FROM oidc_refresh_tokens WHERE token_hash = $1`,
+            [tokenHash]
+        )
+        return rows[0] ?? null
+    }
+
+    async rotateRefreshToken(
+        tokenHash: string,
+        next: { tokenHash: string; scope: string; expiresAt: Date },
+        graceMs: number
+    ): Promise<RotateResult> {
+        await this.database.ready()
+        return this.database.transaction(async db => {
+            // The row lock makes two uses at the same moment wait for each other
+            const { rows } = await db.query<RefreshToken & { reused: boolean }>(
+                `SELECT ${REFRESH_COLUMNS},
+                (used_at IS NOT NULL AND used_at < now() - make_interval(secs => $2::double precision / 1000)) AS reused
+           FROM oidc_refresh_tokens
+          WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now() FOR UPDATE`,
+                [tokenHash, graceMs]
+            )
+            const token = rows[0]
+            if (!token) return { status: 'invalid' as const }
+            const { reused, ...stored } = token
+            if (reused) {
+                await db.query(
+                    'UPDATE oidc_refresh_tokens SET revoked_at = now() WHERE family_id = $1 AND revoked_at IS NULL',
+                    [stored.familyId]
+                )
+                return { status: 'reused' as const, token: stored }
+            }
+            await db.query('UPDATE oidc_refresh_tokens SET used_at = coalesce(used_at, now()) WHERE token_hash = $1', [
+                tokenHash
+            ])
+            // Within the grace period the successor exists already (the same one, derived from the token)
+            await db.query(
+                `INSERT INTO oidc_refresh_tokens (token_hash, family_id, session_id, client_id, user_id, tenant_id, scope, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (token_hash) DO NOTHING`,
+                [
+                    next.tokenHash,
+                    stored.familyId,
+                    stored.sessionId,
+                    stored.clientId,
+                    stored.userId,
+                    stored.tenantId,
+                    next.scope,
+                    next.expiresAt
+                ]
+            )
+            const found = await db.query<RefreshToken>(
+                `SELECT ${REFRESH_COLUMNS} FROM oidc_refresh_tokens WHERE token_hash = $1`,
+                [next.tokenHash]
+            )
+            const successor = found.rows[0]
+            if (!successor || successor.revokedAt || successor.familyId !== stored.familyId)
+                return { status: 'invalid' as const }
+            return { status: 'ok' as const, token: successor }
+        })
+    }
+
+    async revokeRefreshFamily(familyId: string) {
+        await this.query(
+            'UPDATE oidc_refresh_tokens SET revoked_at = now() WHERE family_id = $1 AND revoked_at IS NULL',
+            [familyId]
+        )
     }
 
     async endSession(idHash: string) {
@@ -234,6 +379,18 @@ export class PgOidcStore implements OidcStore {
             [codeHash]
         )
         return rows[0] ?? null
+    }
+
+    async setCodeRefreshFamily(codeHash: string, familyId: string) {
+        await this.query('UPDATE oidc_codes SET refresh_family = $2 WHERE code_hash = $1', [codeHash, familyId])
+    }
+
+    async usedCodeRefreshFamily(codeHash: string) {
+        const rows = await this.query<{ family: string | null }>(
+            'SELECT refresh_family AS family FROM oidc_codes WHERE code_hash = $1 AND used_at IS NOT NULL',
+            [codeHash]
+        )
+        return rows[0]?.family ?? null
     }
 
     async bootstrapAdmin(admin: BootstrapAdmin) {
@@ -641,6 +798,7 @@ export class PgOidcStore implements OidcStore {
     async deleteExpired(now: Date) {
         await this.query(`DELETE FROM oidc_sessions WHERE expires_at <= $1::timestamptz - interval '1 hour'`, [now])
         await this.query('DELETE FROM oidc_codes WHERE expires_at <= $1', [now])
+        await this.query('DELETE FROM oidc_refresh_tokens WHERE expires_at <= $1', [now])
         await this.query('DELETE FROM tenant_invitations WHERE expires_at <= $1', [now])
     }
 }

@@ -72,9 +72,10 @@ export class MfaService {
 
     /**
      * Confirms the setup with a first code: two-factor authentication is on from now on. Returns ten recovery codes,
-     * shown once. Every other session of the account ends, so it logs in again with the second factor.
+     * shown once. Every other session of the account ends (`keepSessionId`: the one that turns it on), so they log in
+     * again with the second factor.
      */
-    async enable(userId: string, code: string) {
+    async enable(userId: string, code: string, keepSessionId: string | null = null) {
         const state = await this.store.getMfa(userId)
         if (state?.enabled) throw new AppException('oidc.MFA_ALREADY_ENABLED', HttpStatus.CONFLICT)
         if (!state?.secret) throw new AppException('oidc.MFA_SETUP_FIRST', HttpStatus.BAD_REQUEST)
@@ -83,7 +84,7 @@ export class MfaService {
         if (step === null) this.invalidCode()
         const recoveryCodes = newRecoveryCodes()
         await this.store.enableMfa(userId, recoveryCodes.map(hashRecovery), step)
-        await this.store.endUserSessions(userId)
+        await this.store.endOtherUserSessions(userId, keepSessionId)
         return { enabled: true as const, recoveryCodes }
     }
 

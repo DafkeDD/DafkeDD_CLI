@@ -15,8 +15,11 @@ import { LoginLimiter } from './login-limiter.js'
 import { OAuthError } from './oauth.error.js'
 import { OIDC, OidcConfig } from './oidc.config.js'
 import { type AuthorizeResult, type InteractionCookie, type LoginResult, OidcService } from './oidc.service.js'
+import { type LogoutResult, SessionsService } from './sessions.service.js'
+import { TokensService } from './tokens.service.js'
 import {
     loginPage,
+    logoutPage,
     messagePage,
     mfaPage,
     mfaSetupPage,
@@ -60,6 +63,8 @@ const translator =
 export class OidcController {
     constructor(
         private readonly oidc: OidcService,
+        private readonly tokens: TokensService,
+        private readonly sessions: SessionsService,
         private readonly config: OidcConfig,
         private readonly limiter: LoginLimiter
     ) {}
@@ -85,7 +90,11 @@ export class OidcController {
     @ApiResponse({ status: 303, description: 'To the login page, or to redirect_uri with a code or an error' })
     @ApiBadRequestResponse({ description: 'Unknown client or redirect_uri: an HTML error page, no redirect' })
     async authorize(@Req() request: Request, @Res() response: Response, @I18n() i18n: I18nContext) {
-        const result = await this.oidc.authorize(request.query as Params, this.sessionId(request))
+        const result = await this.oidc.authorize(
+            request.query as Params,
+            this.sessionId(request),
+            request.headers['user-agent'] ?? ''
+        )
         this.answer(result, response, i18n)
     }
 
@@ -263,24 +272,74 @@ export class OidcController {
     }
 
     @Post('token')
-    @ApiOperation({ summary: 'Exchange a code (with the PKCE code_verifier) for an ID token and an access token' })
-    @ApiOkResponse({ description: '{ access_token, token_type, expires_in, id_token, scope }' })
+    @ApiOperation({
+        summary:
+            'Exchange a code (with the PKCE code_verifier) for tokens, or a refresh token for new tokens (rotation: the old refresh token is used up)'
+    })
+    @ApiOkResponse({ description: '{ access_token, token_type, expires_in, id_token, scope, refresh_token? }' })
     @ApiBadRequestResponse({ description: '{ error, error_description } (RFC 6749 section 5.2)' })
     @ApiUnauthorizedResponse({ description: 'invalid_client' })
     async token(@Req() request: Request, @Res() response: Response) {
-        response.set({ 'Cache-Control': 'no-store', Pragma: 'no-cache' })
-        try {
-            // 200, not the 201 Nest uses for POST: RFC 6749 section 5.1
-            response
-                .status(HttpStatus.OK)
-                .json(await this.oidc.token(request.headers.authorization, (request.body ?? {}) as Params))
-        } catch (error) {
-            if (!(error instanceof OAuthError)) throw error
-            if (error.status === 401 && request.headers.authorization?.startsWith('Basic ')) {
-                response.set('WWW-Authenticate', 'Basic realm="oidc"')
-            }
-            response.status(error.status).json(error.toJSON())
-        }
+        await this.oauth(request, response, async () =>
+            this.tokens.token(request.headers.authorization, (request.body ?? {}) as Params)
+        )
+    }
+
+    @Post('revoke')
+    @ApiOperation({
+        summary:
+            'Revoke a refresh token (RFC 7009), with every token of its family. Unknown tokens get the same 200 answer.'
+    })
+    @ApiOkResponse({ description: 'Empty: revoked, or nothing to revoke' })
+    @ApiBadRequestResponse({ description: 'invalid_request, or unsupported_token_type for an access token' })
+    @ApiUnauthorizedResponse({ description: 'invalid_client' })
+    async revoke(@Req() request: Request, @Res() response: Response) {
+        await this.oauth(request, response, async () => {
+            await this.tokens.revoke(request.headers.authorization, (request.body ?? {}) as Params)
+            return {}
+        })
+    }
+
+    @Post('introspect')
+    @ApiOperation({
+        summary:
+            'Is a token active, and what does it say (RFC 7662)? For confidential clients only (resource servers, other backends).'
+    })
+    @ApiOkResponse({ description: '{ active: true, sub, scope, client_id, exp, tenant, ... } or { active: false }' })
+    @ApiUnauthorizedResponse({ description: 'invalid_client: unknown, wrong secret, or a public client' })
+    async introspect(@Req() request: Request, @Res() response: Response) {
+        await this.oauth(request, response, async () =>
+            this.tokens.introspect(request.headers.authorization, (request.body ?? {}) as Params)
+        )
+    }
+
+    @Get('logout')
+    @ApiOperation({
+        summary:
+            'Log out (end_session_endpoint, OpenID Connect RP-Initiated Logout): ends the session of this browser and goes back to post_logout_redirect_uri'
+    })
+    @ApiProduces('text/html')
+    @ApiResponse({ status: 303, description: 'Logged out: to post_logout_redirect_uri (with state)' })
+    @ApiOkResponse({ description: 'The page "You are logged out", or "Log out?" when nothing proves which user' })
+    @ApiBadRequestResponse({
+        description: 'Unknown client, a forged id_token_hint or an unregistered post_logout_redirect_uri'
+    })
+    async logout(@Req() request: Request, @Res() response: Response, @I18n() i18n: I18nContext) {
+        const result = await this.sessions.logout(request.query as Params, this.sessionId(request), false)
+        this.logoutAnswer(result, request, response, i18n)
+    }
+
+    @Post('logout')
+    @ApiOperation({
+        summary:
+            'The same as GET /oidc/logout, form-encoded; with confirm=yes and the csrf of the "Log out?" page it logs out'
+    })
+    @ApiProduces('text/html')
+    @ApiResponse({ status: 303, description: 'Logged out: to post_logout_redirect_uri (with state)' })
+    async logoutPost(@Req() request: Request, @Res() response: Response, @I18n() i18n: I18nContext) {
+        const body = (request.body ?? {}) as Params
+        const result = await this.sessions.logout(body, this.sessionId(request), body.confirm === 'yes')
+        this.logoutAnswer(result, request, response, i18n)
     }
 
     @Get('userinfo')
@@ -302,6 +361,58 @@ export class OidcController {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /** Answers of the token, revocation and introspection endpoints: JSON, never cached, OAuth errors (RFC 6749). */
+    private async oauth(request: Request, response: Response, work: () => Promise<object>) {
+        response.set({ 'Cache-Control': 'no-store', Pragma: 'no-cache' })
+        try {
+            // 200, not the 201 Nest uses for POST: RFC 6749 section 5.1, RFC 7009 section 2.2, RFC 7662 section 2.2
+            response.status(HttpStatus.OK).json(await work())
+        } catch (error) {
+            if (!(error instanceof OAuthError)) throw error
+            if (error.status === 401 && request.headers.authorization?.startsWith('Basic ')) {
+                response.set('WWW-Authenticate', 'Basic realm="oidc"')
+            }
+            response.status(error.status).json(error.toJSON())
+        }
+    }
+
+    private logoutAnswer(result: LogoutResult, request: Request, response: Response, i18n: I18nContext) {
+        const t = translator(i18n)
+        if (result.kind === 'error') {
+            return sendPage(response, {
+                lang: i18n.lang,
+                status: 400,
+                ...messagePage(t, 'oidc.ERROR_TITLE', result.textKey)
+            })
+        }
+        if (result.kind === 'confirm') {
+            const action = new URL(this.config.issuer + '/logout')
+            if (typeof request.query.lang === 'string') action.searchParams.set('lang', request.query.lang)
+            return sendPage(response, {
+                lang: i18n.lang,
+                formTargets: result.formTargets,
+                ...logoutPage(t, {
+                    action: action.toString(),
+                    csrf: result.csrf,
+                    clientName: result.client?.name,
+                    fields: result.fields
+                })
+            })
+        }
+        // The session ended (or there was none): the browser forgets its cookie
+        response.clearCookie(OIDC.SESSION_COOKIE, {
+            httpOnly: true,
+            sameSite: 'lax',
+            secure: this.config.secureCookies,
+            path: OIDC.COOKIE_PATH
+        })
+        if (result.kind === 'redirect') {
+            response.set('Cache-Control', 'no-store').redirect(HttpStatus.SEE_OTHER, result.location)
+            return
+        }
+        sendPage(response, { lang: i18n.lang, ...messagePage(t, 'oidc.LOGGED_OUT_TITLE', 'oidc.LOGGED_OUT') })
+    }
 
     private sessionId(request: Request): string | undefined {
         const value: unknown = (request.cookies as Record<string, unknown> | undefined)?.[OIDC.SESSION_COOKIE]

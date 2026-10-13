@@ -7,6 +7,7 @@ import {
     OIDC_ISSUER,
     type Session,
     SESSION_COOKIE,
+    SESSION_SECONDS,
     seal,
     unseal,
     userinfo,
@@ -43,10 +44,13 @@ export async function GET(request: NextRequest) {
             tenant,
             superadmin,
             accessToken: tokens.access_token,
-            expiresAt: Date.now() + tokens.expires_in * 1000
+            expiresAt: Date.now() + tokens.expires_in * 1000,
+            refreshToken: tokens.refresh_token ?? null,
+            idToken: tokens.id_token
         }
         const response = NextResponse.redirect(new URL(flow.returnTo, request.url))
-        response.cookies.set(SESSION_COOKIE, seal(session, SESSION_COOKIE), cookieOptions(tokens.expires_in))
+        // Lives as long as the session of the login server; the access token inside is renewed with the refresh token
+        response.cookies.set(SESSION_COOKIE, seal(session, SESSION_COOKIE), cookieOptions(SESSION_SECONDS))
         response.cookies.delete({ name: FLOW_COOKIE, path: '/api/auth' })
         return response
     } catch {

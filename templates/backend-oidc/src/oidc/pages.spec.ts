@@ -2,7 +2,7 @@ import { ConfigService } from '@nestjs/config'
 import type { Response } from 'express'
 import { LoginLimiter } from './login-limiter.js'
 import { OidcConfig } from './oidc.config.js'
-import { escapeHtml, loginPage, sendPage } from './pages.js'
+import { escapeHtml, loginPage, logoutPage, sendPage } from './pages.js'
 
 describe('pages', () => {
     const t = (key: string, args?: Record<string, string>) => key + (args ? JSON.stringify(args) : '')
@@ -24,6 +24,19 @@ describe('pages', () => {
         expect(page.body).not.toContain('<script>')
         expect(page.body).not.toContain('<Evil>')
         expect(page.body).toContain('value="c&quot;srf"')
+    })
+
+    it('asks to confirm a logout with every parameter escaped in hidden fields', () => {
+        const page = logoutPage(t, {
+            action: '/oidc/logout',
+            csrf: 'token',
+            clientName: '<Evil>',
+            fields: { post_logout_redirect_uri: 'http://localhost:3000', state: '"><script>' }
+        })
+        expect(page.body).not.toContain('<script>')
+        expect(page.body).toContain('name="confirm" value="yes"')
+        expect(page.body).toContain('name="csrf" value="token"')
+        expect(page.body).toContain('&lt;Evil&gt;')
     })
 
     it('sends security headers with a fresh nonce', () => {

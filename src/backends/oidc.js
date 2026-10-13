@@ -158,6 +158,17 @@ export const MAIL_MESSAGES = {
 /** Texts of the login pages (namespace "oidc"). Every language needs the same keys (checked by the tests). */
 export const MESSAGES = {
     en: {
+        LOGOUT_TITLE: 'Log out?',
+        LOGOUT_TEXT: 'Do you want to log out on this device?',
+        LOGOUT_TEXT_CLIENT: 'Do you want to log out of {client} on this device?',
+        LOGOUT_SUBMIT: 'Log out',
+        LOGGED_OUT_TITLE: 'Logged out',
+        LOGGED_OUT: 'You are logged out. You can close this page.',
+        LOGOUT_INVALID_HINT:
+            'This logout request is not valid (the ID token is not ours or does not belong to this application).',
+        INVALID_POST_LOGOUT_REDIRECT:
+            'The address to go back to after logging out is not registered for this application.',
+        SESSION_NOT_FOUND: 'This session was not found (it ended already).',
         ACCOUNT_DISABLED: 'This account is disabled.',
         EID_DISABLED: 'Logging in with the eID is not available on this server.',
         EID_INVALID: 'The eID could not be verified. Please try again.',
@@ -216,6 +227,17 @@ export const MESSAGES = {
         ACCOUNT_DETAILS_NEEDED: 'Fill in your name and a password to create your account.'
     },
     nl: {
+        LOGOUT_TITLE: 'Uitloggen?',
+        LOGOUT_TEXT: 'Wil je uitloggen op dit toestel?',
+        LOGOUT_TEXT_CLIENT: 'Wil je uitloggen bij {client} op dit toestel?',
+        LOGOUT_SUBMIT: 'Uitloggen',
+        LOGGED_OUT_TITLE: 'Uitgelogd',
+        LOGGED_OUT: 'Je bent uitgelogd. Je kunt deze pagina sluiten.',
+        LOGOUT_INVALID_HINT:
+            'Deze uitlogaanvraag is niet geldig (het ID-token is niet van ons of hoort niet bij deze applicatie).',
+        INVALID_POST_LOGOUT_REDIRECT:
+            'Het adres om na het uitloggen naar terug te gaan is niet geregistreerd voor deze applicatie.',
+        SESSION_NOT_FOUND: 'Deze sessie werd niet gevonden (ze is al beëindigd).',
         ACCOUNT_DISABLED: 'Dit account is uitgeschakeld.',
         EID_DISABLED: 'Inloggen met de eID is niet beschikbaar op deze server.',
         EID_INVALID: 'De eID kon niet gecontroleerd worden. Probeer het opnieuw.',
@@ -274,6 +296,17 @@ export const MESSAGES = {
         ACCOUNT_DETAILS_NEEDED: 'Vul je naam en een wachtwoord in om je account aan te maken.'
     },
     fr: {
+        LOGOUT_TITLE: 'Se déconnecter ?',
+        LOGOUT_TEXT: 'Voulez-vous vous déconnecter sur cet appareil ?',
+        LOGOUT_TEXT_CLIENT: 'Voulez-vous vous déconnecter de {client} sur cet appareil ?',
+        LOGOUT_SUBMIT: 'Se déconnecter',
+        LOGGED_OUT_TITLE: 'Déconnecté',
+        LOGGED_OUT: 'Vous êtes déconnecté. Vous pouvez fermer cette page.',
+        LOGOUT_INVALID_HINT:
+            "Cette demande de déconnexion n'est pas valable (le jeton d'identité ne vient pas de nous ou n'appartient pas à cette application).",
+        INVALID_POST_LOGOUT_REDIRECT:
+            "L'adresse de retour après la déconnexion n'est pas enregistrée pour cette application.",
+        SESSION_NOT_FOUND: 'Cette session est introuvable (elle est déjà terminée).',
         ACCOUNT_DISABLED: 'Ce compte est désactivé.',
         EID_DISABLED: "La connexion avec l'eID n'est pas disponible sur ce serveur.",
         EID_INVALID: "L'eID n'a pas pu être vérifiée. Veuillez réessayer.",
@@ -339,6 +372,17 @@ export const MESSAGES = {
         ACCOUNT_DETAILS_NEEDED: 'Indiquez votre nom et un mot de passe pour créer votre compte.'
     },
     de: {
+        LOGOUT_TITLE: 'Abmelden?',
+        LOGOUT_TEXT: 'Möchtest du dich auf diesem Gerät abmelden?',
+        LOGOUT_TEXT_CLIENT: 'Möchtest du dich auf diesem Gerät bei {client} abmelden?',
+        LOGOUT_SUBMIT: 'Abmelden',
+        LOGGED_OUT_TITLE: 'Abgemeldet',
+        LOGGED_OUT: 'Du bist abgemeldet. Du kannst diese Seite schließen.',
+        LOGOUT_INVALID_HINT:
+            'Diese Abmeldeanfrage ist ungültig (das ID-Token stammt nicht von uns oder gehört nicht zu dieser Anwendung).',
+        INVALID_POST_LOGOUT_REDIRECT:
+            'Die Adresse für die Rückkehr nach der Abmeldung ist für diese Anwendung nicht registriert.',
+        SESSION_NOT_FOUND: 'Diese Sitzung wurde nicht gefunden (sie ist bereits beendet).',
         ACCOUNT_DISABLED: 'Dieses Konto ist deaktiviert.',
         EID_DISABLED: 'Die Anmeldung mit der eID ist auf diesem Server nicht verfügbar.',
         EID_INVALID: 'Die eID konnte nicht geprüft werden. Bitte versuche es erneut.',
@@ -738,8 +782,30 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/oidc/token',
         tag: 'oidc',
         summary:
-            'Exchange the code for tokens. Public clients send client_id and the PKCE code_verifier; confidential clients also authenticate (Basic or client_secret).',
+            'Exchange the code for tokens, or a refresh token for new tokens. Public clients send client_id (and the PKCE code_verifier); confidential clients also authenticate (Basic or client_secret). Clients with the refresh_token grant also get a refresh_token: bound to the session (at most 12 hours), and used up at every refresh (rotation).',
         form: true,
+        variants: [
+            {
+                title: 'Refresh (grant_type=refresh_token)',
+                body: {
+                    example: {
+                        grant_type: 'refresh_token',
+                        refresh_token: 'refresh-token-from-before',
+                        client_id: 'frontend'
+                    },
+                    fields: [
+                        ['grant_type', 'string', '`refresh_token`'],
+                        [
+                            'refresh_token',
+                            'string',
+                            'required; works once (a second use within 30 seconds is allowed, later it ends the session)'
+                        ],
+                        ['client_id', 'string', 'required for public clients'],
+                        ['scope', 'string', 'optional, the same or smaller than before']
+                    ]
+                }
+            }
+        ],
         body: {
             example: {
                 grant_type: 'authorization_code',
@@ -763,13 +829,15 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 token_type: 'Bearer',
                 expires_in: 600,
                 id_token: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9…',
-                scope: 'openid profile email tenant'
+                scope: 'openid profile email tenant',
+                refresh_token: 'Vb3k…43 characters…'
             }
         },
         oauthErrors: [
             'invalid_request',
             'invalid_client',
             'invalid_grant',
+            'invalid_scope',
             'unauthorized_client',
             'unsupported_grant_type'
         ],
@@ -807,6 +875,98 @@ export const endpoints = ({ port = 4000 } = {}) => [
         },
         response: { status: 200, example: { sub: '1fb82908-476c-4460-951a-0fae1f01fcc6', '...': '...' } },
         oauthErrors: ['invalid_token', 'insufficient_scope'],
+        errors: []
+    },
+    {
+        method: 'POST',
+        path: '/oidc/revoke',
+        tag: 'oidc',
+        summary:
+            'Revoke a refresh token (RFC 7009) with its whole family: the frontend does this when the user logs out. Unknown tokens get the same 200 answer. Access tokens cannot be revoked one by one: they live 10 minutes and stop with their session.',
+        form: true,
+        body: {
+            example: { token: 'refresh-token', token_type_hint: 'refresh_token', client_id: 'frontend' },
+            fields: [
+                ['token', 'string', 'required, the refresh token'],
+                ['token_type_hint', 'string', 'optional, `refresh_token`'],
+                ['client_id', 'string', 'required for public clients (confidential clients authenticate)']
+            ]
+        },
+        response: { status: 200, example: {} },
+        oauthErrors: ['invalid_request', 'invalid_client', 'unsupported_token_type'],
+        errors: []
+    },
+    {
+        method: 'POST',
+        path: '/oidc/introspect',
+        tag: 'oidc',
+        summary:
+            'Is a token active, and what does it say (RFC 7662)? For confidential clients (resource servers, other backends), authenticated with Basic or client_secret. An access token is active while it did not expire and its session did not end; a refresh token only for its own client.',
+        basic: 'server-app',
+        form: true,
+        body: {
+            example: { token: 'eyJhbGciOiJFUzI1NiIs…' },
+            fields: [['token', 'string', 'required, an access token or a refresh token']]
+        },
+        response: {
+            status: 200,
+            example: {
+                active: true,
+                token_type: 'Bearer',
+                sub: USER_ID,
+                client_id: 'frontend',
+                scope: 'openid profile email tenant',
+                exp: 1760000600,
+                sid: '0f8f8a52-55a3-4b8e-9d55-3f1f2f8b1c10',
+                tenant: TENANT
+            }
+        },
+        oauthErrors: ['invalid_request', 'invalid_client'],
+        errors: []
+    },
+    {
+        method: 'GET',
+        path: '/oidc/logout',
+        tag: 'oidc',
+        summary:
+            'Log out (end_session_endpoint, OpenID Connect RP-Initiated Logout 1.0). With an id_token_hint of the user of this browser the session ends at once (and with it its refresh and access tokens); without one the page "Log out?" asks first. Then back to post_logout_redirect_uri, or the page "You are logged out".',
+        curl: `curl -i -b 'oidc_session=…' 'http://localhost:${port}/oidc/logout?id_token_hint=eyJ…&post_logout_redirect_uri=${encodeURIComponent(APP_URL)}&state=xyz'`,
+        query: [
+            ['id_token_hint', 'recommended', 'An ID token this server gave the client (an expired one is fine)'],
+            [
+                'client_id',
+                'optional',
+                'The client (needed without id_token_hint when post_logout_redirect_uri is sent)'
+            ],
+            ['post_logout_redirect_uri', 'optional', 'Exactly one of the `postLogoutRedirectUris` of the client'],
+            ['state', 'optional', 'Returned unchanged on the redirect'],
+            ['ui_locales', 'optional', 'Language of the pages']
+        ],
+        response: null,
+        errors: []
+    },
+    {
+        method: 'POST',
+        path: '/oidc/logout',
+        tag: 'oidc',
+        summary:
+            'The form of the page "Log out?" (form-encoded): the same parameters, with confirm=yes and its CSRF token. Logs out and goes back like GET /oidc/logout.',
+        form: true,
+        body: {
+            example: {
+                client_id: 'frontend',
+                post_logout_redirect_uri: APP_URL,
+                confirm: 'yes',
+                csrf: 'from-the-page'
+            },
+            fields: [
+                ['client_id', 'string', 'optional'],
+                ['post_logout_redirect_uri', 'string', 'optional, registered for the client'],
+                ['confirm', 'string', '`yes`'],
+                ['csrf', 'string', 'required, the hidden field of the page (bound to the session cookie)']
+            ]
+        },
+        response: null,
         errors: []
     },
     // ---------------------------------------------------------------- accounts (JSON, for the pages of the frontend)
@@ -1354,6 +1514,55 @@ export const endpoints = ({ port = 4000 } = {}) => [
         errors: [
             [401, 'errors.UNAUTHORIZED'],
             [409, 'oidc.EID_ONLY_LOGIN']
+        ]
+    },
+    // ---------------------------------------------------------------- the sessions of the own account
+    {
+        method: 'GET',
+        path: '/me/sessions',
+        tag: 'sessions',
+        summary:
+            'Where the logged in account is logged in: one row per session (browser), with the organisation, how it logged in (amr) and when. `current` is the session of this access token.',
+        bearer: true,
+        response: {
+            status: 200,
+            example: [
+                {
+                    id: '0f8f8a52-55a3-4b8e-9d55-3f1f2f8b1c10',
+                    current: true,
+                    tenant: { id: TENANT.id, name: 'Acme' },
+                    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) … Chrome/141.0',
+                    acr: 'loa2',
+                    amr: ['pwd', 'otp', 'mfa'],
+                    createdAt: '2026-10-14T08:00:00.000Z',
+                    lastUsedAt: '2026-10-14T09:12:00.000Z',
+                    expiresAt: '2026-10-14T20:00:00.000Z'
+                }
+            ]
+        },
+        errors: [[401, 'errors.UNAUTHORIZED']]
+    },
+    {
+        method: 'DELETE',
+        path: '/me/sessions',
+        tag: 'sessions',
+        summary: 'Log out everywhere else: ends every session of the account except the one of this access token.',
+        bearer: true,
+        response: { status: 200, example: { ended: 2 } },
+        errors: [[401, 'errors.UNAUTHORIZED']]
+    },
+    {
+        method: 'DELETE',
+        path: '/me/sessions/:id',
+        tag: 'sessions',
+        summary:
+            'End one session of the account: its refresh token and access tokens stop at once. Ending the own session is logging out.',
+        pathExample: '/me/sessions/0f8f8a52-55a3-4b8e-9d55-3f1f2f8b1c10',
+        bearer: true,
+        response: { status: 200, example: { ended: 1 } },
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [404, 'oidc.SESSION_NOT_FOUND']
         ]
     }
 ]

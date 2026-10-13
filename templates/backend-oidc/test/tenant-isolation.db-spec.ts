@@ -172,7 +172,9 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
             firstParty: true
         })
         const session = {
+            id: randomUUID(),
             idHash: randomBytes(16).toString('hex'),
+            userAgent: null,
             interactionHash: randomBytes(16).toString('hex'),
             userId: user.ada,
             tenantId: tenant.a,
@@ -184,11 +186,15 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         expect(await store.createSession(session)).toBe(true)
         expect((await store.findSession(session.idHash))?.tenantId).toBe(tenant.a)
         // One login, one session: a copy of the login cookie cannot create a second one
-        expect(await store.createSession({ ...session, idHash: randomBytes(16).toString('hex') })).toBe(false)
+        expect(
+            await store.createSession({ ...session, id: randomUUID(), idHash: randomBytes(16).toString('hex') })
+        ).toBe(false)
         // An ended session no longer works, but still blocks its login until the cleanup an hour later
         await store.endSession(session.idHash)
         expect(await store.findSession(session.idHash)).toBeNull()
-        expect(await store.createSession({ ...session, idHash: randomBytes(16).toString('hex') })).toBe(false)
+        expect(
+            await store.createSession({ ...session, id: randomUUID(), idHash: randomBytes(16).toString('hex') })
+        ).toBe(false)
         const code = {
             codeHash: randomBytes(16).toString('hex'),
             clientId: 'test',
@@ -243,7 +249,9 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
 
         // A platform login of the superadmin: a session and a code without a tenant
         const session = {
+            id: randomUUID(),
             idHash: randomBytes(16).toString('hex'),
+            userAgent: null,
             interactionHash: randomBytes(16).toString('hex'),
             userId: root?.id ?? '',
             tenantId: null,
@@ -396,7 +404,9 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         await store.setPassword(id, 'new')
         expect(await store.findUserById(id)).toMatchObject({ emailVerified: true, passwordHash: 'new' })
         const session = {
+            id: randomUUID(),
             idHash: randomBytes(16).toString('hex'),
+            userAgent: null,
             interactionHash: randomBytes(16).toString('hex'),
             userId: id,
             tenantId: created?.tenant.id ?? '',
@@ -507,6 +517,96 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         expect((await store.renewInvitation(tenantId, first.id, new Date(Date.now() + 120_000)))?.id).toBe(first.id)
         expect(await store.deleteInvitation(tenantId, first.id)).toBe(true)
         expect(await store.findInvitation(tenantId, first.id)).toBeNull()
+    })
+
+    it('rotates refresh tokens once (also two at the same moment), revokes a family on reuse, and ends sessions', async () => {
+        const store = new PgOidcStore(database)
+        const owner = (await store.createUser({
+            email: 'sessions@example.com',
+            name: 'Sessions',
+            passwordHash: 'x',
+            emailVerified: true,
+            locale: null
+        }))!
+        const newSession = async (userAgent: string | null) => {
+            const session = {
+                id: randomUUID(),
+                idHash: randomBytes(16).toString('hex'),
+                interactionHash: randomBytes(16).toString('hex'),
+                userId: owner.id,
+                tenantId: tenant.a,
+                authTime: new Date(),
+                acr: 'loa2',
+                amr: ['pwd', 'otp', 'mfa'],
+                expiresAt: new Date(Date.now() + 60_000),
+                userAgent
+            }
+            expect(await store.createSession(session)).toBe(true)
+            return session
+        }
+        const first = await newSession('Firefox')
+        const second = await newSession(null)
+        expect((await store.findSessionById(first.id))?.userAgent).toBe('Firefox')
+        expect(await store.findSessionById('not-a-uuid')).toBeNull()
+        await store.touchSession(first.id)
+        const listed = await store.listUserSessions(owner.id)
+        expect(listed.map(item => item.id).sort()).toEqual([first.id, second.id].sort())
+        expect(listed.find(item => item.id === first.id)).toMatchObject({
+            tenantName: 'Tenant A',
+            userAgent: 'Firefox'
+        })
+        expect(listed.find(item => item.id === first.id)?.lastUsedAt).toBeInstanceOf(Date)
+
+        const token = (hash: string) => ({
+            tokenHash: hash,
+            familyId: randomUUID(),
+            sessionId: first.id,
+            clientId: 'test',
+            userId: owner.id,
+            tenantId: tenant.a,
+            scope: 'openid',
+            expiresAt: first.expiresAt
+        })
+        const original = token('rt-' + randomUUID())
+        await store.createRefreshToken(original)
+        const next = (name: string) => ({ tokenHash: name + randomUUID(), scope: 'openid', expiresAt: first.expiresAt })
+        // Two uses of the same token at the same moment (one browser, two requests): both get the SAME successor (the
+        // service derives it from the token), never two chains
+        const successor = next('a-')
+        const both = await Promise.all([
+            store.rotateRefreshToken(original.tokenHash, successor, 30_000),
+            store.rotateRefreshToken(original.tokenHash, successor, 30_000)
+        ])
+        expect(both.map(result => result.status)).toEqual(['ok', 'ok'])
+        expect(new Set(both.map(result => (result.status === 'ok' ? result.token.tokenHash : '')))).toEqual(
+            new Set([successor.tokenHash])
+        )
+        expect((await store.findRefreshToken(original.tokenHash))?.usedAt).toBeInstanceOf(Date)
+        // After the grace period it is reuse: the whole family is revoked
+        const reused = await store.rotateRefreshToken(original.tokenHash, next('c-'), 0)
+        expect(reused.status).toBe('reused')
+        for (const result of both)
+            if (result.status === 'ok')
+                expect((await store.findRefreshToken(result.token.tokenHash))?.revokedAt).toBeInstanceOf(Date)
+        expect((await store.rotateRefreshToken(original.tokenHash, next('d-'), 30_000)).status).toBe('invalid')
+        expect((await store.rotateRefreshToken('unknown', next('e-'), 30_000)).status).toBe('invalid')
+
+        const other = token('rt-' + randomUUID())
+        await store.createRefreshToken(other)
+        await store.revokeRefreshFamily(other.familyId)
+        expect((await store.rotateRefreshToken(other.tokenHash, next('f-'), 30_000)).status).toBe('invalid')
+        // Like the other OpenID Connect tables: Row-Level Security, and never reachable for the tenant role
+        await expect(
+            database.withTenant(tenant.a, db => db.query('SELECT 1 FROM oidc_refresh_tokens'))
+        ).rejects.toThrow(/permission denied/)
+
+        // Ending sessions: one, then every other
+        const third = await newSession('Edge')
+        expect(await store.endUserSession(owner.id, second.id)).toBe(true)
+        expect(await store.endUserSession(owner.id, second.id)).toBe(false)
+        expect(await store.endUserSession(randomUUID(), third.id)).toBe(false)
+        expect(await store.endOtherUserSessions(owner.id, first.id)).toBe(1)
+        expect((await store.listUserSessions(owner.id)).map(item => item.id)).toEqual([first.id])
     })
 
     it('the tenant role exists and owns nothing', async () => {

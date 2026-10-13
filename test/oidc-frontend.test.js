@@ -63,7 +63,7 @@ test('the login checks state, iss, nonce, at_hash and the ID token signature, wi
     const lib = templates['src/lib/oidc.ts']
     const callback = templates['src/app/api/auth/callback/route.ts']
     assert.match(lib, /code_challenge_method: 'S256'/)
-    assert.match(lib, /claims\.nonce !== nonce/)
+    assert.match(lib, /\(claims\.nonce \?\? null\) !== nonce/)
     assert.match(lib, /claims\.at_hash !== atHash/)
     assert.match(lib, /claims\.aud !== OIDC_CLIENT_ID/)
     assert.match(lib, /head\.alg !== 'RS256'/)
@@ -77,7 +77,7 @@ test('cookies are httpOnly and encrypted (AES-256-GCM, purpose bound), returnTo 
     assert.match(lib, /aes-256-gcm/)
     assert.match(lib, /setAAD\(Buffer\.from\(purpose\)\)/)
     assert.match(lib, /!value\.startsWith\('\/\/'\)/)
-    assert.match(templates['src/app/api/auth/logout/route.ts'], /export function POST/)
+    assert.match(templates['src/app/api/auth/logout/route.ts'], /export async function POST/)
 })
 
 test('every text exists in all four languages, and every text the code uses exists', () => {

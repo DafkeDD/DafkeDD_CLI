@@ -23,12 +23,19 @@ export const OIDC = {
     /** A running login lives in an encrypted cookie oidc_ia_<id>, one per login (so several tabs work side by side). */
     INTERACTION_COOKIE: 'oidc_ia_',
     INTERACTION_SECONDS: 10 * 60,
+    /** The User-Agent of a session is kept for the list of sessions, at most this many characters. */
+    USER_AGENT_MAX: 200,
     /** Browsers drop cookies above about 4 KB: a bigger login request is refused with a clear error. */
     MAX_INTERACTION_COOKIE: 3800,
     CODE_SECONDS: 60,
     ACCESS_TOKEN_SECONDS: 10 * 60,
     ID_TOKEN_SECONDS: 5 * 60,
     SESSION_SECONDS: 12 * 60 * 60,
+    /**
+     * A refresh token lives as long as its session (at most 12 hours). A used one is accepted once more within this
+     * many seconds (two requests of the same browser at once); later it counts as stolen: the family and the session end.
+     */
+    REFRESH_REUSE_GRACE_SECONDS: 30,
     /** A signing key is replaced after 90 days and stays in the JWKS for 14 more days. */
     KEY_ROTATION_DAYS: 90,
     KEY_GRACE_DAYS: 14,

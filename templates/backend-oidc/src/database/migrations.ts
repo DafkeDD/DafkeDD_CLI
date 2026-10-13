@@ -189,5 +189,39 @@ CREATE TABLE user_identifiers (
   UNIQUE (user_id, type)
 );
 `
+    },
+    {
+        id: 3,
+        name: 'sessions you can see, refresh tokens',
+        sql: `
+-- A public id per session (the sid claim of the tokens, and the id on /me/sessions), the browser that started it and
+-- when it was last used. The cookie value itself stays known only as its hash (id_hash).
+ALTER TABLE oidc_sessions ADD COLUMN id uuid NOT NULL DEFAULT gen_random_uuid();
+ALTER TABLE oidc_sessions ADD CONSTRAINT oidc_sessions_id_key UNIQUE (id);
+ALTER TABLE oidc_sessions ADD COLUMN user_agent text;
+ALTER TABLE oidc_sessions ADD COLUMN last_used_at timestamptz;
+
+-- Refresh tokens (only their sha256). Bound to a session: they stop with it (logout, password reset, a disabled
+-- member). Every use gives a new one (rotation); an old one used again ends its whole family and the session.
+CREATE TABLE oidc_refresh_tokens (
+  token_hash text PRIMARY KEY,
+  family_id uuid NOT NULL,
+  session_id uuid NOT NULL REFERENCES oidc_sessions (id) ON DELETE CASCADE,
+  client_id text NOT NULL REFERENCES oidc_clients (client_id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
+  -- NULL: a platform login of a superadmin
+  tenant_id uuid REFERENCES tenants (id) ON DELETE CASCADE,
+  scope text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz,
+  revoked_at timestamptz
+);
+CREATE INDEX oidc_refresh_tokens_family_idx ON oidc_refresh_tokens (family_id);
+CREATE INDEX oidc_refresh_tokens_session_idx ON oidc_refresh_tokens (session_id);
+-- The refresh tokens a code gave: when the code comes back (stolen), they are revoked (RFC 6749 section 4.1.2)
+ALTER TABLE oidc_codes ADD COLUMN refresh_family uuid;
+${isolate('oidc_refresh_tokens', 'tenant_id')}
+`
     }
 ]

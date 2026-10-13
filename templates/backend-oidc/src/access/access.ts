@@ -34,6 +34,8 @@ export interface AuthContext {
     tenantName: string
     role: TenantRole
     superadmin: boolean
+    /** The session (sid) of the token: the browser login behind it (see /me/sessions). */
+    sessionId: string
 }
 
 const LEVEL = 'access-level'
@@ -70,6 +72,9 @@ export class AccessGuard implements CanActivate {
         const tenant = claims.tenant as { id?: unknown; name?: unknown } | undefined
         const user = typeof claims.sub === 'string' ? await this.store.findUserById(claims.sub) : null
         if (user?.status !== 'active') throw new AppException('errors.UNAUTHORIZED', HttpStatus.UNAUTHORIZED)
+        // verifyAccessToken checked that this session is still active (not logged out)
+        const sessionId = typeof claims.sid === 'string' ? claims.sid : ''
+        await this.touch('session:' + sessionId, () => this.store.touchSession(sessionId))
 
         const forbidden = new AppException('errors.FORBIDDEN', HttpStatus.FORBIDDEN)
         const needed =
@@ -82,7 +87,7 @@ export class AccessGuard implements CanActivate {
         // A platform login (superadmin without an organisation): only the account and the platform
         if (typeof tenant?.id !== 'string') {
             if (!user.isSuperadmin || (needed !== 'account' && needed !== 'superadmin')) throw forbidden
-            request.auth = { userId: user.id, tenantId: '', tenantName: '', role: 'admin', superadmin: true }
+            request.auth = { userId: user.id, tenantId: '', tenantName: '', role: 'admin', superadmin: true, sessionId }
             return true
         }
 
@@ -92,25 +97,28 @@ export class AccessGuard implements CanActivate {
         if (!role) throw forbidden
         if (needed === 'admin' && role !== 'admin') throw forbidden
 
-        await this.touch(found.id, user.id)
+        await this.touch(found.id + ':' + user.id, () => this.store.touchMember(found.id, user.id))
         request.auth = {
             userId: user.id,
             tenantId: found.id,
             tenantName: found.name,
             role,
-            superadmin: user.isSuperadmin
+            superadmin: user.isSuperadmin,
+            sessionId
         }
         return true
     }
 
-    /** Records the activity of a member, at most once a minute per member (it never fails the request). */
-    private async touch(tenantId: string, userId: string) {
-        const key = tenantId + ':' + userId
+    /**
+     * Records activity (of a member in a tenant: who is online; of a session: last used), at most once a minute per key.
+     * It never fails the request.
+     */
+    private async touch(key: string, write: () => Promise<void>) {
         const now = Date.now()
         if (now - (this.touched.get(key) ?? 0) < TOUCH_MS) return
         if (this.touched.size > 10_000) this.touched.clear()
         this.touched.set(key, now)
-        await this.store.touchMember(tenantId, userId).catch(() => undefined)
+        await write().catch(() => undefined)
     }
 }
 

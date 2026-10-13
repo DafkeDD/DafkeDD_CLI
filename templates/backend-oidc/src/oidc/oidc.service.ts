@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { PKCE_CHALLENGE, PKCE_VERIFIER, pkceChallenge, randomToken, safeEqual, sha256 } from './crypto.js'
+import { PKCE_CHALLENGE, randomToken, safeEqual, sha256 } from './crypto.js'
 import { type Interaction, interactionKey, openInteraction, sealInteraction } from './interaction.js'
-import { halfHash, JoseError, signJwt, verifyJwt } from './jose.js'
+import { JoseError, verifyJwt } from './jose.js'
 import { AppException } from '../common/app.exception.js'
 import { EidService } from './eid.service.js'
 import { KeysService } from './keys.service.js'
@@ -27,6 +27,8 @@ import {
 const DUMMY_HASH = await hashPassword('not-a-real-password')
 
 const PROMPTS = ['none', 'login', 'consent', 'select_account']
+/** Grant types a client can have in config/oidc-clients.json. */
+const GRANT_TYPES = ['authorization_code', 'refresh_token']
 /** tenant (choice) or tenant_hint for a login of a superadmin without an organisation: platform management. */
 export const PLATFORM = 'platform'
 const MAX_STATE = 1024
@@ -75,20 +77,12 @@ export type LoginResult =
     /** A nonce for the eID bridge (JSON only). */
     | { kind: 'eid-challenge'; nonce: string; cookie: InteractionCookie }
 
-export interface TokenResponse {
-    access_token: string
-    token_type: 'Bearer'
-    expires_in: number
-    id_token: string
-    scope: string
-}
-
-type Params = Record<string, unknown>
+export type Params = Record<string, unknown>
 
 const text = (value: unknown, fallback = ''): string => (typeof value === 'string' ? value : fallback)
 
 /** The value of a request parameter. Undefined when absent; an OAuthError when it was sent more than once. */
-function single(params: Params, name: string): string | undefined {
+export function single(params: Params, name: string): string | undefined {
     const value = params[name]
     if (value === undefined || value === '') return undefined
     if (typeof value !== 'string') throw new OAuthError('invalid_request', `${name} must be sent once`)
@@ -147,7 +141,10 @@ export class OidcService implements OnApplicationBootstrap {
             const type = raw.type === 'confidential' ? 'confidential' : 'public'
             const redirectUris = Array.isArray(raw.redirectUris) ? raw.redirectUris.map(String) : []
             if (!/^[A-Za-z0-9._-]{1,100}$/.test(clientId)) throw new Error(`Invalid clientId "${clientId}" in ${file}`)
-            for (const uri of redirectUris) assertRedirectUri(uri)
+            const postLogoutRedirectUris = Array.isArray(raw.postLogoutRedirectUris)
+                ? raw.postLogoutRedirectUris.map(String)
+                : []
+            for (const uri of [...redirectUris, ...postLogoutRedirectUris]) assertRedirectUri(uri)
             let secretHash: string | null = null
             if (type === 'confidential') {
                 const secretEnv = text(raw.secretEnv)
@@ -164,10 +161,11 @@ export class OidcService implements OnApplicationBootstrap {
                 type,
                 secretHash,
                 redirectUris,
-                postLogoutRedirectUris: Array.isArray(raw.postLogoutRedirectUris)
-                    ? raw.postLogoutRedirectUris.map(String)
-                    : [],
-                grantTypes: ['authorization_code'],
+                postLogoutRedirectUris,
+                // refresh_token: the client also gets a refresh token (bound to the session, rotated at every use)
+                grantTypes: Array.isArray(raw.grantTypes)
+                    ? GRANT_TYPES.filter(type => (raw.grantTypes as unknown[]).includes(type))
+                    : ['authorization_code'],
                 scopes: Array.isArray(raw.scopes) ? raw.scopes.map(String) : ['openid'],
                 firstParty: raw.firstParty === true
             } satisfies OidcClient
@@ -184,14 +182,19 @@ export class OidcService implements OnApplicationBootstrap {
             token_endpoint: issuer + '/token',
             userinfo_endpoint: issuer + '/userinfo',
             jwks_uri: issuer + '/jwks',
+            end_session_endpoint: issuer + '/logout',
+            revocation_endpoint: issuer + '/revoke',
+            introspection_endpoint: issuer + '/introspect',
             scopes_supported: [...OIDC.SCOPES],
             response_types_supported: ['code'],
             response_modes_supported: ['query'],
-            grant_types_supported: ['authorization_code'],
+            grant_types_supported: ['authorization_code', 'refresh_token'],
             subject_types_supported: ['public'],
             id_token_signing_alg_values_supported: ['RS256'],
             userinfo_signing_alg_values_supported: ['none'],
             token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
+            revocation_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
+            introspection_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
             code_challenge_methods_supported: ['S256'],
             acr_values_supported: [OIDC.ACR_PASSWORD, OIDC.ACR_MFA, ...(this.eid.enabled ? [OIDC.ACR_EID] : [])],
             claims_supported: [
@@ -226,7 +229,7 @@ export class OidcService implements OnApplicationBootstrap {
 
     // ------------------------------------------------------------------ authorization
 
-    async authorize(query: Params, sessionId: string | undefined): Promise<AuthorizeResult> {
+    async authorize(query: Params, sessionId: string | undefined, userAgent = ''): Promise<AuthorizeResult> {
         await this.prepare()
         const page = (textKey: string): AuthorizeResult => ({
             kind: 'page',
@@ -278,6 +281,8 @@ export class OidcService implements OnApplicationBootstrap {
             enrolling: false,
             amr: [],
             eidNonce: null,
+            // Shown on /me/sessions ("Chrome on Windows"); shortened so the login cookie stays small
+            userAgent: userAgent.slice(0, OIDC.USER_AGENT_MAX),
             expiresAt: Date.now() + OIDC.INTERACTION_SECONDS * 1000
         })
         if (sealed.length > OIDC.MAX_INTERACTION_COOKIE) {
@@ -374,7 +379,7 @@ export class OidcService implements OnApplicationBootstrap {
         const session = await this.store.findSession(sha256(sessionId))
         if (!session) return null
         // A session from before two-step verification was required does not count any more (the eID counts as two steps)
-        if (this.config.mfaRequired && session.acr !== OIDC.ACR_MFA && session.acr !== OIDC.ACR_EID) return null
+        if (!this.strongEnough(session.acr)) return null
         if (params.maxAge !== null && Date.now() - session.authTime.getTime() > params.maxAge * 1000) return null
         const user = await this.store.findUserById(session.userId)
         if (user?.status !== 'active') return null
@@ -617,6 +622,7 @@ export class OidcService implements OnApplicationBootstrap {
         const sessionId = randomToken()
         const now = new Date()
         const session: Session = {
+            id: randomUUID(),
             idHash: sha256(sessionId),
             interactionHash: sha256(interaction.id),
             userId: user.id,
@@ -628,7 +634,8 @@ export class OidcService implements OnApplicationBootstrap {
                   ? OIDC.ACR_MFA
                   : OIDC.ACR_PASSWORD,
             amr: interaction.amr.length ? interaction.amr : ['pwd'],
-            expiresAt: new Date(now.getTime() + OIDC.SESSION_SECONDS * 1000)
+            expiresAt: new Date(now.getTime() + OIDC.SESSION_SECONDS * 1000),
+            userAgent: interaction.userAgent || null
         }
         if (!(await this.store.createSession(session))) return { kind: 'expired' }
         // Logged in: online for the admins of the tenant
@@ -680,145 +687,25 @@ export class OidcService implements OnApplicationBootstrap {
         return { kind: 'redirect', location: location.toString() }
     }
 
-    // ------------------------------------------------------------------ token endpoint
-
-    async token(authorization: string | undefined, body: Params): Promise<TokenResponse> {
-        await this.prepare()
-        for (const name of Object.keys(body)) single(body, name)
-        const client = await this.authenticateClient(authorization, body)
-
-        const grantType = single(body, 'grant_type')
-        if (grantType !== 'authorization_code') {
-            throw new OAuthError('unsupported_grant_type', 'Only grant_type=authorization_code is supported')
-        }
-        if (!client.grantTypes.includes('authorization_code')) {
-            throw new OAuthError('unauthorized_client', 'This client may not use the authorization code flow')
-        }
-        const code = single(body, 'code')
-        const redirectUri = single(body, 'redirect_uri')
-        const verifier = single(body, 'code_verifier')
-        if (!code || !redirectUri || !verifier) {
-            throw new OAuthError('invalid_request', 'code, redirect_uri and code_verifier are required')
-        }
-
-        const grant = await this.store.consumeCode(sha256(code))
-        const invalid = new OAuthError(
-            'invalid_grant',
-            'The code is invalid, expired, used or not issued to this client'
-        )
-        if (!grant || grant.clientId !== client.clientId || grant.redirectUri !== redirectUri) throw invalid
-        if (!PKCE_VERIFIER.test(verifier) || !safeEqual(pkceChallenge(verifier), grant.codeChallenge)) {
-            throw new OAuthError('invalid_grant', 'The code_verifier does not match the code_challenge')
-        }
-        const user = await this.store.findUserById(grant.userId)
-        if (user?.status !== 'active') throw invalid
-        // No tenant: a platform login, only for superadmins
-        const membership =
-            grant.tenantId === null
-                ? null
-                : (await this.memberships(user)).find(item => item.tenantId === grant.tenantId)
-        if (membership === undefined || (membership === null && !user.isSuperadmin)) throw invalid
-
-        const now = Math.floor(Date.now() / 1000)
-        const tenantClaim = membership
-            ? { tenant: { id: membership.tenantId, name: membership.name, role: membership.role } }
-            : {}
-        const superadmin = user.isSuperadmin ? { superadmin: true } : {}
-        const accessKey = await this.keys.signingKey('ES256')
-        const accessToken = signJwt(
-            {
-                iss: this.config.issuer,
-                sub: user.id,
-                aud: this.config.audience,
-                client_id: client.clientId,
-                scope: grant.scope,
-                iat: now,
-                exp: now + OIDC.ACCESS_TOKEN_SECONDS,
-                jti: randomUUID(),
-                auth_time: Math.floor(grant.authTime.getTime() / 1000),
-                acr: grant.acr,
-                ...tenantClaim,
-                ...superadmin
-            },
-            { alg: 'ES256', kid: accessKey.kid, typ: 'at+jwt' },
-            accessKey.privateKey
-        )
-        const idKey = await this.keys.signingKey('RS256')
-        const idToken = signJwt(
-            {
-                iss: this.config.issuer,
-                sub: user.id,
-                aud: client.clientId,
-                iat: now,
-                exp: now + OIDC.ID_TOKEN_SECONDS,
-                auth_time: Math.floor(grant.authTime.getTime() / 1000),
-                ...(grant.nonce !== null ? { nonce: grant.nonce } : {}),
-                acr: grant.acr,
-                amr: grant.amr,
-                sid: grant.sessionHash.slice(0, 32),
-                at_hash: halfHash(accessToken),
-                ...(grant.scope.split(' ').includes('tenant') ? { ...tenantClaim, ...superadmin } : {})
-            },
-            { alg: 'RS256', kid: idKey.kid, typ: 'JWT' },
-            idKey.privateKey
-        )
-        return {
-            access_token: accessToken,
-            token_type: 'Bearer',
-            expires_in: OIDC.ACCESS_TOKEN_SECONDS,
-            id_token: idToken,
-            scope: grant.scope
-        }
-    }
-
-    /** client_secret_basic, client_secret_post or none (public clients, protected by PKCE). */
-    private async authenticateClient(authorization: string | undefined, body: Params): Promise<OidcClient> {
-        let basicId: string | undefined
-        let basicSecret: string | undefined
-        if (authorization?.startsWith('Basic ')) {
-            const decoded = Buffer.from(authorization.slice(6), 'base64').toString('utf8')
-            const colon = decoded.indexOf(':')
-            if (colon < 0) throw new OAuthError('invalid_client', 'Malformed Basic authentication', 401)
-            try {
-                basicId = decodeURIComponent(decoded.slice(0, colon).replace(/\+/g, ' '))
-                basicSecret = decodeURIComponent(decoded.slice(colon + 1).replace(/\+/g, ' '))
-            } catch {
-                throw new OAuthError('invalid_client', 'Malformed Basic authentication', 401)
-            }
-        }
-        const bodyId = single(body, 'client_id')
-        const bodySecret = single(body, 'client_secret')
-        if (basicId !== undefined && bodySecret !== undefined) {
-            throw new OAuthError('invalid_request', 'Use only one client authentication method')
-        }
-        if (basicId !== undefined && bodyId !== undefined && bodyId !== basicId) {
-            throw new OAuthError('invalid_request', 'client_id does not match the Basic authentication')
-        }
-        const clientId = basicId ?? bodyId
-        const secret = basicSecret ?? bodySecret
-        const client = clientId ? await this.store.findClient(clientId) : null
-        const failed = new OAuthError('invalid_client', 'Client authentication failed', 401)
-        if (!client) throw failed
-        if (client.type === 'confidential') {
-            if (!secret || !client.secretHash || !safeEqual(sha256(secret), client.secretHash)) throw failed
-        } else if (secret !== undefined) {
-            throw failed
-        }
-        return client
-    }
-
     // ------------------------------------------------------------------ userinfo
 
+    /** Does a session with this acr still count? With OIDC_MFA=required only two-step logins (loa2) and the eID (loa4). */
+    strongEnough(acr: string): boolean {
+        return !this.config.mfaRequired || acr === OIDC.ACR_MFA || acr === OIDC.ACR_EID
+    }
+
     /**
-     * Verifies an access token of this server (signature, typ at+jwt, iss, aud, exp) and returns its claims. Throws an
-     * OAuthError invalid_token (401) otherwise. Used by userinfo and by AccessTokenGuard for the own API.
+     * Verifies an access token of this server (signature, typ at+jwt, iss, aud, exp) and that its session (the sid
+     * claim) is still active: after a logout the token stops at once, not only when it expires. Returns its claims, or
+     * throws an OAuthError invalid_token (401). Used by userinfo, introspection and AccessGuard for the own API.
      */
     async verifyAccessToken(token: string | undefined): Promise<Record<string, unknown>> {
         await this.prepare()
         if (!token) throw new OAuthError('invalid_token', 'An access token is required', 401)
+        let payload: Record<string, unknown>
         try {
             const keys = await this.keys.verificationKeys()
-            return verifyJwt(token, {
+            payload = verifyJwt(token, {
                 keys: kid => keys.get(kid),
                 algorithms: ['ES256'],
                 issuer: this.config.issuer,
@@ -830,6 +717,10 @@ export class OidcService implements OnApplicationBootstrap {
                 throw new OAuthError('invalid_token', 'The access token is invalid or expired', 401)
             throw error
         }
+        const session = typeof payload.sid === 'string' ? await this.store.findSessionById(payload.sid) : null
+        if (session?.userId !== payload.sub)
+            throw new OAuthError('invalid_token', 'The session of this token ended', 401)
+        return payload
     }
 
     async userinfo(token: string | undefined): Promise<Record<string, unknown>> {

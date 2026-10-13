@@ -120,16 +120,16 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | \`/login?interaction=<id>\` | The login page of the login server (email, password, organisation choice), shown by this frontend |
 | \`/api/auth/callback\` | Back from the login server: checks state and \`iss\`, exchanges the code, verifies the ID token |
 | \`/profile\` | Protected: name, email, organisation, role, and whether the API accepts the access token |
-| \`/api/auth/logout\` | POST: logs out of this frontend (the session of the login server stays) |
+| \`/api/auth/logout\` | POST: logs out: revokes the refresh token, forgets the session and logs out of the login server too (\`end_session_endpoint\`), then back to the home page |
 | \`/register\` | Create an account and a new organisation (you become its admin), with a password or with the Belgian eID; a confirmation email follows |
 | \`/verify-email?token=\` | The link in the confirmation email: confirms the address, then you can log in |
 | \`/forgot-password\` | Ask for a link to choose a new password |
 | \`/reset-password?token=\` | The link in that email: a new password (the link works once; you are logged out everywhere) |
 | \`/invite?token=\` | The link in an invitation: join the organisation, or create your account for it |
-| \`/security\` | Two-step verification of the own account (status, recovery codes left, new recovery codes) and the eID (link, unlink) |
+| \`/security\` | Two-step verification of the own account (status, recovery codes left, new recovery codes), the eID (link, unlink) and where the account is logged in (end one session, or all others) |
 | \`/members\` | Admins: the members of the organisation with who is online, invite by email, open invitations (send again, withdraw), change roles (user, admin), disable or enable, remove |
 | \`/admin\` | Superadmins: every organisation (create, suspend), and who is superadmin |
-| \`/api/backend/...\` | Route handler: calls \`/tenants/current/...\`, \`/admin/...\`, \`/me/mfa\` and \`/me/eid\` of the API with the access token of the session (the token stays on the server; changes only from pages of this app) |
+| \`/api/backend/...\` | Route handler: calls \`/tenants/current/...\`, \`/admin/...\`, \`/me/mfa\`, \`/me/eid\` and \`/me/sessions\` of the API with the access token of the session (the token stays on the server; changes only from pages of this app) |
 
 **Flow**: "Log in" → \`/api/auth/login\` → the API (\`/oidc/authorize\`) → \`/login?interaction=...\` (this frontend talks to
 \`/oidc/interaction/...\` of the API with \`fetch\` and \`credentials: 'include'\`, so the browser sends the encrypted
@@ -137,8 +137,12 @@ login cookie of the API along) → back to the API → \`/api/auth/callback\`
 → the page you came from. A next login of the same browser skips the password (single sign-on).
 
 **Session**: an httpOnly cookie \`app_session\`, encrypted with \`AUTH_SECRET\` (AES-256-GCM), with the name, email,
-organisation (tenant) with the role, whether the user is superadmin, and the access token, valid as long as the access
-token (10 minutes). After that \`/profile\` logs in again without a password.
+organisation (tenant) with the role, whether the user is superadmin, the access token (10 minutes), the refresh token
+and the last ID token. It lives as long as the session of the login server (12 hours). \`src/proxy.ts\` renews the
+access token with the refresh token (\`src/lib/refresh.ts\`) before a page renders when it expires within a minute, and
+\`/api/backend\` does the same before it calls the API: pages and server components always see a valid token (they
+cannot set cookies themselves). When the login server refuses (logged out, session ended on \`/security\`), the cookie
+is deleted and the user logs in again.
 
 **Header**: \`src/components/header-nav.tsx\` shows "Management" (admins), "Platform" (superadmins) and "Profile" for
 everyone who is logged in, and sends the heartbeat (\`src/components/presence.tsx\`, every minute while the page is

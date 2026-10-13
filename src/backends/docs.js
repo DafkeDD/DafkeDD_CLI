@@ -138,6 +138,8 @@ const curlFor = (endpoint, { port }) => {
     if (endpoint.cookie === 'needs' || endpoint.cookie === 'clears') parts.push('-b cookies.txt')
     parts.push("-H 'Accept-Language: nl'")
     if (endpoint.bearer) parts.push('-H "Authorization: Bearer $ACCESS_TOKEN"')
+    // A confidential client authenticates with client_secret_basic
+    if (endpoint.basic) parts.push(`-u ${endpoint.basic}:$CLIENT_SECRET`)
     if (endpoint.body && endpoint.form) {
         parts.push("-H 'Content-Type: application/x-www-form-urlencoded'")
         parts.push(`-d '${formBody(endpoint.body.example)}'`)
@@ -213,6 +215,21 @@ export function backendReadme({
             )
         }
         lines.push('**Example:**', '', `${fence}bash`, curlFor(endpoint, { port }), fence, '')
+        // A second way to call the same endpoint (for example the refresh_token grant of /oidc/token)
+        for (const variant of endpoint.variants ?? []) {
+            lines.push(
+                `**${variant.title}** (form-encoded):`,
+                '',
+                '| Field | Type | Rules |',
+                '| --- | --- | --- |',
+                ...variant.body.fields.map(([name, type, rules]) => `| \`${name}\` | ${type} | ${rules} |`),
+                '',
+                `${fence}bash`,
+                curlFor({ ...endpoint, body: variant.body }, { port }),
+                fence,
+                ''
+            )
+        }
         if (endpoint.response) {
             lines.push(
                 `**Response ${endpoint.response.status}:**`,
@@ -515,12 +532,34 @@ finds all endpoints there.
 | Token | Format | Lifetime | Contents |
 | --- | --- | --- | --- |
 | ID token | JWT, RS256, \`aud\` = client | 5 minutes | \`sub\`, \`auth_time\`, \`nonce\`, \`acr\` (\`loa2\` password and code, \`loa4\` eID), \`amr\`, \`sid\`, \`at_hash\`, \`tenant\`, \`superadmin\` |
-| Access token | JWT, ES256, \`typ: at+jwt\` (RFC 9068), \`aud\` = \`OIDC_AUDIENCE\` | 10 minutes | \`sub\`, \`client_id\`, \`scope\`, \`tenant\`, \`superadmin\` |
+| Access token | JWT, ES256, \`typ: at+jwt\` (RFC 9068), \`aud\` = \`OIDC_AUDIENCE\` | 10 minutes, and stops when its session ends | \`sub\`, \`client_id\`, \`scope\`, \`sid\`, \`tenant\`, \`superadmin\` |
+| Refresh token | Random (only its sha256 is stored) | As long as its session (at most 12 hours), one use | Only for clients with the \`refresh_token\` grant (see "Sessions, refresh tokens and logout") |
 
 The \`tenant\` claim is \`{ "id": "...", "name": "Acme", "role": "admin" }\`: the tenant the user chose, with the role
 of the user there (\`user\` or \`admin\`). \`superadmin: true\` is only present for superadmins. Verify tokens with the
 keys of \`/oidc/jwks\`, check \`iss\`, \`aud\` and \`exp\`, and take the tenant only from a verified token, never from a
 header or the URL.
+
+### Sessions, refresh tokens and logout
+
+A **session** is one browser that logged in (\`oidc_sessions\`, 12 hours). Every token carries it as \`sid\`, and the
+API checks on every request that it is still active: ending a session stops its tokens **at once**, not only when they
+expire.
+
+| What | How |
+| --- | --- |
+| Refresh token | Clients with \`"grantTypes": ["authorization_code", "refresh_token"]\` in \`config/oidc-clients.json\` (the frontend) get one with the code. \`POST /oidc/token\` with \`grant_type=refresh_token\` gives a new access token, ID token **and refresh token**: the old one is used up (rotation). The account, the organisation and the role are checked again at every refresh. |
+| Reuse | The next refresh token is derived from the current one (HMAC): a used refresh token that comes back within 30 seconds (two requests of the same browser at the same moment) gets the **same** successor, never a second chain. Later it counts as stolen: its whole family is revoked and the session ends. A code that is exchanged twice revokes the refresh tokens of its first exchange. |
+| Log out | \`GET /oidc/logout\` (\`end_session_endpoint\`) with \`id_token_hint\` and a registered \`post_logout_redirect_uri\` ends the session of the browser and goes back to the client. Without a hint, or with an ID token of another login (its \`sid\` differs), the page "Log out?" asks first (a CSRF token bound to the session cookie). The frontend revokes its refresh token (\`POST /oidc/revoke\`) and then sends the browser there. |
+| Your sessions | \`GET /me/sessions\` lists where the account is logged in (browser, organisation, how, when); \`DELETE /me/sessions/<id>\` ends one, \`DELETE /me/sessions\` all others. The frontend shows them on \`/security\`. |
+| Revocation | \`POST /oidc/revoke\` (RFC 7009): a refresh token with its family. Access tokens are not revoked one by one: they live 10 minutes and stop with their session. |
+| Introspection | \`POST /oidc/introspect\` (RFC 7662) for **confidential** clients (another backend that receives our access tokens): \`{ active, sub, scope, tenant, ... }\`, or \`{ active: false }\` for an expired token or an ended session. |
+
+- A password reset, a superadmin resetting two-step verification, or an admin disabling a member ends the sessions of
+  that account (in that organisation), and with them every token.
+- Turning on two-step verification on \`/security\` ends every **other** session of the account.
+- Switching organisation (\`tenant_hint\`) keeps the same session; \`/me/sessions\` shows the organisation it logged in
+  to. The organisation of every token is checked again at every API call and every refresh.
 
 ### Roles: user, admin, superadmin
 
@@ -671,6 +710,8 @@ was already so for the \`oidc_session\` cookie (single sign-on).
 | \`type\` | \`public\` (browser and mobile apps: no secret, PKCE) or \`confidential\` (a server with a secret) |
 | \`secretEnv\` | Confidential only: the \`.env\` variable with its secret (at least 32 characters); never in the file |
 | \`redirectUris\` | Exact addresses the browser may be sent back to (https; http only on localhost) |
+| \`postLogoutRedirectUris\` | Exact addresses the browser may go to after logging out (\`post_logout_redirect_uri\`) |
+| \`grantTypes\` | \`authorization_code\` (default), and \`refresh_token\` to get refresh tokens |
 | \`scopes\` | Scopes the client may ask for: \`openid\`, \`profile\`, \`email\`, \`tenant\` |
 | \`firstParty\` | Your own application (no consent screen) |
 
@@ -683,9 +724,8 @@ stored keys cannot be used (new keys are then created and existing tokens stop w
 
 ### Not in this version yet
 
-Refresh tokens, logout, token revocation and introspection, passkeys, a consent screen for external clients, an audit log and
-licences follow in the next phases. Tokens are short-lived until then: a client logs in again (without a password,
-thanks to the session) when its access token expired.
+Passkeys, a consent screen for external clients, back-channel logout to other clients, an audit log and licences follow
+in the next phases.
 
 ## Multi-tenant (Row-Level Security)
 
@@ -719,8 +759,9 @@ ${fence}
 | \`user_identifiers\` | Linked eIDs: an HMAC of the national register number per account (one eID per account, one account per eID), linked and last used | no |
 | \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\`) | no |
 | \`oidc_signing_keys\` | Signing keys (private part encrypted) | no |
-| \`oidc_sessions\` | Browser sessions (hash of the cookie, and of the login that created it); no tenant for a platform login | yes |
+| \`oidc_sessions\` | Browser sessions: a public id (\`sid\`), the hash of the cookie and of the login that created it, the browser (User-Agent) and when it was last used; no tenant for a platform login | yes |
 | \`oidc_codes\` | Authorization codes (hash, once, 60 seconds) | yes |
+| \`oidc_refresh_tokens\` | Refresh tokens (hash), their family, session, client and organisation; used and revoked | yes |
 | \`schema_migrations\` | Which migration ran, with a checksum | no |
 
 Migrations run automatically at start, under an advisory lock (several instances can start at once). Never change a

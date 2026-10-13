@@ -40,6 +40,8 @@ export interface VerifyOptions {
     now?: number
     /** Allowed clock difference in seconds. */
     clockTolerance?: number
+    /** Accept an expired token (only for id_token_hint at logout: it says who, it grants nothing). */
+    ignoreExpiry?: boolean
 }
 
 const MAX_TOKEN_LENGTH = 16_384
@@ -116,7 +118,7 @@ export function verifyJwt(token: string, options: VerifyOptions): { header: JwtH
     const now = options.now ?? Math.floor(Date.now() / 1000)
     const tolerance = options.clockTolerance ?? 30
     if (typeof payload.exp !== 'number') throw new JoseError('Missing expiry')
-    if (now - tolerance >= payload.exp) throw new JoseError('Token expired')
+    if (!options.ignoreExpiry && now - tolerance >= payload.exp) throw new JoseError('Token expired')
     if (typeof payload.nbf === 'number' && now + tolerance < payload.nbf) throw new JoseError('Token not valid yet')
     if (typeof payload.iat === 'number' && now + tolerance < payload.iat)
         throw new JoseError('Token issued in the future')
