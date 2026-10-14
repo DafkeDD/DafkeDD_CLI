@@ -223,5 +223,138 @@ CREATE INDEX oidc_refresh_tokens_session_idx ON oidc_refresh_tokens (session_id)
 ALTER TABLE oidc_codes ADD COLUMN refresh_family uuid;
 ${isolate('oidc_refresh_tokens', 'tenant_id')}
 `
+    },
+    {
+        id: 4,
+        name: 'licences, trials, subscriptions and discount codes',
+        sql: `
+-- Products that are sold per user (seat), per organisation. Prices in cents, as charged (VAT included); a year is
+-- always cheaper than twelve months (checked by the API).
+CREATE TABLE license_products (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  code text NOT NULL UNIQUE CHECK (code ~ '^[a-z0-9][a-z0-9-]{1,62}$'),
+  name text NOT NULL,
+  description text NOT NULL DEFAULT '',
+  price_month_cents integer NOT NULL CHECK (price_month_cents > 0),
+  price_year_cents integer NOT NULL CHECK (price_year_cents > 0),
+  currency text NOT NULL DEFAULT 'EUR',
+  active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- The customer of an organisation at the payment provider (Mollie), created at its first purchase
+ALTER TABLE tenants ADD COLUMN payment_customer_id text;
+
+-- Discount codes, made by superadmins. percent_off (1 to 100) or amount_off_cents; for one product or all of them;
+-- duration: once (the first payment), repeating (duration_periods periods) or forever.
+CREATE TABLE discount_codes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  code text NOT NULL UNIQUE CHECK (code ~ '^[A-Z0-9][A-Z0-9-]{2,39}$'),
+  percent_off integer CHECK (percent_off BETWEEN 1 AND 100),
+  amount_off_cents integer CHECK (amount_off_cents > 0),
+  product_id uuid REFERENCES license_products (id) ON DELETE CASCADE,
+  duration text NOT NULL CHECK (duration IN ('once', 'repeating', 'forever')),
+  duration_periods integer CHECK (duration_periods > 0),
+  max_redemptions integer CHECK (max_redemptions > 0),
+  redemptions integer NOT NULL DEFAULT 0,
+  expires_at timestamptz,
+  active boolean NOT NULL DEFAULT true,
+  created_by uuid REFERENCES ${users} (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CHECK ((percent_off IS NULL) <> (amount_off_cents IS NULL)),
+  CHECK ((duration = 'repeating') = (duration_periods IS NOT NULL))
+);
+
+-- One subscription per organisation per product: a number of paid seats, per month or per year. status pending: the
+-- first payment is not paid yet. current_period_end: paid until then (NULL while pending).
+CREATE TABLE tenant_subscriptions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  product_id uuid NOT NULL REFERENCES license_products (id) ON DELETE CASCADE,
+  interval text NOT NULL CHECK (interval IN ('month', 'year')),
+  seats integer NOT NULL CHECK (seats >= 1),
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'past_due', 'canceled')),
+  provider_subscription_id text,
+  current_period_end timestamptz,
+  cancel_at_period_end boolean NOT NULL DEFAULT false,
+  discount_code_id uuid REFERENCES discount_codes (id) ON DELETE SET NULL,
+  -- Periods that still get the discount (NULL: forever, or no discount)
+  discount_periods_left integer,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, product_id)
+);
+
+-- A code works once per organisation
+CREATE TABLE discount_redemptions (
+  discount_code_id uuid NOT NULL REFERENCES discount_codes (id) ON DELETE CASCADE,
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  redeemed_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (discount_code_id, tenant_id)
+);
+
+-- Free seats a superadmin gives an organisation (until ends_at, or for good when NULL)
+CREATE TABLE license_grants (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  product_id uuid NOT NULL REFERENCES license_products (id) ON DELETE CASCADE,
+  seats integer NOT NULL CHECK (seats >= 1),
+  ends_at timestamptz,
+  note text NOT NULL DEFAULT '',
+  granted_by uuid REFERENCES ${users} (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Every user first gets a trial per product in an organisation, once; a superadmin can extend it
+CREATE TABLE license_trials (
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  product_id uuid NOT NULL REFERENCES license_products (id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  ends_at timestamptz NOT NULL,
+  PRIMARY KEY (tenant_id, product_id, user_id)
+);
+
+-- Seats in use: which user has one of the (paid or free) seats of a product
+CREATE TABLE license_assignments (
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  product_id uuid NOT NULL REFERENCES license_products (id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
+  assigned_by uuid REFERENCES ${users} (id) ON DELETE SET NULL,
+  assigned_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, product_id, user_id)
+);
+
+-- Payments at the provider (the id is theirs): what they were for, and how they ended
+CREATE TABLE billing_payments (
+  id text PRIMARY KEY,
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  subscription_id uuid NOT NULL REFERENCES tenant_subscriptions (id) ON DELETE CASCADE,
+  kind text NOT NULL CHECK (kind IN ('first', 'seats', 'recurring')),
+  seats integer NOT NULL,
+  amount_cents integer NOT NULL,
+  status text NOT NULL,
+  -- seats: the end of the period it was priced for (a later period does not get the seats)
+  period_end timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  paid_at timestamptz,
+  -- What it paid for is applied once: claimed for a short while, then applied_at (a failure can be tried again)
+  applying_until timestamptz,
+  applied_at timestamptz
+);
+${isolate('tenant_subscriptions', 'tenant_id')}
+${isolate('discount_redemptions', 'tenant_id')}
+${isolate('license_grants', 'tenant_id')}
+${isolate('license_trials', 'tenant_id')}
+${isolate('license_assignments', 'tenant_id')}
+${isolate('billing_payments', 'tenant_id')}
+
+-- The application may check licences itself, inside DatabaseService.withTenant()
+GRANT SELECT ON license_products TO ${role};
+GRANT SELECT ON tenant_subscriptions, license_grants, license_trials, license_assignments TO ${role};
+-- Tenant code may rename its tenant, but never change payment_customer_id or its status
+REVOKE UPDATE ON tenants FROM ${role};
+GRANT UPDATE (name) ON tenants TO ${role};
+`
     }
 ]

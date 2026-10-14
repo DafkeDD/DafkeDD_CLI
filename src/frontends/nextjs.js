@@ -6,7 +6,7 @@ import { EID_MOCK_SCRIPT, EID_PACKAGE } from '../eid.js'
 import { run } from '../runner.js'
 import { AUTH_MESSAGES, authFiles } from './auth.js'
 import { frontendReadme } from './docs.js'
-import { envLocal, OIDC_MESSAGES, oidcFrontendFiles } from './oidc.js'
+import { envLocal, LICENSE_MESSAGES, OIDC_MESSAGES, oidcFrontendFiles } from './oidc.js'
 
 export const DIR = 'frontend'
 export const LOCALES = ['en', 'nl', 'fr', 'de']
@@ -836,7 +836,7 @@ export function withApi(fileMap, api, { ui }) {
                     ...MESSAGES[locale],
                     ApiStatus: API_MESSAGES[locale],
                     ...(api.auth ? { Auth: AUTH_MESSAGES[locale] } : {}),
-                    ...(api.oidc ? { Oidc: OIDC_MESSAGES[locale] } : {})
+                    ...(api.oidc ? { Oidc: OIDC_MESSAGES[locale], Licenses: LICENSE_MESSAGES[locale] } : {})
                 },
                 null,
                 2

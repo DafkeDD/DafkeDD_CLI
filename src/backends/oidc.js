@@ -36,18 +36,167 @@ export const SCRIPTS = {
 
 /** Extra validation messages (namespace "validation") used by the account and admin endpoints. */
 export const VALIDATION = {
-    en: { IS_IN: '{property} must be one of: {constraints.0}', IS_OBJECT: '{property} must be an object' },
+    en: {
+        IS_IN: '{property} must be one of: {constraints.0}',
+        IS_OBJECT: '{property} must be an object',
+        IS_INT: '{property} must be a whole number',
+        MIN: '{property} must be at least {constraints.0}',
+        MAX: '{property} must be at most {constraints.0}',
+        MATCHES: '{property} has an invalid format',
+        IS_BOOLEAN: '{property} must be true or false',
+        IS_UUID: '{property} must be an id (uuid)',
+        IS_DATE: '{property} must be a date (ISO 8601)'
+    },
     nl: {
         IS_IN: '{property} moet een van deze waarden zijn: {constraints.0}',
-        IS_OBJECT: '{property} moet een object zijn'
+        IS_OBJECT: '{property} moet een object zijn',
+        IS_INT: '{property} moet een geheel getal zijn',
+        MIN: '{property} moet minstens {constraints.0} zijn',
+        MAX: '{property} mag hoogstens {constraints.0} zijn',
+        MATCHES: '{property} heeft een ongeldige vorm',
+        IS_BOOLEAN: '{property} moet true of false zijn',
+        IS_UUID: '{property} moet een id (uuid) zijn',
+        IS_DATE: '{property} moet een datum zijn (ISO 8601)'
     },
     fr: {
         IS_IN: "{property} doit être l'une de ces valeurs : {constraints.0}",
-        IS_OBJECT: '{property} doit être un objet'
+        IS_OBJECT: '{property} doit être un objet',
+        IS_INT: '{property} doit être un nombre entier',
+        MIN: '{property} doit être au moins {constraints.0}',
+        MAX: '{property} doit être au plus {constraints.0}',
+        MATCHES: "{property} n'a pas un format valable",
+        IS_BOOLEAN: '{property} doit être true ou false',
+        IS_UUID: '{property} doit être un identifiant (uuid)',
+        IS_DATE: '{property} doit être une date (ISO 8601)'
     },
     de: {
         IS_IN: '{property} muss einer dieser Werte sein: {constraints.0}',
-        IS_OBJECT: '{property} muss ein Objekt sein'
+        IS_OBJECT: '{property} muss ein Objekt sein',
+        IS_INT: '{property} muss eine ganze Zahl sein',
+        MIN: '{property} muss mindestens {constraints.0} sein',
+        MAX: '{property} darf höchstens {constraints.0} sein',
+        MATCHES: '{property} hat ein ungültiges Format',
+        IS_BOOLEAN: '{property} muss true oder false sein',
+        IS_UUID: '{property} muss eine ID (uuid) sein',
+        IS_DATE: '{property} muss ein Datum sein (ISO 8601)'
+    }
+}
+
+/** Texts of the licences (namespace "billing"): errors and the fake checkout. Every language has the same keys. */
+export const BILLING_MESSAGES = {
+    en: {
+        PRODUCT_NOT_FOUND: 'This product was not found.',
+        PRODUCT_EXISTS: 'A product with this code exists already.',
+        YEAR_NOT_CHEAPER: 'The price per year must be lower than twelve times the price per month.',
+        DISCOUNT_INVALID:
+            'This discount code is not valid (unknown, expired, used up, used before or for another product).',
+        DISCOUNT_EXISTS: 'This discount code exists already.',
+        DISCOUNT_AMOUNT: 'Give either a percentage or an amount off.',
+        DISCOUNT_PERIODS: 'A repeating discount needs a number of periods (and only a repeating one).',
+        SUBSCRIPTION_EXISTS:
+            'Your organisation has a subscription for this product already: change its number of seats instead.',
+        NO_SUBSCRIPTION: 'Your organisation has no running subscription for this product.',
+        FREE_SUBSCRIPTION:
+            'These seats are free (a discount code): they cannot be changed. Buy a subscription when they end.',
+        NO_FREE_SEAT: 'Every seat is in use. Buy more seats, or take one back from another member.',
+        SEATS_IN_USE: 'More seats are in use than that. Take seats back first.',
+        RENEWAL_PENDING: 'The renewal of this subscription is on its way. Change the seats when it is paid.',
+        SEAT_NOT_FOUND: 'This member has no seat for this product.',
+        TRIAL_USED: 'This member had a trial of this product already.',
+        NOT_A_MEMBER: 'This person is not an active member of the organisation.',
+        LICENSE_REQUIRED: 'You need a licence for {product}. Ask an admin of your organisation.',
+        PAYMENTS_DISABLED: 'Buying is not available on this server (PAYMENTS=off).',
+        PAYMENT_NOT_FOUND: 'This payment was not found.',
+        FAKE_TITLE: 'Test payment',
+        FAKE_TEXT: 'This is not a real payment (PAYMENTS=fake, for development). Choose how it ends.',
+        FAKE_PAY: 'Pay',
+        FAKE_CANCEL: 'Cancel'
+    },
+    nl: {
+        PRODUCT_NOT_FOUND: 'Dit product werd niet gevonden.',
+        PRODUCT_EXISTS: 'Er bestaat al een product met deze code.',
+        YEAR_NOT_CHEAPER: 'De prijs per jaar moet lager zijn dan twaalf keer de prijs per maand.',
+        DISCOUNT_INVALID:
+            'Deze kortingscode is niet geldig (onbekend, verlopen, opgebruikt, al gebruikt of voor een ander product).',
+        DISCOUNT_EXISTS: 'Deze kortingscode bestaat al.',
+        DISCOUNT_AMOUNT: 'Geef een percentage of een bedrag korting, niet allebei.',
+        DISCOUNT_PERIODS: 'Een herhalende korting heeft een aantal periodes nodig (en alleen een herhalende).',
+        SUBSCRIPTION_EXISTS: 'Je organisatie heeft al een abonnement op dit product: wijzig het aantal plaatsen.',
+        NO_SUBSCRIPTION: 'Je organisatie heeft geen lopend abonnement op dit product.',
+        FREE_SUBSCRIPTION:
+            'Deze plaatsen zijn gratis (een kortingscode): ze kunnen niet gewijzigd worden. Koop een abonnement als ze aflopen.',
+        NO_FREE_SEAT: 'Alle plaatsen zijn in gebruik. Koop extra plaatsen, of neem er een terug van een ander lid.',
+        SEATS_IN_USE: 'Er zijn meer plaatsen in gebruik. Neem eerst plaatsen terug.',
+        RENEWAL_PENDING: 'De verlenging van dit abonnement is onderweg. Wijzig de plaatsen zodra ze betaald is.',
+        SEAT_NOT_FOUND: 'Dit lid heeft geen plaats voor dit product.',
+        TRIAL_USED: 'Dit lid had al een proefperiode voor dit product.',
+        NOT_A_MEMBER: 'Deze persoon is geen actief lid van de organisatie.',
+        LICENSE_REQUIRED: 'Je hebt een licentie nodig voor {product}. Vraag het aan een beheerder van je organisatie.',
+        PAYMENTS_DISABLED: 'Kopen is niet beschikbaar op deze server (PAYMENTS=off).',
+        PAYMENT_NOT_FOUND: 'Deze betaling werd niet gevonden.',
+        FAKE_TITLE: 'Testbetaling',
+        FAKE_TEXT: 'Dit is geen echte betaling (PAYMENTS=fake, voor ontwikkeling). Kies hoe ze afloopt.',
+        FAKE_PAY: 'Betalen',
+        FAKE_CANCEL: 'Annuleren'
+    },
+    fr: {
+        PRODUCT_NOT_FOUND: 'Ce produit est introuvable.',
+        PRODUCT_EXISTS: 'Un produit avec ce code existe déjà.',
+        YEAR_NOT_CHEAPER: 'Le prix annuel doit être inférieur à douze fois le prix mensuel.',
+        DISCOUNT_INVALID:
+            "Ce code de réduction n'est pas valable (inconnu, expiré, épuisé, déjà utilisé ou pour un autre produit).",
+        DISCOUNT_EXISTS: 'Ce code de réduction existe déjà.',
+        DISCOUNT_AMOUNT: 'Indiquez soit un pourcentage, soit un montant de réduction.',
+        DISCOUNT_PERIODS: 'Une réduction répétée demande un nombre de périodes (et seulement une réduction répétée).',
+        SUBSCRIPTION_EXISTS:
+            'Votre organisation a déjà un abonnement pour ce produit : modifiez plutôt le nombre de places.',
+        NO_SUBSCRIPTION: "Votre organisation n'a pas d'abonnement en cours pour ce produit.",
+        FREE_SUBSCRIPTION:
+            'Ces places sont gratuites (un code de réduction) : elles ne peuvent pas être modifiées. Achetez un abonnement à leur fin.',
+        NO_FREE_SEAT: 'Toutes les places sont utilisées. Achetez des places, ou reprenez-en une à un autre membre.',
+        SEATS_IN_USE: "Plus de places sont utilisées. Reprenez d'abord des places.",
+        RENEWAL_PENDING:
+            "Le renouvellement de cet abonnement est en cours. Modifiez les places une fois qu'il est payé.",
+        SEAT_NOT_FOUND: "Ce membre n'a pas de place pour ce produit.",
+        TRIAL_USED: "Ce membre a déjà eu une période d'essai pour ce produit.",
+        NOT_A_MEMBER: "Cette personne n'est pas un membre actif de l'organisation.",
+        LICENSE_REQUIRED:
+            "Vous avez besoin d'une licence pour {product}. Demandez à un administrateur de votre organisation.",
+        PAYMENTS_DISABLED: "L'achat n'est pas disponible sur ce serveur (PAYMENTS=off).",
+        PAYMENT_NOT_FOUND: 'Ce paiement est introuvable.',
+        FAKE_TITLE: 'Paiement de test',
+        FAKE_TEXT:
+            "Ce n'est pas un vrai paiement (PAYMENTS=fake, pour le développement). Choisissez comment il se termine.",
+        FAKE_PAY: 'Payer',
+        FAKE_CANCEL: 'Annuler'
+    },
+    de: {
+        PRODUCT_NOT_FOUND: 'Dieses Produkt wurde nicht gefunden.',
+        PRODUCT_EXISTS: 'Ein Produkt mit diesem Code gibt es bereits.',
+        YEAR_NOT_CHEAPER: 'Der Jahrespreis muss niedriger sein als zwölfmal der Monatspreis.',
+        DISCOUNT_INVALID:
+            'Dieser Rabattcode ist ungültig (unbekannt, abgelaufen, aufgebraucht, schon benutzt oder für ein anderes Produkt).',
+        DISCOUNT_EXISTS: 'Diesen Rabattcode gibt es bereits.',
+        DISCOUNT_AMOUNT: 'Gib entweder einen Prozentsatz oder einen Betrag als Rabatt an.',
+        DISCOUNT_PERIODS: 'Ein wiederholter Rabatt braucht eine Anzahl Perioden (und nur ein wiederholter).',
+        SUBSCRIPTION_EXISTS:
+            'Deine Organisation hat bereits ein Abonnement für dieses Produkt: Ändere stattdessen die Anzahl der Plätze.',
+        NO_SUBSCRIPTION: 'Deine Organisation hat kein laufendes Abonnement für dieses Produkt.',
+        FREE_SUBSCRIPTION:
+            'Diese Plätze sind kostenlos (ein Rabattcode): Sie können nicht geändert werden. Kaufe ein Abonnement, wenn sie enden.',
+        NO_FREE_SEAT: 'Alle Plätze sind belegt. Kaufe weitere Plätze oder nimm einem anderen Mitglied einen weg.',
+        SEATS_IN_USE: 'Es sind mehr Plätze belegt. Nimm zuerst Plätze zurück.',
+        RENEWAL_PENDING: 'Die Verlängerung dieses Abos ist unterwegs. Ändere die Plätze, sobald sie bezahlt ist.',
+        SEAT_NOT_FOUND: 'Dieses Mitglied hat keinen Platz für dieses Produkt.',
+        TRIAL_USED: 'Dieses Mitglied hatte bereits eine Testphase für dieses Produkt.',
+        NOT_A_MEMBER: 'Diese Person ist kein aktives Mitglied der Organisation.',
+        LICENSE_REQUIRED: 'Du brauchst eine Lizenz für {product}. Frage einen Administrator deiner Organisation.',
+        PAYMENTS_DISABLED: 'Kaufen ist auf diesem Server nicht möglich (PAYMENTS=off).',
+        PAYMENT_NOT_FOUND: 'Diese Zahlung wurde nicht gefunden.',
+        FAKE_TITLE: 'Testzahlung',
+        FAKE_TEXT: 'Dies ist keine echte Zahlung (PAYMENTS=fake, für die Entwicklung). Wähle, wie sie endet.',
+        FAKE_PAY: 'Bezahlen',
+        FAKE_CANCEL: 'Abbrechen'
     }
 }
 
@@ -559,6 +708,16 @@ export function envLines(oidc, { port, example = false }) {
         'SMTP_USER=',
         'SMTP_PASSWORD=',
         `MAIL_FROM=${quote(`${oidc.appName ?? 'App'} <no-reply@example.com>`)}`,
+        '',
+        '# Licences: every user of an organisation needs a seat of a product, after a free trial of BILLING_TRIAL_DAYS days.',
+        '# PAYMENTS: mollie (MOLLIE_API_KEY, test_... or live_...), fake (a checkout page of this API, development only)',
+        '# or off (nothing can be bought; trials and free seats of a superadmin still work)',
+        `PAYMENTS=${example ? 'mollie' : 'fake'}`,
+        'MOLLIE_API_KEY=',
+        'BILLING_TRIAL_DAYS=14',
+        '# The public address of this API, where Mollie calls /billing/webhook (default: the origin of OIDC_ISSUER).',
+        '# Mollie cannot call localhost: use a tunnel (ngrok) here to test renewals; the return page works without it.',
+        '# PUBLIC_API_URL=https://api.example.com',
         ''
     ].join('\n')
 }
@@ -586,6 +745,74 @@ const ACCESS = level => [
     [403, 'errors.FORBIDDEN', `not ${level}`]
 ]
 const PASSWORD_RULE = 'required, 12 to 128 characters'
+const SUBSCRIPTION_ID = '3c8e1f0a-7b2d-4e5f-9a6b-1d2c3e4f5a6b'
+const PRODUCT = {
+    id: '5a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
+    code: 'planner',
+    name: 'Planner',
+    description: 'Plan the week of your team',
+    priceMonthCents: 900,
+    priceYearCents: 9000,
+    currency: 'EUR',
+    active: true,
+    createdAt: '2026-10-01T08:00:00.000Z'
+}
+const DISCOUNT = {
+    id: '7e6d5c4b-3a2f-4e1d-9c8b-7a6f5e4d3c2b',
+    code: 'WELCOME-50',
+    percentOff: 50,
+    amountOffCents: null,
+    productId: PRODUCT.id,
+    productCode: 'planner',
+    duration: 'repeating',
+    durationPeriods: 3,
+    maxRedemptions: 100,
+    redemptions: 0,
+    expiresAt: '2026-12-31T23:59:59.000Z',
+    active: true,
+    createdAt: '2026-10-14T08:00:00.000Z'
+}
+const GRANT = {
+    id: '2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e',
+    tenantId: TENANT.id,
+    productId: PRODUCT.id,
+    seats: 3,
+    endsAt: '2027-06-30T00:00:00.000Z',
+    note: 'Partner',
+    createdAt: '2026-10-14T08:00:00.000Z'
+}
+const OVERVIEW = {
+    product: PRODUCT,
+    subscription: {
+        id: SUBSCRIPTION_ID,
+        tenantId: TENANT.id,
+        productId: PRODUCT.id,
+        interval: 'year',
+        seats: 5,
+        status: 'active',
+        currentPeriodEnd: '2027-10-14T08:00:00.000Z',
+        cancelAtPeriodEnd: false,
+        discountPeriodsLeft: null,
+        paid: true,
+        valid: true,
+        renewalCents: 45000,
+        discount: null
+    },
+    grants: [{ ...GRANT, valid: true }],
+    seats: { paid: 5, free: 3, total: 8, used: 2 },
+    trials: [{ userId: USER_ID, endsAt: '2026-10-28T08:00:00.000Z', active: true }],
+    assignments: [{ userId: USER_ID, assignedAt: '2026-10-14T09:00:00.000Z', active: true }]
+}
+/** The body of a purchase (and of its quote). */
+const PURCHASE = {
+    example: { productCode: 'planner', interval: 'year', seats: 5, discountCode: 'WELCOME-50' },
+    fields: [
+        ['productCode', 'string', 'required'],
+        ['interval', 'string', '`month` or `year` (cheaper)'],
+        ['seats', 'number', 'required, 1 to 10000: one per user'],
+        ['discountCode', 'string', 'optional']
+    ]
+}
 const CHECK_EMAIL = { status: 202, example: { status: 'check-email' } }
 const EID_DISABLED = [404, 'oidc.EID_DISABLED']
 /** The token of the DafkeDD eID bridge after the PIN (shortened). */
@@ -1563,6 +1790,383 @@ export const endpoints = ({ port = 4000 } = {}) => [
         errors: [
             [401, 'errors.UNAUTHORIZED'],
             [404, 'oidc.SESSION_NOT_FOUND']
+        ]
+    },
+    // ---------------------------------------------------------------- licences of the own organisation (admins)
+    {
+        method: 'GET',
+        path: '/tenants/current/licenses',
+        tag: 'licences (admin)',
+        summary:
+            'Per product: the subscription (seats, month or year, paid until, the next renewal), the free seats of a superadmin, the trials of the members and who has a seat. `assignments[].active` is false for the newest assignments when there are fewer seats than assignments.',
+        bearer: true,
+        response: { status: 200, example: [OVERVIEW] },
+        errors: ACCESS('admin')
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/licenses/quote',
+        tag: 'licences (admin)',
+        summary:
+            'What a purchase costs, with a discount code: the price of one seat, the first payment and every renewal after it (in cents). Nothing is bought.',
+        bearer: true,
+        body: PURCHASE,
+        response: {
+            status: 200,
+            example: {
+                currency: 'EUR',
+                unitCents: 9000,
+                baseCents: 45000,
+                firstCents: 22500,
+                renewalCents: 45000,
+                discount: {
+                    code: 'WELCOME-50',
+                    percentOff: 50,
+                    amountOffCents: null,
+                    duration: 'once',
+                    durationPeriods: null
+                }
+            }
+        },
+        errors: [BAD_REQUEST, ...ACCESS('admin'), [404, 'billing.PRODUCT_NOT_FOUND'], [400, 'billing.DISCOUNT_INVALID']]
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/licenses/subscriptions',
+        tag: 'licences (admin)',
+        summary:
+            'Buy seats of a product per month or per year (a year is cheaper). Answers the checkout URL of Mollie: send the browser there; it comes back on /licenses/return of the frontend. A discount code that makes it free activates at once (`status: active`, no checkout).',
+        bearer: true,
+        body: PURCHASE,
+        response: {
+            status: 201,
+            example: {
+                status: 'pending',
+                checkoutUrl: 'https://www.mollie.com/checkout/select-method/7UhSN1zuXS',
+                subscriptionId: SUBSCRIPTION_ID
+            }
+        },
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('admin'),
+            [404, 'billing.PRODUCT_NOT_FOUND'],
+            [400, 'billing.DISCOUNT_INVALID'],
+            [409, 'billing.SUBSCRIPTION_EXISTS'],
+            [503, 'billing.PAYMENTS_DISABLED']
+        ]
+    },
+    {
+        method: 'PATCH',
+        path: '/tenants/current/licenses/subscriptions/:productCode',
+        tag: 'licences (admin)',
+        summary:
+            'Change the number of paid seats. More: a payment for the rest of the current period (checkout URL), the renewals cost more after it. Fewer: at once, no refund, only when the seats in use still fit.',
+        bearer: true,
+        pathExample: '/tenants/current/licenses/subscriptions/planner',
+        body: { example: { seats: 8 }, fields: [['seats', 'number', 'required, 1 to 10000']] },
+        response: {
+            status: 200,
+            example: { status: 'pending', checkoutUrl: 'https://www.mollie.com/checkout/select-method/9KqWm2Lp' }
+        },
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('admin'),
+            [404, 'billing.PRODUCT_NOT_FOUND'],
+            [409, 'billing.NO_SUBSCRIPTION'],
+            [409, 'billing.FREE_SUBSCRIPTION'],
+            [409, 'billing.RENEWAL_PENDING'],
+            [409, 'billing.SEATS_IN_USE']
+        ]
+    },
+    {
+        method: 'DELETE',
+        path: '/tenants/current/licenses/subscriptions/:productCode',
+        tag: 'licences (admin)',
+        summary:
+            'Cancel a subscription: no more renewals; the seats keep working until the end of the paid period (`endsAt`).',
+        bearer: true,
+        pathExample: '/tenants/current/licenses/subscriptions/planner',
+        response: { status: 200, example: { status: 'canceled', endsAt: '2027-10-14T08:00:00.000Z' } },
+        errors: [...ACCESS('admin'), [404, 'billing.PRODUCT_NOT_FOUND'], [409, 'billing.NO_SUBSCRIPTION']]
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/licenses/subscriptions/:id/sync',
+        tag: 'licences (admin)',
+        summary:
+            'After the checkout (the return page of the frontend): fetches the status of the last payment from Mollie and applies it. Works without a webhook (localhost); the status never comes from the browser.',
+        bearer: true,
+        pathExample: `/tenants/current/licenses/subscriptions/${SUBSCRIPTION_ID}/sync`,
+        response: { status: 200, example: { payment: 'paid', subscription: 'active', seats: 5 } },
+        errors: [...ACCESS('admin'), [404, 'billing.PAYMENT_NOT_FOUND']]
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/licenses/:productCode/trials/:userId',
+        tag: 'licences (admin)',
+        summary:
+            'Start the 14-day trial (BILLING_TRIAL_DAYS) of a member, for a member that joined before the product existed. New members get it automatically; once per member and product.',
+        bearer: true,
+        pathExample: `/tenants/current/licenses/planner/trials/${USER_ID}`,
+        response: { status: 201, example: { userId: USER_ID, endsAt: '2026-10-28T08:00:00.000Z' } },
+        errors: [
+            ...ACCESS('admin'),
+            [404, 'billing.PRODUCT_NOT_FOUND'],
+            [404, 'billing.NOT_A_MEMBER'],
+            [409, 'billing.TRIAL_USED']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/licenses/:productCode/seats/:userId',
+        tag: 'licences (admin)',
+        summary:
+            'Give a member one of the seats (paid or free). Every member that uses the product after the trial needs one.',
+        bearer: true,
+        pathExample: `/tenants/current/licenses/planner/seats/${USER_ID}`,
+        response: { status: 201, example: { userId: USER_ID, assigned: true } },
+        errors: [
+            ...ACCESS('admin'),
+            [404, 'billing.PRODUCT_NOT_FOUND'],
+            [404, 'billing.NOT_A_MEMBER'],
+            [409, 'billing.NO_FREE_SEAT']
+        ]
+    },
+    {
+        method: 'DELETE',
+        path: '/tenants/current/licenses/:productCode/seats/:userId',
+        tag: 'licences (admin)',
+        summary: 'Take a seat back from a member: it is free at once for another member.',
+        bearer: true,
+        pathExample: `/tenants/current/licenses/planner/seats/${USER_ID}`,
+        response: { status: 200, example: { userId: USER_ID, assigned: false } },
+        errors: [...ACCESS('admin'), [404, 'billing.PRODUCT_NOT_FOUND'], [404, 'billing.SEAT_NOT_FOUND']]
+    },
+    // ---------------------------------------------------------------- the licences of the own account
+    {
+        method: 'GET',
+        path: '/me/licenses',
+        tag: 'licences',
+        summary:
+            'Which products the logged in account may use in the organisation of its token, and why: a running trial (until `endsAt`), a seat, or being a superadmin.',
+        bearer: true,
+        response: {
+            status: 200,
+            example: [
+                { code: 'planner', name: 'Planner', access: true, via: 'trial', endsAt: '2026-10-28T08:00:00.000Z' },
+                { code: 'reports', name: 'Reports', access: false }
+            ]
+        },
+        errors: [[401, 'errors.UNAUTHORIZED']]
+    },
+    // ---------------------------------------------------------------- the payment provider
+    {
+        method: 'POST',
+        path: '/billing/webhook',
+        tag: 'licences',
+        summary:
+            'The webhook of Mollie (form-encoded `id=tr_…`, no login). The status is always fetched from Mollie, never taken from the call; a paid payment is applied once. Always 200 (500 when the database is down, so Mollie tries again).',
+        form: true,
+        body: { example: { id: 'tr_WDqYK6vllg' }, fields: [['id', 'string', 'the payment id of Mollie']] },
+        response: null,
+        errors: []
+    },
+    // ---------------------------------------------------------------- licences of the platform (superadmins)
+    {
+        method: 'GET',
+        path: '/admin/products',
+        tag: 'licences (superadmin)',
+        summary: 'Every product, also the ones that are no longer sold (`active: false`).',
+        bearer: true,
+        response: { status: 200, example: [PRODUCT] },
+        errors: ACCESS('superadmin')
+    },
+    {
+        method: 'POST',
+        path: '/admin/products',
+        tag: 'licences (superadmin)',
+        summary:
+            'A new product, sold per user (seat): a price per month and a price per year that must be cheaper than twelve months. The code is fixed: the backend checks it with @License(code).',
+        bearer: true,
+        body: {
+            example: {
+                code: 'planner',
+                name: 'Planner',
+                description: 'Plan the week of your team',
+                priceMonthCents: 900,
+                priceYearCents: 9000
+            },
+            fields: [
+                ['code', 'string', 'required, lowercase letters, digits and dashes (2 to 63)'],
+                ['name', 'string', 'required, 2 to 100 characters'],
+                ['description', 'string', 'optional, up to 500 characters'],
+                ['priceMonthCents', 'number', 'required, per seat per month, in cents'],
+                ['priceYearCents', 'number', 'required, per seat per year, in cents: less than 12 × priceMonthCents']
+            ]
+        },
+        response: { status: 201, example: PRODUCT },
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('superadmin'),
+            [400, 'billing.YEAR_NOT_CHEAPER'],
+            [409, 'billing.PRODUCT_EXISTS']
+        ]
+    },
+    {
+        method: 'PATCH',
+        path: '/admin/products/:code',
+        tag: 'licences (superadmin)',
+        summary:
+            'Change a product: name, description, prices (for new purchases and seats) or stop selling it (`active: false`: no new purchases or trials, bought seats keep working until they end).',
+        bearer: true,
+        pathExample: '/admin/products/planner',
+        body: {
+            example: {
+                name: 'Planner',
+                description: 'Plan the week of your team',
+                priceMonthCents: 900,
+                priceYearCents: 9500,
+                active: true
+            },
+            fields: [
+                ['name', 'string', 'optional'],
+                ['description', 'string', 'optional'],
+                ['priceMonthCents', 'number', 'optional'],
+                ['priceYearCents', 'number', 'optional, still less than 12 months'],
+                ['active', 'boolean', 'optional']
+            ]
+        },
+        response: { status: 200, example: { ...PRODUCT, priceYearCents: 9500 } },
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('superadmin'),
+            [404, 'billing.PRODUCT_NOT_FOUND'],
+            [400, 'billing.YEAR_NOT_CHEAPER']
+        ]
+    },
+    {
+        method: 'GET',
+        path: '/admin/discounts',
+        tag: 'licences (superadmin)',
+        summary: 'Every discount code, with its product and how many organisations used it.',
+        bearer: true,
+        response: { status: 200, example: [DISCOUNT] },
+        errors: ACCESS('superadmin')
+    },
+    {
+        method: 'POST',
+        path: '/admin/discounts',
+        tag: 'licences (superadmin)',
+        summary:
+            'Make a discount code: a percentage (100 = free, no payment at all) or an amount per payment; for one product or all; for the first payment (`once`), `durationPeriods` periods (`repeating`) or `forever`. Each organisation uses a code once. Without `code` a random one is made (like K7QM-2XPD).',
+        bearer: true,
+        body: {
+            example: {
+                code: 'WELCOME-50',
+                percentOff: 50,
+                productCode: 'planner',
+                duration: 'repeating',
+                durationPeriods: 3,
+                maxRedemptions: 100,
+                expiresAt: '2026-12-31T23:59:59Z'
+            },
+            fields: [
+                ['code', 'string', 'optional, 3 to 40 letters, digits and dashes (stored in capitals)'],
+                [
+                    'percentOff',
+                    'number',
+                    '1 to 100 (100: free). Instead of it: `amountOffCents`, cents off every discounted payment'
+                ],
+                ['productCode', 'string', 'optional: left out is every product'],
+                ['duration', 'string', '`once`, `repeating` or `forever`'],
+                ['durationPeriods', 'number', 'only with `repeating`: 1 to 120 periods'],
+                ['maxRedemptions', 'number', 'optional: how many organisations'],
+                ['expiresAt', 'string', 'optional ISO date: no longer usable after it']
+            ]
+        },
+        response: { status: 201, example: DISCOUNT },
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('superadmin'),
+            [400, 'billing.DISCOUNT_AMOUNT'],
+            [400, 'billing.DISCOUNT_PERIODS'],
+            [404, 'billing.PRODUCT_NOT_FOUND'],
+            [409, 'billing.DISCOUNT_EXISTS']
+        ]
+    },
+    {
+        method: 'PATCH',
+        path: '/admin/discounts/:code',
+        tag: 'licences (superadmin)',
+        summary: 'Switch a discount code off (or on again). Subscriptions that used it keep their discount.',
+        bearer: true,
+        pathExample: '/admin/discounts/WELCOME-50',
+        body: { example: { active: false }, fields: [['active', 'boolean', 'required']] },
+        response: { status: 200, example: { code: 'WELCOME-50', active: false } },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), [404, 'billing.DISCOUNT_INVALID']]
+    },
+    {
+        method: 'GET',
+        path: '/admin/tenants/:id/licenses',
+        tag: 'licences (superadmin)',
+        summary: 'The licences of any organisation: the same overview as GET /tenants/current/licenses.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/licenses`,
+        response: { status: 200, example: [OVERVIEW] },
+        errors: ACCESS('superadmin')
+    },
+    {
+        method: 'POST',
+        path: '/admin/tenants/:id/grants',
+        tag: 'licences (superadmin)',
+        summary:
+            'Give an organisation free seats of a product, until `endsAt` or for good. Its admins hand them out like paid seats.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/grants`,
+        body: {
+            example: { productCode: 'planner', seats: 3, endsAt: '2027-06-30T00:00:00Z', note: 'Partner' },
+            fields: [
+                ['productCode', 'string', 'required'],
+                ['seats', 'number', 'required, 1 to 10000'],
+                ['endsAt', 'string', 'optional ISO date: left out is for good'],
+                ['note', 'string', 'optional, up to 200 characters']
+            ]
+        },
+        response: { status: 201, example: GRANT },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), [404, 'billing.PRODUCT_NOT_FOUND'], [404, 'errors.NOT_FOUND']]
+    },
+    {
+        method: 'DELETE',
+        path: '/admin/tenants/:id/grants/:grantId',
+        tag: 'licences (superadmin)',
+        summary: 'Take free seats back at once.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/grants/${GRANT.id}`,
+        response: { status: 200, example: { id: GRANT.id, deleted: true } },
+        errors: [...ACCESS('superadmin'), [404, 'errors.NOT_FOUND']]
+    },
+    {
+        method: 'POST',
+        path: '/admin/tenants/:id/trials',
+        tag: 'licences (superadmin)',
+        summary:
+            'Extend the trial of a member by a number of days: from its end, or from today when it ended. Starts one when there is none.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/trials`,
+        body: {
+            example: { productCode: 'planner', userId: USER_ID, days: 14 },
+            fields: [
+                ['productCode', 'string', 'required'],
+                ['userId', 'string', 'required, a member of the organisation'],
+                ['days', 'number', 'required, 1 to 365']
+            ]
+        },
+        response: { status: 201, example: { userId: USER_ID, endsAt: '2026-11-11T08:00:00.000Z' } },
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('superadmin'),
+            [404, 'billing.PRODUCT_NOT_FOUND'],
+            [404, 'billing.NOT_A_MEMBER']
         ]
     }
 ]

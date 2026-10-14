@@ -5,6 +5,8 @@ import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import type { App } from 'supertest/types.js'
 import { AppModule } from '../src/app.module.js'
+import { BILLING_STORE } from '../src/billing/store/billing.store.js'
+import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import type { Mail } from '../src/mail/mail.service.js'
 import { MailService } from '../src/mail/mail.service.js'
@@ -55,6 +57,8 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
             .useValue({ ping: vi.fn().mockResolvedValue(true), query: vi.fn().mockResolvedValue({ rows: [] }) })
             .overrideProvider(OIDC_STORE)
             .useValue(store)
+            .overrideProvider(BILLING_STORE)
+            .useValue(new MemoryBillingStore())
             .overrideProvider(MailService)
             .useValue({
                 send: async (mail: Mail) => {

@@ -149,7 +149,7 @@ test('the frontend contacts the eID program only after a click, and never reads 
     assert.match(frontend['src/components/account-forms.tsx'], /api\('register-eid', \{/)
     assert.match(frontend['src/components/security.tsx'], /export function EidSecurity\(\)/)
     const route = frontend['src/app/api/backend/[...path]/route.ts']
-    const allowed = new RegExp(/const ALLOWED = \/(.+)\/$/m.exec(route)[1])
+    const allowed = new RegExp(/const ALLOWED =\s+\/(.+)\/$/m.exec(route)[1])
     for (const p of ['me/eid', 'me/eid/challenge']) assert.ok(allowed.test(p), p)
 })
 

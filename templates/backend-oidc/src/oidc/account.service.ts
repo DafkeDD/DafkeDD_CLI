@@ -45,6 +45,17 @@ export class AccountService {
         private readonly eid: EidService
     ) {}
 
+    /** Called when an account joins an organisation (the licences give it a trial of every product). */
+    private readonly joined: ((tenantId: string, userId: string) => Promise<void>)[] = []
+
+    onMemberJoined(listener: (tenantId: string, userId: string) => Promise<void>) {
+        this.joined.push(listener)
+    }
+
+    private async memberJoined(tenantId: string, userId: string) {
+        for (const listener of this.joined) await listener(tenantId, userId)
+    }
+
     private get key() {
         return accountTokenKey(this.config.masterKey())
     }
@@ -91,8 +102,10 @@ export class AccountService {
             },
             { name: input.organisation.trim(), slug: slugify(input.organisation) }
         )
-        if (created) await this.sendVerification(created.user, lang)
-        else await this.tellOwner(email, lang)
+        if (created) {
+            await this.memberJoined(created.tenant.id, created.user.id)
+            await this.sendVerification(created.user, lang)
+        } else await this.tellOwner(email, lang)
         return { status: 'check-email' as const }
     }
 
@@ -143,8 +156,10 @@ export class AccountService {
             { type: 'eid', valueHash: person.valueHash }
         )
         if (created === 'identifier-taken') throw new AppException('oidc.EID_ALREADY_LINKED', HttpStatus.CONFLICT)
-        if (created) await this.sendVerification(created.user, lang)
-        else await this.tellOwner(email, lang)
+        if (created) {
+            await this.memberJoined(created.tenant.id, created.user.id)
+            await this.sendVerification(created.user, lang)
+        } else await this.tellOwner(email, lang)
         return { status: 'check-email' as const, name: person.name }
     }
 
@@ -362,6 +377,7 @@ export class AccountService {
             await this.store.setEmailVerified(user.id)
         }
         await this.store.addMember(tenant.id, user.id, data.role)
+        await this.memberJoined(tenant.id, user.id)
         await this.store.deleteInvitation(tenant.id, data.invitationId)
         return { status: 'accepted' as const, tenantName: tenant.name, accountExists }
     }

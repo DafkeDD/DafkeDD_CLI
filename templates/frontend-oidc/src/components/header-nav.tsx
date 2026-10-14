@@ -17,9 +17,14 @@ export async function HeaderNav() {
         <nav className='flex items-center gap-1'>
             <Presence />
             {session.tenant?.role === 'admin' && (
-                <Link href='/members' className={NAV}>
-                    {t('management')}
-                </Link>
+                <>
+                    <Link href='/members' className={NAV}>
+                        {t('management')}
+                    </Link>
+                    <Link href='/licenses' className={NAV}>
+                        {t('licenses')}
+                    </Link>
+                </>
             )}
             {session.superadmin && (
                 <Link href='/admin' className={NAV}>

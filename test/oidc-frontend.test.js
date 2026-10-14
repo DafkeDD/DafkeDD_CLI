@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { files, uiFiles, withApi, LOCALES } from '../src/frontends/nextjs.js'
-import { envLocal, OIDC_MESSAGES, oidcFrontendFiles } from '../src/frontends/oidc.js'
+import { envLocal, LICENSE_MESSAGES, OIDC_MESSAGES, oidcFrontendFiles } from '../src/frontends/oidc.js'
 import { frontendReadme } from '../src/frontends/docs.js'
 import { main } from '../src/index.js'
 import * as backendOidc from '../src/backends/oidc.js'
@@ -81,14 +81,29 @@ test('cookies are httpOnly and encrypted (AES-256-GCM, purpose bound), returnTo 
 })
 
 test('every text exists in all four languages, and every text the code uses exists', () => {
-    const keys = Object.keys(OIDC_MESSAGES.en).sort()
-    for (const locale of LOCALES) assert.deepEqual(Object.keys(OIDC_MESSAGES[locale]).sort(), keys, locale)
-    const used = new Set()
+    const namespaces = { Oidc: OIDC_MESSAGES, Licenses: LICENSE_MESSAGES }
+    const used = { Oidc: new Set(), Licenses: new Set() }
     for (const content of Object.values(templates)) {
-        for (const match of content.matchAll(/\bt\('(\w+)'/g)) used.add(match[1])
+        // const t = useTranslations('Oidc'), const l = await getTranslations('Licenses'), ...
+        const names = new Map()
+        for (const match of content.matchAll(/\b(\w+) = (?:await )?(?:use|get)Translations\('(\w+)'\)/g)) {
+            names.set(match[1], match[2])
+        }
+        // helpers that are handed t, like roleLabel(t, role), use the Oidc texts
+        if (!names.size) names.set('t', 'Oidc')
+        for (const [name, namespace] of names) {
+            assert.ok(used[namespace], `unknown namespace ${namespace}`)
+            for (const match of content.matchAll(new RegExp(`\\b${name}\\('(\\w+)'`, 'g')))
+                used[namespace].add(match[1])
+        }
     }
-    for (const key of used) assert.ok(keys.includes(key), `missing text ${key}`)
-    for (const key of keys) assert.ok(used.has(key), `unused text ${key}`)
+    for (const [namespace, messages] of Object.entries(namespaces)) {
+        const keys = Object.keys(messages.en).sort()
+        for (const locale of LOCALES)
+            assert.deepEqual(Object.keys(messages[locale]).sort(), keys, `${namespace} ${locale}`)
+        for (const key of used[namespace]) assert.ok(keys.includes(key), `missing text ${namespace}.${key}`)
+        for (const key of keys) assert.ok(used[namespace].has(key), `unused text ${namespace}.${key}`)
+    }
 })
 
 for (const ui of [true, false]) {
@@ -97,7 +112,9 @@ for (const ui of [true, false]) {
         assert.ok(all['src/app/api/auth/callback/route.ts'])
         assert.ok(!all['src/components/auth-links.tsx'], 'not the simple login')
         for (const locale of LOCALES) {
-            assert.deepEqual(JSON.parse(all[`messages/${locale}.json`]).Oidc, OIDC_MESSAGES[locale])
+            const messages = JSON.parse(all[`messages/${locale}.json`])
+            assert.deepEqual(messages.Oidc, OIDC_MESSAGES[locale])
+            assert.deepEqual(messages.Licenses, LICENSE_MESSAGES[locale])
         }
         const page = all['src/app/[locale]/page.tsx']
         assert.match(page, /import \{ Suspense, use \} from 'react'/)
@@ -184,7 +201,7 @@ test('the API proxy only forwards members, platform and two-step calls, with the
     const route = templates['src/app/api/backend/[...path]/route.ts']
     assert.match(route, /Authorization: 'Bearer ' \+ session\.accessToken/)
     assert.match(route, /request\.headers\.get\('origin'\) !== new URL\(APP_URL\)\.origin/)
-    const allowed = new RegExp(/const ALLOWED = \/(.+)\/$/m.exec(route)[1])
+    const allowed = new RegExp(/const ALLOWED =\s+\/(.+)\/$/m.exec(route)[1])
     for (const path of ['tenants/current/members', 'admin/tenants', 'me/mfa', 'me/mfa/recovery-codes'])
         assert.ok(allowed.test(path), path)
     for (const path of ['oidc/token', 'health', 'tenants/other/members', '../admin', 'me/profile'])

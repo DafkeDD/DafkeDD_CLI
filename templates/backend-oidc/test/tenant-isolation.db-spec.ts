@@ -4,6 +4,7 @@ import pg from 'pg'
 import { TENANT_ROLE, TENANT_TABLES, USERS_TABLE } from '../src/database/database.constants.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import { runMigrations } from '../src/database/migrator.js'
+import { PgBillingStore } from '../src/billing/store/pg-billing.store.js'
 import { PgOidcStore } from '../src/oidc/store/pg-oidc.store.js'
 
 /**
@@ -321,10 +322,10 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         expect(
             await store.findMemberRole(created[0] && typeof created[0] === 'object' ? created[0].tenant.id : '', jan.id)
         ).toBe('admin')
-        // A taken email address: nothing is created, the eID stays free
+        // A taken email address (of the registration that won): nothing is created, the eID stays free
         const other = { type: 'eid' as const, valueHash: 'hash-' + randomUUID() }
         expect(
-            await store.registerWithIdentifier(account('JAN1@example.com'), { name: 'X', slug: 'x-y' }, other)
+            await store.registerWithIdentifier(account(jan.email.toUpperCase()), { name: 'X', slug: 'x-y' }, other)
         ).toBeNull()
         expect(await store.findUserByIdentifier('eid', other.valueHash)).toBeNull()
 
@@ -607,6 +608,142 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         expect(await store.endUserSession(randomUUID(), third.id)).toBe(false)
         expect(await store.endOtherUserSessions(owner.id, first.id)).toBe(1)
         expect((await store.listUserSessions(owner.id)).map(item => item.id)).toEqual([first.id])
+    })
+
+    it('licences: seats never go over (also at the same moment), codes and payments count once, per tenant', async () => {
+        const billing = new PgBillingStore(database)
+        const oidc = new PgOidcStore(database)
+        const user = async (email: string) =>
+            (await oidc.createUser({ email, name: email, passwordHash: 'x', emailVerified: true, locale: null }))!.id
+        const [ann, ben, cas] = [await user('ann@lic.com'), await user('ben@lic.com'), await user('cas@lic.com')]
+        const product = (await billing.createProduct({
+            code: 'planner',
+            name: 'Planner',
+            description: '',
+            priceMonthCents: 900,
+            priceYearCents: 9000,
+            active: true
+        }))!
+        expect(await billing.createProduct({ ...product, code: 'planner' })).toBeNull()
+        expect(await billing.updateProduct(product.id, { priceYearCents: 8000 })).toMatchObject({
+            priceYearCents: 8000
+        })
+
+        // Trials: once per user and product
+        const ends = new Date(Date.now() + 60_000)
+        expect(await billing.startTrial(tenant.a, product.id, ann, ends)).toBe(true)
+        expect(await billing.startTrial(tenant.a, product.id, ann, ends)).toBe(false)
+        expect(await billing.setTrialEnd(tenant.a, product.id, ann, new Date(Date.now() + 120_000))).toBe(true)
+
+        // Two seats, three people at the same moment: one is refused
+        const results = await Promise.all(
+            [ann, ben, cas].map(id => billing.assignSeat(tenant.a, product.id, id, ann, 2))
+        )
+        expect([...results].sort()).toEqual(['full', 'ok', 'ok'])
+        expect(await billing.assignSeat(tenant.a, product.id, results[0] === 'ok' ? ann : ben, ann, 2)).toBe('exists')
+        expect(await billing.listAssignments(tenant.a)).toHaveLength(2)
+
+        // A discount code: once per tenant, and never more than its maximum (also at the same moment)
+        const code = (await billing.createDiscount({
+            code: 'TWO-ONLY',
+            percentOff: 50,
+            amountOffCents: null,
+            productId: null,
+            duration: 'once',
+            durationPeriods: null,
+            maxRedemptions: 1,
+            expiresAt: null,
+            createdBy: ann
+        }))!
+        const redeemed = await Promise.all([
+            billing.redeemDiscount(code.id, tenant.a),
+            billing.redeemDiscount(code.id, tenant.b)
+        ])
+        expect(redeemed.filter(Boolean)).toHaveLength(1)
+        expect((await billing.findDiscount(code.id))?.redemptions).toBe(1)
+
+        // A subscription and its payment: paid once, also when the webhook comes twice at once
+        const subscription = await billing.saveSubscription({
+            tenantId: tenant.a,
+            productId: product.id,
+            interval: 'year',
+            seats: 2,
+            status: 'pending',
+            providerSubscriptionId: null,
+            currentPeriodEnd: null,
+            cancelAtPeriodEnd: false,
+            discountCodeId: code.id,
+            discountPeriodsLeft: 1
+        })
+        await billing.updateSubscription(subscription.id, {
+            status: 'active',
+            providerSubscriptionId: 'sub_x',
+            seats: 3
+        })
+        expect(await billing.findSubscriptionByProviderId('sub_x')).toMatchObject({
+            seats: 3,
+            status: 'active',
+            interval: 'year'
+        })
+        await billing.createPayment({
+            id: 'tr_test',
+            tenantId: tenant.a,
+            subscriptionId: subscription.id,
+            kind: 'first',
+            seats: 2,
+            amountCents: 8000,
+            status: 'open',
+            periodEnd: null
+        })
+        // Not paid yet: nothing to claim
+        expect(await billing.claimPayment('tr_test')).toBe(false)
+        await Promise.all([billing.setPaymentStatus('tr_test', 'paid'), billing.setPaymentStatus('tr_test', 'paid')])
+        expect((await billing.lastPayment(subscription.id))?.paidAt).toBeInstanceOf(Date)
+        // The webhook and the return page at the same time: one claims it
+        const claims = await Promise.all([billing.claimPayment('tr_test'), billing.claimPayment('tr_test')])
+        expect(claims.filter(Boolean)).toHaveLength(1)
+        // A failure releases it (tried again), applied it is never claimed again
+        await billing.releasePayment('tr_test')
+        expect(await billing.claimPayment('tr_test')).toBe(true)
+        await billing.finishPayment('tr_test')
+        expect(await billing.claimPayment('tr_test')).toBe(false)
+        expect((await billing.findPayment('tr_test'))?.appliedAt).toBeInstanceOf(Date)
+        // A reserved discount code is given back once
+        const winner = redeemed[0] ? tenant.a : tenant.b
+        expect(await billing.releaseDiscount(code.id, winner)).toBe(true)
+        expect(await billing.releaseDiscount(code.id, winner)).toBe(false)
+        expect(await billing.hasRedeemed(code.id, winner)).toBe(false)
+        expect((await billing.findDiscount(code.id))?.redemptions).toBe(0)
+
+        const grant = await billing.addGrant({
+            tenantId: tenant.b,
+            productId: product.id,
+            seats: 3,
+            endsAt: null,
+            note: 'x',
+            grantedBy: ann
+        })
+        expect(await billing.deleteGrant(tenant.a, grant.id)).toBe(false)
+        expect(await billing.listGrants(tenant.b)).toHaveLength(1)
+        await billing.setCustomerId(tenant.a, 'cst_x')
+        expect(await billing.getCustomerId(tenant.a)).toBe('cst_x')
+
+        // Row-Level Security: the tenant role sees the licences of its own tenant only, and never the payments
+        const seen = await database.withTenant(tenant.b, db => db.query('SELECT * FROM license_assignments'))
+        expect(seen.rows).toHaveLength(0)
+        const own = await database.withTenant(tenant.a, db => db.query('SELECT * FROM license_assignments'))
+        expect(own.rows).toHaveLength(2)
+        await expect(database.withTenant(tenant.a, db => db.query('SELECT * FROM billing_payments'))).rejects.toThrow(
+            /permission denied/
+        )
+        // Tenant code may rename its own tenant, never change its Mollie customer or its status
+        await database.withTenant(tenant.a, db => db.query("UPDATE tenants SET name = name || ''"))
+        await expect(
+            database.withTenant(tenant.a, db => db.query("UPDATE tenants SET payment_customer_id = 'cst_evil'"))
+        ).rejects.toThrow(/permission denied/)
+        await expect(
+            database.withTenant(tenant.a, db => db.query("UPDATE tenants SET status = 'active'"))
+        ).rejects.toThrow(/permission denied/)
     })
 
     it('the tenant role exists and owns nothing', async () => {

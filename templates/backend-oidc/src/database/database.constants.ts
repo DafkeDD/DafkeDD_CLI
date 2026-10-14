@@ -14,5 +14,11 @@ export const TENANT_TABLES = [
     'tenant_invitations',
     'oidc_sessions',
     'oidc_codes',
-    'oidc_refresh_tokens'
+    'oidc_refresh_tokens',
+    'tenant_subscriptions',
+    'discount_redemptions',
+    'license_grants',
+    'license_trials',
+    'license_assignments',
+    'billing_payments'
 ] as const

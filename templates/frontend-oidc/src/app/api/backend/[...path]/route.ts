@@ -5,9 +5,10 @@ import { freshSession } from '@/lib/refresh'
 
 /**
  * Only these parts of the API can be called through this route: members, the platform, the own two-step verification,
- * the eID, the own sessions and the heartbeat (who is online).
+ * the eID, the own sessions and licences, and the heartbeat (who is online).
  */
-const ALLOWED = /^(tenants\/current\/|admin\/|me\/mfa|me\/eid|me\/sessions|me\/heartbeat$)[A-Za-z0-9/_-]*$/
+const ALLOWED =
+    /^(tenants\/current\/|admin\/|me\/mfa|me\/eid|me\/sessions|me\/licenses$|me\/heartbeat$)[A-Za-z0-9/_-]*$/
 
 /**
  * Calls the protected API for the browser: adds the access token of the session (Authorization: Bearer) on the server.

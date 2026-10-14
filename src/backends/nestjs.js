@@ -706,6 +706,7 @@ describe('API (e2e)', () => {\n`
         for (const locale of LOCALES) {
             result[`src/i18n/${locale}/oidc.json`] = json(oidc.MESSAGES[locale])
             result[`src/i18n/${locale}/mail.json`] = json(oidc.MAIL_MESSAGES[locale])
+            result[`src/i18n/${locale}/billing.json`] = json(oidc.BILLING_MESSAGES[locale])
             result[`src/i18n/${locale}/validation.json`] = json({
                 ...TRANSLATIONS[locale].validation,
                 ...login.VALIDATION[locale],
@@ -722,10 +723,10 @@ describe('API (e2e)', () => {\n`
             replaceOnce(
                 result['src/app.module.ts'],
                 "import { HealthController } from './health/health.controller.js';\n",
-                "import { HealthController } from './health/health.controller.js';\nimport { OidcModule } from './oidc/oidc.module.js';\nimport { TenantsModule } from './tenants/tenants.module.js';\n"
+                "import { HealthController } from './health/health.controller.js';\nimport { OidcModule } from './oidc/oidc.module.js';\nimport { TenantsModule } from './tenants/tenants.module.js';\nimport { BillingModule } from './billing/billing.module.js';\n"
             ),
             '    DatabaseModule,\n',
-            '    DatabaseModule,\n    OidcModule,\n    TenantsModule,\n'
+            '    DatabaseModule,\n    OidcModule,\n    TenantsModule,\n    BillingModule,\n'
         )
         result['src/setup.ts'] = replaceOnce(
             replaceOnce(
@@ -740,7 +741,7 @@ describe('API (e2e)', () => {\n`
         let e2e = replaceOnce(
             result['test/app.e2e-spec.ts'],
             "import { DatabaseService } from '../src/database/database.service.js';\n",
-            "import { randomBytes } from 'node:crypto';\nimport { DatabaseService } from '../src/database/database.service.js';\nimport { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js';\nimport { OIDC_STORE } from '../src/oidc/store/oidc.store.js';\n"
+            "import { randomBytes } from 'node:crypto';\nimport { BILLING_STORE } from '../src/billing/store/billing.store.js';\nimport { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js';\nimport { DatabaseService } from '../src/database/database.service.js';\nimport { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js';\nimport { OIDC_STORE } from '../src/oidc/store/oidc.store.js';\n"
         )
         e2e = replaceOnce(
             e2e,
@@ -750,7 +751,7 @@ describe('API (e2e)', () => {\n`
         result['test/app.e2e-spec.ts'] = replaceOnce(
             e2e,
             '      .useValue(database)\n',
-            '      .useValue(database)\n      .overrideProvider(OIDC_STORE)\n      .useValue(new MemoryOidcStore())\n'
+            '      .useValue(database)\n      .overrideProvider(OIDC_STORE)\n      .useValue(new MemoryOidcStore())\n      .overrideProvider(BILLING_STORE)\n      .useValue(new MemoryBillingStore())\n'
         )
     }
     result['README.md'] = backendReadme({
@@ -764,7 +765,7 @@ describe('API (e2e)', () => {\n`
         translations: {
             en: {
                 errors: JSON.parse(result['src/i18n/en/errors.json']),
-                ...(oidcAnswers ? { oidc: oidc.MESSAGES.en } : {})
+                ...(oidcAnswers ? { oidc: oidc.MESSAGES.en, billing: oidc.BILLING_MESSAGES.en } : {})
             }
         }
     })

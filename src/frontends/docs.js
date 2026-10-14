@@ -128,8 +128,10 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | \`/invite?token=\` | The link in an invitation: join the organisation, or create your account for it |
 | \`/security\` | Two-step verification of the own account (status, recovery codes left, new recovery codes), the eID (link, unlink) and where the account is logged in (end one session, or all others) |
 | \`/members\` | Admins: the members of the organisation with who is online, invite by email, open invitations (send again, withdraw), change roles (user, admin), disable or enable, remove |
-| \`/admin\` | Superadmins: every organisation (create, suspend), and who is superadmin |
-| \`/api/backend/...\` | Route handler: calls \`/tenants/current/...\`, \`/admin/...\`, \`/me/mfa\`, \`/me/eid\` and \`/me/sessions\` of the API with the access token of the session (the token stays on the server; changes only from pages of this app) |
+| \`/admin\` | Superadmins: every organisation (create, suspend), who is superadmin, the products for sale (prices per month and per year, stop selling) and the discount codes (percentage or amount, 100% is free) |
+| \`/licenses\` | Admins: per product the seats (bought, free, in use), buy seats per month or per year with a discount code, more or fewer seats, cancel, give or take back the seat of a member and start trials. Superadmins open an organisation on \`/admin\` and also give free seats and extend trials here |
+| \`/licenses/return\` | Back from the checkout of Mollie: asks the API how the payment went (no webhook needed on localhost) |
+| \`/api/backend/...\` | Route handler: calls \`/tenants/current/...\`, \`/admin/...\`, \`/me/mfa\`, \`/me/eid\`, \`/me/sessions\` and \`/me/licenses\` of the API with the access token of the session (the token stays on the server; changes only from pages of this app) |
 
 **Flow**: "Log in" → \`/api/auth/login\` → the API (\`/oidc/authorize\`) → \`/login?interaction=...\` (this frontend talks to
 \`/oidc/interaction/...\` of the API with \`fetch\` and \`credentials: 'include'\`, so the browser sends the encrypted

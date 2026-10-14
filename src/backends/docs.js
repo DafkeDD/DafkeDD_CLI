@@ -330,7 +330,27 @@ export function backendReadme({
                   ['SMTP_SECURE', 'false', '`true` for TLS from the start (port 465)'],
                   ['SMTP_USER', '(empty)', 'Login of the mail server, when it needs one'],
                   ['SMTP_PASSWORD', '(empty)', 'Password of the mail server'],
-                  ['MAIL_FROM', '(project) <no-reply@example.com>', 'Sender of every email']
+                  ['MAIL_FROM', '(project) <no-reply@example.com>', 'Sender of every email'],
+                  [
+                      'PAYMENTS',
+                      'fake',
+                      'Buying licences: `mollie`, `fake` (a checkout page of the API, refused in production) or `off`'
+                  ],
+                  [
+                      'MOLLIE_API_KEY',
+                      '(empty)',
+                      'API key of Mollie (`test_...` while testing, `live_...` in production)'
+                  ],
+                  [
+                      'BILLING_TRIAL_DAYS',
+                      '14',
+                      'Free days of every user for every product (a superadmin can extend one trial)'
+                  ],
+                  [
+                      'PUBLIC_API_URL',
+                      '(origin of OIDC_ISSUER)',
+                      'Public address of the API: Mollie calls `/billing/webhook` there (not on localhost)'
+                  ]
               ]
             : [])
     ]
@@ -722,10 +742,71 @@ first start, stored in \`oidc_signing_keys\` with the private part encrypted (AE
 replaced after 90 days and kept in the JWKS for 14 more days. **Keep a backup of \`OIDC_MASTER_KEY\`**: without it the
 stored keys cannot be used (new keys are then created and existing tokens stop working).
 
+### Licences and payments
+
+Products are sold **per organisation, per product and per user** (a seat), per month or per year (a year is always
+cheaper than twelve months). Every user first gets a **free trial of 14 days** (\`BILLING_TRIAL_DAYS\`) of every
+product: it starts when the user joins the organisation (registration, eID registration or invitation). After the trial
+the user needs a seat; an admin buys seats and gives them to members (and takes them back to give them to someone else)
+on \`/licenses\` of the frontend.
+
+| Who | Can |
+| --- | --- |
+| Superadmin | Products and prices (\`/admin/products\`), discount codes (\`/admin/discounts\`), **free seats** for one organisation (\`/admin/tenants/:id/grants\`), **extend a trial** (\`/admin/tenants/:id/trials\`). Always has access to every product. |
+| Admin of an organisation | Buy seats (\`POST /tenants/current/licenses/subscriptions\`), more or fewer seats, cancel, give and take back seats, start the trial of a member that joined before the product existed |
+| Every user | \`GET /me/licenses\`: which products may I use, through a trial or a seat |
+
+**Protect an endpoint** with \`@License('<product code>')\` (\`src/billing/license.guard.ts\`): it logs in like
+\`@Access('user')\` and answers 403 \`billing.LICENSE_REQUIRED\` without a running trial or a seat. The module of the
+controller imports \`BillingModule\`:
+
+${fence}ts
+@Controller('planner')
+export class PlannerController {
+  @Get('week')
+  @License('planner')
+  week(@Auth() auth: AuthContext) { ... }
+}
+${fence}
+
+When there are fewer seats than assigned members (fewer seats bought, free seats ended), the members that got a seat
+first keep access.
+
+**Payments (Mollie).** \`PAYMENTS=mollie\` with \`MOLLIE_API_KEY\` (a \`test_...\` key from the Mollie dashboard while
+testing). Buying is a first payment through the checkout of Mollie (it saves the mandate); after it the API creates a
+Mollie subscription that charges every month or year. More seats: a payment for the rest of the period, and the
+renewals cost more. Fewer seats: at once, no refund. Cancel: no more renewals, the seats stay until the end of the paid
+period. A renewal by direct debit (SEPA) takes a few days: the seats stay valid for **7 days** after the period while
+it is on its way (the seats cannot be changed meanwhile: 409 \`billing.RENEWAL_PENDING\`). A failed renewal makes the
+subscription \`past_due\` (the seats stop at the end of the period).
+
+- Mollie calls \`POST /billing/webhook\` with only the payment id: the API always fetches the status from Mollie, and a
+  paid payment is applied once (also when the webhook and the return page come at the same time). When applying fails
+  (Mollie or the database is down) the webhook answers 500 and Mollie tries again; the subscription at Mollie is
+  created with an idempotency key, so a retry never makes a second one. Mollie cannot call **localhost**: the return page
+  of the frontend (\`/licenses/return\`) asks the status itself (\`POST .../subscriptions/:id/sync\`), so buying works
+  locally. To test renewals locally, set \`PUBLIC_API_URL\` to a tunnel (for example \`ngrok http ${port}\`).
+- Only the newest checkout of a purchase can activate it, and a payment for more seats only counts in the period it
+  was priced for. Such a late payment buys nothing and is logged as a warning ("refund it"): refund it in the Mollie
+  dashboard. Refunds and chargebacks are not handled automatically either.
+- \`PAYMENTS=fake\` (the default \`.env\`): a checkout page of the API itself (\`/billing/fake/:id\`, "Pay" or "Cancel"),
+  without Mollie. The API refuses to start with \`fake\` and \`NODE_ENV=production\`.
+- \`PAYMENTS=off\`: nothing can be bought (503 \`billing.PAYMENTS_DISABLED\`); trials and free seats still work.
+
+**Discount codes** (superadmin): a percentage or an amount, for one product or all, for the first payment
+(\`once\`), a number of periods (\`repeating\`) or \`forever\`, with a maximum number of organisations and an end date.
+Each organisation uses a code once; the code is reserved at the checkout and given back when that is not paid. **100% makes it free**: the seats are active at once, without a payment, for the
+periods of the code. Leave the code empty to get a random one (\`K7QM-2XPD\`).
+
+- Accounts made with \`npm run oidc:user\` get no trial automatically: start it on \`/licenses\` or with
+  \`POST /tenants/current/licenses/:productCode/trials/:userId\`.
+- Tests: the e2e tests run without a database, so override \`BILLING_STORE\` with \`MemoryBillingStore\` (like
+  \`test/billing.e2e-spec.ts\`).
+
 ### Not in this version yet
 
-Passkeys, a consent screen for external clients, back-channel logout to other clients, an audit log and licences follow
-in the next phases.
+Passkeys, a consent screen for external clients, back-channel logout to other clients and an audit log follow in the
+next phases.
 
 ## Multi-tenant (Row-Level Security)
 
@@ -762,6 +843,14 @@ ${fence}
 | \`oidc_sessions\` | Browser sessions: a public id (\`sid\`), the hash of the cookie and of the login that created it, the browser (User-Agent) and when it was last used; no tenant for a platform login | yes |
 | \`oidc_codes\` | Authorization codes (hash, once, 60 seconds) | yes |
 | \`oidc_refresh_tokens\` | Refresh tokens (hash), their family, session, client and organisation; used and revoked | yes |
+| \`license_products\` | Products for sale: fixed code, name, price per seat per month and per year | no |
+| \`tenant_subscriptions\` | Bought seats of an organisation per product: month or year, paid until, the Mollie subscription, discount | yes |
+| \`license_trials\` | The trial of a user per product (once), until when | yes |
+| \`license_assignments\` | Who has a seat, given by whom | yes |
+| \`license_grants\` | Free seats from a superadmin, until when | yes |
+| \`discount_codes\` | Discount codes: percentage or amount, duration, how often used | no |
+| \`discount_redemptions\` | Which organisation used which code (once each) | yes |
+| \`billing_payments\` | Payments at Mollie (id, what for, status); a paid one is applied once | yes |
 | \`schema_migrations\` | Which migration ran, with a checksum | no |
 
 Migrations run automatically at start, under an advisory lock (several instances can start at once). Never change a

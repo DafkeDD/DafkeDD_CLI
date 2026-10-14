@@ -39,7 +39,11 @@ function routesOf(files) {
     for (const [rel, content] of Object.entries(files)) {
         if (!rel.endsWith('.controller.ts')) continue
         const prefix = content.match(/@Controller\('([^']*)'\)/)?.[1] ?? ''
-        for (const [, method, sub] of content.matchAll(/@(Get|Post|Put|Patch|Delete)\((?:'([^']*)')?\)/g)) {
+        // @ApiExcludeEndpoint(): only for development (the fake checkout), not part of the API
+        for (const [, method, sub, excluded] of content.matchAll(
+            /@(Get|Post|Put|Patch|Delete)\((?:'([^']*)')?\)(\s*@ApiExcludeEndpoint\(\))?/g
+        )) {
+            if (excluded) continue
             const parts = [prefix, sub ?? ''].filter(Boolean)
             routes.push({ rel, key: `${method.toUpperCase()} /${parts.join('/')}` })
         }
@@ -59,7 +63,9 @@ for (const [name, variant] of Object.entries(VARIANTS)) {
     test(`(${name}) every route has a Swagger description (@ApiOperation) and is in the README`, () => {
         const files = filesOf(variant)
         for (const [rel, content] of Object.entries(files).filter(([r]) => r.endsWith('.controller.ts'))) {
-            const routeCount = (content.match(/@(Get|Post|Put|Patch|Delete)\(/g) ?? []).length
+            const routeCount =
+                (content.match(/@(Get|Post|Put|Patch|Delete)\(/g) ?? []).length -
+                (content.match(/@ApiExcludeEndpoint\(/g) ?? []).length
             const described = (content.match(/@ApiOperation\(/g) ?? []).length
             assert.equal(described, routeCount, `${rel}: every route needs @ApiOperation`)
             assert.match(content, /@ApiTags\(/, rel)

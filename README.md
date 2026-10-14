@@ -291,7 +291,13 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   ends the session), real logout (`end_session_endpoint`: the frontend logs out of the login server too), revocation
   (RFC 7009) and introspection (RFC 7662). Every token carries its session (`sid`): ending a session stops its tokens at
   once. `/security` shows where you are logged in and ends one or all other sessions.
-- **Not yet** (next phases): passkeys, audit log, back-channel logout, licences and payments.
+- **Licences and payments (Mollie)**: products are sold per organisation, per product and per user (seat), per month or
+  per year (always cheaper). Every user first gets a 14-day trial; admins buy seats on `/licenses`, give them to members
+  and take them back. Superadmins manage products, make discount codes (a percentage or an amount, once, for some
+  periods or forever; 100% is free), give free seats and extend trials. `@License('planner')` protects an endpoint.
+  `PAYMENTS=fake` (the default `.env`) has its own checkout page for development; `PAYMENTS=mollie` with a `test_...`
+  key uses the real checkout of Mollie.
+- **Not yet** (next phases): passkeys, audit log, back-channel logout.
 
 The TypeScript files of this feature live as real files in `templates/backend-oidc` and `templates/frontend-oidc` (see
 Development).
@@ -437,6 +443,13 @@ git switch developer
 
 ## Changelog
 
+- **0.27.0**: licences and payments. Products per organisation, per product and per user (seats), per month or per year
+  (a year must be cheaper), with Mollie (first payment, mandate, subscription; more seats prorated, fewer at once,
+  cancel at the end of the period, webhook and a status check from the return page) or a fake checkout for development.
+  A 14-day trial for every new member (`BILLING_TRIAL_DAYS`), extendable by a superadmin. Superadmins manage products,
+  discount codes (percentage or amount, once, repeating or forever, 100% is free) and free seats. `@License(code)`
+  guard, `/me/licenses`, `/licenses` and `/licenses/return` in the frontend, products and codes on `/admin`. Migration
+  4: products, subscriptions, trials, seats, free seats, discount codes and payments, with RLS.
 - **0.26.0**: sessions and tokens. Refresh tokens (rotation, reuse detection with a grace of 30 seconds, bound to the
   session; the frontend renews its access token in `src/proxy.ts` and stays logged in for 12 hours), RP-initiated logout
   (`/oidc/logout`, with a "Log out?" page when no `id_token_hint` is sent), revocation (`/oidc/revoke`), introspection
