@@ -2,7 +2,8 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { select } from '@inquirer/prompts'
-import { EID_MOCK_SCRIPT, EID_PACKAGE } from '../eid.js'
+import { allowEidDownload, EID_MOCK_SCRIPT, EID_PACKAGE } from '../eid.js'
+import { denyInstallScripts } from '../npm.js'
 import { run } from '../runner.js'
 import { AUTH_MESSAGES, authFiles } from './auth.js'
 import { frontendReadme } from './docs.js'
@@ -1021,7 +1022,11 @@ export const nextjs = {
             {
                 title: 'Dependencies installeren',
                 weight: 4,
-                run: () => exec('npm', ['install'], { cwd: root })
+                run: async () => {
+                    // npm 12+: no install scripts (and no warnings about them), see src/npm.js
+                    await denyInstallScripts(root)
+                    await exec('npm', ['install'], { cwd: root })
+                }
             },
             {
                 title: 'next-intl installeren',
@@ -1039,7 +1044,10 @@ export const nextjs = {
                       {
                           title: 'DafkeDD eID installeren',
                           weight: 1,
-                          run: () => exec('npm', ['install', EID_PACKAGE], { cwd: root })
+                          run: async () => {
+                              await allowEidDownload(root, exec, write)
+                              await exec('npm', ['install', EID_PACKAGE], { cwd: root })
+                          }
                       }
                   ]
                 : []),

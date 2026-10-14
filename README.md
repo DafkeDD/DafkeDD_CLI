@@ -443,6 +443,11 @@ git switch developer
 
 ## Changelog
 
+- **0.27.1**: works with npm 12. npm 12 refuses packages from a URL (`allow-remote=none`): when it does, the backend and
+  the frontend get a `.npmrc` with `allow-remote=root` (only the packages in their own package.json, like DafkeDD eID),
+  so the installation and every `npm install` after it work. npm 12 also skips install scripts and warns about each one:
+  `allowScripts` in package.json denies the ones that are not needed (their binaries come with the package), so there
+  are no warnings.
 - **0.27.0**: licences and payments. Products per organisation, per product and per user (seats), per month or per year
   (a year must be cheaper), with Mollie (first payment, mandate, subscription; more seats prorated, fewer at once,
   cancel at the end of the period, webhook and a status check from the return page) or a fake checkout for development.

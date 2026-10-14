@@ -5,6 +5,24 @@
  */
 export const EID_VERSION = '0.2.0'
 export const EID_PACKAGE = `@dafkedd/eid@https://github.com/DafkeDD/DafkeDD_EID/releases/download/v${EID_VERSION}/dafkedd-eid-${EID_VERSION}.tgz`
+/**
+ * .npmrc of the backend and the frontend when npm refuses packages from a URL (npm 12 and later: `allow-remote` is
+ * `none` by default). `root` only allows the URLs in the package.json of the project itself (DafkeDD eID), so
+ * `npm install` and `npm ci` keep working later on, and packages deeper in the tree still cannot use a URL.
+ */
+export const ALLOW_REMOTE_NPMRC =
+    '# npm 12+: allow the packages with a URL in package.json (DafkeDD eID), not deeper in the tree\nallow-remote=root\n'
+
+/**
+ * Before installing DafkeDD eID: asks npm whether it fetches packages from a URL, and writes .npmrc when it refuses.
+ * Older npm versions (that allow it, or do not know the setting) get no .npmrc, so they never warn about it.
+ */
+export async function allowEidDownload(root, exec, write) {
+    const value = String((await exec('npm', ['config', 'get', 'allow-remote'], { cwd: root })) ?? '').trim()
+    if (value === 'none') await write(root, '.npmrc', ALLOW_REMOTE_NPMRC)
+    return value === 'none'
+}
+
 export const EID_BRIDGE_DOWNLOAD = 'https://github.com/DafkeDD/DafkeDD_EID/releases/latest'
 export const EID_BRIDGE_PORT = 47820
 /** The PIN of the virtual card of `dafke-eid --mock`. */

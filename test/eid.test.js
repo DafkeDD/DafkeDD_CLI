@@ -6,7 +6,7 @@ import path from 'node:path'
 import { buildFiles, nestjs } from '../src/backends/nestjs.js'
 import * as oidc from '../src/backends/oidc.js'
 import { endpoints } from '../src/backends/docs.js'
-import { EID_MOCK_SCRIPT, EID_PACKAGE, EID_VERSION } from '../src/eid.js'
+import { ALLOW_REMOTE_NPMRC, allowEidDownload, EID_MOCK_SCRIPT, EID_PACKAGE, EID_VERSION } from '../src/eid.js'
 import { nextjs } from '../src/frontends/nextjs.js'
 import { OIDC_MESSAGES, oidcFrontendFiles } from '../src/frontends/oidc.js'
 import { frontendReadme } from '../src/frontends/docs.js'
@@ -202,4 +202,37 @@ test('steps with the OIDC server install DafkeDD eID and add npm run eid:mock', 
         exec
     })
     assert.ok(!plain.some(step => step.title === 'DafkeDD eID installeren'))
+})
+
+test('npm 12+ refuses packages from a URL: .npmrc allows the ones in package.json (root), older npm gets none', async () => {
+    for (const [answer, expected] of [
+        ['none\n', true],
+        ['all\n', false],
+        ['undefined\n', false],
+        ['', false]
+    ]) {
+        const written = {}
+        const calls = []
+        const exec = async (cmd, args, options) => {
+            calls.push({ line: [cmd, ...args].join(' '), cwd: options?.cwd })
+            return answer
+        }
+        const result = await allowEidDownload('/x/frontend', exec, async (root, rel, content) => {
+            written[path.join(root, rel)] = content
+        })
+        assert.equal(result, expected, answer)
+        assert.deepEqual(calls, [{ line: 'npm config get allow-remote', cwd: '/x/frontend' }])
+        assert.deepEqual(written, expected ? { [path.join('/x/frontend', '.npmrc')]: ALLOW_REMOTE_NPMRC } : {})
+    }
+    assert.match(ALLOW_REMOTE_NPMRC, /^allow-remote=root$/m)
+})
+
+test('the frontend and the backend ask npm before installing DafkeDD eID', async () => {
+    const front = await fs.readFile(new URL('../src/frontends/nextjs.js', import.meta.url), 'utf8')
+    const back = await fs.readFile(new URL('../src/backends/nestjs.js', import.meta.url), 'utf8')
+    assert.match(front, /await allowEidDownload\(root, exec, write\)\s+await exec\('npm', \['install', EID_PACKAGE\]/)
+    assert.match(
+        back,
+        /await allowEidDownload\(root, exec, write\)\s+await exec\('npm', \['install', \.\.\.oidc\.PACKAGES\.dependencies\]/
+    )
 })

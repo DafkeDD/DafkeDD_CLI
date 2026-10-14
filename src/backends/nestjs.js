@@ -2,7 +2,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { confirm, input, password, select } from '@inquirer/prompts'
-import { EID_MOCK_PIN } from '../eid.js'
+import { allowEidDownload, EID_MOCK_PIN } from '../eid.js'
+import { denyInstallScripts } from '../npm.js'
 import { run } from '../runner.js'
 import { PRETTIERRC } from '../frontends/nextjs.js'
 import { databases } from '../databases/index.js'
@@ -943,7 +944,11 @@ export const nestjs = {
             {
                 title: 'Backend dependencies installeren',
                 weight: 4,
-                run: () => exec('npm', ['install'], { cwd: root })
+                run: async () => {
+                    // npm 12+: no install scripts (and no warnings about them), see src/npm.js
+                    await denyInstallScripts(root)
+                    await exec('npm', ['install'], { cwd: root })
+                }
             },
             {
                 title: 'i18n, validatie, Swagger en config installeren',
@@ -997,6 +1002,8 @@ export const nestjs = {
                           title: 'OIDC-pakketten installeren (cookies)',
                           weight: 1,
                           run: async () => {
+                              // DafkeDD eID comes from its release on GitHub (a URL): npm 12+ needs .npmrc for it
+                              await allowEidDownload(root, exec, write)
                               await exec('npm', ['install', ...oidc.PACKAGES.dependencies], { cwd: root })
                               await exec('npm', ['install', '--save-dev', ...oidc.PACKAGES.devDependencies], {
                                   cwd: root
