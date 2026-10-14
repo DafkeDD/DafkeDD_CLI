@@ -297,7 +297,11 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   periods or forever; 100% is free), give free seats and extend trials. `@License('planner')` protects an endpoint.
   `PAYMENTS=fake` (the default `.env`) has its own checkout page for development; `PAYMENTS=mollie` with a `test_...`
   key uses the real checkout of Mollie.
-- **Not yet** (next phases): passkeys, audit log, back-channel logout.
+- **Audit log**: who did what, when, in which organisation, from which IP address and browser: logins (also failed
+  ones), accounts, members, the platform and licences. Append-only in PostgreSQL (a trigger refuses changes), kept
+  `AUDIT_RETENTION_DAYS` (365) days. Admins read their organisation on `/audit`, superadmins the whole platform, every
+  account its own recent activity on `/security`.
+- **Not yet** (next phases): passkeys, back-channel logout, a consent screen for external clients.
 
 The TypeScript files of this feature live as real files in `templates/backend-oidc` and `templates/frontend-oidc` (see
 Development).
@@ -443,6 +447,12 @@ git switch developer
 
 ## Changelog
 
+- **0.28.0**: audit log. Every login (also failed ones), account change, member change, platform change and licence
+  change is recorded with who, about whom, the organisation, the details, the IP address and the browser
+  (`AuditService`, global). Migration 5: `audit_events`, append-only (a trigger refuses UPDATE, DELETE and TRUNCATE),
+  Row-Level Security, purged after `AUDIT_RETENTION_DAYS`. `GET /tenants/current/audit` (admins), `GET /admin/audit`
+  (superadmins, also failed logins) and `GET /me/audit`; `/audit` in the frontend and "Recent activity" on `/security`.
+  The frontend passes the IP address and browser of the user to the API (`X-Forwarded-For`, trusted from `TRUST_PROXY`).
 - **0.27.1**: works with npm 12. npm 12 refuses packages from a URL (`allow-remote=none`): when it does, the backend and
   the frontend get a `.npmrc` with `allow-remote=root` (only the packages in their own package.json, like DafkeDD eID),
   so the installation and every `npm install` after it work. npm 12 also skips install scripts and warns about each one:

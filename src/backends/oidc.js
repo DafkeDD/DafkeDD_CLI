@@ -718,6 +718,12 @@ export function envLines(oidc, { port, example = false }) {
         '# The public address of this API, where Mollie calls /billing/webhook (default: the origin of OIDC_ISSUER).',
         '# Mollie cannot call localhost: use a tunnel (ngrok) here to test renewals; the return page works without it.',
         '# PUBLIC_API_URL=https://api.example.com',
+        '',
+        '# Audit log (who did what, when, from where): days an event is kept (0 keeps everything)',
+        'AUDIT_RETENTION_DAYS=365',
+        '# Proxies that may tell the IP address of the user (X-Forwarded-For): loopback (this computer, the default: the',
+        '# frontend and nginx on the same server), false, a number of proxies, or addresses like loopback, 10.0.0.0/8',
+        'TRUST_PROXY=loopback',
         ''
     ].join('\n')
 }
@@ -745,6 +751,23 @@ const ACCESS = level => [
     [403, 'errors.FORBIDDEN', `not ${level}`]
 ]
 const PASSWORD_RULE = 'required, 12 to 128 characters'
+/** A page of the audit log. */
+const AUDIT_PAGE = {
+    events: [
+        {
+            id: '1532',
+            createdAt: '2026-10-14T10:02:45.000Z',
+            tenant: { id: TENANT.id, name: 'Acme' },
+            actor: { id: USER_ID, name: 'Ada', email: 'ada@example.com' },
+            action: 'members.role_changed',
+            target: { type: 'user', id: '9a4c1e2b-7d3f-4b8a-9c6e-5f1d2a3b4c5d', label: 'bob@example.com' },
+            details: { from: 'user', to: 'admin' },
+            ip: '203.0.113.7',
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) … Chrome/141.0'
+        }
+    ],
+    next: '1532'
+}
 const SUBSCRIPTION_ID = '3c8e1f0a-7b2d-4e5f-9a6b-1d2c3e4f5a6b'
 const PRODUCT = {
     id: '5a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
@@ -1791,6 +1814,58 @@ export const endpoints = ({ port = 4000 } = {}) => [
             [401, 'errors.UNAUTHORIZED'],
             [404, 'oidc.SESSION_NOT_FOUND']
         ]
+    },
+    // ---------------------------------------------------------------- the audit log
+    {
+        method: 'GET',
+        path: '/tenants/current/audit',
+        tag: 'audit log',
+        summary:
+            'The audit log of the current organisation, newest first: logins, members, licences. Who did it (`actor`, null for the payment provider), about whom (`target`), the details, the IP address and the browser. Query: `category` (login, account, members, platform, licences), `actor` (user id), `limit` (1 to 100, default 50) and `before` (the `next` of the page before). Read with Row-Level Security: never events of another organisation.',
+        bearer: true,
+        pathExample: '/tenants/current/audit?category=members&limit=50',
+        response: { status: 200, example: AUDIT_PAGE },
+        errors: [BAD_REQUEST, ...ACCESS('admin')]
+    },
+    {
+        method: 'GET',
+        path: '/admin/audit',
+        tag: 'audit log',
+        summary:
+            'The audit log of the whole platform (superadmins): every organisation, and the events without one (failed logins, two-step verification, eID, superadmins). The same query as above, plus `tenant`: an organisation id, or `platform` for only the events without one.',
+        bearer: true,
+        pathExample: '/admin/audit?tenant=platform&category=login',
+        response: {
+            status: 200,
+            example: {
+                events: [
+                    {
+                        id: '1531',
+                        createdAt: '2026-10-14T09:58:12.000Z',
+                        tenant: null,
+                        actor: null,
+                        action: 'login.failed',
+                        target: { type: 'user', id: USER_ID, label: 'ada@example.com' },
+                        details: { method: 'password', reason: 'wrong_password', email: 'ada@example.com' },
+                        ip: '203.0.113.7',
+                        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) … Chrome/141.0'
+                    }
+                ],
+                next: null
+            }
+        },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin')]
+    },
+    {
+        method: 'GET',
+        path: '/me/audit',
+        tag: 'audit log',
+        summary:
+            'What happened with the own account: everything it did, and what was done to it (also failed logins with its email address). Shown as "Recent activity" on /security. Query: `category`, `limit`, `before`.',
+        bearer: true,
+        pathExample: '/me/audit?limit=10',
+        response: { status: 200, example: AUDIT_PAGE },
+        errors: [BAD_REQUEST, [401, 'errors.UNAUTHORIZED']]
     },
     // ---------------------------------------------------------------- licences of the own organisation (admins)
     {

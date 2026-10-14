@@ -4,6 +4,7 @@ import pg from 'pg'
 import { TENANT_ROLE, TENANT_TABLES, USERS_TABLE } from '../src/database/database.constants.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import { runMigrations } from '../src/database/migrator.js'
+import { PgAuditStore } from '../src/audit/pg-audit.store.js'
 import { PgBillingStore } from '../src/billing/store/pg-billing.store.js'
 import { PgOidcStore } from '../src/oidc/store/pg-oidc.store.js'
 
@@ -744,6 +745,72 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         await expect(
             database.withTenant(tenant.a, db => db.query("UPDATE tenants SET status = 'active'"))
         ).rejects.toThrow(/permission denied/)
+    })
+
+    it('the audit log: append-only, each organisation reads only its own events, old events are purged', async () => {
+        const audit = new PgAuditStore(database)
+        // Own accounts: earlier tests removed Ada and Bob
+        const account = async (email: string, name: string) =>
+            (
+                await database.query<{ id: string }>(
+                    `INSERT INTO ${users} (email, name, password_hash) VALUES ($1, $2, 'x') RETURNING id`,
+                    [email, name]
+                )
+            ).rows[0]?.id ?? ''
+        const ada = await account('audit-ada@example.com', 'Ada')
+        const bob = await account('audit-bob@example.com', 'Bob')
+        const event = (tenantId: string | null, action: string, actorId: string | null = ada) => ({
+            tenantId,
+            actorId,
+            action,
+            targetType: 'user' as const,
+            targetId: bob,
+            details: { role: 'admin', seats: 2, active: true },
+            ip: '203.0.113.7',
+            userAgent: 'Browser/1'
+        })
+        await audit.add(event(tenant.a, 'members.role_changed'))
+        await audit.add(event(tenant.b, 'members.removed', bob))
+        await audit.add(event(null, 'login.failed', null))
+        await expect(audit.add(event(tenant.a, 'not an action'))).rejects.toThrow()
+
+        // Organisation A (with Row-Level Security): only its own event, with the names
+        const a = await audit.list({ tenantId: tenant.a, limit: 10 })
+        expect(a).toHaveLength(1)
+        expect(a[0]).toMatchObject({
+            action: 'members.role_changed',
+            tenant: { id: tenant.a, name: 'Tenant A' },
+            actor: { id: ada, name: 'Ada', email: 'audit-ada@example.com' },
+            target: { type: 'user', id: bob, label: 'audit-bob@example.com' },
+            details: { role: 'admin', seats: 2, active: true },
+            ip: '203.0.113.7'
+        })
+        // The tenant role itself never sees the platform events or another organisation, even without a WHERE
+        const seen = await database.withTenant(tenant.a, db => db.query('SELECT action FROM audit_events'))
+        expect(seen.rows.map(row => row.action)).toEqual(['members.role_changed'])
+        await expect(
+            database.withTenant(tenant.a, db =>
+                db.query("INSERT INTO audit_events (tenant_id, action) VALUES ($1, 'members.removed')", [tenant.a])
+            )
+        ).rejects.toThrow(/permission denied/)
+
+        expect((await audit.list({ tenantId: null, limit: 10 })).map(row => row.action)).toEqual(['login.failed'])
+        expect(await audit.list({ limit: 10 })).toHaveLength(3)
+        // Bob: what he did (in B) and what was done to him (in A, and the failed login on his account)
+        expect(await audit.list({ userId: bob, limit: 10 })).toHaveLength(3)
+        expect(await audit.list({ actorId: bob, limit: 10 })).toHaveLength(1)
+        expect(await audit.list({ categories: ['login'], limit: 10 })).toHaveLength(1)
+        const [newest] = await audit.list({ limit: 1 })
+        expect(await audit.list({ before: newest?.id, limit: 10 })).toHaveLength(2)
+
+        // Append-only: also the owner of the table cannot change or delete an event
+        await expect(database.query("UPDATE audit_events SET action = 'login.logout'")).rejects.toThrow(/append-only/)
+        await expect(database.query('DELETE FROM audit_events')).rejects.toThrow(/append-only/)
+        await expect(database.query('TRUNCATE audit_events')).rejects.toThrow(/append-only/)
+        // Only the purge removes old events
+        expect(await audit.purge(new Date(Date.now() - 365 * 24 * 60 * 60 * 1000))).toBe(0)
+        expect(await audit.purge(new Date(Date.now() + 1000))).toBe(3)
+        expect(await audit.list({ limit: 10 })).toHaveLength(0)
     })
 
     it('the tenant role exists and owns nothing', async () => {

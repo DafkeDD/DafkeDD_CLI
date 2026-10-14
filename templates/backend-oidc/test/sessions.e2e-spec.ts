@@ -6,6 +6,8 @@ import type { App } from 'supertest/types.js'
 import { AppModule } from '../src/app.module.js'
 import { BILLING_STORE } from '../src/billing/store/billing.store.js'
 import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
+import { AUDIT_STORE } from '../src/audit/audit.store.js'
+import { MemoryAuditStore } from '../src/audit/memory-audit.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import { pkceChallenge, sha256 } from '../src/oidc/crypto.js'
 import { decodeUnverified } from '../src/oidc/jose.js'
@@ -60,6 +62,8 @@ describe('Sessions, refresh tokens, logout, revocation and introspection (e2e)',
             .useValue(store)
             .overrideProvider(BILLING_STORE)
             .useValue(new MemoryBillingStore())
+            .overrideProvider(AUDIT_STORE)
+            .useValue(new MemoryAuditStore())
             .compile()
         app = moduleRef.createNestApplication()
         configureApp(app)

@@ -20,5 +20,6 @@ export const TENANT_TABLES = [
     'license_grants',
     'license_trials',
     'license_assignments',
-    'billing_payments'
+    'billing_payments',
+    'audit_events'
 ] as const

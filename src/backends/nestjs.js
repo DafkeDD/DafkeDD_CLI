@@ -742,7 +742,7 @@ describe('API (e2e)', () => {\n`
         let e2e = replaceOnce(
             result['test/app.e2e-spec.ts'],
             "import { DatabaseService } from '../src/database/database.service.js';\n",
-            "import { randomBytes } from 'node:crypto';\nimport { BILLING_STORE } from '../src/billing/store/billing.store.js';\nimport { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js';\nimport { DatabaseService } from '../src/database/database.service.js';\nimport { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js';\nimport { OIDC_STORE } from '../src/oidc/store/oidc.store.js';\n"
+            "import { randomBytes } from 'node:crypto';\nimport { AUDIT_STORE } from '../src/audit/audit.store.js';\nimport { MemoryAuditStore } from '../src/audit/memory-audit.store.js';\nimport { BILLING_STORE } from '../src/billing/store/billing.store.js';\nimport { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js';\nimport { DatabaseService } from '../src/database/database.service.js';\nimport { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js';\nimport { OIDC_STORE } from '../src/oidc/store/oidc.store.js';\n"
         )
         e2e = replaceOnce(
             e2e,
@@ -752,7 +752,7 @@ describe('API (e2e)', () => {\n`
         result['test/app.e2e-spec.ts'] = replaceOnce(
             e2e,
             '      .useValue(database)\n',
-            '      .useValue(database)\n      .overrideProvider(OIDC_STORE)\n      .useValue(new MemoryOidcStore())\n      .overrideProvider(BILLING_STORE)\n      .useValue(new MemoryBillingStore())\n'
+            '      .useValue(database)\n      .overrideProvider(OIDC_STORE)\n      .useValue(new MemoryOidcStore())\n      .overrideProvider(BILLING_STORE)\n      .useValue(new MemoryBillingStore())\n      .overrideProvider(AUDIT_STORE)\n      .useValue(new MemoryAuditStore())\n'
         )
     }
     result['README.md'] = backendReadme({

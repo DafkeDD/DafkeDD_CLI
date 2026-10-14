@@ -350,6 +350,16 @@ export function backendReadme({
                       'PUBLIC_API_URL',
                       '(origin of OIDC_ISSUER)',
                       'Public address of the API: Mollie calls `/billing/webhook` there (not on localhost)'
+                  ],
+                  [
+                      'AUDIT_RETENTION_DAYS',
+                      '365',
+                      'Days an event of the audit log is kept (purged daily; `0` keeps all)'
+                  ],
+                  [
+                      'TRUST_PROXY',
+                      'loopback',
+                      'Proxies that may tell the IP address of the user (`X-Forwarded-For`): `loopback`, `false`, a number or addresses'
                   ]
               ]
             : [])
@@ -803,10 +813,55 @@ periods of the code. Leave the code empty to get a random one (\`K7QM-2XPD\`).
 - Tests: the e2e tests run without a database, so override \`BILLING_STORE\` with \`MemoryBillingStore\` (like
   \`test/billing.e2e-spec.ts\`).
 
+### Audit log
+
+Every important change is recorded in \`audit_events\`: **who** (the account, or nobody for a payment that came in or a
+failed login), **what** (\`login.succeeded\`, \`members.role_changed\`, \`licences.subscription_activated\`, ...),
+**about whom or what**, **in which organisation**, the details, **when**, the **IP address** and the **browser**.
+
+| Category | Events |
+| --- | --- |
+| \`login\` | Logged in (how: password and code, eID), failed login (unknown email, wrong password, not verified, too many attempts, eID not linked), wrong two-step code, logged out, session ended, logged out everywhere else, copied refresh token blocked |
+| \`account\` | Registered (with a new organisation), email verified, new password, two-step verification on, off, new recovery codes, reset by a superadmin, eID linked or unlinked |
+| \`members\` | Invited, invitation sent again or withdrawn, joined, role changed, disabled, enabled, removed |
+| \`platform\` | Organisation created, suspended or reactivated, superadmin granted or taken away |
+| \`licences\` | Products, discount codes, free seats, trials, seats given or taken back, purchase started, paid, more or fewer seats, renewed, renewal not paid, canceled, a late payment to refund |
+
+| Who | Reads |
+| --- | --- |
+| Admin of an organisation | \`GET /tenants/current/audit\` (\`/audit\` in the frontend): the events of the organisation, read with Row-Level Security |
+| Superadmin | \`GET /admin/audit\` (\`/audit?scope=platform\`): everything, also the events without an organisation (failed logins, accounts, platform) |
+| Every account | \`GET /me/audit\` ("Recent activity" on \`/security\`): what it did, and what happened to it (also failed logins with its email address) |
+
+Record your own events with \`AuditService\` (global, inject it anywhere); add the action to
+\`src/audit/audit.actions.ts\` and its text to the frontend (\`Audit.actions\` in \`messages/*.json\`, four languages):
+
+${fence}ts
+await this.audit.record('licences.seat_assigned', {
+  target: { type: 'user', id: userId },
+  details: { product: 'planner' },
+})
+${fence}
+
+- The account, the organisation, the IP address and the browser come from the request (\`src/audit/audit.context.ts\`).
+  Never put a password, token, code or card number in \`details\` (short values only; texts are cut at 200 characters).
+- Writing the log never fails the request: an error is logged (\`AuditLog\`).
+- **Append-only**: a trigger refuses every \`UPDATE\`, \`DELETE\` and \`TRUNCATE\` of \`audit_events\`, also by the
+  owner. Only the daily purge (events older than \`AUDIT_RETENTION_DAYS\`, 365) deletes, in its own transaction.
+- **IP address**: the frontend calls the API for the browser (\`/api/backend\`) and passes the IP address and browser of
+  the user (\`X-Forwarded-For\`, \`User-Agent\`). The API believes \`X-Forwarded-For\` only from \`TRUST_PROXY\`
+  (default \`loopback\`: the frontend and a proxy on the same server). On separate servers, set the address of the
+  frontend or the proxy (\`TRUST_PROXY=10.0.0.5\`). In production, put the frontend behind a proxy that adds the real
+  address (nginx: \`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\`): Next.js itself passes on an
+  \`X-Forwarded-For\` that a browser sends, so without such a proxy a user could write another IP address into the log
+  of what they do through the frontend.
+- IP addresses and email addresses are personal data: keep the retention as short as your rules allow, and mention the
+  log in your privacy statement.
+- Tests: override \`AUDIT_STORE\` with \`MemoryAuditStore\` in e2e tests (like \`BILLING_STORE\`).
+
 ### Not in this version yet
 
-Passkeys, a consent screen for external clients, back-channel logout to other clients and an audit log follow in the
-next phases.
+Passkeys, a consent screen for external clients and back-channel logout to other clients follow in the next phases.
 
 ## Multi-tenant (Row-Level Security)
 
@@ -851,6 +906,7 @@ ${fence}
 | \`discount_codes\` | Discount codes: percentage or amount, duration, how often used | no |
 | \`discount_redemptions\` | Which organisation used which code (once each) | yes |
 | \`billing_payments\` | Payments at Mollie (id, what for, status); a paid one is applied once | yes |
+| \`audit_events\` | The audit log: who, what, about whom, organisation, details, IP address, browser, when (append-only) | yes (\`NULL\`: platform and accounts) |
 | \`schema_migrations\` | Which migration ran, with a checksum | no |
 
 Migrations run automatically at start, under an advisory lock (several instances can start at once). Never change a

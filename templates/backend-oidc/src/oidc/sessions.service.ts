@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto'
+import { AuditService } from '../audit/audit.service.js'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { AppException } from '../common/app.exception.js'
 import { deriveKey, safeEqual, sha256 } from './crypto.js'
@@ -36,7 +37,8 @@ export class SessionsService {
         @Inject(OIDC_STORE) private readonly store: OidcStore,
         private readonly keys: KeysService,
         private readonly oidc: OidcService,
-        private readonly config: OidcConfig
+        private readonly config: OidcConfig,
+        private readonly audit: AuditService
     ) {}
 
     // ---------------------------------------------------------------- logout
@@ -110,6 +112,12 @@ export class SessionsService {
             (confirmed && typeof params.csrf === 'string' && safeEqual(params.csrf, this.csrf(sessionCookie)))
         if (sure) {
             await this.store.endSession(session.idHash)
+            await this.audit.record('login.logout', {
+                tenantId: session.tenantId,
+                actorId: session.userId,
+                target: { type: 'session', id: session.id },
+                details: { client: clientId ?? null }
+            })
             return finish()
         }
         const fields: Record<string, string> = {
@@ -148,11 +156,23 @@ export class SessionsService {
     async end(userId: string, id: string) {
         if (!(await this.store.endUserSession(userId, id)))
             throw new AppException('oidc.SESSION_NOT_FOUND', HttpStatus.NOT_FOUND)
+        await this.audit.record('login.session_ended', {
+            tenantId: null,
+            actorId: userId,
+            target: { type: 'session', id }
+        })
         return { ended: 1 }
     }
 
     /** Ends every other session of the account: "log out everywhere else". */
     async endOthers(userId: string, currentId: string) {
-        return { ended: await this.store.endOtherUserSessions(userId, currentId || null) }
+        const ended = await this.store.endOtherUserSessions(userId, currentId || null)
+        await this.audit.record('login.sessions_ended', {
+            tenantId: null,
+            actorId: userId,
+            target: { type: 'user', id: userId },
+            details: { count: ended }
+        })
+        return { ended }
     }
 }

@@ -5,10 +5,18 @@ import { freshSession } from '@/lib/refresh'
 
 /**
  * Only these parts of the API can be called through this route: members, the platform, the own two-step verification,
- * the eID, the own sessions and licences, and the heartbeat (who is online).
+ * the eID, the own sessions, licences and audit log, and the heartbeat (who is online).
  */
 const ALLOWED =
-    /^(tenants\/current\/|admin\/|me\/mfa|me\/eid|me\/sessions|me\/licenses$|me\/heartbeat$)[A-Za-z0-9/_-]*$/
+    /^(tenants\/current\/|admin\/|me\/mfa|me\/eid|me\/sessions|me\/licenses$|me\/audit$|me\/heartbeat$)[A-Za-z0-9/_-]*$/
+
+/**
+ * The IP address chain of the browser for the API (X-Forwarded-For): what a proxy in front of this app sent, and the
+ * address Next.js saw. The API only believes it from the addresses in its TRUST_PROXY (default: this computer).
+ */
+function forwardedFor(request: NextRequest): string {
+    return request.headers.get('x-forwarded-for')?.slice(0, 500) ?? ''
+}
 
 /**
  * Calls the protected API for the browser: adds the access token of the session (Authorization: Bearer) on the server.
@@ -36,6 +44,9 @@ async function forward(request: NextRequest, { params }: { params: Promise<{ pat
             Authorization: 'Bearer ' + session.accessToken,
             Accept: 'application/json',
             'Accept-Language': request.headers.get('accept-language') ?? 'en',
+            // The audit log of the API records the browser and the IP address of the user, not those of this server
+            'User-Agent': request.headers.get('user-agent') ?? '',
+            ...(forwardedFor(request) ? { 'X-Forwarded-For': forwardedFor(request) } : {}),
             ...(hasBody ? { 'Content-Type': 'application/json' } : {})
         },
         body: hasBody ? await request.text() : undefined,

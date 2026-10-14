@@ -1,4 +1,5 @@
 import { createHmac, randomUUID } from 'node:crypto'
+import { AuditService } from '../audit/audit.service.js'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { deriveKey, PKCE_VERIFIER, pkceChallenge, randomToken, safeEqual, sha256 } from './crypto.js'
 import { halfHash, signJwt } from './jose.js'
@@ -48,7 +49,8 @@ export class TokensService {
         @Inject(OIDC_STORE) private readonly store: OidcStore,
         private readonly keys: KeysService,
         private readonly oidc: OidcService,
-        private readonly config: OidcConfig
+        private readonly config: OidcConfig,
+        private readonly audit: AuditService
     ) {}
 
     async token(authorization: string | undefined, body: Params): Promise<TokenResponse> {
@@ -152,6 +154,12 @@ export class TokensService {
         if (result.status === 'reused') {
             this.logger.warn(`A used refresh token came back: family and session of user ${user.id} ended`)
             await this.store.endSession(session.idHash)
+            await this.audit.record('login.token_reuse', {
+                tenantId: stored.tenantId,
+                actorId: null,
+                target: { type: 'user', id: user.id },
+                details: { client: client.clientId, session: session.id }
+            })
             throw invalid
         }
         if (result.status !== 'ok') throw invalid

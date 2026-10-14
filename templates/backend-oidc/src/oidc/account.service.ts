@@ -1,4 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
+import { AuditService } from '../audit/audit.service.js'
 import { I18nService } from 'nestjs-i18n'
 import { AppException } from '../common/app.exception.js'
 import { MailService } from '../mail/mail.service.js'
@@ -42,7 +43,8 @@ export class AccountService {
         private readonly mail: MailService,
         private readonly limiter: LoginLimiter,
         private readonly i18n: I18nService,
-        private readonly eid: EidService
+        private readonly eid: EidService,
+        private readonly audit: AuditService
     ) {}
 
     /** Called when an account joins an organisation (the licences give it a trial of every product). */
@@ -103,10 +105,29 @@ export class AccountService {
             { name: input.organisation.trim(), slug: slugify(input.organisation) }
         )
         if (created) {
+            await this.registered(created, 'password')
             await this.memberJoined(created.tenant.id, created.user.id)
             await this.sendVerification(created.user, lang)
         } else await this.tellOwner(email, lang)
         return { status: 'check-email' as const }
+    }
+
+    /** A new account with its own organisation (in the log of that organisation). */
+    private async registered(created: { user: StoredUser; tenant: { id: string; name: string } }, method: string) {
+        await this.audit.record('account.registered', {
+            tenantId: created.tenant.id,
+            actorId: created.user.id,
+            target: { type: 'user', id: created.user.id },
+            details: { method, organisation: created.tenant.name }
+        })
+    }
+
+    /** Something an account did with itself (no organisation: superadmins and the account see it). */
+    private own(
+        action: 'account.email_verified' | 'account.password_reset' | 'account.eid_linked' | 'account.eid_unlinked',
+        userId: string
+    ) {
+        return this.audit.record(action, { tenantId: null, actorId: userId, target: { type: 'user', id: userId } })
     }
 
     /** The address has an account already: tell its owner, not the person who filled in the form. */
@@ -157,6 +178,7 @@ export class AccountService {
         )
         if (created === 'identifier-taken') throw new AppException('oidc.EID_ALREADY_LINKED', HttpStatus.CONFLICT)
         if (created) {
+            await this.registered(created, 'eid')
             await this.memberJoined(created.tenant.id, created.user.id)
             await this.sendVerification(created.user, lang)
         } else await this.tellOwner(email, lang)
@@ -194,6 +216,7 @@ export class AccountService {
         const result = await this.store.linkIdentifier(userId, 'eid', person.valueHash)
         if (result === 'taken') throw new AppException('oidc.EID_ALREADY_LINKED', HttpStatus.CONFLICT)
         if (result === 'exists') throw new AppException('oidc.EID_OTHER_LINKED', HttpStatus.CONFLICT)
+        await this.own('account.eid_linked', userId)
         return this.eidStatus(userId)
     }
 
@@ -201,6 +224,7 @@ export class AccountService {
         const user = await this.store.findUserById(userId)
         if (!user?.passwordHash) throw new AppException('oidc.EID_ONLY_LOGIN', HttpStatus.CONFLICT)
         await this.store.unlinkIdentifier(userId, 'eid')
+        await this.own('account.eid_unlinked', userId)
         return this.eidStatus(userId)
     }
 
@@ -225,6 +249,7 @@ export class AccountService {
         const user = data ? await this.store.findUserById(data.userId) : null
         if (!data || !user || user.email.toLowerCase() !== data.email.toLowerCase()) this.invalidLink()
         await this.store.setEmailVerified(user.id)
+        await this.own('account.email_verified', user.id)
         return { status: 'verified' as const, email: user.email }
     }
 
@@ -256,6 +281,7 @@ export class AccountService {
         await this.store.setPassword(user.id, await hashPassword(input.password))
         await this.store.setEmailVerified(user.id)
         await this.store.endUserSessions(user.id)
+        await this.own('account.password_reset', user.id)
         return { status: 'password-changed' as const }
     }
 
@@ -283,6 +309,12 @@ export class AccountService {
             expiresAt: new Date(Date.now() + OIDC.INVITATION_SECONDS * 1000)
         })
         await this.sendInvitation(invitation, inviter.name, tenant.name, lang)
+        await this.audit.record('members.invited', {
+            tenantId: tenant.id,
+            actorId: inviter.userId,
+            target: { type: 'invitation', id: invitation.id },
+            details: { email, role: input.role }
+        })
         return { status: 'invited' as const, email, id: invitation.id }
     }
 
@@ -295,6 +327,11 @@ export class AccountService {
         )
         if (!invitation) throw new AppException('oidc.INVITATION_NOT_FOUND', HttpStatus.NOT_FOUND)
         await this.sendInvitation(invitation, inviterName, tenant.name, lang)
+        await this.audit.record('members.invitation_resent', {
+            tenantId: tenant.id,
+            target: { type: 'invitation', id: invitation.id },
+            details: { email: invitation.email, role: invitation.role }
+        })
         return { status: 'invited' as const, email: invitation.email, id: invitation.id }
     }
 
@@ -377,6 +414,12 @@ export class AccountService {
             await this.store.setEmailVerified(user.id)
         }
         await this.store.addMember(tenant.id, user.id, data.role)
+        await this.audit.record('members.joined', {
+            tenantId: tenant.id,
+            actorId: user.id,
+            target: { type: 'user', id: user.id },
+            details: { role: data.role, newAccount: !accountExists }
+        })
         await this.memberJoined(tenant.id, user.id)
         await this.store.deleteInvitation(tenant.id, data.invitationId)
         return { status: 'accepted' as const, tenantName: tenant.name, accountExists }

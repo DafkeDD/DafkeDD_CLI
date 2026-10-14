@@ -1,4 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
+import { AuditService } from '../audit/audit.service.js'
 import QRCode from 'qrcode'
 import { AppException } from '../common/app.exception.js'
 import { decrypt, deriveKey, encrypt, sha256 } from './crypto.js'
@@ -31,7 +32,8 @@ export class MfaService {
     constructor(
         @Inject(OIDC_STORE) private readonly store: OidcStore,
         private readonly config: OidcConfig,
-        private readonly limiter: LoginLimiter
+        private readonly limiter: LoginLimiter,
+        private readonly audit: AuditService
     ) {}
 
     private key() {
@@ -85,6 +87,7 @@ export class MfaService {
         const recoveryCodes = newRecoveryCodes()
         await this.store.enableMfa(userId, recoveryCodes.map(hashRecovery), step)
         await this.store.endOtherUserSessions(userId, keepSessionId)
+        await this.record('account.mfa_enabled', userId)
         return { enabled: true as const, recoveryCodes }
     }
 
@@ -93,6 +96,7 @@ export class MfaService {
         if (this.config.mfaRequired) throw new AppException('oidc.MFA_REQUIRED', HttpStatus.FORBIDDEN)
         if (!(await this.check(userId, code))) this.invalidCode()
         await this.store.disableMfa(userId)
+        await this.record('account.mfa_disabled', userId)
         return { enabled: false as const }
     }
 
@@ -103,6 +107,8 @@ export class MfaService {
     async reset(userId: string) {
         await this.store.disableMfa(userId)
         await this.store.endUserSessions(userId)
+        // Done by the superadmin of this request
+        await this.audit.record('account.mfa_reset', { tenantId: null, target: { type: 'user', id: userId } })
     }
 
     /** New recovery codes (the old ones stop working); needs a valid code. */
@@ -110,7 +116,16 @@ export class MfaService {
         if (!(await this.check(userId, code))) this.invalidCode()
         const recoveryCodes = newRecoveryCodes()
         await this.store.setRecoveryCodes(userId, recoveryCodes.map(hashRecovery))
+        await this.record('account.mfa_codes_renewed', userId)
         return { recoveryCodes }
+    }
+
+    /** Something the account did with its own two-step verification (also during the login, before a token). */
+    private record(
+        action: 'account.mfa_enabled' | 'account.mfa_disabled' | 'account.mfa_codes_renewed',
+        userId: string
+    ) {
+        return this.audit.record(action, { tenantId: null, actorId: userId, target: { type: 'user', id: userId } })
     }
 
     private limit(userId: string) {

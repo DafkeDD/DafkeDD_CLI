@@ -12,6 +12,7 @@ import {
 import { Reflector } from '@nestjs/core'
 import { ApiBearerAuth, ApiForbiddenResponse, ApiUnauthorizedResponse } from '@nestjs/swagger'
 import type { Request } from 'express'
+import { setActor } from '../audit/audit.context.js'
 import { AppException } from '../common/app.exception.js'
 import { OAuthError } from '../oidc/oauth.error.js'
 import { OidcService } from '../oidc/oidc.service.js'
@@ -88,6 +89,7 @@ export class AccessGuard implements CanActivate {
         if (typeof tenant?.id !== 'string') {
             if (!user.isSuperadmin || (needed !== 'account' && needed !== 'superadmin')) throw forbidden
             request.auth = { userId: user.id, tenantId: '', tenantName: '', role: 'admin', superadmin: true, sessionId }
+            setActor(user.id, null)
             return true
         }
 
@@ -106,6 +108,8 @@ export class AccessGuard implements CanActivate {
             superadmin: user.isSuperadmin,
             sessionId
         }
+        // The audit log knows who does what in this request
+        setActor(user.id, found.id)
         return true
     }
 

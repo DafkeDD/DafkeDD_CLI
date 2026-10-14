@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { AccessGuard } from '../access/access.js'
+import { AuditModule } from '../audit/audit.module.js'
 import { MailModule } from '../mail/mail.module.js'
 import { AccountController } from './account.controller.js'
 import { AccountService } from './account.service.js'
@@ -21,7 +22,7 @@ import { WellKnownController } from './well-known.controller.js'
 
 /** The OpenID Connect server: /oidc/..., /oidc/account/... and /.well-known/oauth-authorization-server/oidc. */
 @Module({
-    imports: [MailModule],
+    imports: [MailModule, AuditModule],
     controllers: [
         OidcController,
         AccountController,

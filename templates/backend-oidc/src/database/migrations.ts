@@ -356,5 +356,50 @@ GRANT SELECT ON tenant_subscriptions, license_grants, license_trials, license_as
 REVOKE UPDATE ON tenants FROM ${role};
 GRANT UPDATE (name) ON tenants TO ${role};
 `
+    },
+    {
+        id: 5,
+        name: 'audit log',
+        sql: `
+-- Who did what, when and from where. Append-only: an UPDATE or a DELETE fails (only the retention purge, with
+-- app.audit_purge set in its own transaction, deletes old rows). No foreign keys: an event stays when what it is
+-- about changes or goes.
+CREATE TABLE audit_events (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  -- The organisation it happened in; NULL for the platform and the account itself (only superadmins see those)
+  tenant_id uuid,
+  -- Who did it; NULL for the system (a payment coming in) or someone who is not logged in (a failed login)
+  actor_id uuid,
+  action text NOT NULL CHECK (action ~ '^[a-z]+\\.[a-z_]+$'),
+  target_type text,
+  target_id text,
+  details jsonb NOT NULL DEFAULT '{}',
+  ip text,
+  user_agent text
+);
+CREATE INDEX audit_events_tenant ON audit_events (tenant_id, id DESC);
+CREATE INDEX audit_events_actor ON audit_events (actor_id, id DESC);
+CREATE INDEX audit_events_target ON audit_events (target_type, target_id, id DESC);
+CREATE INDEX audit_events_created ON audit_events (created_at);
+
+CREATE FUNCTION audit_events_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' AND current_setting('app.audit_purge', true) = 'on' THEN
+    RETURN OLD;
+  END IF;
+  RAISE EXCEPTION 'audit_events is append-only';
+END;
+$$;
+CREATE TRIGGER audit_events_append_only BEFORE UPDATE OR DELETE ON audit_events
+  FOR EACH ROW EXECUTE FUNCTION audit_events_append_only();
+CREATE TRIGGER audit_events_no_truncate BEFORE TRUNCATE ON audit_events
+  FOR EACH STATEMENT EXECUTE FUNCTION audit_events_append_only();
+${isolate('audit_events', 'tenant_id')}
+
+-- The admins of an organisation read its log inside DatabaseService.withTenant(): Row-Level Security shows only
+-- its own events (never the platform and account events, whose tenant_id is NULL)
+GRANT SELECT ON audit_events TO ${role};
+`
     }
 ]

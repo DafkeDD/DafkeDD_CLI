@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { files, uiFiles, withApi, LOCALES } from '../src/frontends/nextjs.js'
-import { envLocal, LICENSE_MESSAGES, OIDC_MESSAGES, oidcFrontendFiles } from '../src/frontends/oidc.js'
+import { AUDIT_MESSAGES, envLocal, LICENSE_MESSAGES, OIDC_MESSAGES, oidcFrontendFiles } from '../src/frontends/oidc.js'
 import { frontendReadme } from '../src/frontends/docs.js'
 import { main } from '../src/index.js'
 import * as backendOidc from '../src/backends/oidc.js'
@@ -81,8 +81,8 @@ test('cookies are httpOnly and encrypted (AES-256-GCM, purpose bound), returnTo 
 })
 
 test('every text exists in all four languages, and every text the code uses exists', () => {
-    const namespaces = { Oidc: OIDC_MESSAGES, Licenses: LICENSE_MESSAGES }
-    const used = { Oidc: new Set(), Licenses: new Set() }
+    const namespaces = { Oidc: OIDC_MESSAGES, Licenses: LICENSE_MESSAGES, Audit: AUDIT_MESSAGES }
+    const used = { Oidc: new Set(), Licenses: new Set(), Audit: new Set() }
     for (const content of Object.values(templates)) {
         // const t = useTranslations('Oidc'), const l = await getTranslations('Licenses'), ...
         const names = new Map()
@@ -97,10 +97,16 @@ test('every text exists in all four languages, and every text the code uses exis
                 used[namespace].add(match[1])
         }
     }
+    // Every key, also nested ones (Audit.actions.login_succeeded), in every language
+    const flat = (messages, prefix = '') =>
+        Object.entries(messages).flatMap(([key, value]) =>
+            typeof value === 'object' ? flat(value, prefix + key + '.') : [prefix + key]
+        )
     for (const [namespace, messages] of Object.entries(namespaces)) {
-        const keys = Object.keys(messages.en).sort()
-        for (const locale of LOCALES)
-            assert.deepEqual(Object.keys(messages[locale]).sort(), keys, `${namespace} ${locale}`)
+        const all = flat(messages.en).sort()
+        for (const locale of LOCALES) assert.deepEqual(flat(messages[locale]).sort(), all, `${namespace} ${locale}`)
+        // Groups of texts (Audit.actions, .details, ...) are used with a variable key: only plain texts are checked here
+        const keys = Object.keys(messages.en).filter(key => typeof messages.en[key] === 'string')
         for (const key of used[namespace]) assert.ok(keys.includes(key), `missing text ${namespace}.${key}`)
         for (const key of keys) assert.ok(used[namespace].has(key), `unused text ${namespace}.${key}`)
     }
@@ -115,6 +121,7 @@ for (const ui of [true, false]) {
             const messages = JSON.parse(all[`messages/${locale}.json`])
             assert.deepEqual(messages.Oidc, OIDC_MESSAGES[locale])
             assert.deepEqual(messages.Licenses, LICENSE_MESSAGES[locale])
+            assert.deepEqual(messages.Audit, AUDIT_MESSAGES[locale])
         }
         const page = all['src/app/[locale]/page.tsx']
         assert.match(page, /import \{ Suspense, use \} from 'react'/)

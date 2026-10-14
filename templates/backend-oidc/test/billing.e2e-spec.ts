@@ -10,6 +10,8 @@ import { FakeProvider } from '../src/billing/payments/fake.provider.js'
 import { PAYMENT_PROVIDER } from '../src/billing/payments/payment-provider.js'
 import { BILLING_STORE } from '../src/billing/store/billing.store.js'
 import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
+import { AUDIT_STORE } from '../src/audit/audit.store.js'
+import { MemoryAuditStore } from '../src/audit/memory-audit.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import type { Mail } from '../src/mail/mail.service.js'
 import { MailService } from '../src/mail/mail.service.js'
@@ -50,6 +52,7 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
     let fake: FakeProvider
     const store = new MemoryOidcStore()
     const billing = new MemoryBillingStore()
+    const audit = new MemoryAuditStore(store)
     const outbox: Mail[] = []
     const http = () => request(app.getHttpServer())
     const ids = { acme: '', alice: '', bob: '', carol: '', root: '' }
@@ -77,6 +80,8 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
             .useValue(store)
             .overrideProvider(BILLING_STORE)
             .useValue(billing)
+            .overrideProvider(AUDIT_STORE)
+            .useValue(audit)
             .overrideProvider(MailService)
             .useValue({
                 send: async (mail: Mail) => {
@@ -662,6 +667,34 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
             subscription.currentPeriodEnd = new Date(Date.now() - 8 * DAY)
             expect((await overview('chat')).subscription.valid).toBe(false)
             warn.mockRestore()
+        })
+    })
+
+    it('every change of the licences is in the audit log: by whom, or by the payment provider', async () => {
+        const actions = audit.events.map(event => event.action)
+        for (const action of [
+            'licences.product_created',
+            'licences.discount_created',
+            'licences.trial_extended',
+            'licences.seat_assigned',
+            'licences.seat_unassigned',
+            'licences.subscription_started',
+            'licences.subscription_activated',
+            'licences.subscription_seats_changed',
+            'licences.subscription_renewed',
+            'licences.subscription_past_due',
+            'licences.subscription_canceled',
+            'licences.grant_added',
+            'licences.payment_refund_needed'
+        ])
+            expect(actions, action).toContain(action)
+        // A payment that came in: no person did it
+        const activated = audit.events.find(event => event.action === 'licences.subscription_activated')
+        expect(activated).toMatchObject({ actorId: null, tenantId: ids.acme, targetType: 'subscription' })
+        const started = audit.events.find(event => event.action === 'licences.subscription_started')
+        expect(started).toMatchObject({
+            actorId: ids.alice,
+            details: { product: 'planner', interval: 'year', seats: 2 }
         })
     })
 })

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { OidcModule } from '../oidc/oidc.module.js'
+import { AuditController } from './audit.controller.js'
 import { MembersController } from './members.controller.js'
 import { PlatformController } from './platform.controller.js'
 import { PresenceController } from './presence.controller.js'
@@ -10,6 +11,6 @@ import { PresenceController } from './presence.controller.js'
  */
 @Module({
     imports: [OidcModule],
-    controllers: [MembersController, PlatformController, PresenceController]
+    controllers: [MembersController, PlatformController, PresenceController, AuditController]
 })
 export class TenantsModule {}

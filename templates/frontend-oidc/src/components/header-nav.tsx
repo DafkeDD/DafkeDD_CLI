@@ -6,7 +6,7 @@ import { getSession } from '@/lib/session'
 const NAV = 'rounded-lg px-3 py-1.5 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10'
 
 /**
- * In the header of every page: "Management" for admins (members of the organisation) and "Platform" for superadmins.
+ * In the header of every page: "Management", "Licences" and "Audit log" for admins and "Platform" for superadmins.
  * For everyone who is logged in it also sends the heartbeat that shows them as online.
  */
 export async function HeaderNav() {
@@ -25,6 +25,11 @@ export async function HeaderNav() {
                         {t('licenses')}
                     </Link>
                 </>
+            )}
+            {(session.tenant?.role === 'admin' || session.superadmin) && (
+                <Link href='/audit' className={NAV}>
+                    {t('audit')}
+                </Link>
             )}
             {session.superadmin && (
                 <Link href='/admin' className={NAV}>

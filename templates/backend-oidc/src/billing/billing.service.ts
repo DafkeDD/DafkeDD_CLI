@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto'
+import { AuditService } from '../audit/audit.service.js'
 import { HttpStatus, Inject, Injectable, Logger, type OnModuleInit, Optional } from '@nestjs/common'
 import { AppException } from '../common/app.exception.js'
 import { AccountService } from '../oidc/account.service.js'
@@ -100,6 +101,7 @@ export class BillingService implements OnModuleInit {
         @Inject(OIDC_STORE) private readonly oidc: OidcStore,
         private readonly config: BillingConfig,
         private readonly accounts: AccountService,
+        private readonly audit: AuditService,
         @Optional() @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider | null
     ) {}
 
@@ -144,6 +146,15 @@ export class BillingService implements OnModuleInit {
             active: true
         })
         if (!created) throw new AppException('billing.PRODUCT_EXISTS', HttpStatus.CONFLICT)
+        await this.audit.record('licences.product_created', {
+            tenantId: null,
+            target: { type: 'product', id: created.id },
+            details: {
+                product: created.code,
+                priceMonthCents: created.priceMonthCents,
+                priceYearCents: created.priceYearCents
+            }
+        })
         return created
     }
 
@@ -162,11 +173,22 @@ export class BillingService implements OnModuleInit {
             change.priceMonthCents ?? product.priceMonthCents,
             change.priceYearCents ?? product.priceYearCents
         )
-        return this.store.updateProduct(product.id, {
+        const updated = await this.store.updateProduct(product.id, {
             ...change,
             name: change.name?.trim(),
             description: change.description?.trim()
         })
+        await this.audit.record('licences.product_changed', {
+            tenantId: null,
+            target: { type: 'product', id: product.id },
+            details: {
+                product: product.code,
+                priceMonthCents: change.priceMonthCents,
+                priceYearCents: change.priceYearCents,
+                active: change.active
+            }
+        })
+        return updated
     }
 
     // ---------------------------------------------------------------- trials
@@ -190,6 +212,11 @@ export class BillingService implements OnModuleInit {
         const endsAt = new Date(Date.now() + this.config.trialDays * DAY)
         if (!(await this.store.startTrial(tenantId, product.id, userId, endsAt)))
             throw new AppException('billing.TRIAL_USED', HttpStatus.CONFLICT)
+        await this.audit.record('licences.trial_started', {
+            tenantId,
+            target: { type: 'user', id: userId },
+            details: { product: product.code, endsAt: endsAt.toISOString() }
+        })
         return { userId, endsAt }
     }
 
@@ -202,6 +229,11 @@ export class BillingService implements OnModuleInit {
         const endsAt = new Date(from + days * DAY)
         if (trial) await this.store.setTrialEnd(tenantId, product.id, userId, endsAt)
         else await this.store.startTrial(tenantId, product.id, userId, endsAt)
+        await this.audit.record('licences.trial_extended', {
+            tenantId,
+            target: { type: 'user', id: userId },
+            details: { product: product.code, days, endsAt: endsAt.toISOString() }
+        })
         return { userId, endsAt }
     }
 
@@ -257,6 +289,13 @@ export class BillingService implements OnModuleInit {
         const result =
             total > 0 ? await this.store.assignSeat(actor.tenantId, product.id, userId, actor.userId, total) : 'full'
         if (result === 'full') throw new AppException('billing.NO_FREE_SEAT', HttpStatus.CONFLICT)
+        if (result === 'ok')
+            await this.audit.record('licences.seat_assigned', {
+                tenantId: actor.tenantId,
+                actorId: actor.userId,
+                target: { type: 'user', id: userId },
+                details: { product: product.code }
+            })
         return { userId, assigned: true }
     }
 
@@ -265,6 +304,11 @@ export class BillingService implements OnModuleInit {
         const product = await this.product(productCode, false)
         if (!(await this.store.unassignSeat(tenantId, product.id, userId)))
             throw new AppException('billing.SEAT_NOT_FOUND', HttpStatus.NOT_FOUND)
+        await this.audit.record('licences.seat_unassigned', {
+            tenantId,
+            target: { type: 'user', id: userId },
+            details: { product: product.code }
+        })
         return { userId, assigned: false }
     }
 
@@ -378,6 +422,18 @@ export class BillingService implements OnModuleInit {
             createdBy: creator
         })
         if (!created) throw new AppException('billing.DISCOUNT_EXISTS', HttpStatus.CONFLICT)
+        await this.audit.record('licences.discount_created', {
+            tenantId: null,
+            target: { type: 'discount', id: created.id },
+            details: {
+                code: created.code,
+                percentOff: created.percentOff,
+                amountOffCents: created.amountOffCents,
+                product: product?.code ?? null,
+                duration: created.duration,
+                periods: created.durationPeriods
+            }
+        })
         return created
     }
 
@@ -393,6 +449,11 @@ export class BillingService implements OnModuleInit {
         const discount = await this.store.findDiscountByCode(code.trim().toUpperCase())
         if (!discount || !(await this.store.setDiscountActive(discount.id, active)))
             throw new AppException('billing.DISCOUNT_INVALID', HttpStatus.NOT_FOUND)
+        await this.audit.record('licences.discount_switched', {
+            tenantId: null,
+            target: { type: 'discount', id: discount.id },
+            details: { code: discount.code, active }
+        })
         return { code: discount.code, active }
     }
 
@@ -405,7 +466,7 @@ export class BillingService implements OnModuleInit {
     ) {
         const product = await this.product(input.productCode, false)
         if (!(await this.oidc.findTenant(tenantId))) throw new AppException('errors.NOT_FOUND', HttpStatus.NOT_FOUND)
-        return this.store.addGrant({
+        const grant = await this.store.addGrant({
             tenantId,
             productId: product.id,
             seats: input.seats,
@@ -413,11 +474,19 @@ export class BillingService implements OnModuleInit {
             note: input.note?.trim() ?? '',
             grantedBy: creator
         })
+        await this.audit.record('licences.grant_added', {
+            tenantId,
+            actorId: creator,
+            target: { type: 'grant', id: grant.id },
+            details: { product: product.code, seats: grant.seats, endsAt: grant.endsAt?.toISOString() ?? null }
+        })
+        return grant
     }
 
     async revokeGrant(tenantId: string, id: string) {
         if (!(await this.store.deleteGrant(tenantId, id)))
             throw new AppException('errors.NOT_FOUND', HttpStatus.NOT_FOUND)
+        await this.audit.record('licences.grant_revoked', { tenantId, target: { type: 'grant', id } })
         return { id, deleted: true }
     }
 
@@ -505,6 +574,18 @@ export class BillingService implements OnModuleInit {
                 discountCodeId: discount.id,
                 discountPeriodsLeft: null
             })
+            await this.audit.record('licences.subscription_started', {
+                tenantId: actor.tenantId,
+                actorId: actor.userId,
+                target: { type: 'subscription', id: saved.id },
+                details: {
+                    product: product.code,
+                    interval: input.interval,
+                    seats: input.seats,
+                    code: discount.code,
+                    free: true
+                }
+            })
             return { status: 'active', checkoutUrl: null, subscriptionId: saved.id }
         }
 
@@ -549,6 +630,18 @@ export class BillingService implements OnModuleInit {
                 amountCents: first,
                 status: 'open',
                 periodEnd: null
+            })
+            await this.audit.record('licences.subscription_started', {
+                tenantId: actor.tenantId,
+                actorId: actor.userId,
+                target: { type: 'subscription', id: saved.id },
+                details: {
+                    product: product.code,
+                    interval: input.interval,
+                    seats: input.seats,
+                    code: discount?.code ?? null,
+                    amountCents: first
+                }
             })
             return { status: 'pending', checkoutUrl: payment.checkoutUrl, subscriptionId: saved.id }
         } catch (error) {
@@ -613,6 +706,12 @@ export class BillingService implements OnModuleInit {
                 product.currency
             )
             await this.store.updateSubscription(subscription.id, { seats })
+            await this.audit.record('licences.subscription_seats_changed', {
+                tenantId: actor.tenantId,
+                actorId: actor.userId,
+                target: { type: 'subscription', id: subscription.id },
+                details: { product: product.code, from: subscription.seats, to: seats }
+            })
             return { status: 'updated' as const, checkoutUrl: null }
         }
 
@@ -665,6 +764,12 @@ export class BillingService implements OnModuleInit {
             // A free subscription without an end stops now
             currentPeriodEnd: subscription.currentPeriodEnd ?? new Date()
         })
+        await this.audit.record('licences.subscription_canceled', {
+            tenantId: actor.tenantId,
+            actorId: actor.userId,
+            target: { type: 'subscription', id: subscription.id },
+            details: { product: product.code, endsAt: subscription.currentPeriodEnd?.toISOString() ?? null }
+        })
         return { status: 'canceled' as const, endsAt: subscription.currentPeriodEnd }
     }
 
@@ -711,9 +816,10 @@ export class BillingService implements OnModuleInit {
                 throw error
             }
         } else if (['failed', 'expired', 'canceled'].includes(remote.status)) {
-            if (payment.kind === 'recurring')
+            if (payment.kind === 'recurring') {
                 await this.store.updateSubscription(subscription.id, { status: 'past_due' })
-            else if (payment.kind === 'first' && (await this.isCurrentFirst(subscription, payment)))
+                await this.paymentEvent('licences.subscription_past_due', subscription, payment)
+            } else if (payment.kind === 'first' && (await this.isCurrentFirst(subscription, payment)))
                 // Not bought: the discount code can be used again
                 if (subscription.discountCodeId)
                     await this.store.releaseDiscount(subscription.discountCodeId, subscription.tenantId)
@@ -728,17 +834,47 @@ export class BillingService implements OnModuleInit {
     private async applyPaid(subscription: Subscription, payment: Payment) {
         if (payment.kind === 'first') {
             // An older checkout of a purchase that was replaced: it buys nothing (refund it in the Mollie dashboard)
-            if (!(await this.isCurrentFirst(subscription, payment)))
-                return this.logger.warn(`Payment ${payment.id} was paid for a replaced purchase: refund it`)
-            return this.firstPaid(subscription, payment)
+            if (!(await this.isCurrentFirst(subscription, payment))) {
+                this.logger.warn(`Payment ${payment.id} was paid for a replaced purchase: refund it`)
+                return this.paymentEvent('licences.payment_refund_needed', subscription, payment)
+            }
+            await this.firstPaid(subscription, payment)
+            return this.paymentEvent('licences.subscription_activated', subscription, payment)
         }
         if (payment.kind === 'seats') {
             const samePeriod = payment.periodEnd?.getTime() === subscription.currentPeriodEnd?.getTime()
-            if (!samePeriod || subscription.cancelAtPeriodEnd || subscription.status !== 'active')
-                return this.logger.warn(`Payment ${payment.id} for more seats came after its period: refund it`)
-            return this.seatsPaid(subscription, payment)
+            if (!samePeriod || subscription.cancelAtPeriodEnd || subscription.status !== 'active') {
+                this.logger.warn(`Payment ${payment.id} for more seats came after its period: refund it`)
+                return this.paymentEvent('licences.payment_refund_needed', subscription, payment)
+            }
+            await this.seatsPaid(subscription, payment)
+            return this.paymentEvent('licences.subscription_seats_changed', subscription, payment, {
+                from: subscription.seats,
+                to: subscription.seats + payment.seats
+            })
         }
-        return this.renewalPaid(subscription)
+        await this.renewalPaid(subscription)
+        return this.paymentEvent('licences.subscription_renewed', subscription, payment)
+    }
+
+    /** A payment that came in (the provider, not a person: no actor). */
+    private paymentEvent(
+        action:
+            | 'licences.subscription_activated'
+            | 'licences.subscription_seats_changed'
+            | 'licences.subscription_renewed'
+            | 'licences.subscription_past_due'
+            | 'licences.payment_refund_needed',
+        subscription: Subscription,
+        payment: Payment,
+        extra: Record<string, number> = {}
+    ) {
+        return this.audit.record(action, {
+            tenantId: subscription.tenantId,
+            actorId: null,
+            target: { type: 'subscription', id: subscription.id },
+            details: { payment: payment.id, amountCents: payment.amountCents, seats: payment.seats, ...extra }
+        })
     }
 
     /** A renewal the provider made by itself: stored as a payment of the subscription. */

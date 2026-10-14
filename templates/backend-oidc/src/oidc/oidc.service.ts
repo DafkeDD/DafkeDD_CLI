@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { AuditService } from '../audit/audit.service.js'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common'
@@ -101,7 +102,8 @@ export class OidcService implements OnApplicationBootstrap {
         private readonly mfa: MfaService,
         private readonly eid: EidService,
         private readonly config: OidcConfig,
-        private readonly env: ConfigService
+        private readonly env: ConfigService,
+        private readonly audit: AuditService
     ) {}
 
     onApplicationBootstrap() {
@@ -411,15 +413,21 @@ export class OidcService implements OnApplicationBootstrap {
         const { interaction, client } = found
         const email = typeof form.email === 'string' ? form.email.trim().toLowerCase().slice(0, 254) : ''
         const password = typeof form.password === 'string' ? form.password.slice(0, 128) : ''
-        if (!allowed) return { kind: 'form', interaction, client, errorKey: 'oidc.TOO_MANY_ATTEMPTS', email }
+        if (!allowed) {
+            await this.loginFailed('password', 'too_many_attempts', email, null)
+            return { kind: 'form', interaction, client, errorKey: 'oidc.TOO_MANY_ATTEMPTS', email }
+        }
 
         const user = email ? await this.store.findUserByEmail(email) : null
         const valid = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH)
         if (!user || !valid || user.status !== 'active') {
+            const reason = !user ? 'unknown_email' : !valid ? 'wrong_password' : 'account_blocked'
+            await this.loginFailed('password', reason, email, user?.id ?? null)
             return { kind: 'form', interaction, client, errorKey: 'oidc.INVALID_CREDENTIALS', email }
         }
         // Only said after the right password, so it does not reveal which email addresses have an account
         if (!user.emailVerified) {
+            await this.loginFailed('password', 'email_not_verified', email, user.id)
             return { kind: 'form', interaction, client, errorKey: 'oidc.EMAIL_NOT_VERIFIED', email }
         }
 
@@ -466,14 +474,10 @@ export class OidcService implements OnApplicationBootstrap {
         // The nonce works once: the cookie forgets it, whatever the outcome
         const interaction = { ...found.interaction, eidNonce: null }
         const cookie = { id, value: this.seal(interaction) }
-        const refused = (errorKey: string): LoginResult => ({
-            kind: 'form',
-            interaction,
-            client,
-            errorKey,
-            email: '',
-            cookie
-        })
+        const refused = async (errorKey: string, userId: string | null = null): Promise<LoginResult> => {
+            await this.loginFailed('eid', errorKey.replace(/^oidc\./, '').toLowerCase(), null, userId)
+            return { kind: 'form', interaction, client, errorKey, email: '', cookie }
+        }
         if (!allowed) return refused('oidc.TOO_MANY_ATTEMPTS')
         if (!found.interaction.eidNonce) return refused('oidc.EID_EXPIRED')
 
@@ -486,8 +490,8 @@ export class OidcService implements OnApplicationBootstrap {
         }
         const user = await this.store.findUserByIdentifier('eid', person.valueHash)
         if (!user) return refused('oidc.EID_NOT_LINKED')
-        if (user.status !== 'active') return refused('oidc.ACCOUNT_DISABLED')
-        if (!user.emailVerified) return refused('oidc.EMAIL_NOT_VERIFIED')
+        if (user.status !== 'active') return refused('oidc.ACCOUNT_DISABLED', user.id)
+        if (!user.emailVerified) return refused('oidc.EMAIL_NOT_VERIFIED', user.id)
         await this.store.touchIdentifier('eid', person.valueHash)
         return this.authenticated(
             { ...interaction, userId: user.id, mfaPending: false, enrolling: false, amr: [...OIDC.EID_AMR] },
@@ -514,7 +518,14 @@ export class OidcService implements OnApplicationBootstrap {
                 return { kind: 'mfa', interaction, client, cookie, errorKey: 'oidc.TOO_MANY_ATTEMPTS' }
             throw error
         }
-        if (!factor) return { kind: 'mfa', interaction, client, cookie, errorKey: 'oidc.MFA_INVALID_CODE' }
+        if (!factor) {
+            await this.audit.record('login.mfa_failed', {
+                tenantId: null,
+                actorId: user.id,
+                target: { type: 'user', id: user.id }
+            })
+            return { kind: 'mfa', interaction, client, cookie, errorKey: 'oidc.MFA_INVALID_CODE' }
+        }
         return this.authenticated({ ...interaction, mfaPending: false, amr: MFA_AMR[factor] }, user)
     }
 
@@ -638,6 +649,12 @@ export class OidcService implements OnApplicationBootstrap {
             userAgent: interaction.userAgent || null
         }
         if (!(await this.store.createSession(session))) return { kind: 'expired' }
+        await this.audit.record('login.succeeded', {
+            tenantId: membership?.tenantId ?? null,
+            actorId: user.id,
+            target: { type: 'session', id: session.id },
+            details: { method: session.amr.join(' '), acr: session.acr, client: interaction.params.clientId }
+        })
         // Logged in: online for the admins of the tenant
         if (membership) await this.store.touchMember(membership.tenantId, user.id).catch(() => undefined)
         const result = await this.issueCode(interaction.params, session, user, membership)
@@ -647,6 +664,19 @@ export class OidcService implements OnApplicationBootstrap {
             sessionId,
             cookie: { id: interaction.id, value: null }
         }
+    }
+
+    /**
+     * A login that did not work. Not in any organisation (it is not known which one): superadmins see it, and the
+     * account itself when the email address (or eID) belongs to one.
+     */
+    private async loginFailed(method: string, reason: string, email: string | null, userId: string | null) {
+        await this.audit.record('login.failed', {
+            tenantId: null,
+            actorId: null,
+            target: userId ? { type: 'user', id: userId } : null,
+            details: { method, reason, ...(email ? { email } : {}) }
+        })
     }
 
     private async issueCode(

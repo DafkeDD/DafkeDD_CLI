@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service.js'
 import {
     Body,
     Controller,
@@ -38,7 +39,8 @@ export const ONLINE_SECONDS = 120
 export class MembersController {
     constructor(
         @Inject(OIDC_STORE) private readonly store: OidcStore,
-        private readonly accounts: AccountService
+        private readonly accounts: AccountService,
+        private readonly audit: AuditService
     ) {}
 
     @Get('members')
@@ -81,11 +83,18 @@ export class MembersController {
         @Param('userId', new ParseUUIDPipe()) userId: string,
         @Body() body: RoleDto
     ) {
+        const before = await this.store.findMemberRole(auth.tenantId, userId)
         assertChanged(
             await this.store.setMemberRole(auth.tenantId, userId, body.role),
             'oidc.MEMBER_NOT_FOUND',
             'oidc.LAST_ADMIN'
         )
+        if (before !== body.role)
+            await this.audit.record('members.role_changed', {
+                tenantId: auth.tenantId,
+                target: { type: 'user', id: userId },
+                details: { from: before, to: body.role }
+            })
         return { userId, role: body.role }
     }
 
@@ -98,6 +107,7 @@ export class MembersController {
     async remove(@Auth() auth: AuthContext, @Param('userId', new ParseUUIDPipe()) userId: string) {
         assertChanged(await this.store.removeMember(auth.tenantId, userId), 'oidc.MEMBER_NOT_FOUND', 'oidc.LAST_ADMIN')
         await this.store.endTenantSessions(auth.tenantId, userId)
+        await this.audit.record('members.removed', { tenantId: auth.tenantId, target: { type: 'user', id: userId } })
     }
 
     @Patch('members/:userId/status')
@@ -119,6 +129,10 @@ export class MembersController {
             'oidc.LAST_ADMIN'
         )
         if (body.status === 'disabled') await this.store.endTenantSessions(auth.tenantId, userId)
+        await this.audit.record(body.status === 'disabled' ? 'members.disabled' : 'members.enabled', {
+            tenantId: auth.tenantId,
+            target: { type: 'user', id: userId }
+        })
         return { userId, status: body.status }
     }
 
@@ -152,5 +166,9 @@ export class MembersController {
     async withdraw(@Auth() auth: AuthContext, @Param('id', new ParseUUIDPipe()) id: string) {
         if (!(await this.store.deleteInvitation(auth.tenantId, id)))
             throw new AppException('oidc.INVITATION_NOT_FOUND', HttpStatus.NOT_FOUND)
+        await this.audit.record('members.invitation_withdrawn', {
+            tenantId: auth.tenantId,
+            target: { type: 'invitation', id }
+        })
     }
 }

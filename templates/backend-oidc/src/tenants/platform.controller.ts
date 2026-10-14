@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service.js'
 import {
     Body,
     Controller,
@@ -38,7 +39,8 @@ export class PlatformController {
     constructor(
         @Inject(OIDC_STORE) private readonly store: OidcStore,
         private readonly accounts: AccountService,
-        private readonly mfa: MfaService
+        private readonly mfa: MfaService,
+        private readonly audit: AuditService
     ) {}
 
     @Get('tenants')
@@ -53,6 +55,11 @@ export class PlatformController {
     @ApiCreatedResponse({ description: '{ tenant, invited }' })
     async createTenant(@Auth() auth: AuthContext, @Body() body: CreateTenantDto, @I18n() i18n: I18nContext) {
         const tenant = await this.store.createTenant(body.name.trim(), slugify(body.name))
+        await this.audit.record('platform.tenant_created', {
+            tenantId: tenant.id,
+            target: { type: 'tenant', id: tenant.id },
+            details: { name: tenant.name }
+        })
         let invited: string | null = null
         if (body.adminEmail) {
             const inviter = await this.store.findUserById(auth.userId)
@@ -75,6 +82,10 @@ export class PlatformController {
     async setStatus(@Param('id', new ParseUUIDPipe()) id: string, @Body() body: TenantStatusDto) {
         if (!(await this.store.setTenantStatus(id, body.status)))
             throw new AppException('oidc.TENANT_NOT_FOUND', HttpStatus.NOT_FOUND)
+        await this.audit.record(
+            body.status === 'suspended' ? 'platform.tenant_suspended' : 'platform.tenant_activated',
+            { tenantId: id, target: { type: 'tenant', id } }
+        )
         return { id, status: body.status }
     }
 
@@ -98,6 +109,11 @@ export class PlatformController {
         const user = await this.store.findUserByEmail(body.email.trim().toLowerCase())
         if (!user) throw new AppException('oidc.USER_NOT_FOUND', HttpStatus.NOT_FOUND)
         await this.store.setSuperadmin(user.id, true)
+        await this.audit.record('platform.superadmin_granted', {
+            tenantId: null,
+            target: { type: 'user', id: user.id },
+            details: { email: user.email }
+        })
         return { userId: user.id, name: user.name, email: user.email }
     }
 
@@ -109,6 +125,7 @@ export class PlatformController {
     @ApiConflictResponse({ description: 'oidc.LAST_SUPERADMIN' })
     async revoke(@Param('userId', new ParseUUIDPipe()) userId: string) {
         assertChanged(await this.store.setSuperadmin(userId, false), 'oidc.USER_NOT_FOUND', 'oidc.LAST_SUPERADMIN')
+        await this.audit.record('platform.superadmin_revoked', { tenantId: null, target: { type: 'user', id: userId } })
     }
 
     @Delete('users/:userId/mfa')
