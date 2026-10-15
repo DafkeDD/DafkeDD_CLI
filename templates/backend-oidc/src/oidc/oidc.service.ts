@@ -168,7 +168,11 @@ export class OidcService implements OnApplicationBootstrap {
     }
 
     private async setup() {
-        for (const client of await this.readClients()) await this.store.upsertClient(client)
+        for (const client of await this.readClients())
+            if (!(await this.store.upsertClient(client)))
+                this.logger.warn(
+                    `Client ${client.clientId} of the clients file is skipped: an app made on /admin has that id`
+                )
         await this.keys.ensure()
         const admin = this.config.bootstrapAdmin()
         if (admin && (await this.store.bootstrapAdmin(admin))) {

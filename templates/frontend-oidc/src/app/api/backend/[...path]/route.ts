@@ -25,10 +25,13 @@ function forwardedFor(request: NextRequest): string {
  */
 /** The allowed applications: a client id may contain dots (com.example.app), never an empty or ".." segment. */
 const CONSENTS = /^me\/consents(\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*)?$/
+/** The apps on /admin (superadmins), with the same rule for their client id. */
+const APPS = /^admin\/clients(\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*(\/secret)?)?$/
 
 async function forward(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
     const path = (await params).path.join('/')
-    if (!ALLOWED.test(path) && !CONSENTS.test(path)) return NextResponse.json({ error: 'not-found' }, { status: 404 })
+    if (!ALLOWED.test(path) && !CONSENTS.test(path) && !APPS.test(path))
+        return NextResponse.json({ error: 'not-found' }, { status: 404 })
     if (request.method !== 'GET' && request.headers.get('origin') !== new URL(APP_URL).origin)
         return NextResponse.json({ error: 'origin' }, { status: 403 })
     // Renews the access token with the refresh token when it (almost) expired
@@ -67,4 +70,4 @@ async function forward(request: NextRequest, { params }: { params: Promise<{ pat
     )
 }
 
-export { forward as DELETE, forward as GET, forward as PATCH, forward as POST }
+export { forward as DELETE, forward as GET, forward as PATCH, forward as POST, forward as PUT }

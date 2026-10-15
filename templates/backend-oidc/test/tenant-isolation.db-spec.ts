@@ -1008,6 +1008,90 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         expect(none.rows).toHaveLength(0)
     })
 
+    it('apps made on /admin: the clients file never takes them over; disabled they log nobody in; removed with everything', async () => {
+        const store = new PgOidcStore(database)
+        const owner = (await store.createUser({
+            email: 'apps@example.com',
+            name: 'Apps',
+            passwordHash: 'x',
+            emailVerified: true,
+            locale: null
+        }))!
+        const app = {
+            clientId: 'made.here',
+            name: 'Made here',
+            type: 'confidential' as const,
+            secretHash: 'a'.repeat(64),
+            redirectUris: ['https://made.example.com/cb'],
+            postLogoutRedirectUris: [],
+            grantTypes: ['authorization_code', 'refresh_token'],
+            scopes: ['openid', 'email'],
+            firstParty: false,
+            backchannelLogoutUri: null
+        }
+        expect(await store.createClient(app, owner.id)).toBe(true)
+        expect(await store.createClient(app, owner.id)).toBe(false)
+        expect(await store.upsertClient({ ...app, name: 'From the file' })).toBe(false)
+        expect(await store.findClientSummary('made.here')).toMatchObject({
+            name: 'Made here',
+            source: 'admin',
+            disabled: false,
+            consents: 0
+        })
+        expect(await store.updateClient('made.here', { name: 'Renamed', scopes: ['openid'] })).toBe(true)
+        expect(await store.setClientSecret('made.here', 'b'.repeat(64))).toBe(true)
+        expect((await store.findClient('made.here'))?.secretHash).toBe('b'.repeat(64))
+        await store.saveConsent(owner.id, 'made.here', ['openid'])
+        expect((await store.listClients()).find(item => item.clientId === 'made.here')).toMatchObject({
+            name: 'Renamed',
+            consents: 1
+        })
+
+        // A file client: never changed, disabled or removed from /admin
+        await store.upsertClient({ ...app, clientId: 'from.file', secretHash: null, type: 'public' })
+        expect(await store.updateClient('from.file', { name: 'x' })).toBe(false)
+        expect(await store.setClientDisabled('from.file', true)).toBe(false)
+        expect(await store.deleteClient('from.file')).toBe(false)
+
+        // Disabled: not found for logins, its refresh tokens revoked
+        const session = {
+            id: randomUUID(),
+            idHash: randomBytes(16).toString('hex'),
+            interactionHash: randomBytes(16).toString('hex'),
+            userId: owner.id,
+            tenantId: null,
+            authTime: new Date(),
+            acr: 'loa2',
+            amr: ['pwd'],
+            expiresAt: new Date(Date.now() + 60_000),
+            userAgent: null
+        }
+        await store.createSession(session)
+        const tokenHash = randomBytes(16).toString('hex')
+        await store.createRefreshToken({
+            tokenHash,
+            familyId: randomUUID(),
+            sessionId: session.id,
+            clientId: 'made.here',
+            userId: owner.id,
+            tenantId: null,
+            scope: 'openid',
+            expiresAt: new Date(Date.now() + 60_000)
+        })
+        expect(await store.setClientDisabled('made.here', true)).toBe(true)
+        expect(await store.findClient('made.here')).toBeNull()
+        expect((await store.findClientSummary('made.here'))?.disabled).toBe(true)
+        expect((await store.findRefreshToken(tokenHash))?.revokedAt).toBeInstanceOf(Date)
+        expect(await store.setClientDisabled('made.here', false)).toBe(true)
+        expect(await store.findClient('made.here')).not.toBeNull()
+
+        // Removed: its tokens and consents go along
+        expect(await store.deleteClient('made.here')).toBe(true)
+        expect(await store.findRefreshToken(tokenHash)).toBeNull()
+        expect(await store.findConsent(owner.id, 'made.here')).toBeNull()
+        expect(await store.deleteClient('made.here')).toBe(false)
+    })
+
     it('the tenant role exists and owns nothing', async () => {
         const { rows } = await database.query<{ owned: number }>(
             `SELECT count(*)::int AS owned FROM pg_class c JOIN pg_roles r ON r.oid = c.relowner WHERE r.rolname = $1`,

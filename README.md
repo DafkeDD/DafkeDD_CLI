@@ -315,6 +315,10 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   and takes access back (their refresh tokens stop at once). **Back-channel logout** (OpenID Connect Back-Channel Logout
   1.0): when a session ends, every client that was used in it and has a `backchannelLogoutUri` gets a signed logout
   token, with retries; the frontend is one of them and logs the browser out too.
+- **Apps on /admin**: superadmins make, change, disable and remove apps (OpenID Connect clients) in the frontend instead
+  of editing `config/oidc-clients.json`: redirect URIs, scopes, refresh tokens, own app or of others, back-channel
+  logout URI, and for a confidential app a secret that is shown once (only its hash is stored). The apps of the file
+  stay read-only there.
 
 The TypeScript files of this feature live as real files in `templates/backend-oidc` and `templates/frontend-oidc` (see
 Development).
@@ -460,6 +464,12 @@ git switch developer
 
 ## Changelog
 
+- **0.32.0**: apps on `/admin`. `GET/POST /admin/clients`, `PUT/PATCH/DELETE /admin/clients/:clientId` and
+  `POST /admin/clients/:clientId/secret` (superadmins): make an app (public or confidential, a client id of your choice
+  or made from the name), change it, a new secret (32 random bytes, shown once, only its sha256 stored), disable it (its
+  refresh tokens and codes stop at once; its access tokens no longer reach the API) and remove it once disabled.
+  Migration 9: `source`, `disabled_at` and `created_by` on `oidc_clients`; the clients file never overwrites an app made
+  on `/admin`. Audit log: `platform.client_*`. The card "Apps" on `/admin` with the texts in four languages.
 - **0.31.0**: applications of others and back-channel logout. Clients with `"firstParty": false` get a consent screen
   after the login (HTML page of the API and the login page of the frontend; `POST /oidc/interaction/:id/consent`), with
   `prompt=consent`, more scopes than before and `consent_required` for `prompt=none`. `GET /me/consents` and

@@ -494,5 +494,16 @@ CREATE TRIGGER oidc_session_ended AFTER UPDATE OF expires_at ON oidc_sessions
   FOR EACH ROW WHEN (OLD.expires_at > now() AND NEW.expires_at <= now())
   EXECUTE FUNCTION oidc_session_ended();
 `
+    },
+    {
+        id: 9,
+        name: 'clients managed on /admin',
+        sql: `
+-- file: from config/oidc-clients.json (applied at every start); admin: made by a superadmin on /admin
+ALTER TABLE oidc_clients ADD COLUMN source text NOT NULL DEFAULT 'file' CHECK (source IN ('file', 'admin'));
+-- A disabled client cannot log anyone in and its refresh tokens stop
+ALTER TABLE oidc_clients ADD COLUMN disabled_at timestamptz;
+ALTER TABLE oidc_clients ADD COLUMN created_by uuid REFERENCES ${users} (id) ON DELETE SET NULL;
+`
     }
 ]

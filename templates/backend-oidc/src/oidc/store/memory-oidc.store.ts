@@ -5,6 +5,8 @@ import type {
     AuthorizationCode,
     BootstrapAdmin,
     ChangeResult,
+    ClientChanges,
+    ClientSummary,
     Consent,
     IdentifierType,
     Invitation,
@@ -36,6 +38,7 @@ export class MemoryOidcStore implements OidcStore {
         []
     invitations: Invitation[] = []
     clients = new Map<string, OidcClient>()
+    clientInfo = new Map<string, { source: 'file' | 'admin'; disabled: boolean; createdAt: Date; updatedAt: Date }>()
     keys: StoredKey[] = []
     sessions = new Map<string, Session & { createdAt: Date; lastUsedAt: Date | null }>()
     refreshTokens = new Map<string, RefreshToken>()
@@ -115,11 +118,102 @@ export class MemoryOidcStore implements OidcStore {
     }
 
     async findClient(clientId: string) {
-        return this.clients.get(clientId) ?? null
+        return this.clientInfo.get(clientId)?.disabled ? null : (this.clients.get(clientId) ?? null)
     }
 
     async upsertClient(client: OidcClient) {
+        const info = this.clientInfo.get(client.clientId)
+        if (info?.source === 'admin') return false
         this.clients.set(client.clientId, client)
+        const now = new Date()
+        this.clientInfo.set(client.clientId, {
+            source: 'file',
+            disabled: info?.disabled ?? false,
+            createdAt: info?.createdAt ?? now,
+            updatedAt: now
+        })
+        return true
+    }
+
+    private summary(client: OidcClient): ClientSummary {
+        const info = this.clientInfo.get(client.clientId) ?? {
+            source: 'file' as const,
+            disabled: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        }
+        return {
+            ...client,
+            ...info,
+            consents: this.consents.filter(item => item.clientId === client.clientId).length
+        }
+    }
+
+    async listClients() {
+        return [...this.clients.values()]
+            .map(client => this.summary(client))
+            .sort((a, b) => b.source.localeCompare(a.source) || a.name.localeCompare(b.name))
+    }
+
+    async findClientSummary(clientId: string) {
+        const client = this.clients.get(clientId)
+        return client ? this.summary(client) : null
+    }
+
+    async createClient(client: OidcClient) {
+        if (this.clients.has(client.clientId)) return false
+        this.clients.set(client.clientId, client)
+        const now = new Date()
+        this.clientInfo.set(client.clientId, { source: 'admin', disabled: false, createdAt: now, updatedAt: now })
+        return true
+    }
+
+    private adminClient(clientId: string) {
+        const info = this.clientInfo.get(clientId)
+        const client = this.clients.get(clientId)
+        return info?.source === 'admin' && client ? { info, client } : null
+    }
+
+    async updateClient(clientId: string, changes: ClientChanges) {
+        const found = this.adminClient(clientId)
+        if (!found) return false
+        const defined = Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined))
+        this.clients.set(clientId, { ...found.client, ...defined })
+        found.info.updatedAt = new Date()
+        return true
+    }
+
+    async setClientSecret(clientId: string, secretHash: string) {
+        const found = this.adminClient(clientId)
+        if (!found || found.client.type !== 'confidential') return false
+        this.clients.set(clientId, { ...found.client, secretHash })
+        found.info.updatedAt = new Date()
+        return true
+    }
+
+    async setClientDisabled(clientId: string, disabled: boolean) {
+        const found = this.adminClient(clientId)
+        if (!found) return false
+        found.info.disabled = disabled
+        found.info.updatedAt = new Date()
+        if (disabled) {
+            for (const token of this.refreshTokens.values())
+                if (token.clientId === clientId && !token.revokedAt) token.revokedAt = new Date()
+            for (const [hash, code] of this.codes) if (code.clientId === clientId) this.codes.delete(hash)
+        }
+        return true
+    }
+
+    async deleteClient(clientId: string) {
+        if (!this.adminClient(clientId)) return false
+        this.clients.delete(clientId)
+        this.clientInfo.delete(clientId)
+        for (const [hash, token] of this.refreshTokens) if (token.clientId === clientId) this.refreshTokens.delete(hash)
+        for (const [hash, code] of this.codes) if (code.clientId === clientId) this.codes.delete(hash)
+        this.consents = this.consents.filter(item => item.clientId !== clientId)
+        this.sessionClients = this.sessionClients.filter(item => item.clientId !== clientId)
+        this.logoutQueue = this.logoutQueue.filter(job => job.clientId !== clientId)
+        return true
     }
 
     async findConsent(userId: string, clientId: string) {

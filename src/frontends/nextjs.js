@@ -7,7 +7,7 @@ import { denyInstallScripts } from '../npm.js'
 import { run } from '../runner.js'
 import { AUTH_MESSAGES, authFiles } from './auth.js'
 import { frontendReadme } from './docs.js'
-import { AUDIT_MESSAGES, envLocal, LICENSE_MESSAGES, OIDC_MESSAGES, oidcFrontendFiles } from './oidc.js'
+import { APPS_MESSAGES, AUDIT_MESSAGES, envLocal, LICENSE_MESSAGES, OIDC_MESSAGES, oidcFrontendFiles } from './oidc.js'
 
 export const DIR = 'frontend'
 export const LOCALES = ['en', 'nl', 'fr', 'de']
@@ -841,7 +841,8 @@ export function withApi(fileMap, api, { ui }) {
                         ? {
                               Oidc: OIDC_MESSAGES[locale],
                               Licenses: LICENSE_MESSAGES[locale],
-                              Audit: AUDIT_MESSAGES[locale]
+                              Audit: AUDIT_MESSAGES[locale],
+                              Apps: APPS_MESSAGES[locale]
                           }
                         : {})
                 },

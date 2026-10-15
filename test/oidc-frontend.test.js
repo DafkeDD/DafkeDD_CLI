@@ -1,7 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { files, uiFiles, withApi, LOCALES } from '../src/frontends/nextjs.js'
-import { AUDIT_MESSAGES, envLocal, LICENSE_MESSAGES, OIDC_MESSAGES, oidcFrontendFiles } from '../src/frontends/oidc.js'
+import {
+    APPS_MESSAGES,
+    AUDIT_MESSAGES,
+    envLocal,
+    LICENSE_MESSAGES,
+    OIDC_MESSAGES,
+    oidcFrontendFiles
+} from '../src/frontends/oidc.js'
 import { frontendReadme } from '../src/frontends/docs.js'
 import { main } from '../src/index.js'
 import * as backendOidc from '../src/backends/oidc.js'
@@ -81,8 +88,8 @@ test('cookies are httpOnly and encrypted (AES-256-GCM, purpose bound), returnTo 
 })
 
 test('every text exists in all four languages, and every text the code uses exists', () => {
-    const namespaces = { Oidc: OIDC_MESSAGES, Licenses: LICENSE_MESSAGES, Audit: AUDIT_MESSAGES }
-    const used = { Oidc: new Set(), Licenses: new Set(), Audit: new Set() }
+    const namespaces = { Oidc: OIDC_MESSAGES, Licenses: LICENSE_MESSAGES, Audit: AUDIT_MESSAGES, Apps: APPS_MESSAGES }
+    const used = { Oidc: new Set(), Licenses: new Set(), Audit: new Set(), Apps: new Set() }
     for (const content of Object.values(templates)) {
         // const t = useTranslations('Oidc'), const l = await getTranslations('Licenses'), ...
         const names = new Map()

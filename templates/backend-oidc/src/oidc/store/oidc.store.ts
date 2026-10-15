@@ -146,6 +146,31 @@ export interface OidcClient {
     backchannelLogoutSessionRequired?: boolean
 }
 
+/** A client as superadmins see it on /admin: where it comes from, whether it is on, how many accounts allowed it. */
+export interface ClientSummary extends OidcClient {
+    /** file: config/oidc-clients.json (read-only here); admin: made on /admin. */
+    source: 'file' | 'admin'
+    disabled: boolean
+    createdAt: Date
+    updatedAt: Date
+    /** Accounts that allowed it on the consent screen. */
+    consents: number
+}
+
+/** What a superadmin can change of a client made on /admin (not its id or type). */
+export type ClientChanges = Partial<
+    Pick<
+        OidcClient,
+        | 'name'
+        | 'redirectUris'
+        | 'postLogoutRedirectUris'
+        | 'backchannelLogoutUri'
+        | 'scopes'
+        | 'grantTypes'
+        | 'firstParty'
+    >
+>
+
 /** What a user allowed an application that is not our own: these scopes, until revoked on /security. */
 export interface Consent {
     clientId: string
@@ -380,8 +405,26 @@ export interface OidcStore {
     renewInvitation(tenantId: string, id: string, expiresAt: Date): Promise<Invitation | null>
     deleteInvitation(tenantId: string, id: string): Promise<boolean>
 
+    /** Only enabled clients: a disabled one cannot log anyone in. */
     findClient(clientId: string): Promise<OidcClient | null>
-    upsertClient(client: OidcClient): Promise<void>
+    /** A client of config/oidc-clients.json; false (nothing changed) when a client made on /admin has that id. */
+    upsertClient(client: OidcClient): Promise<boolean>
+
+    // ---------------------------------------------------------------- clients on /admin (superadmins)
+
+    listClients(): Promise<ClientSummary[]>
+    /** Also a disabled one. */
+    findClientSummary(clientId: string): Promise<ClientSummary | null>
+    /** A new client made on /admin; false when the id exists already. */
+    createClient(client: OidcClient, createdBy: string): Promise<boolean>
+    /** Only clients made on /admin; false otherwise. */
+    updateClient(clientId: string, changes: ClientChanges): Promise<boolean>
+    /** A new secret (sha256) for a confidential client made on /admin. */
+    setClientSecret(clientId: string, secretHash: string): Promise<boolean>
+    /** Disabling also revokes its refresh tokens and unused codes at once. Only clients made on /admin. */
+    setClientDisabled(clientId: string, disabled: boolean): Promise<boolean>
+    /** Removes a client made on /admin with everything of it (codes, refresh tokens, consents). */
+    deleteClient(clientId: string): Promise<boolean>
 
     // ---------------------------------------------------------------- consent and back-channel logout
 

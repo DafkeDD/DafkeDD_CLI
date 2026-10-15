@@ -45,7 +45,9 @@ export const VALIDATION = {
         MATCHES: '{property} has an invalid format',
         IS_BOOLEAN: '{property} must be true or false',
         IS_UUID: '{property} must be an id (uuid)',
-        IS_DATE: '{property} must be a date (ISO 8601)'
+        IS_DATE: '{property} must be a date (ISO 8601)',
+        IS_ARRAY: '{property} must be a list',
+        ARRAY_MAX_SIZE: '{property} may have at most {constraints.0} items'
     },
     nl: {
         IS_IN: '{property} moet een van deze waarden zijn: {constraints.0}',
@@ -56,7 +58,9 @@ export const VALIDATION = {
         MATCHES: '{property} heeft een ongeldige vorm',
         IS_BOOLEAN: '{property} moet true of false zijn',
         IS_UUID: '{property} moet een id (uuid) zijn',
-        IS_DATE: '{property} moet een datum zijn (ISO 8601)'
+        IS_DATE: '{property} moet een datum zijn (ISO 8601)',
+        IS_ARRAY: '{property} moet een lijst zijn',
+        ARRAY_MAX_SIZE: '{property} mag hoogstens {constraints.0} elementen hebben'
     },
     fr: {
         IS_IN: "{property} doit être l'une de ces valeurs : {constraints.0}",
@@ -67,7 +71,9 @@ export const VALIDATION = {
         MATCHES: "{property} n'a pas un format valable",
         IS_BOOLEAN: '{property} doit être true ou false',
         IS_UUID: '{property} doit être un identifiant (uuid)',
-        IS_DATE: '{property} doit être une date (ISO 8601)'
+        IS_DATE: '{property} doit être une date (ISO 8601)',
+        IS_ARRAY: '{property} doit être une liste',
+        ARRAY_MAX_SIZE: '{property} peut contenir au plus {constraints.0} éléments'
     },
     de: {
         IS_IN: '{property} muss einer dieser Werte sein: {constraints.0}',
@@ -78,7 +84,9 @@ export const VALIDATION = {
         MATCHES: '{property} hat ein ungültiges Format',
         IS_BOOLEAN: '{property} muss true oder false sein',
         IS_UUID: '{property} muss eine ID (uuid) sein',
-        IS_DATE: '{property} muss ein Datum sein (ISO 8601)'
+        IS_DATE: '{property} muss ein Datum sein (ISO 8601)',
+        IS_ARRAY: '{property} muss eine Liste sein',
+        ARRAY_MAX_SIZE: '{property} darf höchstens {constraints.0} Einträge haben'
     }
 }
 
@@ -330,6 +338,13 @@ export const MESSAGES = {
             'An account with this email address exists already. Log in with it, or ask an admin to link it.',
         EXTERNAL_OTHER_LINKED: 'This account is linked to another account of the other server already.',
         PASSWORD_LOGIN_OFF: 'Logging in with a password is turned off: use the button below.',
+        CLIENT_INVALID_URI: 'The address {uri} is not valid: use https (http only on localhost) and no #fragment.',
+        CLIENT_NO_REDIRECT: 'An app needs at least one redirect URI.',
+        CLIENT_EXISTS: 'An app with this client id exists already.',
+        CLIENT_NOT_FOUND: 'This app was not found.',
+        CLIENT_FROM_FILE: 'This app comes from config/oidc-clients.json: change it in that file.',
+        CLIENT_PUBLIC: 'A public app has no secret.',
+        CLIENT_DISABLE_FIRST: 'Disable the app first, then remove it.',
         CONSENT_TITLE: 'Allow {client}?',
         CONSENT_TEXT: '{client} wants to use your account {email}. It gets:',
         CONSENT_NOTE: 'You can take this back at any time on Security.',
@@ -426,6 +441,14 @@ export const MESSAGES = {
             'Er bestaat al een account met dit e-mailadres. Log daarmee in, of vraag een beheerder om het te koppelen.',
         EXTERNAL_OTHER_LINKED: 'Dit account is al gekoppeld aan een ander account van de andere server.',
         PASSWORD_LOGIN_OFF: 'Inloggen met een wachtwoord staat uit: gebruik de knop hieronder.',
+        CLIENT_INVALID_URI:
+            'Het adres {uri} is niet geldig: gebruik https (http alleen op localhost) en geen #fragment.',
+        CLIENT_NO_REDIRECT: 'Een app heeft minstens één redirect-URI nodig.',
+        CLIENT_EXISTS: 'Er bestaat al een app met deze client-id.',
+        CLIENT_NOT_FOUND: 'Deze app werd niet gevonden.',
+        CLIENT_FROM_FILE: 'Deze app komt uit config/oidc-clients.json: pas ze in dat bestand aan.',
+        CLIENT_PUBLIC: 'Een publieke app heeft geen secret.',
+        CLIENT_DISABLE_FIRST: 'Schakel de app eerst uit en verwijder ze daarna.',
         CONSENT_TITLE: '{client} toestaan?',
         CONSENT_TEXT: '{client} wil je account {email} gebruiken. Het krijgt:',
         CONSENT_NOTE: 'Je kunt dit altijd intrekken onder Beveiliging.',
@@ -523,6 +546,14 @@ export const MESSAGES = {
             'Un compte avec cette adresse e-mail existe déjà. Connectez-vous avec celui-ci, ou demandez à un administrateur de le lier.',
         EXTERNAL_OTHER_LINKED: "Ce compte est déjà lié à un autre compte de l'autre serveur.",
         PASSWORD_LOGIN_OFF: 'La connexion par mot de passe est désactivée : utilisez le bouton ci-dessous.',
+        CLIENT_INVALID_URI:
+            "L'adresse {uri} n'est pas valable : utilisez https (http seulement sur localhost) et pas de #fragment.",
+        CLIENT_NO_REDIRECT: "Une application a besoin d'au moins une URI de redirection.",
+        CLIENT_EXISTS: 'Une application avec ce client id existe déjà.',
+        CLIENT_NOT_FOUND: 'Cette application est introuvable.',
+        CLIENT_FROM_FILE: 'Cette application vient de config/oidc-clients.json : modifiez-la dans ce fichier.',
+        CLIENT_PUBLIC: "Une application publique n'a pas de secret.",
+        CLIENT_DISABLE_FIRST: "Désactivez d'abord l'application, puis supprimez-la.",
         CONSENT_TITLE: 'Autoriser {client} ?',
         CONSENT_TEXT: '{client} souhaite utiliser votre compte {email}. Il reçoit :',
         CONSENT_NOTE: 'Vous pouvez retirer cette autorisation à tout moment dans Sécurité.',
@@ -627,6 +658,14 @@ export const MESSAGES = {
             'Es gibt bereits ein Konto mit dieser E-Mail-Adresse. Melde dich damit an oder bitte einen Admin, es zu verknüpfen.',
         EXTERNAL_OTHER_LINKED: 'Dieses Konto ist bereits mit einem anderen Konto des anderen Servers verknüpft.',
         PASSWORD_LOGIN_OFF: 'Die Anmeldung mit Passwort ist ausgeschaltet: nutze die Schaltfläche unten.',
+        CLIENT_INVALID_URI:
+            'Die Adresse {uri} ist ungültig: verwende https (http nur auf localhost) und kein #Fragment.',
+        CLIENT_NO_REDIRECT: 'Eine App braucht mindestens eine Redirect-URI.',
+        CLIENT_EXISTS: 'Es gibt bereits eine App mit dieser Client-ID.',
+        CLIENT_NOT_FOUND: 'Diese App wurde nicht gefunden.',
+        CLIENT_FROM_FILE: 'Diese App stammt aus config/oidc-clients.json: ändere sie in dieser Datei.',
+        CLIENT_PUBLIC: 'Eine öffentliche App hat kein Secret.',
+        CLIENT_DISABLE_FIRST: 'Deaktiviere die App zuerst und entferne sie dann.',
         CONSENT_TITLE: '{client} erlauben?',
         CONSENT_TEXT: '{client} möchte dein Konto {email} verwenden. Es erhält:',
         CONSENT_NOTE: 'Du kannst das jederzeit unter Sicherheit widerrufen.',
@@ -935,6 +974,25 @@ const INVITATION_ID = '9d2c4e7a-3b1f-4c8e-a5d6-0e7f8a9b1c2d'
 const TOKEN = 'v1.Qm9u…'
 const BAD_REQUEST = [400, 'errors.BAD_REQUEST']
 const INVALID_LINK = [400, 'oidc.INVALID_LINK']
+/** An app as /admin/clients shows it. */
+const APP_EXAMPLE = {
+    clientId: 'partner.planner',
+    name: 'Partner Planner',
+    type: 'confidential',
+    source: 'admin',
+    disabled: false,
+    redirectUris: ['https://planner.partner.com/callback'],
+    postLogoutRedirectUris: ['https://planner.partner.com'],
+    backchannelLogoutUri: 'https://planner.partner.com/backchannel-logout',
+    backchannelLogoutSessionRequired: false,
+    scopes: ['openid', 'profile', 'email'],
+    grantTypes: ['authorization_code', 'refresh_token'],
+    firstParty: false,
+    hasSecret: true,
+    consents: 3,
+    createdAt: '2026-10-15T09:00:00.000Z',
+    updatedAt: '2026-10-15T09:00:00.000Z'
+}
 const TOO_MANY = [429, 'oidc.TOO_MANY_ATTEMPTS']
 const ACCESS = level => [
     [401, 'errors.UNAUTHORIZED'],
@@ -1840,6 +1898,135 @@ export const endpoints = ({ port = 4000 } = {}) => [
         errors: [
             [401, 'errors.UNAUTHORIZED'],
             [403, 'errors.FORBIDDEN', 'not a member']
+        ]
+    },
+    // ---------------------------------------------------------------- apps (superadmins)
+    {
+        method: 'GET',
+        path: '/admin/clients',
+        tag: 'apps (superadmin)',
+        summary:
+            'Every app that may log in (OpenID Connect clients): `source: "file"` from config/oidc-clients.json (read-only here) and `source: "admin"` made on /admin. Never a secret or its hash. Superadmins only.',
+        bearer: true,
+        response: { status: 200, example: [APP_EXAMPLE] },
+        errors: ACCESS('superadmin')
+    },
+    {
+        method: 'POST',
+        path: '/admin/clients',
+        tag: 'apps (superadmin)',
+        summary:
+            'Makes an app. A confidential one gets a secret (32 random bytes): it is in this answer only, only its sha256 is stored. Every address is checked (https, http only on localhost, no #fragment); `openid` is always in the scopes.',
+        bearer: true,
+        body: {
+            example: {
+                name: 'Partner Planner',
+                clientId: 'partner.planner',
+                type: 'confidential',
+                redirectUris: ['https://planner.partner.com/callback'],
+                postLogoutRedirectUris: ['https://planner.partner.com'],
+                backchannelLogoutUri: 'https://planner.partner.com/backchannel-logout',
+                scopes: ['openid', 'profile', 'email'],
+                refreshTokens: true,
+                firstParty: false
+            },
+            fields: [
+                ['name', 'string', 'required, 2 to 100 characters'],
+                ['clientId', 'string', 'optional, letters, digits, . _ - (3 to 100); empty: made from the name'],
+                ['type', 'string', '`public` (PKCE, no secret) or `confidential` (a server, gets a secret)'],
+                ['redirectUris', 'string[]', 'required, 1 to 10 exact addresses'],
+                ['postLogoutRedirectUris', 'string[]', 'optional, 0 to 10'],
+                ['backchannelLogoutUri', 'string', 'optional, back-channel logout; empty: none'],
+                ['scopes', 'string[]', '`openid`, `profile`, `email`, `tenant`'],
+                ['refreshTokens', 'boolean', 'required, also refresh tokens'],
+                ['firstParty', 'boolean', 'required, `true`: your own app (no consent screen, may call this API)']
+            ]
+        },
+        response: {
+            status: 201,
+            example: { client: APP_EXAMPLE, secret: 'Jq3v1yHq0jYv1Jx3Cxk0E4b3cMq6l0D9YvC2y4ZLm2r' }
+        },
+        errors: [
+            [400, 'oidc.CLIENT_INVALID_URI'],
+            [400, 'oidc.CLIENT_NO_REDIRECT'],
+            ...ACCESS('superadmin'),
+            [409, 'oidc.CLIENT_EXISTS']
+        ]
+    },
+    {
+        method: 'PUT',
+        path: '/admin/clients/:clientId',
+        tag: 'apps (superadmin)',
+        summary: 'Changes an app made on /admin: the same fields as making one, except its id and type.',
+        pathExample: '/admin/clients/partner.planner',
+        bearer: true,
+        body: {
+            example: {
+                name: 'Partner Planner',
+                redirectUris: ['https://planner.partner.com/callback'],
+                postLogoutRedirectUris: [],
+                backchannelLogoutUri: '',
+                scopes: ['openid', 'email'],
+                refreshTokens: false,
+                firstParty: false
+            },
+            fields: [
+                ['name', 'string', 'required'],
+                ['redirectUris', 'string[]', 'required'],
+                ['postLogoutRedirectUris', 'string[]', 'optional'],
+                ['backchannelLogoutUri', 'string', 'optional'],
+                ['scopes', 'string[]', 'required'],
+                ['refreshTokens', 'boolean', 'required'],
+                ['firstParty', 'boolean', 'required']
+            ]
+        },
+        response: { status: 200, example: APP_EXAMPLE },
+        errors: [
+            [400, 'oidc.CLIENT_INVALID_URI'],
+            ...ACCESS('superadmin'),
+            [404, 'oidc.CLIENT_NOT_FOUND'],
+            [409, 'oidc.CLIENT_FROM_FILE']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/admin/clients/:clientId/secret',
+        tag: 'apps (superadmin)',
+        summary: 'A new secret for a confidential app made on /admin: the old one stops at once. In this answer only.',
+        pathExample: '/admin/clients/partner.planner/secret',
+        bearer: true,
+        response: {
+            status: 200,
+            example: { client: APP_EXAMPLE, secret: 'q6l0D9YvC2y4ZLm2rHd3o1yHq0jYv1Jx3Cxk0E4b3cM' }
+        },
+        errors: [...ACCESS('superadmin'), [404, 'oidc.CLIENT_NOT_FOUND'], [409, 'oidc.CLIENT_PUBLIC']]
+    },
+    {
+        method: 'PATCH',
+        path: '/admin/clients/:clientId',
+        tag: 'apps (superadmin)',
+        summary:
+            'Disables (`enabled: false`) or enables an app made on /admin. Disabled: nobody can log in with it, its refresh tokens and unused codes stop at once, and its access tokens no longer reach the API.',
+        pathExample: '/admin/clients/partner.planner',
+        bearer: true,
+        body: { example: { enabled: false }, fields: [['enabled', 'boolean', 'required']] },
+        response: { status: 200, example: { ...APP_EXAMPLE, disabled: true } },
+        errors: [...ACCESS('superadmin'), [404, 'oidc.CLIENT_NOT_FOUND'], [409, 'oidc.CLIENT_FROM_FILE']]
+    },
+    {
+        method: 'DELETE',
+        path: '/admin/clients/:clientId',
+        tag: 'apps (superadmin)',
+        summary:
+            'Removes a disabled app made on /admin, with its codes, refresh tokens, consents and session links. Answers 204.',
+        pathExample: '/admin/clients/partner.planner',
+        bearer: true,
+        response: null,
+        errors: [
+            ...ACCESS('superadmin'),
+            [404, 'oidc.CLIENT_NOT_FOUND'],
+            [409, 'oidc.CLIENT_DISABLE_FIRST'],
+            [409, 'oidc.CLIENT_FROM_FILE']
         ]
     },
     // ---------------------------------------------------------------- the platform (superadmins)

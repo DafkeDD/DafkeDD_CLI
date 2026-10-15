@@ -44,7 +44,13 @@ export const AUDIT_ACTIONS = {
         'platform.tenant_suspended',
         'platform.tenant_activated',
         'platform.superadmin_granted',
-        'platform.superadmin_revoked'
+        'platform.superadmin_revoked',
+        'platform.client_created',
+        'platform.client_updated',
+        'platform.client_secret_rotated',
+        'platform.client_disabled',
+        'platform.client_enabled',
+        'platform.client_deleted'
     ],
     licences: [
         'licences.product_created',
@@ -73,7 +79,16 @@ export const AUDIT_CATEGORIES = Object.keys(AUDIT_ACTIONS) as AuditCategory[]
 
 /** What an event is about. */
 export type AuditTargetType =
-    'user' | 'tenant' | 'session' | 'invitation' | 'product' | 'discount' | 'grant' | 'subscription' | 'payment'
+    | 'user'
+    | 'tenant'
+    | 'session'
+    | 'invitation'
+    | 'product'
+    | 'discount'
+    | 'grant'
+    | 'subscription'
+    | 'payment'
+    | 'client'
 
 /** Extra facts of an event: short values only, never a password, token, code or card number (undefined is left out). */
 export type AuditDetails = Record<string, string | number | boolean | null | undefined>

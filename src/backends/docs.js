@@ -823,7 +823,16 @@ was already so for the \`oidc_session\` cookie (single sign-on).
 
 ### Clients
 
-\`config/oidc-clients.json\` lists the applications that may use the login (applied at every start):
+Apps come from two places. \`config/oidc-clients.json\` lists the applications that may use the login (applied at every
+start; on \`/admin\` they are read-only), and **superadmins make apps on \`/admin\`** of the frontend (\`/admin/clients\`,
+stored with \`source: admin\`): the same fields, a client id of their choice (or made from the name), and for a
+confidential app a **secret of 32 random bytes that is shown once** (only its sha256 is stored; "New secret" stops the
+old one at once). An app made there can be changed, disabled (nobody logs in with it, its refresh tokens and codes stop
+at once, its access tokens no longer reach the API) and, once disabled, removed with its codes, refresh tokens and
+consents. The clients file never overwrites an app made on \`/admin\` with the same id (a warning in the log). Every
+change is in the audit log (\`platform.client_*\`).
+
+The fields (in the file, and on \`/admin\`):
 
 | Field | Meaning |
 | --- | --- |

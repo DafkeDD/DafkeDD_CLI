@@ -8,6 +8,8 @@ import type {
     AuthorizationCode,
     BootstrapAdmin,
     ChangeResult,
+    ClientChanges,
+    ClientSummary,
     Consent,
     IdentifierType,
     Invitation,
@@ -131,14 +133,122 @@ export class PgOidcStore implements OidcStore {
     }
 
     async findClient(clientId: string) {
-        const rows = await this.query<OidcClient>(`SELECT ${CLIENT_COLUMNS} FROM oidc_clients WHERE client_id = $1`, [
-            clientId
-        ])
+        const rows = await this.query<OidcClient>(
+            `SELECT ${CLIENT_COLUMNS} FROM oidc_clients WHERE client_id = $1 AND disabled_at IS NULL`,
+            [clientId]
+        )
         return rows[0] ?? null
     }
 
+    // ---------------------------------------------------------------- clients on /admin
+
+    private summaries(where: string, params: unknown[]) {
+        return this.query<ClientSummary>(
+            `SELECT ${CLIENT_COLUMNS}, source, disabled_at IS NOT NULL AS disabled, created_at AS "createdAt",
+              updated_at AS "updatedAt",
+              (SELECT count(*)::int FROM oidc_consents k WHERE k.client_id = oidc_clients.client_id) AS consents
+         FROM oidc_clients ${where} ORDER BY source DESC, lower(name)`,
+            params
+        )
+    }
+
+    async listClients() {
+        return this.summaries('', [])
+    }
+
+    async findClientSummary(clientId: string) {
+        return (await this.summaries('WHERE client_id = $1', [clientId]))[0] ?? null
+    }
+
+    async createClient(client: OidcClient, createdBy: string) {
+        const rows = await this.query(
+            `INSERT INTO oidc_clients (client_id, name, type, secret_hash, redirect_uris, post_logout_redirect_uris, grant_types, scopes,
+                           first_party, backchannel_logout_uri, backchannel_logout_session_required, source, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'admin', $12)
+       ON CONFLICT (client_id) DO NOTHING RETURNING 1`,
+            [
+                client.clientId,
+                client.name,
+                client.type,
+                client.secretHash,
+                client.redirectUris,
+                client.postLogoutRedirectUris,
+                client.grantTypes,
+                client.scopes,
+                client.firstParty,
+                client.backchannelLogoutUri ?? null,
+                client.backchannelLogoutSessionRequired ?? false,
+                createdBy
+            ]
+        )
+        return rows.length === 1
+    }
+
+    async updateClient(clientId: string, changes: ClientChanges) {
+        const columns: Record<keyof ClientChanges, string> = {
+            name: 'name',
+            redirectUris: 'redirect_uris',
+            postLogoutRedirectUris: 'post_logout_redirect_uris',
+            backchannelLogoutUri: 'backchannel_logout_uri',
+            scopes: 'scopes',
+            grantTypes: 'grant_types',
+            firstParty: 'first_party'
+        }
+        const sets: string[] = []
+        const params: unknown[] = [clientId]
+        for (const [key, column] of Object.entries(columns) as [keyof ClientChanges, string][]) {
+            if (changes[key] === undefined) continue
+            params.push(changes[key])
+            sets.push(`${column} = $${params.length}`)
+        }
+        const rows = await this.query(
+            `UPDATE oidc_clients SET ${[...sets, 'updated_at = now()'].join(', ')}
+        WHERE client_id = $1 AND source = 'admin' RETURNING 1`,
+            params
+        )
+        return rows.length === 1
+    }
+
+    async setClientSecret(clientId: string, secretHash: string) {
+        const rows = await this.query(
+            `UPDATE oidc_clients SET secret_hash = $2, updated_at = now()
+        WHERE client_id = $1 AND source = 'admin' AND type = 'confidential' RETURNING 1`,
+            [clientId, secretHash]
+        )
+        return rows.length === 1
+    }
+
+    async setClientDisabled(clientId: string, disabled: boolean) {
+        await this.database.ready()
+        return this.database.transaction(async db => {
+            const { rowCount } = await db.query(
+                `UPDATE oidc_clients SET disabled_at = CASE WHEN $2 THEN coalesce(disabled_at, now()) END, updated_at = now()
+          WHERE client_id = $1 AND source = 'admin'`,
+                [clientId, disabled]
+            )
+            if (!rowCount) return false
+            if (disabled) {
+                // Off at once: no new tokens with its refresh tokens, no code exchanged any more
+                await db.query(
+                    'UPDATE oidc_refresh_tokens SET revoked_at = now() WHERE client_id = $1 AND revoked_at IS NULL',
+                    [clientId]
+                )
+                await db.query('DELETE FROM oidc_codes WHERE client_id = $1', [clientId])
+            }
+            return true
+        })
+    }
+
+    async deleteClient(clientId: string) {
+        const rows = await this.query(
+            "DELETE FROM oidc_clients WHERE client_id = $1 AND source = 'admin' RETURNING 1",
+            [clientId]
+        )
+        return rows.length === 1
+    }
+
     async upsertClient(client: OidcClient) {
-        await this.query(
+        const rows = await this.query(
             `INSERT INTO oidc_clients (client_id, name, type, secret_hash, redirect_uris, post_logout_redirect_uris, grant_types, scopes,
                            first_party, backchannel_logout_uri, backchannel_logout_session_required)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -147,7 +257,10 @@ export class PgOidcStore implements OidcStore {
          redirect_uris = EXCLUDED.redirect_uris, post_logout_redirect_uris = EXCLUDED.post_logout_redirect_uris,
          grant_types = EXCLUDED.grant_types, scopes = EXCLUDED.scopes, first_party = EXCLUDED.first_party,
          backchannel_logout_uri = EXCLUDED.backchannel_logout_uri,
-         backchannel_logout_session_required = EXCLUDED.backchannel_logout_session_required, updated_at = now()`,
+         backchannel_logout_session_required = EXCLUDED.backchannel_logout_session_required, updated_at = now()
+       -- Never a client made on /admin
+       WHERE oidc_clients.source = 'file'
+       RETURNING 1`,
             [
                 client.clientId,
                 client.name,
@@ -162,6 +275,7 @@ export class PgOidcStore implements OidcStore {
                 client.backchannelLogoutSessionRequired ?? false
             ]
         )
+        return rows.length === 1
     }
 
     // ---------------------------------------------------------------- consent and back-channel logout
