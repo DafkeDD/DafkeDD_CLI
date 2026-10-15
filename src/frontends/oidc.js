@@ -148,6 +148,9 @@ export const OIDC_MESSAGES = {
         platformChoice: 'Platform management (no organisation)',
         noTenantsYet: 'There are no organisations yet. Create the first one below.',
         eidLogin: 'Log in with eID',
+        passkeyLogin: 'Log in with a passkey',
+        passkeyFailed: 'Logging in with the passkey failed. Please try again.',
+        passkeyCancelled: 'The passkey request was cancelled or timed out.',
         or: 'or',
         eidTitle: 'Log in with your eID',
         eidText: 'Put your eID in the card reader and enter its PIN code.',
@@ -188,6 +191,25 @@ export const OIDC_MESSAGES = {
         thisDevice: 'This device',
         unknownBrowser: 'Unknown browser',
         method_eid: 'eID',
+        method_passkey: 'Passkey',
+        passkeysTitle: 'Passkeys',
+        passkeysText:
+            'Log in with the fingerprint, face or PIN of your device or a security key: no password, and it counts as two-step verification.',
+        passkeysNone: 'No passkeys yet.',
+        passkeyName: 'Name',
+        passkeyNamePlaceholder: 'For example: Laptop',
+        passkeyAdd: 'Add a passkey',
+        passkeyAdded: 'The passkey was added. Next time choose “Log in with a passkey”.',
+        passkeyRemoved: 'The passkey was removed. You can also remove it from your device.',
+        passkeyRename: 'Rename',
+        passkeyRemove: 'Remove',
+        passkeySave: 'Save',
+        passkeySynced: 'Synced between your devices',
+        passkeyDevice: 'On one device or key',
+        passkeyAddedOn: 'added {date}',
+        passkeyUsedOn: 'last used {date}',
+        passkeyUnsupported: 'This browser cannot use passkeys.',
+        passkeyOnDevice: 'This device has a passkey for this account already.',
         method_mfa: 'Password and code',
         method_pwd: 'Password',
         sessionSince: 'Logged in {date}',
@@ -342,6 +364,9 @@ export const OIDC_MESSAGES = {
         platformChoice: 'Platformbeheer (geen organisatie)',
         noTenantsYet: 'Er zijn nog geen organisaties. Maak hieronder de eerste aan.',
         eidLogin: 'Inloggen met eID',
+        passkeyLogin: 'Inloggen met een passkey',
+        passkeyFailed: 'Inloggen met de passkey is mislukt. Probeer het opnieuw.',
+        passkeyCancelled: 'De passkey-aanvraag is geannuleerd of verlopen.',
         or: 'of',
         eidTitle: 'Inloggen met je eID',
         eidText: 'Steek je eID in de kaartlezer en geef je pincode in.',
@@ -383,6 +408,25 @@ export const OIDC_MESSAGES = {
         thisDevice: 'Dit toestel',
         unknownBrowser: 'Onbekende browser',
         method_eid: 'eID',
+        method_passkey: 'Passkey',
+        passkeysTitle: 'Passkeys',
+        passkeysText:
+            'Log in met de vingerafdruk, het gezicht of de pincode van je toestel of een beveiligingssleutel: geen wachtwoord, en het telt als tweestapsverificatie.',
+        passkeysNone: 'Nog geen passkeys.',
+        passkeyName: 'Naam',
+        passkeyNamePlaceholder: 'Bijvoorbeeld: Laptop',
+        passkeyAdd: 'Passkey toevoegen',
+        passkeyAdded: 'De passkey is toegevoegd. Kies de volgende keer “Inloggen met een passkey”.',
+        passkeyRemoved: 'De passkey is verwijderd. Je kunt hem ook van je toestel verwijderen.',
+        passkeyRename: 'Hernoemen',
+        passkeyRemove: 'Verwijderen',
+        passkeySave: 'Opslaan',
+        passkeySynced: 'Gesynchroniseerd tussen je toestellen',
+        passkeyDevice: 'Op één toestel of sleutel',
+        passkeyAddedOn: 'toegevoegd op {date}',
+        passkeyUsedOn: 'laatst gebruikt {date}',
+        passkeyUnsupported: 'Deze browser kan geen passkeys gebruiken.',
+        passkeyOnDevice: 'Dit toestel heeft al een passkey voor dit account.',
         method_mfa: 'Wachtwoord en code',
         method_pwd: 'Wachtwoord',
         sessionSince: 'Ingelogd {date}',
@@ -539,6 +583,9 @@ export const OIDC_MESSAGES = {
         platformChoice: 'Gestion de la plateforme (sans organisation)',
         noTenantsYet: "Il n'y a pas encore d'organisation. Créez la première ci-dessous.",
         eidLogin: "Se connecter avec l'eID",
+        passkeyLogin: "Se connecter avec une clé d'accès",
+        passkeyFailed: "La connexion avec la clé d'accès a échoué. Veuillez réessayer.",
+        passkeyCancelled: "La demande de clé d'accès a été annulée ou a expiré.",
         or: 'ou',
         eidTitle: 'Se connecter avec votre eID',
         eidText: 'Insérez votre eID dans le lecteur de cartes et saisissez votre code PIN.',
@@ -583,6 +630,26 @@ export const OIDC_MESSAGES = {
         thisDevice: 'Cet appareil',
         unknownBrowser: 'Navigateur inconnu',
         method_eid: 'eID',
+        method_passkey: "Clé d'accès",
+        passkeysTitle: "Clés d'accès",
+        passkeysText:
+            "Connectez-vous avec l'empreinte, le visage ou le code PIN de votre appareil ou une clé de sécurité : sans mot de passe, et cela compte comme vérification en deux étapes.",
+        passkeysNone: "Pas encore de clé d'accès.",
+        passkeyName: 'Nom',
+        passkeyNamePlaceholder: 'Par exemple : Portable',
+        passkeyAdd: "Ajouter une clé d'accès",
+        passkeyAdded:
+            "La clé d'accès a été ajoutée. La prochaine fois, choisissez « Se connecter avec une clé d'accès ».",
+        passkeyRemoved: "La clé d'accès a été supprimée. Vous pouvez aussi la supprimer de votre appareil.",
+        passkeyRename: 'Renommer',
+        passkeyRemove: 'Supprimer',
+        passkeySave: 'Enregistrer',
+        passkeySynced: 'Synchronisée entre vos appareils',
+        passkeyDevice: 'Sur un seul appareil ou une clé',
+        passkeyAddedOn: 'ajoutée le {date}',
+        passkeyUsedOn: 'dernière utilisation {date}',
+        passkeyUnsupported: "Ce navigateur ne peut pas utiliser de clés d'accès.",
+        passkeyOnDevice: "Cet appareil a déjà une clé d'accès pour ce compte.",
         method_mfa: 'Mot de passe et code',
         method_pwd: 'Mot de passe',
         sessionSince: 'Connecté {date}',
@@ -738,6 +805,9 @@ export const OIDC_MESSAGES = {
         platformChoice: 'Plattformverwaltung (keine Organisation)',
         noTenantsYet: 'Es gibt noch keine Organisationen. Lege unten die erste an.',
         eidLogin: 'Mit eID anmelden',
+        passkeyLogin: 'Mit einem Passkey anmelden',
+        passkeyFailed: 'Die Anmeldung mit dem Passkey ist fehlgeschlagen. Bitte versuche es erneut.',
+        passkeyCancelled: 'Die Passkey-Anfrage wurde abgebrochen oder ist abgelaufen.',
         or: 'oder',
         eidTitle: 'Mit deiner eID anmelden',
         eidText: 'Stecke deine eID in das Kartenlesegerät und gib deine PIN ein.',
@@ -779,6 +849,25 @@ export const OIDC_MESSAGES = {
         thisDevice: 'Dieses Gerät',
         unknownBrowser: 'Unbekannter Browser',
         method_eid: 'eID',
+        method_passkey: 'Passkey',
+        passkeysTitle: 'Passkeys',
+        passkeysText:
+            'Melde dich mit Fingerabdruck, Gesicht oder PIN deines Geräts oder einem Sicherheitsschlüssel an: ohne Passwort, und es zählt als Zwei-Schritt-Verifizierung.',
+        passkeysNone: 'Noch keine Passkeys.',
+        passkeyName: 'Name',
+        passkeyNamePlaceholder: 'Zum Beispiel: Laptop',
+        passkeyAdd: 'Passkey hinzufügen',
+        passkeyAdded: 'Der Passkey wurde hinzugefügt. Wähle beim nächsten Mal „Mit einem Passkey anmelden“.',
+        passkeyRemoved: 'Der Passkey wurde entfernt. Du kannst ihn auch von deinem Gerät entfernen.',
+        passkeyRename: 'Umbenennen',
+        passkeyRemove: 'Entfernen',
+        passkeySave: 'Speichern',
+        passkeySynced: 'Zwischen deinen Geräten synchronisiert',
+        passkeyDevice: 'Auf einem Gerät oder Schlüssel',
+        passkeyAddedOn: 'hinzugefügt am {date}',
+        passkeyUsedOn: 'zuletzt verwendet {date}',
+        passkeyUnsupported: 'Dieser Browser kann keine Passkeys verwenden.',
+        passkeyOnDevice: 'Dieses Gerät hat bereits einen Passkey für dieses Konto.',
         method_mfa: 'Passwort und Code',
         method_pwd: 'Passwort',
         sessionSince: 'Angemeldet {date}',
@@ -855,6 +944,8 @@ export const AUDIT_MESSAGES = {
             account_eid_linked: 'eID linked',
             account_eid_unlinked: 'eID unlinked',
             account_external_linked: 'Account of another server linked',
+            account_passkey_added: 'Passkey added',
+            account_passkey_removed: 'Passkey removed',
             members_invited: 'Invitation sent',
             members_invitation_resent: 'Invitation sent again',
             members_invitation_withdrawn: 'Invitation withdrawn',
@@ -914,13 +1005,15 @@ export const AUDIT_MESSAGES = {
             days: 'Days',
             endsAt: 'Until',
             count: 'Number',
-            provider: 'Server'
+            provider: 'Server',
+            synced: 'Synced'
         },
         methods: {
             password: 'password',
             passwordCode: 'password and code',
             eid: 'eID',
-            external: 'another server'
+            external: 'another server',
+            passkey: 'passkey'
         },
         reasons: {
             unknown_email: 'unknown email address',
@@ -928,7 +1021,10 @@ export const AUDIT_MESSAGES = {
             account_blocked: 'account blocked',
             email_not_verified: 'email address not verified',
             too_many_attempts: 'too many attempts',
-            eid_not_linked: 'eID not linked to an account'
+            eid_not_linked: 'eID not linked to an account',
+            passkey_invalid: 'passkey not valid',
+            passkey_unknown: 'unknown passkey',
+            passkey_expired: 'passkey request expired'
         }
     },
     nl: {
@@ -981,6 +1077,8 @@ export const AUDIT_MESSAGES = {
             account_eid_linked: 'eID gekoppeld',
             account_eid_unlinked: 'eID ontkoppeld',
             account_external_linked: 'Account van een andere server gekoppeld',
+            account_passkey_added: 'Passkey toegevoegd',
+            account_passkey_removed: 'Passkey verwijderd',
             members_invited: 'Uitnodiging verstuurd',
             members_invitation_resent: 'Uitnodiging opnieuw verstuurd',
             members_invitation_withdrawn: 'Uitnodiging ingetrokken',
@@ -1040,13 +1138,15 @@ export const AUDIT_MESSAGES = {
             days: 'Dagen',
             endsAt: 'Tot',
             count: 'Aantal',
-            provider: 'Server'
+            provider: 'Server',
+            synced: 'Gesynchroniseerd'
         },
         methods: {
             password: 'wachtwoord',
             passwordCode: 'wachtwoord en code',
             eid: 'eID',
-            external: 'een andere server'
+            external: 'een andere server',
+            passkey: 'passkey'
         },
         reasons: {
             unknown_email: 'onbekend e-mailadres',
@@ -1054,7 +1154,10 @@ export const AUDIT_MESSAGES = {
             account_blocked: 'account geblokkeerd',
             email_not_verified: 'e-mailadres niet bevestigd',
             too_many_attempts: 'te veel pogingen',
-            eid_not_linked: 'eID niet aan een account gekoppeld'
+            eid_not_linked: 'eID niet aan een account gekoppeld',
+            passkey_invalid: 'passkey ongeldig',
+            passkey_unknown: 'onbekende passkey',
+            passkey_expired: 'passkey-aanvraag verlopen'
         }
     },
     fr: {
@@ -1107,6 +1210,8 @@ export const AUDIT_MESSAGES = {
             account_eid_linked: 'eID liée',
             account_eid_unlinked: 'eID dissociée',
             account_external_linked: "Compte d'un autre serveur lié",
+            account_passkey_added: "Clé d'accès ajoutée",
+            account_passkey_removed: "Clé d'accès supprimée",
             members_invited: 'Invitation envoyée',
             members_invitation_resent: 'Invitation renvoyée',
             members_invitation_withdrawn: 'Invitation retirée',
@@ -1166,13 +1271,15 @@ export const AUDIT_MESSAGES = {
             days: 'Jours',
             endsAt: "Jusqu'au",
             count: 'Nombre',
-            provider: 'Serveur'
+            provider: 'Serveur',
+            synced: 'Synchronisée'
         },
         methods: {
             password: 'mot de passe',
             passwordCode: 'mot de passe et code',
             eid: 'eID',
-            external: 'un autre serveur'
+            external: 'un autre serveur',
+            passkey: "clé d'accès"
         },
         reasons: {
             unknown_email: 'adresse e-mail inconnue',
@@ -1180,7 +1287,10 @@ export const AUDIT_MESSAGES = {
             account_blocked: 'compte bloqué',
             email_not_verified: 'adresse e-mail non confirmée',
             too_many_attempts: 'trop de tentatives',
-            eid_not_linked: 'eID non liée à un compte'
+            eid_not_linked: 'eID non liée à un compte',
+            passkey_invalid: "clé d'accès non valable",
+            passkey_unknown: "clé d'accès inconnue",
+            passkey_expired: "demande de clé d'accès expirée"
         }
     },
     de: {
@@ -1233,6 +1343,8 @@ export const AUDIT_MESSAGES = {
             account_eid_linked: 'eID verknüpft',
             account_eid_unlinked: 'eID-Verknüpfung entfernt',
             account_external_linked: 'Konto eines anderen Servers verknüpft',
+            account_passkey_added: 'Passkey hinzugefügt',
+            account_passkey_removed: 'Passkey entfernt',
             members_invited: 'Einladung gesendet',
             members_invitation_resent: 'Einladung erneut gesendet',
             members_invitation_withdrawn: 'Einladung zurückgezogen',
@@ -1292,13 +1404,15 @@ export const AUDIT_MESSAGES = {
             days: 'Tage',
             endsAt: 'Bis',
             count: 'Anzahl',
-            provider: 'Server'
+            provider: 'Server',
+            synced: 'Synchronisiert'
         },
         methods: {
             password: 'Passwort',
             passwordCode: 'Passwort und Code',
             eid: 'eID',
-            external: 'einen anderen Server'
+            external: 'einen anderen Server',
+            passkey: 'Passkey'
         },
         reasons: {
             unknown_email: 'unbekannte E-Mail-Adresse',
@@ -1306,7 +1420,10 @@ export const AUDIT_MESSAGES = {
             account_blocked: 'Konto gesperrt',
             email_not_verified: 'E-Mail-Adresse nicht bestätigt',
             too_many_attempts: 'zu viele Versuche',
-            eid_not_linked: 'eID mit keinem Konto verknüpft'
+            eid_not_linked: 'eID mit keinem Konto verknüpft',
+            passkey_invalid: 'Passkey ungültig',
+            passkey_unknown: 'unbekannter Passkey',
+            passkey_expired: 'Passkey-Anfrage abgelaufen'
         }
     }
 }

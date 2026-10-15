@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import { HttpStatus, Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { decrypt, deriveKey, encrypt, PKCE_CHALLENGE, randomToken, safeEqual, sha256 } from './crypto.js'
+import { PasskeyService } from './passkeys/passkey.service.js'
 import { type ExternalAttempt, type ExternalIdentity, ExternalService } from './external/external.service.js'
 import { type Interaction, interactionKey, openInteraction, sealInteraction } from './interaction.js'
 import { JoseError, verifyJwt } from './jose.js'
@@ -96,6 +97,8 @@ export type LoginResult =
           errorKey?: string
       }
     | { kind: 'recovery-codes'; interaction: Interaction; recoveryCodes: string[]; cookie: InteractionCookie }
+    /** The options for navigator.credentials.get() (JSON only). */
+    | { kind: 'passkey-challenge'; options: Record<string, unknown>; cookie: InteractionCookie }
     /** A nonce for the eID bridge (JSON only). */
     | { kind: 'eid-challenge'; nonce: string; cookie: InteractionCookie }
     /** To the other OpenID Connect server; `external` is the cookie that remembers this login until it comes back. */
@@ -127,7 +130,8 @@ export class OidcService implements OnApplicationBootstrap {
         private readonly config: OidcConfig,
         private readonly env: ConfigService,
         private readonly audit: AuditService,
-        private readonly external: ExternalService
+        private readonly external: ExternalService,
+        private readonly passkeys: PasskeyService
     ) {}
 
     onApplicationBootstrap() {
@@ -307,6 +311,7 @@ export class OidcService implements OnApplicationBootstrap {
             enrolling: false,
             amr: [],
             eidNonce: null,
+            passkeyChallenge: null,
             // Shown on /me/sessions ("Chrome on Windows"); shortened so the login cookie stays small
             userAgent: userAgent.slice(0, OIDC.USER_AGENT_MAX),
             expiresAt: Date.now() + OIDC.INTERACTION_SECONDS * 1000
@@ -702,6 +707,51 @@ export class OidcService implements OnApplicationBootstrap {
             return { kind: 'mfa-setup', interaction, client, setup: await this.mfa.pendingSetup(user), cookie }
         if (interaction.mfaPending) return { kind: 'mfa', interaction, client, cookie }
         return this.authenticated(interaction, user)
+    }
+
+    // ------------------------------------------------------------------ passkeys
+
+    /** Logging in with a passkey, step 1: a challenge for navigator.credentials.get(), kept in the login cookie. */
+    async passkeyChallenge(id: string, sealed: string | undefined, form: Params): Promise<LoginResult> {
+        const found = await this.findInteraction(id, sealed)
+        if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
+            return { kind: 'expired' }
+        this.passkeys.assertEnabled()
+        const challenge = this.passkeys.challenge()
+        const next = { ...found.interaction, passkeyChallenge: challenge }
+        return {
+            kind: 'passkey-challenge',
+            options: this.passkeys.loginOptions(challenge),
+            cookie: { id, value: this.seal(next) }
+        }
+    }
+
+    /**
+     * Logging in with a passkey, step 2: the signed answer of the device. With user verification (PIN, fingerprint,
+     * face) it counts as two-step verification: straight on to the organisation.
+     */
+    async passkeyLogin(id: string, sealed: string | undefined, form: Params, allowed: boolean): Promise<LoginResult> {
+        const found = await this.findInteraction(id, sealed)
+        if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
+            return { kind: 'expired' }
+        this.passkeys.assertEnabled()
+        const { client } = found
+        // The challenge works once: the cookie forgets it, whatever the outcome
+        const interaction = { ...found.interaction, passkeyChallenge: null }
+        const cookie = { id, value: this.seal(interaction) }
+        const refused = async (errorKey: string, userId: string | null = null): Promise<LoginResult> => {
+            await this.loginFailed('passkey', errorKey.replace(/^oidc\./, '').toLowerCase(), null, userId)
+            return { kind: 'form', interaction, client, errorKey, email: '', cookie }
+        }
+        if (!allowed) return refused('oidc.TOO_MANY_ATTEMPTS')
+        if (!found.interaction.passkeyChallenge) return refused('oidc.PASSKEY_EXPIRED')
+        const user = await this.passkeys.authenticate(form.credential, found.interaction.passkeyChallenge)
+        if (typeof user === 'string') return refused(user)
+        if (user.status !== 'active') return refused('oidc.ACCOUNT_DISABLED', user.id)
+        return this.authenticated(
+            { ...interaction, userId: user.id, mfaPending: false, enrolling: false, amr: ['pop', 'user', 'mfa'] },
+            user
+        )
     }
 
     /** The second factor: a code of the authenticator app or a recovery code, after the right password. */

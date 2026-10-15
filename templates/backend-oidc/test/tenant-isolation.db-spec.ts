@@ -114,6 +114,7 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         for (const statement of [
             'SELECT * FROM oidc_signing_keys',
             'SELECT * FROM oidc_sessions',
+            'SELECT * FROM user_passkeys',
             `SELECT password_hash FROM ${users}`
         ]) {
             await expect(database.withTenant(tenant.a, db => db.query(statement))).rejects.toThrow(/permission denied/)
@@ -840,6 +841,58 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
                 other!.id
             ])
         ).rejects.toThrow(/user_identifiers_type_check/)
+    })
+
+    it('stores passkeys: one account per credential, max 20, the counter only goes up (also at the same time)', async () => {
+        const store = new PgOidcStore(database)
+        const make = (email: string) =>
+            store.createUser({ email, name: 'Passkeys', passwordHash: null, emailVerified: true, locale: null })
+        const owner = (await make('passkeys@example.com'))!
+        const other = (await make('passkeys2@example.com'))!
+        const passkey = (credentialId: string, userId = owner.id) => ({
+            userId,
+            credentialId,
+            publicKey: 'MFkw',
+            algorithm: -7,
+            signCount: 0,
+            name: 'Laptop',
+            aaguid: '00000000000000000000000000000000',
+            backupEligible: false,
+            backedUp: false,
+            transports: ['usb', 'nfc']
+        })
+        const first = await store.addPasskey(passkey('credential-1'))
+        expect(first).toMatchObject({ userId: owner.id, transports: ['usb', 'nfc'], lastUsedAt: null })
+        // The same credential never twice, not even for another account
+        expect(await store.addPasskey(passkey('credential-1', other.id))).toBeNull()
+        expect((await store.findPasskey('credential-1'))?.userId).toBe(owner.id)
+
+        // The counter: two logins with the same value at the same moment, only one wins
+        const results = await Promise.all([
+            store.usePasskey(first!.id, 5, false),
+            store.usePasskey(first!.id, 5, false)
+        ])
+        expect(results.filter(Boolean)).toHaveLength(1)
+        expect(await store.usePasskey(first!.id, 4, false)).toBe(false)
+        expect(await store.usePasskey(first!.id, 6, true)).toBe(true)
+        expect(await store.findPasskey('credential-1')).toMatchObject({ signCount: 6, backedUp: true })
+        expect((await store.findPasskey('credential-1'))?.lastUsedAt).toBeInstanceOf(Date)
+
+        // Renaming and deleting only the own ones
+        expect(await store.renamePasskey(other.id, first!.id, 'Stolen')).toBe(false)
+        expect(await store.renamePasskey(owner.id, first!.id, 'Key')).toBe(true)
+        expect(await store.deletePasskey(other.id, first!.id)).toBe(false)
+
+        // Max 20 per account, also when added at the same moment
+        await Promise.all(Array.from({ length: 24 }, (_, i) => store.addPasskey(passkey('bulk-' + i))))
+        expect(await store.listPasskeys(owner.id)).toHaveLength(20)
+        expect(await store.deletePasskey(owner.id, first!.id)).toBe(true)
+        await expect(
+            database.query(
+                `INSERT INTO user_passkeys (user_id, credential_id, public_key, algorithm, name) VALUES ($1, 'x', 'y', -999, 'z')`,
+                [owner.id]
+            )
+        ).rejects.toThrow(/user_passkeys_algorithm_check/)
     })
 
     it('the tenant role exists and owns nothing', async () => {

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type {
+    NewPasskey,
+    Passkey,
     AuthorizationCode,
     BootstrapAdmin,
     ChangeResult,
@@ -301,6 +303,45 @@ export class MemoryOidcStore implements OidcStore {
     async touchIdentifier(type: IdentifierType, valueHash: string) {
         const row = this.identifiers.find(item => item.type === type && item.valueHash === valueHash)
         if (row) row.lastUsedAt = new Date()
+    }
+
+    passkeys: Passkey[] = []
+
+    async addPasskey(passkey: NewPasskey) {
+        if (this.passkeys.some(item => item.credentialId === passkey.credentialId)) return null
+        if (this.passkeys.filter(item => item.userId === passkey.userId).length >= 20) return null
+        const row: Passkey = { ...passkey, id: randomUUID(), createdAt: new Date(), lastUsedAt: null }
+        this.passkeys.push(row)
+        return { ...row }
+    }
+
+    async listPasskeys(userId: string) {
+        return this.passkeys.filter(item => item.userId === userId).map(item => ({ ...item }))
+    }
+
+    async findPasskey(credentialId: string) {
+        const found = this.passkeys.find(item => item.credentialId === credentialId)
+        return found ? { ...found } : null
+    }
+
+    async usePasskey(id: string, signCount: number, backedUp: boolean) {
+        const row = this.passkeys.find(item => item.id === id)
+        if (!row) return false
+        if ((signCount !== 0 || row.signCount !== 0) && signCount <= row.signCount) return false
+        Object.assign(row, { signCount, backedUp, lastUsedAt: new Date() })
+        return true
+    }
+
+    async renamePasskey(userId: string, id: string, name: string) {
+        const row = this.passkeys.find(item => item.id === id && item.userId === userId)
+        if (row) row.name = name
+        return Boolean(row)
+    }
+
+    async deletePasskey(userId: string, id: string) {
+        const before = this.passkeys.length
+        this.passkeys = this.passkeys.filter(item => !(item.id === id && item.userId === userId))
+        return this.passkeys.length < before
     }
 
     async createUser(account: NewAccount) {

@@ -166,6 +166,7 @@ function AuditRow({ event, showTenant }: { event: AuditEvent; showTenant: boolea
         const parts = raw.split(' ')
         if (parts.includes('sc') || raw === 'eid') return t('methods.eid')
         if (parts.includes('fed') || raw === 'external') return t('methods.external')
+        if (parts.includes('pop') || raw === 'passkey') return t('methods.passkey')
         if (parts.includes('mfa') || parts.includes('otp')) return t('methods.passwordCode')
         return t('methods.password')
     }

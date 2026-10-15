@@ -7,6 +7,7 @@ import { BUTTON, CARD, INPUT, LINK, OUTLINE, roleLabel } from '@/components/acco
 import { EidBridge, EidPin, type EidToken } from '@/components/eid'
 import { MfaQr, RecoveryCodes } from '@/components/mfa-ui'
 import { useAccountApi } from '@/lib/account'
+import { cancelled, getPasskey, type GetOptions, passkeysSupported } from '@/lib/webauthn'
 import { API_URL } from '@/lib/api'
 
 type Tenant = { id: string; name: string; role?: 'user' | 'admin' }
@@ -19,6 +20,8 @@ type State =
           loginHint: string
           registration: boolean
           eid: boolean
+          /** "Log in with a passkey" (OIDC_PASSKEYS, and this browser can). */
+          passkey: boolean
           /** Email and password (false: only the other OpenID Connect server). */
           password: boolean
           /** "Log in with <name>": another OpenID Connect server. */
@@ -42,6 +45,8 @@ type Answer = {
     loginHint?: string
     registration?: boolean
     eid?: boolean
+    passkey?: boolean
+    options?: GetOptions
     password?: boolean
     external?: { name: string } | null
     pending?: boolean
@@ -121,6 +126,7 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                         loginHint: answer.loginHint ?? '',
                         registration: answer.registration !== false,
                         eid: answer.eid === true,
+                        passkey: answer.passkey === true && passkeysSupported(),
                         password: answer.password !== false,
                         external: answer.external ?? null
                     })
@@ -209,6 +215,32 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
     function onExternal() {
         if (state.step !== 'login') return
         void submit('/external', { csrf: state.csrf })
+    }
+
+    /**
+     * "Log in with a passkey": a challenge from the login server (kept in its login cookie), the device shows its
+     * passkeys for this site (fingerprint, face or PIN), and the signed answer goes back. Counts as two-step
+     * verification: on to the organisation choice or back to the application.
+     */
+    async function onPasskey() {
+        if (state.step !== 'login') return
+        setBusy(true)
+        setError(null)
+        try {
+            const first = await call('/passkey/challenge', { csrf: state.csrf })
+            if (first.status !== 200 || !first.answer.options) return handle(first.status, first.answer)
+            const credential = await getPasskey(first.answer.options)
+            const { status, answer } = await call('/passkey', { csrf: state.csrf, credential })
+            if (answer.status === 'error') {
+                setError(answer.message ?? t('passkeyFailed'))
+                setBusy(false)
+                return
+            }
+            handle(status, answer)
+        } catch (error) {
+            setError(cancelled(error) ? t('passkeyCancelled') : t('passkeyFailed'))
+            setBusy(false)
+        }
     }
 
     async function resend() {
@@ -464,12 +496,17 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
             <button type='submit' disabled={busy} className={BUTTON}>
                 {busy ? t('busy') : t('submit')}
             </button>
-            {(state.eid || state.external) && (
+            {(state.eid || state.external || state.passkey) && (
                 <div className='flex items-center gap-3 text-xs uppercase opacity-60'>
                     <span className='h-px flex-1 bg-current opacity-30' />
                     {t('or')}
                     <span className='h-px flex-1 bg-current opacity-30' />
                 </div>
+            )}
+            {state.passkey && (
+                <button type='button' disabled={busy} className={OUTLINE} onClick={() => void onPasskey()}>
+                    {t('passkeyLogin')}
+                </button>
             )}
             {externalButton}
             {state.eid && (

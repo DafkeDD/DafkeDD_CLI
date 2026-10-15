@@ -330,6 +330,13 @@ export const MESSAGES = {
             'An account with this email address exists already. Log in with it, or ask an admin to link it.',
         EXTERNAL_OTHER_LINKED: 'This account is linked to another account of the other server already.',
         PASSWORD_LOGIN_OFF: 'Logging in with a password is turned off: use the button below.',
+        PASSKEYS_DISABLED: 'Passkeys are not available on this server.',
+        PASSKEY_EXPIRED: 'The passkey request expired. Please try again.',
+        PASSKEY_INVALID: 'The passkey could not be verified. Please try again.',
+        PASSKEY_EXISTS: 'This passkey was added already, or the account has the maximum of 20.',
+        PASSKEY_NOT_FOUND: 'This passkey was not found.',
+        PASSKEY_LAST_LOGIN: 'This is the only way left to log in: add a password or another passkey first.',
+        PASSKEY_UNKNOWN: 'This passkey does not belong to an account here (any more).',
         EID_INVALID: 'The eID could not be verified. Please try again.',
         EID_EXPIRED: 'The eID request expired. Please try again.',
         EID_NOT_LINKED:
@@ -409,6 +416,14 @@ export const MESSAGES = {
             'Er bestaat al een account met dit e-mailadres. Log daarmee in, of vraag een beheerder om het te koppelen.',
         EXTERNAL_OTHER_LINKED: 'Dit account is al gekoppeld aan een ander account van de andere server.',
         PASSWORD_LOGIN_OFF: 'Inloggen met een wachtwoord staat uit: gebruik de knop hieronder.',
+        PASSKEYS_DISABLED: 'Passkeys zijn niet beschikbaar op deze server.',
+        PASSKEY_EXPIRED: 'De passkey-aanvraag is verlopen. Probeer opnieuw.',
+        PASSKEY_INVALID: 'De passkey kon niet gecontroleerd worden. Probeer opnieuw.',
+        PASSKEY_EXISTS: 'Deze passkey is al toegevoegd, of het account heeft het maximum van 20.',
+        PASSKEY_NOT_FOUND: 'Deze passkey werd niet gevonden.',
+        PASSKEY_LAST_LOGIN:
+            'Dit is de enige manier die overblijft om in te loggen: voeg eerst een wachtwoord of een andere passkey toe.',
+        PASSKEY_UNKNOWN: 'Deze passkey hoort (niet meer) bij een account hier.',
         EID_INVALID: 'De eID kon niet gecontroleerd worden. Probeer het opnieuw.',
         EID_EXPIRED: 'De eID-aanvraag is verlopen. Probeer het opnieuw.',
         EID_NOT_LINKED:
@@ -488,6 +503,14 @@ export const MESSAGES = {
             'Un compte avec cette adresse e-mail existe déjà. Connectez-vous avec celui-ci, ou demandez à un administrateur de le lier.',
         EXTERNAL_OTHER_LINKED: "Ce compte est déjà lié à un autre compte de l'autre serveur.",
         PASSWORD_LOGIN_OFF: 'La connexion par mot de passe est désactivée : utilisez le bouton ci-dessous.',
+        PASSKEYS_DISABLED: "Les clés d'accès ne sont pas disponibles sur ce serveur.",
+        PASSKEY_EXPIRED: "La demande de clé d'accès a expiré. Veuillez réessayer.",
+        PASSKEY_INVALID: "La clé d'accès n'a pas pu être vérifiée. Veuillez réessayer.",
+        PASSKEY_EXISTS: "Cette clé d'accès a déjà été ajoutée, ou le compte en a le maximum de 20.",
+        PASSKEY_NOT_FOUND: "Cette clé d'accès est introuvable.",
+        PASSKEY_LAST_LOGIN:
+            "C'est le seul moyen de connexion restant : ajoutez d'abord un mot de passe ou une autre clé d'accès.",
+        PASSKEY_UNKNOWN: "Cette clé d'accès n'appartient (plus) à aucun compte ici.",
         EID_INVALID: "L'eID n'a pas pu être vérifiée. Veuillez réessayer.",
         EID_EXPIRED: 'La demande eID a expiré. Veuillez réessayer.',
         EID_NOT_LINKED:
@@ -574,6 +597,14 @@ export const MESSAGES = {
             'Es gibt bereits ein Konto mit dieser E-Mail-Adresse. Melde dich damit an oder bitte einen Admin, es zu verknüpfen.',
         EXTERNAL_OTHER_LINKED: 'Dieses Konto ist bereits mit einem anderen Konto des anderen Servers verknüpft.',
         PASSWORD_LOGIN_OFF: 'Die Anmeldung mit Passwort ist ausgeschaltet: nutze die Schaltfläche unten.',
+        PASSKEYS_DISABLED: 'Passkeys sind auf diesem Server nicht verfügbar.',
+        PASSKEY_EXPIRED: 'Die Passkey-Anfrage ist abgelaufen. Bitte versuche es erneut.',
+        PASSKEY_INVALID: 'Der Passkey konnte nicht geprüft werden. Bitte versuche es erneut.',
+        PASSKEY_EXISTS: 'Dieser Passkey wurde bereits hinzugefügt, oder das Konto hat das Maximum von 20.',
+        PASSKEY_NOT_FOUND: 'Dieser Passkey wurde nicht gefunden.',
+        PASSKEY_LAST_LOGIN:
+            'Dies ist die letzte Möglichkeit zur Anmeldung: füge zuerst ein Passwort oder einen anderen Passkey hinzu.',
+        PASSKEY_UNKNOWN: 'Dieser Passkey gehört hier (nicht mehr) zu einem Konto.',
         EID_INVALID: 'Die eID konnte nicht geprüft werden. Bitte versuche es erneut.',
         EID_EXPIRED: 'Die eID-Anfrage ist abgelaufen. Bitte versuche es erneut.',
         EID_NOT_LINKED:
@@ -790,6 +821,12 @@ export function envLines(oidc, { port, example = false }) {
         '# Login with the Belgian eID (through the DafkeDD eID bridge on the PC of the user): off, on (real cards,',
         '# with OCSP) or test (also the virtual card of the bridge: npm run eid:mock in the frontend; never in production)',
         `OIDC_EID=${example ? 'on' : 'test'}`,
+        '# Passkeys (fingerprint, face or PIN of the device, or a security key; counts as two-step verification): on or off',
+        'OIDC_PASSKEYS=on',
+        '# The domain the passkeys belong to (default: the host name of APP_URL) and the websites that may use them (default:',
+        '# the origin of APP_URL, comma separated). A passkey only works on its domain: changing it later loses them all.',
+        'OIDC_PASSKEY_RP_ID=',
+        'OIDC_PASSKEY_ORIGINS=',
         '',
         '# Log in at another OpenID Connect server (Microsoft Entra ID, Keycloak, Google, ...). Register this redirect URI',
         `# there: http://localhost:${port}${ISSUER_PATH}/external/callback. Leave OIDC_EXTERNAL_ISSUER empty to turn it off.`,
@@ -1134,6 +1171,72 @@ export const endpoints = ({ port = 4000 } = {}) => [
         },
         response: null,
         errors: []
+    },
+    {
+        method: 'POST',
+        path: '/oidc/interaction/:id/passkey/challenge',
+        tag: 'oidc',
+        summary:
+            'Log in with a passkey, step 1 (OIDC_PASSKEYS; GET /oidc/interaction/:id says `passkey: true`): the options for `navigator.credentials.get()`. The challenge waits in the login cookie and works once.',
+        body: {
+            example: { csrf: 'from-the-page' },
+            fields: [['csrf', 'string', 'required, from GET /oidc/interaction/:id']]
+        },
+        response: {
+            status: 200,
+            example: {
+                status: 'passkey-challenge',
+                options: {
+                    challenge: 'q6l0D9YvC2y4ZLm2rHd3o1yHq0jYv1Jx3Cxk0E4b3cM',
+                    rpId: 'localhost',
+                    userVerification: 'required',
+                    timeout: 300000
+                }
+            }
+        },
+        errors: [
+            [404, 'oidc.PASSKEYS_DISABLED'],
+            [410, 'oidc.EXPIRED']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/oidc/interaction/:id/passkey',
+        tag: 'oidc',
+        summary:
+            'Log in with a passkey, step 2: the answer of `navigator.credentials.get()` (base64url fields). Checks the challenge, origin, rpId, user verification, signature and sign counter. A passkey with PIN, fingerprint or face counts as two-step verification (amr `pop user mfa`, acr loa2): straight on to the organisation choice. Rate limited.',
+        body: {
+            example: {
+                csrf: 'from-the-page',
+                credential: {
+                    id: 'base64url credential id',
+                    rawId: 'base64url credential id',
+                    type: 'public-key',
+                    response: {
+                        clientDataJSON: 'base64url',
+                        authenticatorData: 'base64url',
+                        signature: 'base64url',
+                        userHandle: 'base64url user id'
+                    }
+                }
+            },
+            fields: [
+                ['csrf', 'string', 'required, from GET /oidc/interaction/:id'],
+                ['credential', 'object', 'required, the PublicKeyCredential as JSON (base64url)']
+            ]
+        },
+        response: {
+            status: 200,
+            example: { status: 'redirect', location: 'http://localhost:3000/auth/callback?code=...' }
+        },
+        errors: [
+            [400, 'oidc.PASSKEY_EXPIRED'],
+            [401, 'oidc.PASSKEY_INVALID'],
+            [401, 'oidc.PASSKEY_UNKNOWN'],
+            [403, 'oidc.ACCOUNT_DISABLED'],
+            [404, 'oidc.PASSKEYS_DISABLED'],
+            [429, 'oidc.TOO_MANY_ATTEMPTS']
+        ]
     },
     {
         method: 'POST',
@@ -1981,6 +2084,137 @@ export const endpoints = ({ port = 4000 } = {}) => [
         errors: [
             [401, 'errors.UNAUTHORIZED'],
             [404, 'oidc.SESSION_NOT_FOUND']
+        ]
+    },
+    // ---------------------------------------------------------------- passkeys of the own account
+    {
+        method: 'GET',
+        path: '/me/passkeys',
+        tag: 'passkeys',
+        summary: 'The passkeys of the logged in account, and whether passkeys are on (OIDC_PASSKEYS).',
+        bearer: true,
+        response: {
+            status: 200,
+            example: {
+                enabled: true,
+                passkeys: [
+                    {
+                        id: '6a1d1f8e-3c55-4f7b-a1a8-0e2b1b9c2d11',
+                        name: 'Laptop',
+                        synced: true,
+                        createdAt: '2026-10-15T09:00:00.000Z',
+                        lastUsedAt: '2026-10-15T10:12:00.000Z'
+                    }
+                ]
+            }
+        },
+        errors: [[401, 'errors.UNAUTHORIZED']]
+    },
+    {
+        method: 'POST',
+        path: '/me/passkeys/options',
+        tag: 'passkeys',
+        summary:
+            'Adding a passkey, step 1: the options for `navigator.credentials.create()` (a discoverable credential with user verification, ES256, RS256 or EdDSA, no attestation) and a token with the challenge, valid 5 minutes.',
+        bearer: true,
+        response: {
+            status: 200,
+            example: {
+                token: 'sealed challenge',
+                options: {
+                    challenge: 'q6l0D9YvC2y4ZLm2rHd3o1yHq0jYv1Jx3Cxk0E4b3cM',
+                    rp: { id: 'localhost', name: 'shop' },
+                    user: { id: 'base64url user id', name: 'jan@example.com', displayName: 'Jan Peeters' },
+                    pubKeyCredParams: [
+                        { type: 'public-key', alg: -7 },
+                        { type: 'public-key', alg: -257 },
+                        { type: 'public-key', alg: -8 }
+                    ],
+                    authenticatorSelection: {
+                        residentKey: 'required',
+                        requireResidentKey: true,
+                        userVerification: 'required'
+                    },
+                    excludeCredentials: [],
+                    attestation: 'none',
+                    timeout: 300000
+                }
+            }
+        },
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [404, 'oidc.PASSKEYS_DISABLED']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/me/passkeys',
+        tag: 'passkeys',
+        summary:
+            'Adding a passkey, step 2: the answer of `navigator.credentials.create()`. Checks the challenge, origin, rpId, user presence and verification, and the public key. Max 20 per account.',
+        bearer: true,
+        body: {
+            example: {
+                token: 'from POST /me/passkeys/options',
+                name: 'Laptop',
+                credential: {
+                    id: 'base64url credential id',
+                    rawId: 'base64url credential id',
+                    type: 'public-key',
+                    response: { clientDataJSON: 'base64url', attestationObject: 'base64url', transports: ['internal'] }
+                }
+            },
+            fields: [
+                ['token', 'string', 'required, from POST /me/passkeys/options'],
+                ['credential', 'object', 'required, the PublicKeyCredential as JSON (base64url)'],
+                ['name', 'string', 'optional, max 60 (default "Passkey")']
+            ]
+        },
+        response: {
+            status: 201,
+            example: {
+                id: '6a1d1f8e-3c55-4f7b-a1a8-0e2b1b9c2d11',
+                name: 'Laptop',
+                synced: true,
+                createdAt: '2026-10-15T09:00:00.000Z',
+                lastUsedAt: null
+            }
+        },
+        errors: [
+            [400, 'oidc.PASSKEY_EXPIRED'],
+            [400, 'oidc.PASSKEY_INVALID'],
+            [401, 'errors.UNAUTHORIZED'],
+            [404, 'oidc.PASSKEYS_DISABLED'],
+            [409, 'oidc.PASSKEY_EXISTS']
+        ]
+    },
+    {
+        method: 'PATCH',
+        path: '/me/passkeys/:id',
+        tag: 'passkeys',
+        summary: 'Renames a passkey of the account.',
+        pathExample: '/me/passkeys/6a1d1f8e-3c55-4f7b-a1a8-0e2b1b9c2d11',
+        bearer: true,
+        body: { example: { name: 'Phone' }, fields: [['name', 'string', 'required, 1 to 60 characters']] },
+        response: { status: 200, example: { id: '6a1d1f8e-3c55-4f7b-a1a8-0e2b1b9c2d11', name: 'Phone' } },
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [404, 'oidc.PASSKEY_NOT_FOUND']
+        ]
+    },
+    {
+        method: 'DELETE',
+        path: '/me/passkeys/:id',
+        tag: 'passkeys',
+        summary:
+            'Removes a passkey: it no longer logs in (the device may still offer it until it is removed there too). Not the last way to log in of an account without password, eID or other server.',
+        pathExample: '/me/passkeys/6a1d1f8e-3c55-4f7b-a1a8-0e2b1b9c2d11',
+        bearer: true,
+        response: { status: 200, example: { removed: true } },
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [404, 'oidc.PASSKEY_NOT_FOUND'],
+            [409, 'oidc.PASSKEY_LAST_LOGIN']
         ]
     },
     // ---------------------------------------------------------------- the audit log

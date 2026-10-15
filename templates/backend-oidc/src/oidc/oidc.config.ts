@@ -175,6 +175,27 @@ export class OidcConfig {
         }
     }
 
+    /** Passkeys (WebAuthn): OIDC_PASSKEYS=on (default) or off; never when only the other OpenID Connect server is used. */
+    get passkeys(): boolean {
+        return this.config.get<string>('OIDC_PASSKEYS') !== 'off' && !this.externalOnly
+    }
+
+    /** The domain the passkeys belong to (OIDC_PASSKEY_RP_ID): by default the host name of APP_URL (the login page). */
+    get passkeyRpId(): string {
+        return this.config.get<string>('OIDC_PASSKEY_RP_ID') || new URL(this.appUrl).hostname
+    }
+
+    /** Where the browser may use them (OIDC_PASSKEY_ORIGINS, comma separated): by default the origin of APP_URL. */
+    get passkeyOrigins(): string[] {
+        const value = this.config.get<string>('OIDC_PASSKEY_ORIGINS')
+        return value
+            ? value
+                  .split(',')
+                  .map(origin => origin.trim())
+                  .filter(Boolean)
+            : [new URL(this.appUrl).origin]
+    }
+
     /** Only the other server: no password and no eID login, no registration with them (OIDC_EXTERNAL_ONLY=true). */
     get externalOnly(): boolean {
         return this.external?.only === true

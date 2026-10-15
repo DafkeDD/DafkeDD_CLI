@@ -22,7 +22,9 @@ export const AUDIT_ACTIONS = {
         'account.mfa_reset',
         'account.eid_linked',
         'account.eid_unlinked',
-        'account.external_linked'
+        'account.external_linked',
+        'account.passkey_added',
+        'account.passkey_removed'
     ],
     members: [
         'members.invited',

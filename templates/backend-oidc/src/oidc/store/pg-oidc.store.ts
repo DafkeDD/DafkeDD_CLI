@@ -17,7 +17,9 @@ import type {
     RefreshToken,
     RotateResult,
     NewAccount,
+    NewPasskey,
     OidcClient,
+    Passkey,
     OidcStore,
     Session,
     SessionSummary,
@@ -60,6 +62,10 @@ const insertUser = async (db: Queryable, account: NewAccount) =>
             [account.email, account.emailVerified, account.name, account.locale, account.passwordHash]
         )
     ).rows[0] ?? null
+const PASSKEY_COLUMNS =
+    'id, user_id AS "userId", credential_id AS "credentialId", public_key AS "publicKey", algorithm, ' +
+    'sign_count::int AS "signCount", name, aaguid, backup_eligible AS "backupEligible", backed_up AS "backedUp", ' +
+    'transports, created_at AS "createdAt", last_used_at AS "lastUsedAt"'
 const IDENTIFIER_COLUMNS =
     'type, value_hash AS "valueHash", user_id AS "userId", created_at AS "createdAt", last_used_at AS "lastUsedAt"'
 
@@ -498,6 +504,82 @@ export class PgOidcStore implements OidcStore {
             type
         ])
         return rows.length > 0
+    }
+
+    async addPasskey(passkey: NewPasskey) {
+        await this.database.ready()
+        return this.database.transaction(async db => {
+            // At most 20 per account: the row lock of the account makes two at once count one after the other
+            await db.query(`SELECT 1 FROM ${USERS} WHERE id = $1 FOR UPDATE`, [passkey.userId])
+            const count = await db.query<{ n: number }>(
+                'SELECT count(*)::int AS n FROM user_passkeys WHERE user_id = $1',
+                [passkey.userId]
+            )
+            if ((count.rows[0]?.n ?? 0) >= 20) return null
+            const rows = await db.query<Passkey>(
+                `INSERT INTO user_passkeys (user_id, credential_id, public_key, algorithm, sign_count, name, aaguid,
+                                    backup_eligible, backed_up, transports)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (credential_id) DO NOTHING
+         RETURNING ${PASSKEY_COLUMNS}`,
+                [
+                    passkey.userId,
+                    passkey.credentialId,
+                    passkey.publicKey,
+                    passkey.algorithm,
+                    passkey.signCount,
+                    passkey.name,
+                    passkey.aaguid,
+                    passkey.backupEligible,
+                    passkey.backedUp,
+                    passkey.transports
+                ]
+            )
+            return rows.rows[0] ?? null
+        })
+    }
+
+    listPasskeys(userId: string) {
+        return this.query<Passkey>(
+            `SELECT ${PASSKEY_COLUMNS} FROM user_passkeys WHERE user_id = $1 ORDER BY created_at`,
+            [userId]
+        )
+    }
+
+    async findPasskey(credentialId: string) {
+        const rows = await this.query<Passkey>(
+            `SELECT ${PASSKEY_COLUMNS} FROM user_passkeys WHERE credential_id = $1`,
+            [credentialId]
+        )
+        return rows[0] ?? null
+    }
+
+    async usePasskey(id: string, signCount: number, backedUp: boolean) {
+        // The counter only goes up (authenticators that do not count always send 0)
+        const rows = await this.query(
+            `UPDATE user_passkeys SET sign_count = $2, backed_up = $3, last_used_at = now()
+        WHERE id = $1 AND (($2 = 0 AND sign_count = 0) OR sign_count < $2)
+        RETURNING 1`,
+            [id, signCount, backedUp]
+        )
+        return rows.length === 1
+    }
+
+    async renamePasskey(userId: string, id: string, name: string) {
+        const rows = await this.query('UPDATE user_passkeys SET name = $3 WHERE user_id = $1 AND id = $2 RETURNING 1', [
+            userId,
+            id,
+            name
+        ])
+        return rows.length === 1
+    }
+
+    async deletePasskey(userId: string, id: string) {
+        const rows = await this.query('DELETE FROM user_passkeys WHERE user_id = $1 AND id = $2 RETURNING 1', [
+            userId,
+            id
+        ])
+        return rows.length === 1
     }
 
     async touchIdentifier(type: IdentifierType, valueHash: string) {

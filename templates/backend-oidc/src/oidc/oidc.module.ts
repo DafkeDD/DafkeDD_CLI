@@ -12,6 +12,8 @@ import { LoginLimiter } from './login-limiter.js'
 import { MfaController } from './mfa.controller.js'
 import { MfaService } from './mfa.service.js'
 import { OidcConfig } from './oidc.config.js'
+import { PasskeyService } from './passkeys/passkey.service.js'
+import { PasskeysController } from './passkeys/passkeys.controller.js'
 import { OidcController } from './oidc.controller.js'
 import { OidcService } from './oidc.service.js'
 import { OIDC_STORE } from './store/oidc.store.js'
@@ -30,12 +32,14 @@ import { WellKnownController } from './well-known.controller.js'
         MfaController,
         EidController,
         SessionsController,
+        PasskeysController,
         WellKnownController
     ],
     providers: [
         OidcConfig,
         OidcService,
         ExternalService,
+        PasskeyService,
         AccountService,
         MfaService,
         EidService,
@@ -49,6 +53,7 @@ import { WellKnownController } from './well-known.controller.js'
     exports: [
         OidcService,
         ExternalService,
+        PasskeyService,
         TokensService,
         SessionsService,
         AccountService,

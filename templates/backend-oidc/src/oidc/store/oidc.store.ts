@@ -91,6 +91,28 @@ export interface UserIdentifier {
     lastUsedAt: Date | null
 }
 
+/** A passkey (WebAuthn credential) of an account. */
+export interface Passkey {
+    id: string
+    userId: string
+    /** base64url, unique over all accounts */
+    credentialId: string
+    /** SPKI DER, base64 */
+    publicKey: string
+    /** COSE algorithm: -7 ES256, -257 RS256, -8 EdDSA */
+    algorithm: number
+    signCount: number
+    name: string
+    aaguid: string
+    backupEligible: boolean
+    backedUp: boolean
+    transports: string[]
+    createdAt: Date
+    lastUsedAt: Date | null
+}
+
+export type NewPasskey = Omit<Passkey, 'id' | 'createdAt' | 'lastUsedAt'>
+
 /** Linking an identifier: `taken` when it belongs to another account, `exists` when this account has another one. */
 export type LinkResult = 'ok' | 'taken' | 'exists'
 
@@ -266,6 +288,20 @@ export interface OidcStore {
     unlinkIdentifier(userId: string, type: IdentifierType): Promise<boolean>
     /** Records a login with the identifier. */
     touchIdentifier(type: IdentifierType, valueHash: string): Promise<void>
+
+    // ---------------------------------------------------------------- passkeys
+
+    /** null when the credential id exists already (also of another account). At most 20 per account. */
+    addPasskey(passkey: NewPasskey): Promise<Passkey | null>
+    listPasskeys(userId: string): Promise<Passkey[]>
+    findPasskey(credentialId: string): Promise<Passkey | null>
+    /**
+     * Records a login: the new signature counter and the backup state. False when the counter did not go up in the
+     * meantime (two logins with the same counter at once: a clone), checked in the same statement.
+     */
+    usePasskey(id: string, signCount: number, backedUp: boolean): Promise<boolean>
+    renamePasskey(userId: string, id: string, name: string): Promise<boolean>
+    deletePasskey(userId: string, id: string): Promise<boolean>
 
     // ---------------------------------------------------------------- two-factor authentication
 

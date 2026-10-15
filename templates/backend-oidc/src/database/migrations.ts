@@ -410,5 +410,28 @@ GRANT SELECT ON audit_events TO ${role};
 ALTER TABLE user_identifiers DROP CONSTRAINT user_identifiers_type_check;
 ALTER TABLE user_identifiers ADD CONSTRAINT user_identifiers_type_check CHECK (type IN ('eid', 'external'));
 `
+    },
+    {
+        id: 7,
+        name: 'passkeys',
+        sql: `
+-- Passkeys (WebAuthn): the public key of each credential; the private key never leaves the device of the user
+CREATE TABLE user_passkeys (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
+  credential_id text NOT NULL UNIQUE,
+  public_key text NOT NULL,
+  algorithm integer NOT NULL CHECK (algorithm IN (-7, -257, -8)),
+  sign_count bigint NOT NULL DEFAULT 0,
+  name text NOT NULL,
+  aaguid text NOT NULL DEFAULT '',
+  backup_eligible boolean NOT NULL DEFAULT false,
+  backed_up boolean NOT NULL DEFAULT false,
+  transports text[] NOT NULL DEFAULT '{}',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_used_at timestamptz
+);
+CREATE INDEX user_passkeys_user ON user_passkeys (user_id);
+`
     }
 ]

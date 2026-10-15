@@ -306,7 +306,11 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   The login page shows "Log in with <name>"; that server proves who someone is (PKCE, state, nonce, its ID token checked
   with its JWKS), and accounts, organisations, roles, licences and the audit log stay here. A verified email address
   joins an existing account; two-step verification there counts when it says so.
-- **Not yet** (next phases): passkeys, back-channel logout, a consent screen for external clients.
+- **Passkeys**: every account adds passkeys on `/security` (fingerprint, face or PIN of the device, synced passkeys or a
+  security key) and logs in with "Log in with a passkey": no password, and it counts as two-step verification
+  (`acr: loa2`). Our own WebAuthn code (CBOR, COSE keys ES256, RS256 and EdDSA, signature counter), no attestation.
+  `OIDC_PASSKEYS=off` turns them off.
+- **Not yet** (next phase): back-channel logout, a consent screen for external clients.
 
 The TypeScript files of this feature live as real files in `templates/backend-oidc` and `templates/frontend-oidc` (see
 Development).
@@ -452,6 +456,13 @@ git switch developer
 
 ## Changelog
 
+- **0.30.0**: passkeys (WebAuthn). `/security` adds, renames and removes passkeys (`GET/POST /me/passkeys`,
+  `POST /me/passkeys/options`, `PATCH/DELETE /me/passkeys/:id`); the login page has "Log in with a passkey"
+  (`POST /oidc/interaction/:id/passkey/challenge` and `/passkey`), which counts as two-step verification (amr
+  `pop user mfa`, acr loa2). Our own strict CBOR decoder and WebAuthn checks on `node:crypto` (challenge used once,
+  origin, domain, user verification, user handle, signature counter against cloned keys). Migration 7: `user_passkeys`.
+  `OIDC_PASSKEYS`, `OIDC_PASSKEY_RP_ID` and `OIDC_PASSKEY_ORIGINS` in `.env`. Audit log: `account.passkey_added`,
+  `account.passkey_removed` and logins with method passkey. Tests with a virtual authenticator.
 - **0.29.0**: log in with another OpenID Connect server (federation). New CLI question; `OIDC_EXTERNAL_*` in `.env`;
   `POST /oidc/interaction/:id/external`, `GET /oidc/external/callback` and `POST /oidc/interaction/:id/resume`. Our own
   client code (discovery, PKCE, state, nonce, client_secret_basic) and ID token check (RS/PS/ES 256-512 with its JWKS,

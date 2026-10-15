@@ -324,6 +324,21 @@ export function backendReadme({
                       'The website that asks for the PIN (the bridge signs its origin); only when it is not APP_URL'
                   ],
                   [
+                      'OIDC_PASSKEYS',
+                      'on',
+                      'Passkeys (WebAuthn: fingerprint, face or PIN, or a security key) on the login page and on /security; `off` hides them'
+                  ],
+                  [
+                      'OIDC_PASSKEY_RP_ID',
+                      '(host name of APP_URL)',
+                      'The domain the passkeys belong to; a parent domain (example.com) lets subdomains use them too. Changing it later makes every passkey useless'
+                  ],
+                  [
+                      'OIDC_PASSKEY_ORIGINS',
+                      '(origin of APP_URL)',
+                      'The websites that may use the passkeys (comma separated), e.g. the login page of the frontend'
+                  ],
+                  [
                       'OIDC_EXTERNAL_ISSUER',
                       '(empty)',
                       'Another OpenID Connect server to log in with (Entra ID, Keycloak, Google, ...); empty: off'
@@ -731,6 +746,30 @@ licences, sessions, two-step verification and the audit log stay in this server,
   \`fed\` (federation). Why a login there failed is logged as a warning (never tokens).
 - Logging out here does not log out at that server (its own session stays).
 
+### Passkeys
+
+Every account can add **passkeys** on \`/security\`: the fingerprint, face or PIN of a laptop or phone (Windows Hello,
+Touch ID, Android, iCloud Keychain, Google Password Manager) or a security key (YubiKey). The login page then shows
+**"Log in with a passkey"**: no email address, no password, and no code of the authenticator app, because a passkey
+with user verification is already two factors (something you have and something you know or are), like the eID.
+\`OIDC_PASSKEYS=off\` turns them off; with \`OIDC_EXTERNAL_ONLY=true\` they are off as well.
+
+| Step | What happens |
+| --- | --- |
+| Add (\`/security\`) | \`POST /me/passkeys/options\`: the options for \`navigator.credentials.create()\` (a discoverable credential, user verification required, ES256, RS256 or EdDSA, attestation \`none\`: we never learn which device it is) and a token with the challenge, encrypted for this account (5 minutes). \`POST /me/passkeys\` checks the answer: the challenge, the origin (\`OIDC_PASSKEY_ORIGINS\`), the hash of the domain (\`OIDC_PASSKEY_RP_ID\`), user presence and verification, and the public key (COSE: EC P-256, RSA of at least 2048 bits, Ed25519). Max 20 per account. |
+| Log in | \`POST /oidc/interaction/:id/passkey/challenge\`: a random challenge, kept in the login cookie. The device shows its passkeys for this site; \`POST /oidc/interaction/:id/passkey\` checks the signature with the stored public key, the challenge (once), origin, domain, user verification, the user handle (the account id) and the **signature counter** (a device that counts must count up: a lower value means a cloned key, refused). Then on to the organisation choice, as after a password. |
+| Account | \`amr\` \`pop user mfa\` and \`acr\` \`loa2\` in the tokens; the audit log shows "passkey" as method, \`account.passkey_added\` and \`account.passkey_removed\`. Failed logins are logged with method \`passkey\`. |
+
+- Our own code on \`node:crypto\` (a strict CBOR decoder and the checks of WebAuthn level 2), no library.
+- Table \`user_passkeys\` (migration 7): per passkey the credential id (unique over all accounts), the public key
+  (SPKI), algorithm, signature counter, name, whether it is synced, transports, added and last used. No secrets: a
+  stolen database cannot log in.
+- A passkey belongs to its domain: in production \`APP_URL\` must be the https address of the frontend, and when the
+  domain changes every passkey stops working (the accounts keep their password or eID). Keep \`OIDC_PASSKEY_RP_ID\`
+  fixed, for example the parent domain.
+- Removing a passkey here does not remove it from the device (the device may still offer it; the login then says it is
+  unknown). The last passkey of an account without a password, eID or other server cannot be removed.
+
 ### Accounts: registration, email verification, forgotten password, invitations
 
 | Flow | How |
@@ -940,6 +979,7 @@ ${fence}
 | \`tenant_members\` | Which user is in which tenant: role (\`user\` or \`admin\`), status (\`active\` or \`disabled\`), last seen | yes |
 | \`tenant_invitations\` | Open invitations (email, role, who invited, expiry) | yes |
 | \`user_identifiers\` | Linked eIDs: an HMAC of the national register number per account (one eID per account, one account per eID), linked and last used | no |
+| \`user_passkeys\` | Passkeys: the credential id (unique), public key (SPKI), COSE algorithm, signature counter, name, synced or not, transports, added and last used; no secrets | no |
 | \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\`) | no |
 | \`oidc_signing_keys\` | Signing keys (private part encrypted) | no |
 | \`oidc_sessions\` | Browser sessions: a public id (\`sid\`), the hash of the cookie and of the login that created it, the browser (User-Agent) and when it was last used; no tenant for a platform login | yes |

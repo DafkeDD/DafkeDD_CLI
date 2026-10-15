@@ -314,7 +314,13 @@ export function SessionsSecurity() {
     }
 
     const method = (amr: string[]) =>
-        amr.includes('sc') ? t('method_eid') : amr.includes('mfa') ? t('method_mfa') : t('method_pwd')
+        amr.includes('sc')
+            ? t('method_eid')
+            : amr.includes('pop')
+              ? t('method_passkey')
+              : amr.includes('mfa')
+                ? t('method_mfa')
+                : t('method_pwd')
     const others = (sessions ?? []).filter(session => !session.current).length
 
     return (

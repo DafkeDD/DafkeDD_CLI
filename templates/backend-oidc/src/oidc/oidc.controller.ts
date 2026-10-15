@@ -50,6 +50,9 @@ const LOGIN_ERRORS: Record<string, { status: number; error: string }> = {
     'oidc.EID_NOT_LINKED': { status: 404, error: 'EID_NOT_LINKED' },
     'oidc.EID_UNAVAILABLE': { status: 503, error: 'EID_UNAVAILABLE' },
     'oidc.PASSWORD_LOGIN_OFF': { status: 403, error: 'PASSWORD_LOGIN_OFF' },
+    'oidc.PASSKEY_INVALID': { status: 401, error: 'PASSKEY_INVALID' },
+    'oidc.PASSKEY_UNKNOWN': { status: 401, error: 'PASSKEY_UNKNOWN' },
+    'oidc.PASSKEY_EXPIRED': { status: 400, error: 'PASSKEY_EXPIRED' },
     'oidc.EXTERNAL_FAILED': { status: 401, error: 'EXTERNAL_FAILED' },
     'oidc.EXTERNAL_NO_EMAIL': { status: 400, error: 'EXTERNAL_NO_EMAIL' },
     'oidc.EXTERNAL_EMAIL_UNVERIFIED': { status: 403, error: 'EXTERNAL_EMAIL_UNVERIFIED' },
@@ -148,6 +151,8 @@ export class OidcController {
                 password: !this.config.externalOnly,
                 // Login with the Belgian eID is available (OIDC_EID=on or test)
                 eid: this.config.eid !== 'off' && !this.config.externalOnly,
+                // "Log in with a passkey" (OIDC_PASSKEYS, not with OIDC_EXTERNAL_ONLY)
+                passkey: this.config.passkeys,
                 // "Log in with <name>": another OpenID Connect server (OIDC_EXTERNAL_ISSUER)
                 external: external ? { name: external.name } : null,
                 // Back from that server, halfway (second factor, organisation): POST .../resume goes on
@@ -317,6 +322,52 @@ export class OidcController {
         @I18n() i18n: I18nContext
     ) {
         const result = await this.oidc.resume(id, this.interactionCookie(request, id), (request.body ?? {}) as Params)
+        this.loginAnswer(id, result, request, response, i18n)
+    }
+
+    @Post('interaction/:id/passkey/challenge')
+    @ApiOperation({
+        summary:
+            'Log in with a passkey, step 1 (JSON { csrf }): the options for navigator.credentials.get() with a challenge kept in the login cookie (used once)'
+    })
+    @ApiOkResponse({
+        description: '{ status: "passkey-challenge", options: { challenge, rpId, userVerification, timeout } }'
+    })
+    @ApiResponse({ status: 404, description: 'oidc.PASSKEYS_DISABLED' })
+    async passkeyChallenge(
+        @Param('id') id: string,
+        @Req() request: Request,
+        @Res() response: Response,
+        @I18n() i18n: I18nContext
+    ) {
+        const result = await this.oidc.passkeyChallenge(
+            id,
+            this.interactionCookie(request, id),
+            (request.body ?? {}) as Params
+        )
+        this.loginAnswer(id, result, request, response, i18n)
+    }
+
+    @Post('interaction/:id/passkey')
+    @ApiOperation({
+        summary:
+            'Log in with a passkey, step 2 (JSON { csrf, credential }): the answer of navigator.credentials.get(). Counts as two-step verification. Rate limited.'
+    })
+    @ApiOkResponse({ description: '{ status: "redirect", location } or the organisation choice' })
+    @ApiResponse({ status: 401, description: 'PASSKEY_INVALID (signature, origin, challenge) or PASSKEY_UNKNOWN' })
+    async passkeyLogin(
+        @Param('id') id: string,
+        @Req() request: Request,
+        @Res() response: Response,
+        @I18n() i18n: I18nContext
+    ) {
+        const allowed = this.limiter.allow(['ip:' + (request.ip ?? 'unknown'), 'passkey:' + id])
+        const result = await this.oidc.passkeyLogin(
+            id,
+            this.interactionCookie(request, id),
+            (request.body ?? {}) as Params,
+            allowed
+        )
         this.loginAnswer(id, result, request, response, i18n)
     }
 
@@ -620,7 +671,8 @@ export class OidcController {
             response.set('Cache-Control', 'no-store').redirect(HttpStatus.SEE_OTHER, result.location)
             return
         }
-        if (wantsJson(request) || result.kind === 'eid-challenge') return this.loginJson(result, response, t)
+        if (wantsJson(request) || result.kind === 'eid-challenge' || result.kind === 'passkey-challenge')
+            return this.loginJson(result, response, t)
         switch (result.kind) {
             case 'expired':
                 return this.expired(response, i18n)
@@ -757,6 +809,8 @@ export class OidcController {
                 return this.json(response, 200, { status: 'eid-challenge', nonce: result.nonce })
             case 'external':
                 return this.json(response, 200, { status: 'redirect', location: result.location })
+            case 'passkey-challenge':
+                return this.json(response, 200, { status: 'passkey-challenge', options: result.options })
             case 'done':
                 this.setSessionCookie(response, result.sessionId)
                 return this.json(response, 200, { status: 'redirect', location: result.location })
