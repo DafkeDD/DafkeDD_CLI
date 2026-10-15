@@ -117,7 +117,7 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | Path | What it does |
 | --- | --- |
 | \`/api/auth/login\` | Starts a login: state, nonce and a PKCE verifier go into an encrypted cookie, then to the login server |
-| \`/login?interaction=<id>\` | The login page of the login server (email, password, organisation choice), shown by this frontend |
+| \`/login?interaction=<id>\` | The login page of the login server (email, password, eID, "Log in with <name>" for another OpenID Connect server, second factor, organisation choice), shown by this frontend. Back from the other server it goes on where the login is (\`pending\`); \`&error=EXTERNAL_...\` shows why that login failed |
 | \`/api/auth/callback\` | Back from the login server: checks state and \`iss\`, exchanges the code, verifies the ID token |
 | \`/profile\` | Protected: name, email, organisation, role, and whether the API accepts the access token |
 | \`/api/auth/logout\` | POST: logs out: revokes the refresh token, forgets the session and logs out of the login server too (\`end_session_endpoint\`), then back to the home page |

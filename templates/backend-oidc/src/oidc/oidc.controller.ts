@@ -10,11 +10,18 @@ import {
 } from '@nestjs/swagger'
 import type { Request, Response } from 'express'
 import { I18n, I18nContext } from 'nestjs-i18n'
+import { ExternalService } from './external/external.service.js'
 import { interactionCookieName, interactionCookiePath } from './interaction.js'
 import { LoginLimiter } from './login-limiter.js'
 import { OAuthError } from './oauth.error.js'
 import { OIDC, OidcConfig } from './oidc.config.js'
-import { type AuthorizeResult, type InteractionCookie, type LoginResult, OidcService } from './oidc.service.js'
+import {
+    type AuthorizeResult,
+    externalCookieName,
+    type InteractionCookie,
+    type LoginResult,
+    OidcService
+} from './oidc.service.js'
 import { type LogoutResult, SessionsService } from './sessions.service.js'
 import { TokensService } from './tokens.service.js'
 import {
@@ -41,8 +48,17 @@ const LOGIN_ERRORS: Record<string, { status: number; error: string }> = {
     'oidc.EID_INVALID': { status: 401, error: 'EID_INVALID' },
     'oidc.EID_EXPIRED': { status: 400, error: 'EID_EXPIRED' },
     'oidc.EID_NOT_LINKED': { status: 404, error: 'EID_NOT_LINKED' },
-    'oidc.EID_UNAVAILABLE': { status: 503, error: 'EID_UNAVAILABLE' }
+    'oidc.EID_UNAVAILABLE': { status: 503, error: 'EID_UNAVAILABLE' },
+    'oidc.PASSWORD_LOGIN_OFF': { status: 403, error: 'PASSWORD_LOGIN_OFF' },
+    'oidc.EXTERNAL_FAILED': { status: 401, error: 'EXTERNAL_FAILED' },
+    'oidc.EXTERNAL_NO_EMAIL': { status: 400, error: 'EXTERNAL_NO_EMAIL' },
+    'oidc.EXTERNAL_EMAIL_UNVERIFIED': { status: 403, error: 'EXTERNAL_EMAIL_UNVERIFIED' },
+    'oidc.EXTERNAL_EMAIL_TAKEN': { status: 409, error: 'EXTERNAL_EMAIL_TAKEN' },
+    'oidc.EXTERNAL_OTHER_LINKED': { status: 409, error: 'EXTERNAL_OTHER_LINKED' }
 }
+
+/** The cookies of logins at another OpenID Connect server (oidc_ext_<...>): only sent to our callback. */
+const EXTERNAL_PATH = OIDC.COOKIE_PATH + '/external'
 const loginError = (key: string) => LOGIN_ERRORS[key] ?? { status: 401, error: 'INVALID_CREDENTIALS' }
 
 /** The login page of the frontend asks for JSON; the server's own HTML page posts forms. */
@@ -66,7 +82,8 @@ export class OidcController {
         private readonly tokens: TokensService,
         private readonly sessions: SessionsService,
         private readonly config: OidcConfig,
-        private readonly limiter: LoginLimiter
+        private readonly limiter: LoginLimiter,
+        private readonly external: ExternalService
     ) {}
 
     @Get('.well-known/openid-configuration')
@@ -104,7 +121,10 @@ export class OidcController {
             'A running login: the HTML login page, or with Accept: application/json the details for the login page of the frontend'
     })
     @ApiProduces('text/html', 'application/json')
-    @ApiOkResponse({ description: 'The login form, or { step, clientName, registration, eid, csrf, loginHint }' })
+    @ApiOkResponse({
+        description:
+            'The login form, or { step, clientName, registration, password, eid, external, pending, csrf, loginHint }'
+    })
     @ApiResponse({
         status: 410,
         description: 'The login request expired (HTML page or { status: "expired", message })'
@@ -119,27 +139,47 @@ export class OidcController {
         const found = await this.oidc.findInteraction(id, this.interactionCookie(request, id))
         if (wantsJson(request)) {
             if (!found) return this.json(response, 410, { status: 'expired', message: t('oidc.EXPIRED') })
+            const external = this.config.external
             return this.json(response, 200, {
                 step: 'login',
                 clientName: found.client.name,
                 registration: this.config.registrationOpen,
+                // Email and password (not when only the other OpenID Connect server is allowed)
+                password: !this.config.externalOnly,
                 // Login with the Belgian eID is available (OIDC_EID=on or test)
-                eid: this.config.eid !== 'off',
+                eid: this.config.eid !== 'off' && !this.config.externalOnly,
+                // "Log in with <name>": another OpenID Connect server (OIDC_EXTERNAL_ISSUER)
+                external: external ? { name: external.name } : null,
+                // Back from that server, halfway (second factor, organisation): POST .../resume goes on
+                pending: found.interaction.userId !== null,
                 csrf: found.interaction.csrf,
                 loginHint: found.interaction.params.loginHint ?? ''
             })
         }
         if (!found) return this.expired(response, i18n)
-        const page = loginPage(t, {
-            action: this.action(id, 'login', request),
-            csrf: found.interaction.csrf,
-            clientName: found.client.name,
-            email: found.interaction.params.loginHint ?? ''
-        })
+        // Halfway after the other server (second factor, organisation): go on there
+        if (found.interaction.userId !== null)
+            return this.loginAnswer(
+                id,
+                await this.oidc.resume(id, this.interactionCookie(request, id), { csrf: found.interaction.csrf }),
+                request,
+                response,
+                i18n
+            )
+        const page = loginPage(
+            t,
+            this.loginOptions(
+                id,
+                request,
+                found.interaction.csrf,
+                found.client.name,
+                found.interaction.params.loginHint ?? ''
+            )
+        )
         sendPage(response, {
             lang: i18n.lang,
             ...page,
-            formTargets: [new URL(found.interaction.params.redirectUri).origin]
+            formTargets: await this.loginTargets(found.interaction.params.redirectUri)
         })
     }
 
@@ -210,6 +250,73 @@ export class OidcController {
             (request.body ?? {}) as Params,
             allowed
         )
+        this.loginAnswer(id, result, request, response, i18n)
+    }
+
+    @Post('interaction/:id/external')
+    @ApiOperation({
+        summary:
+            'Log in at the other OpenID Connect server (OIDC_EXTERNAL_ISSUER; form-encoded or JSON { csrf }): to its login page with PKCE, state and nonce'
+    })
+    @ApiResponse({ status: 303, description: 'To the other server (form), or JSON { status: "redirect", location }' })
+    @ApiResponse({ status: 404, description: 'oidc.EXTERNAL_DISABLED: no other server is set up' })
+    async externalStart(
+        @Param('id') id: string,
+        @Req() request: Request,
+        @Res() response: Response,
+        @I18n() i18n: I18nContext
+    ) {
+        const result = await this.oidc.externalStart(
+            id,
+            this.interactionCookie(request, id),
+            (request.body ?? {}) as Params
+        )
+        this.loginAnswer(id, result, request, response, i18n)
+    }
+
+    @Get('external/callback')
+    @ApiOperation({
+        summary:
+            'Back from the other OpenID Connect server (register this URL there as redirect URI): the code is exchanged and the ID token checked, then the login goes on'
+    })
+    @ApiResponse({
+        status: 303,
+        description: 'Back to the client, or to the login page (second factor, organisation, error)'
+    })
+    async externalCallback(@Req() request: Request, @Res() response: Response, @I18n() i18n: I18nContext) {
+        // The cookie of the login with this state (other logins in other tabs stay as they are)
+        const state = typeof request.query.state === 'string' ? request.query.state : ''
+        const name = externalCookieName(state)
+        const cookies = request.cookies as Record<string, unknown> | undefined
+        const sealed = state && typeof cookies?.[name] === 'string' ? (cookies[name] as string) : undefined
+        if (sealed) response.clearCookie(name, this.externalCookieOptions())
+        const { id, result } = await this.oidc.externalCallback(request.query as Params, sealed)
+        const ui = this.config.loginUiUrl
+        if (!id || !ui || result.kind === 'done' || result.kind === 'expired' || result.kind === 'no-tenant')
+            return this.loginAnswer(id ?? '', result, request, response, i18n)
+        // The login page of the frontend goes on (GET .../interaction/<id> says "pending", or shows the error)
+        if ('cookie' in result && result.cookie) this.setInteractionCookie(response, result.cookie)
+        const location = new URL(ui)
+        location.searchParams.set('interaction', id)
+        if (typeof request.query.lang === 'string') location.searchParams.set('lang', request.query.lang)
+        if (result.kind === 'form') location.searchParams.set('error', loginError(result.errorKey).error)
+        response.set('Cache-Control', 'no-store').redirect(HttpStatus.SEE_OTHER, location.toString())
+    }
+
+    @Post('interaction/:id/resume')
+    @ApiOperation({
+        summary:
+            'Go on after the other OpenID Connect server (JSON { csrf }): the second factor, setting it up, or the organisation choice'
+    })
+    @ApiOkResponse({ description: '{ status: "mfa" | "mfa-setup" | "choose-tenant" | "redirect", ... }' })
+    @ApiResponse({ status: 410, description: 'The login request expired' })
+    async resume(
+        @Param('id') id: string,
+        @Req() request: Request,
+        @Res() response: Response,
+        @I18n() i18n: I18nContext
+    ) {
+        const result = await this.oidc.resume(id, this.interactionCookie(request, id), (request.body ?? {}) as Params)
         this.loginAnswer(id, result, request, response, i18n)
     }
 
@@ -447,7 +554,7 @@ export class OidcController {
     }
 
     /** Action URL of a form on the login page; keeps ?lang= so errors come back in the same language. */
-    private action(id: string, step: 'login' | 'mfa' | 'continue' | 'tenant', request: Request): string {
+    private action(id: string, step: 'login' | 'mfa' | 'continue' | 'tenant' | 'external', request: Request): string {
         const url = new URL(this.config.issuer + '/interaction/' + encodeURIComponent(id) + '/' + step)
         if (typeof request.query.lang === 'string') url.searchParams.set('lang', request.query.lang)
         return url.toString()
@@ -466,9 +573,53 @@ export class OidcController {
         })
     }
 
+    private externalCookieOptions() {
+        return { httpOnly: true, sameSite: 'lax' as const, secure: this.config.secureCookies, path: EXTERNAL_PATH }
+    }
+
+    /** What the HTML login page shows: email and password, and/or "Log in with <the other server>". */
+    private loginOptions(
+        id: string,
+        request: Request,
+        csrf: string,
+        clientName: string,
+        email: string,
+        error?: string
+    ) {
+        const external = this.config.external
+        return {
+            action: this.action(id, 'login', request),
+            csrf,
+            clientName,
+            email,
+            error,
+            password: !this.config.externalOnly,
+            external: external ? { name: external.name, action: this.action(id, 'external', request) } : undefined
+        }
+    }
+
+    /** Where the forms of the login page may go (Content-Security-Policy form-action): the client and the other server. */
+    private async loginTargets(redirectUri: string): Promise<string[]> {
+        const targets = [new URL(redirectUri).origin]
+        if (this.config.external) {
+            const authorize = await this.external.metadata().catch(() => null)
+            if (authorize) targets.push(new URL(authorize.authorization_endpoint).origin)
+        }
+        return targets
+    }
+
     private loginAnswer(id: string, result: LoginResult, request: Request, response: Response, i18n: I18nContext) {
         const t = translator(i18n)
         if ('cookie' in result && result.cookie) this.setInteractionCookie(response, result.cookie)
+        if (result.kind === 'external') {
+            response.cookie(result.cookieName, result.external, {
+                ...this.externalCookieOptions(),
+                maxAge: OIDC.INTERACTION_SECONDS * 1000
+            })
+            if (wantsJson(request)) return this.json(response, 200, { status: 'redirect', location: result.location })
+            response.set('Cache-Control', 'no-store').redirect(HttpStatus.SEE_OTHER, result.location)
+            return
+        }
         if (wantsJson(request) || result.kind === 'eid-challenge') return this.loginJson(result, response, t)
         switch (result.kind) {
             case 'expired':
@@ -484,13 +635,17 @@ export class OidcController {
                     lang: i18n.lang,
                     status: loginError(result.errorKey).status,
                     formTargets: [new URL(result.interaction.params.redirectUri).origin],
-                    ...loginPage(t, {
-                        action: this.action(id, 'login', request),
-                        csrf: result.interaction.csrf,
-                        clientName: result.client.name,
-                        email: result.email,
-                        error: t(result.errorKey)
-                    })
+                    ...loginPage(
+                        t,
+                        this.loginOptions(
+                            id,
+                            request,
+                            result.interaction.csrf,
+                            result.client.name,
+                            result.email,
+                            t(result.errorKey)
+                        )
+                    )
                 })
             case 'mfa':
                 return sendPage(response, {
@@ -600,6 +755,8 @@ export class OidcController {
                 })
             case 'eid-challenge':
                 return this.json(response, 200, { status: 'eid-challenge', nonce: result.nonce })
+            case 'external':
+                return this.json(response, 200, { status: 'redirect', location: result.location })
             case 'done':
                 this.setSessionCookie(response, result.sessionId)
                 return this.json(response, 200, { status: 'redirect', location: result.location })

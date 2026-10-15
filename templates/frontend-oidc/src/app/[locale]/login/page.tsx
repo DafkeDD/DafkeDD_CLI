@@ -36,7 +36,8 @@ export default async function LoginPage({
 async function LoginContent({ searchParams }: { searchParams: Search }) {
     const { interaction, error } = await searchParams
     const t = await getTranslations('Oidc')
-    if (interaction) return <OidcLogin interaction={interaction} />
+    // ?error=: the login at the other OpenID Connect server did not work (back from its callback)
+    if (interaction) return <OidcLogin interaction={interaction} externalError={error} />
 
     return (
         <section className={CARD}>

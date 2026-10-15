@@ -59,6 +59,27 @@ export const OIDC = {
     LOCALES: ['en', 'nl', 'fr', 'de']
 } as const
 
+/** The other OpenID Connect server (OIDC_EXTERNAL_*). */
+export interface ExternalSettings {
+    /** Its issuer, exactly as in its discovery document (https). */
+    issuer: string
+    clientId: string
+    /** Empty: a public client (PKCE only). Otherwise client_secret_basic. */
+    clientSecret: string | null
+    /** On the button: "Log in with <name>". */
+    name: string
+    scopes: string
+    /** Only this way of logging in. */
+    only: boolean
+    /**
+     * Does a login there count as two-step verification? `external` (default): when its ID token says so (amr "mfa");
+     * `trust`: always (it requires two-step verification itself); `local`: never, our own code follows.
+     */
+    mfa: 'external' | 'trust' | 'local'
+    /** A first login there with a verified email address joins the account with that address (default true). */
+    linkByEmail: boolean
+}
+
 /** Reads the OIDC_* settings from .env. */
 @Injectable()
 export class OidcConfig {
@@ -112,7 +133,7 @@ export class OidcConfig {
 
     /** Can someone create an account themselves (in any way)? */
     get registrationOpen(): boolean {
-        return this.registration !== 'closed'
+        return this.registration !== 'closed' && !this.externalOnly
     }
 
     /**
@@ -130,6 +151,33 @@ export class OidcConfig {
      */
     get eidOrigin(): string {
         return new URL(this.config.get<string>('OIDC_EID_ORIGIN') || this.appUrl).origin
+    }
+
+    /**
+     * Logging in at another OpenID Connect server (federation), or null when OIDC_EXTERNAL_ISSUER is empty. That server
+     * proves who the user is; accounts, organisations, roles and licences stay here.
+     */
+    get external(): ExternalSettings | null {
+        // Exactly as in its discovery document (some end with a slash, like Auth0)
+        const issuer = (this.config.get<string>('OIDC_EXTERNAL_ISSUER') ?? '').trim()
+        const clientId = (this.config.get<string>('OIDC_EXTERNAL_CLIENT_ID') ?? '').trim()
+        if (!issuer || !clientId) return null
+        const mfa = this.config.get<string>('OIDC_EXTERNAL_MFA') ?? 'external'
+        return {
+            issuer,
+            clientId,
+            clientSecret: this.config.get<string>('OIDC_EXTERNAL_CLIENT_SECRET') || null,
+            name: this.config.get<string>('OIDC_EXTERNAL_NAME') || new URL(issuer).hostname,
+            scopes: this.config.get<string>('OIDC_EXTERNAL_SCOPES') || 'openid profile email',
+            only: this.config.get<string>('OIDC_EXTERNAL_ONLY') === 'true',
+            mfa: mfa === 'trust' || mfa === 'local' ? mfa : 'external',
+            linkByEmail: this.config.get<string>('OIDC_EXTERNAL_LINK_EMAIL') !== 'false'
+        }
+    }
+
+    /** Only the other server: no password and no eID login, no registration with them (OIDC_EXTERNAL_ONLY=true). */
+    get externalOnly(): boolean {
+        return this.external?.only === true
     }
 
     get production(): boolean {

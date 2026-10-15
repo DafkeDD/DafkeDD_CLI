@@ -813,6 +813,35 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         expect(await audit.list({ limit: 10 })).toHaveLength(0)
     })
 
+    it('links an account of another OpenID Connect server once, next to the eID', async () => {
+        const store = new PgOidcStore(database)
+        const account = await store.createUser({
+            email: 'external@example.com',
+            name: 'External',
+            passwordHash: null,
+            emailVerified: true,
+            locale: null
+        })
+        const hash = 'external-' + randomUUID()
+        expect(await store.linkIdentifier(account!.id, 'external', hash)).toBe('ok')
+        expect((await store.findUserByIdentifier('external', hash))?.id).toBe(account!.id)
+        // The same subject never for a second account; one per account
+        const other = await store.createUser({
+            email: 'external2@example.com',
+            name: 'Other',
+            passwordHash: null,
+            emailVerified: true,
+            locale: null
+        })
+        expect(await store.linkIdentifier(other!.id, 'external', hash)).toBe('taken')
+        expect(await store.linkIdentifier(account!.id, 'external', 'external-' + randomUUID())).toBe('exists')
+        await expect(
+            database.query(`INSERT INTO user_identifiers (type, value_hash, user_id) VALUES ('saml', 'x', $1)`, [
+                other!.id
+            ])
+        ).rejects.toThrow(/user_identifiers_type_check/)
+    })
+
     it('the tenant role exists and owns nothing', async () => {
         const { rows } = await database.query<{ owned: number }>(
             `SELECT count(*)::int AS owned FROM pg_class c JOIN pg_roles r ON r.oid = c.relowner WHERE r.rolname = $1`,

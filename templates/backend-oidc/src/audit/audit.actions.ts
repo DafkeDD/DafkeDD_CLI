@@ -21,7 +21,8 @@ export const AUDIT_ACTIONS = {
         'account.mfa_codes_renewed',
         'account.mfa_reset',
         'account.eid_linked',
-        'account.eid_unlinked'
+        'account.eid_unlinked',
+        'account.external_linked'
     ],
     members: [
         'members.invited',

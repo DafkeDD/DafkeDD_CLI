@@ -229,3 +229,8 @@ for (const ui of [true, false]) {
         assert.match(templates['src/components/presence.tsx'], /me\/heartbeat/)
     })
 }
+
+test('a superadmin on the platform (no organisation) goes to /admin instead of seeing an error', () => {
+    for (const page of ['src/app/[locale]/members/page.tsx', 'src/app/[locale]/licenses/page.tsx'])
+        assert.match(templates[page], /if \(!session\.tenant && session\.superadmin\) redirect\('\/admin'\)/, page)
+})

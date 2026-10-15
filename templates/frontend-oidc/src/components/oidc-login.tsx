@@ -19,6 +19,10 @@ type State =
           loginHint: string
           registration: boolean
           eid: boolean
+          /** Email and password (false: only the other OpenID Connect server). */
+          password: boolean
+          /** "Log in with <name>": another OpenID Connect server. */
+          external: { name: string } | null
       }
     | { step: 'tenant'; csrf: string; tenants: Tenant[]; platform: boolean }
     | { step: 'mfa'; csrf: string }
@@ -38,6 +42,9 @@ type Answer = {
     loginHint?: string
     registration?: boolean
     eid?: boolean
+    password?: boolean
+    external?: { name: string } | null
+    pending?: boolean
     nonce?: string
     secret?: string
     qrSvg?: string
@@ -55,11 +62,24 @@ const SEARCH_FROM = 7
  * /oidc/interaction/<id> on the API (with credentials, so the browser keeps the session cookie of the login server)
  * and finally sends the browser back to the application that asked for the login.
  */
-export function OidcLogin({ interaction }: { interaction: string }) {
+export function OidcLogin({ interaction, externalError }: { interaction: string; externalError?: string }) {
     const t = useTranslations('Oidc')
     const locale = useLocale()
     const [state, setState] = useState<State>({ step: 'loading' })
-    const [error, setError] = useState<string | null>(null)
+    // Why the login at the other OpenID Connect server did not work (?error= of its callback)
+    const [error, setError] = useState<string | null>(() =>
+        !externalError
+            ? null
+            : externalError === 'EXTERNAL_NO_EMAIL'
+              ? t('externalNoEmail')
+              : externalError === 'EXTERNAL_EMAIL_UNVERIFIED'
+                ? t('externalEmailUnverified')
+                : externalError === 'EXTERNAL_EMAIL_TAKEN'
+                  ? t('externalEmailTaken')
+                  : externalError === 'EXTERNAL_OTHER_LINKED'
+                    ? t('externalOtherLinked')
+                    : t('externalFailed')
+    )
     const [busy, setBusy] = useState(false)
     // Set when the password was right but the email address is not verified yet: offers to send the email again
     const [unverified, setUnverified] = useState('')
@@ -87,6 +107,12 @@ export function OidcLogin({ interaction }: { interaction: string }) {
         call('')
             .then(({ status, answer }) => {
                 if (!active) return
+                if (status === 200 && answer.csrf && answer.pending) {
+                    // Back from the other server, halfway: the second factor or the organisation
+                    return call('/resume', { csrf: answer.csrf }).then(
+                        next => active && handle(next.status, next.answer)
+                    )
+                }
                 if (status === 200 && answer.csrf) {
                     setState({
                         step: 'login',
@@ -94,7 +120,9 @@ export function OidcLogin({ interaction }: { interaction: string }) {
                         csrf: answer.csrf,
                         loginHint: answer.loginHint ?? '',
                         registration: answer.registration !== false,
-                        eid: answer.eid === true
+                        eid: answer.eid === true,
+                        password: answer.password !== false,
+                        external: answer.external ?? null
                     })
                 } else {
                     setState({ step: 'fatal', message: answer.message ?? t('offline') })
@@ -175,6 +203,12 @@ export function OidcLogin({ interaction }: { interaction: string }) {
             { csrf: state.csrf, email: values.email, password: values.password },
             String(values.email)
         )
+    }
+
+    /** "Log in with ...": to the other server (the answer is { status: "redirect", location }). */
+    function onExternal() {
+        if (state.step !== 'login') return
+        void submit('/external', { csrf: state.csrf })
     }
 
     async function resend() {
@@ -361,6 +395,30 @@ export function OidcLogin({ interaction }: { interaction: string }) {
         )
     }
 
+    const externalButton = state.external && (
+        <button type='button' disabled={busy} className={state.password ? OUTLINE : BUTTON} onClick={onExternal}>
+            {t('externalLogin', { name: state.external.name })}
+        </button>
+    )
+
+    // Only the other OpenID Connect server (OIDC_EXTERNAL_ONLY)
+    if (!state.password) {
+        return (
+            <section className={CARD}>
+                <div className='flex flex-col gap-1.5'>
+                    <h1 className='text-2xl font-bold tracking-tight'>{t('loginTitle')}</h1>
+                    <p className='text-sm opacity-80'>{t('loginSubtitle', { client: state.clientName })}</p>
+                </div>
+                {error && (
+                    <div role='alert' className='text-sm text-red-600 dark:text-red-400'>
+                        {error}
+                    </div>
+                )}
+                {externalButton}
+            </section>
+        )
+    }
+
     return (
         <form key='login' onSubmit={onLogin} className={CARD}>
             <div className='flex flex-col gap-1.5'>
@@ -406,13 +464,16 @@ export function OidcLogin({ interaction }: { interaction: string }) {
             <button type='submit' disabled={busy} className={BUTTON}>
                 {busy ? t('busy') : t('submit')}
             </button>
+            {(state.eid || state.external) && (
+                <div className='flex items-center gap-3 text-xs uppercase opacity-60'>
+                    <span className='h-px flex-1 bg-current opacity-30' />
+                    {t('or')}
+                    <span className='h-px flex-1 bg-current opacity-30' />
+                </div>
+            )}
+            {externalButton}
             {state.eid && (
                 <>
-                    <div className='flex items-center gap-3 text-xs uppercase opacity-60'>
-                        <span className='h-px flex-1 bg-current opacity-30' />
-                        {t('or')}
-                        <span className='h-px flex-1 bg-current opacity-30' />
-                    </div>
                     <button
                         type='button'
                         className={OUTLINE}

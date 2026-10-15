@@ -20,12 +20,13 @@ export default async function MembersPage({ params }: { params: Promise<{ locale
 async function Content() {
     const session = await getSession()
     if (!session) redirect('/api/auth/login?returnTo=/members')
+    // A superadmin on the platform (no organisation): opening one is done on the platform page
+    if (!session.tenant && session.superadmin) redirect('/admin')
     if (session.tenant?.role !== 'admin') {
         const t = await getTranslations('Oidc')
         return (
             <section className={WIDE_CARD}>
-                {/* A superadmin without an organisation chooses one on the platform page */}
-                <Notice tone='error'>{session.tenant ? t('noAccess') : t('chooseOrganisation')}</Notice>
+                <Notice tone='error'>{t('noAccess')}</Notice>
             </section>
         )
     }

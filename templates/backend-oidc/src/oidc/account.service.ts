@@ -90,7 +90,7 @@ export class AccountService {
         lang: string,
         ip: string
     ) {
-        if (this.config.registration !== 'open')
+        if (this.config.registration !== 'open' || this.config.externalOnly)
             throw new AppException('oidc.REGISTRATION_CLOSED', HttpStatus.FORBIDDEN)
         const email = normalize(input.email)
         this.limit(ip, email)
@@ -143,7 +143,10 @@ export class AccountService {
 
     /** Which ways of registering are open (for the registration page). */
     registrationOptions() {
-        return { password: this.config.registration === 'open', eid: this.config.registrationOpen && this.eid.enabled }
+        return {
+            password: this.config.registration === 'open' && !this.config.externalOnly,
+            eid: this.config.registrationOpen && this.eid.enabled
+        }
     }
 
     /** A challenge for registering with the eID (the nonce goes to the bridge). */

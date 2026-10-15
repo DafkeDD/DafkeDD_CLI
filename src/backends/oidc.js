@@ -320,6 +320,16 @@ export const MESSAGES = {
         SESSION_NOT_FOUND: 'This session was not found (it ended already).',
         ACCOUNT_DISABLED: 'This account is disabled.',
         EID_DISABLED: 'Logging in with the eID is not available on this server.',
+        EXTERNAL_LOGIN: 'Log in with {name}',
+        EXTERNAL_DISABLED: 'Logging in with another server is not set up.',
+        EXTERNAL_FAILED: 'Logging in with the other server did not work. Try again.',
+        EXTERNAL_NO_EMAIL: 'The other server did not give an email address: an account needs one.',
+        EXTERNAL_EMAIL_UNVERIFIED:
+            'The other server did not verify this email address: log in there with a verified address.',
+        EXTERNAL_EMAIL_TAKEN:
+            'An account with this email address exists already. Log in with it, or ask an admin to link it.',
+        EXTERNAL_OTHER_LINKED: 'This account is linked to another account of the other server already.',
+        PASSWORD_LOGIN_OFF: 'Logging in with a password is turned off: use the button below.',
         EID_INVALID: 'The eID could not be verified. Please try again.',
         EID_EXPIRED: 'The eID request expired. Please try again.',
         EID_NOT_LINKED:
@@ -389,6 +399,16 @@ export const MESSAGES = {
         SESSION_NOT_FOUND: 'Deze sessie werd niet gevonden (ze is al beëindigd).',
         ACCOUNT_DISABLED: 'Dit account is uitgeschakeld.',
         EID_DISABLED: 'Inloggen met de eID is niet beschikbaar op deze server.',
+        EXTERNAL_LOGIN: 'Inloggen met {name}',
+        EXTERNAL_DISABLED: 'Inloggen via een andere server is niet ingesteld.',
+        EXTERNAL_FAILED: 'Inloggen via de andere server is niet gelukt. Probeer het opnieuw.',
+        EXTERNAL_NO_EMAIL: 'De andere server gaf geen e-mailadres: een account heeft er een nodig.',
+        EXTERNAL_EMAIL_UNVERIFIED:
+            'De andere server heeft dit e-mailadres niet bevestigd: log daar in met een bevestigd adres.',
+        EXTERNAL_EMAIL_TAKEN:
+            'Er bestaat al een account met dit e-mailadres. Log daarmee in, of vraag een beheerder om het te koppelen.',
+        EXTERNAL_OTHER_LINKED: 'Dit account is al gekoppeld aan een ander account van de andere server.',
+        PASSWORD_LOGIN_OFF: 'Inloggen met een wachtwoord staat uit: gebruik de knop hieronder.',
         EID_INVALID: 'De eID kon niet gecontroleerd worden. Probeer het opnieuw.',
         EID_EXPIRED: 'De eID-aanvraag is verlopen. Probeer het opnieuw.',
         EID_NOT_LINKED:
@@ -458,6 +478,16 @@ export const MESSAGES = {
         SESSION_NOT_FOUND: 'Cette session est introuvable (elle est déjà terminée).',
         ACCOUNT_DISABLED: 'Ce compte est désactivé.',
         EID_DISABLED: "La connexion avec l'eID n'est pas disponible sur ce serveur.",
+        EXTERNAL_LOGIN: 'Se connecter avec {name}',
+        EXTERNAL_DISABLED: "La connexion via un autre serveur n'est pas configurée.",
+        EXTERNAL_FAILED: "La connexion via l'autre serveur n'a pas fonctionné. Réessayez.",
+        EXTERNAL_NO_EMAIL: "L'autre serveur n'a pas donné d'adresse e-mail : un compte en a besoin.",
+        EXTERNAL_EMAIL_UNVERIFIED:
+            "L'autre serveur n'a pas confirmé cette adresse e-mail : connectez-vous là-bas avec une adresse confirmée.",
+        EXTERNAL_EMAIL_TAKEN:
+            'Un compte avec cette adresse e-mail existe déjà. Connectez-vous avec celui-ci, ou demandez à un administrateur de le lier.',
+        EXTERNAL_OTHER_LINKED: "Ce compte est déjà lié à un autre compte de l'autre serveur.",
+        PASSWORD_LOGIN_OFF: 'La connexion par mot de passe est désactivée : utilisez le bouton ci-dessous.',
         EID_INVALID: "L'eID n'a pas pu être vérifiée. Veuillez réessayer.",
         EID_EXPIRED: 'La demande eID a expiré. Veuillez réessayer.',
         EID_NOT_LINKED:
@@ -534,6 +564,16 @@ export const MESSAGES = {
         SESSION_NOT_FOUND: 'Diese Sitzung wurde nicht gefunden (sie ist bereits beendet).',
         ACCOUNT_DISABLED: 'Dieses Konto ist deaktiviert.',
         EID_DISABLED: 'Die Anmeldung mit der eID ist auf diesem Server nicht verfügbar.',
+        EXTERNAL_LOGIN: 'Mit {name} anmelden',
+        EXTERNAL_DISABLED: 'Die Anmeldung über einen anderen Server ist nicht eingerichtet.',
+        EXTERNAL_FAILED: 'Die Anmeldung über den anderen Server hat nicht funktioniert. Versuche es erneut.',
+        EXTERNAL_NO_EMAIL: 'Der andere Server hat keine E-Mail-Adresse geliefert: ein Konto braucht eine.',
+        EXTERNAL_EMAIL_UNVERIFIED:
+            'Der andere Server hat diese E-Mail-Adresse nicht bestätigt: melde dich dort mit einer bestätigten Adresse an.',
+        EXTERNAL_EMAIL_TAKEN:
+            'Es gibt bereits ein Konto mit dieser E-Mail-Adresse. Melde dich damit an oder bitte einen Admin, es zu verknüpfen.',
+        EXTERNAL_OTHER_LINKED: 'Dieses Konto ist bereits mit einem anderen Konto des anderen Servers verknüpft.',
+        PASSWORD_LOGIN_OFF: 'Die Anmeldung mit Passwort ist ausgeschaltet: nutze die Schaltfläche unten.',
         EID_INVALID: 'Die eID konnte nicht geprüft werden. Bitte versuche es erneut.',
         EID_EXPIRED: 'Die eID-Anfrage ist abgelaufen. Bitte versuche es erneut.',
         EID_NOT_LINKED:
@@ -656,7 +696,64 @@ export async function ask({ projectDir = process.cwd(), prompts, hasFrontend = f
         // With a frontend the login pages live there (port 3000), not in the API
         loginUi: hasFrontend,
         // The name of the application in emails
-        appName: basename(projectDir)
+        appName: basename(projectDir),
+        external: await askExternal(prompts)
+    }
+}
+
+/** An issuer: https (http only on this computer), without a trailing slash. */
+export function validIssuer(value) {
+    try {
+        const url = new URL(value.trim())
+        if (url.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(url.hostname)) return true
+    } catch {
+        // below
+    }
+    return 'Geef de https-URL van de issuer op (bv. https://login.microsoftonline.com/<tenant-id>/v2.0)'
+}
+
+/**
+ * Logging in at another OpenID Connect server (Microsoft Entra ID, Keycloak, Google, ...): its issuer, our client
+ * there and the text of the button. Null when not wanted.
+ */
+async function askExternal(prompts) {
+    const how = await prompts.select({
+        message: 'Ook inloggen via een bestaande OIDC-server (Entra ID, Keycloak, Google, ...)?',
+        choices: [
+            { name: 'Nee', value: 'no' },
+            { name: 'Ja, naast e-mail en wachtwoord', value: 'also' },
+            { name: 'Ja, enkel via die server', value: 'only' }
+        ]
+    })
+    if (how !== 'also' && how !== 'only') return null
+    const issuer = (
+        await prompts.input({
+            message: 'Issuer-URL van die server (exact zoals "issuer" in zijn /.well-known/openid-configuration):',
+            validate: validIssuer
+        })
+    ).trim()
+    const clientId = (
+        await prompts.input({
+            message: 'Client-id van deze applicatie bij die server:',
+            validate: value => value.trim().length > 0 || 'Geef de client-id op'
+        })
+    ).trim()
+    const secret = await (prompts.password ?? prompts.input)({
+        message: 'Client-secret (leeg laten voor een publieke client met PKCE):',
+        mask: '*'
+    })
+    const name = (
+        await prompts.input({
+            message: 'Tekst op de knop "Inloggen met ...":',
+            default: new URL(issuer).hostname
+        })
+    ).trim()
+    return {
+        issuer,
+        clientId,
+        clientSecret: secret.trim(),
+        name: name || new URL(issuer).hostname,
+        only: how === 'only'
     }
 }
 
@@ -693,6 +790,20 @@ export function envLines(oidc, { port, example = false }) {
         '# Login with the Belgian eID (through the DafkeDD eID bridge on the PC of the user): off, on (real cards,',
         '# with OCSP) or test (also the virtual card of the bridge: npm run eid:mock in the frontend; never in production)',
         `OIDC_EID=${example ? 'on' : 'test'}`,
+        '',
+        '# Log in at another OpenID Connect server (Microsoft Entra ID, Keycloak, Google, ...). Register this redirect URI',
+        `# there: http://localhost:${port}${ISSUER_PATH}/external/callback. Leave OIDC_EXTERNAL_ISSUER empty to turn it off.`,
+        `OIDC_EXTERNAL_ISSUER=${oidc.external?.issuer ?? ''}`,
+        `OIDC_EXTERNAL_CLIENT_ID=${oidc.external?.clientId ?? ''}`,
+        '# Empty: a public client (PKCE only); otherwise the secret of our client there (client_secret_basic)',
+        `OIDC_EXTERNAL_CLIENT_SECRET=${example ? '' : quote(oidc.external?.clientSecret ?? '')}`,
+        '# The text of the button: "Log in with <name>"',
+        `OIDC_EXTERNAL_NAME=${quote(oidc.external?.name ?? '')}`,
+        '# true: only that server (no password, no eID, no registration here)',
+        `OIDC_EXTERNAL_ONLY=${oidc.external?.only ? 'true' : 'false'}`,
+        '# Does a login there count as two-step verification? external: when it says so (amr "mfa"); trust: always;',
+        '# local: never (our own code follows)',
+        'OIDC_EXTERNAL_MFA=external',
         '',
         '# Accounts: links in emails go to the pages of the frontend (/verify-email, /reset-password, /invite)',
         `APP_URL=${APP_URL}`,
@@ -929,8 +1040,21 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/oidc/interaction/:id',
         tag: 'oidc',
         summary:
-            'The login page (HTML, in the language of the browser or ui_locales) of a running login. Valid 10 minutes.',
-        response: null,
+            'The login page (HTML, in the language of the browser or ui_locales) of a running login. Valid 10 minutes. With `Accept: application/json` (the login page of the frontend): what the page shows — email and password (`password`), the eID, "Log in with <name>" (`external`) — and `pending: true` when the login came back from the other server halfway (then POST .../resume).',
+        response: {
+            status: 200,
+            example: {
+                step: 'login',
+                clientName: 'Frontend',
+                registration: true,
+                password: true,
+                eid: true,
+                external: { name: 'Contoso' },
+                pending: false,
+                csrf: 'from-the-page',
+                loginHint: ''
+            }
+        },
         errors: []
     },
     {
@@ -1010,6 +1134,50 @@ export const endpoints = ({ port = 4000 } = {}) => [
         },
         response: null,
         errors: []
+    },
+    {
+        method: 'POST',
+        path: '/oidc/interaction/:id/external',
+        tag: 'oidc',
+        summary:
+            '"Log in with <name>": to the other OpenID Connect server (OIDC_EXTERNAL_ISSUER), with PKCE, state and nonce. Form-encoded (303 to that server) or JSON (`{ status: "redirect", location }`). The login waits in a cookie `oidc_ext_<...>` named after its state (only sent to the callback).',
+        form: true,
+        body: {
+            example: { csrf: 'from-the-page' },
+            fields: [['csrf', 'string', 'required, the hidden field of the page']]
+        },
+        response: null,
+        errors: [[404, 'oidc.EXTERNAL_DISABLED']]
+    },
+    {
+        method: 'GET',
+        path: '/oidc/external/callback',
+        tag: 'oidc',
+        summary:
+            'Back from the other OpenID Connect server: register this URL there as redirect URI. Checks the state, exchanges the code (PKCE, client secret) and checks the ID token with its keys (issuer, audience, expiry, nonce). The account is the one linked to that person, or the one with the same verified email address, or a new one; then the login goes on (second factor, organisation) and ends at the client.',
+        pathExample: '/oidc/external/callback?code=SplxlOBeZQQYbYS6WxSbIA&state=af0ifjsldkj',
+        response: null,
+        errors: [
+            [400, 'oidc.EXPIRED'],
+            [401, 'oidc.EXTERNAL_FAILED'],
+            [400, 'oidc.EXTERNAL_NO_EMAIL'],
+            [403, 'oidc.EXTERNAL_EMAIL_UNVERIFIED'],
+            [409, 'oidc.EXTERNAL_EMAIL_TAKEN'],
+            [409, 'oidc.EXTERNAL_OTHER_LINKED']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/oidc/interaction/:id/resume',
+        tag: 'oidc',
+        summary:
+            'For the login page of the frontend after the callback of the other server (GET /oidc/interaction/:id says `pending: true`): goes on with the second factor, setting it up, or the organisation choice.',
+        body: {
+            example: { csrf: 'from-the-page' },
+            fields: [['csrf', 'string', 'required, from GET /oidc/interaction/:id']]
+        },
+        response: { status: 200, example: { status: 'mfa', csrf: 'from-the-page' } },
+        errors: [[410, 'oidc.EXPIRED']]
     },
     {
         method: 'POST',

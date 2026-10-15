@@ -20,11 +20,13 @@ export default async function LicensesPage({ params }: { params: Promise<{ local
 async function Content() {
     const session = await getSession()
     if (!session) redirect('/api/auth/login?returnTo=/licenses')
+    // A superadmin on the platform (no organisation): opening one is done on the platform page
+    if (!session.tenant && session.superadmin) redirect('/admin')
     if (session.tenant?.role !== 'admin') {
         const t = await getTranslations('Licenses')
         return (
             <section className={WIDE_CARD}>
-                <Notice tone='error'>{session.tenant ? t('noAccess') : t('chooseOrganisation')}</Notice>
+                <Notice tone='error'>{t('noAccess')}</Notice>
             </section>
         )
     }

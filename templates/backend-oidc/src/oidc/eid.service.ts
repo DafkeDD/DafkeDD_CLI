@@ -49,8 +49,9 @@ export class EidService {
             throw new Error('OIDC_EID=test also trusts test cards: never use it in production. Use OIDC_EID=on.')
     }
 
+    /** OIDC_EID on or test, and not only the other OpenID Connect server (OIDC_EXTERNAL_ONLY). */
     get enabled(): boolean {
-        return this.config.eid !== 'off'
+        return this.config.eid !== 'off' && !this.config.externalOnly
     }
 
     assertEnabled(): void {

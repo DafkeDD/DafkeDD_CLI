@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { AccessGuard } from '../access/access.js'
+import { ExternalService } from './external/external.service.js'
 import { AuditModule } from '../audit/audit.module.js'
 import { MailModule } from '../mail/mail.module.js'
 import { AccountController } from './account.controller.js'
@@ -34,6 +35,7 @@ import { WellKnownController } from './well-known.controller.js'
     providers: [
         OidcConfig,
         OidcService,
+        ExternalService,
         AccountService,
         MfaService,
         EidService,
@@ -46,6 +48,7 @@ import { WellKnownController } from './well-known.controller.js'
     ],
     exports: [
         OidcService,
+        ExternalService,
         TokensService,
         SessionsService,
         AccountService,

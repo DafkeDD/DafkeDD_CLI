@@ -146,7 +146,6 @@ export const OIDC_MESSAGES = {
         withdrawn: 'Invitation withdrawn.',
         openTenant: 'Open',
         platformChoice: 'Platform management (no organisation)',
-        chooseOrganisation: 'You are logged in without an organisation. Open one on the Platform page.',
         noTenantsYet: 'There are no organisations yet. Create the first one below.',
         eidLogin: 'Log in with eID',
         or: 'or',
@@ -197,7 +196,15 @@ export const OIDC_MESSAGES = {
         sessionsEndOthers: 'Log out everywhere else',
         sessionsEnded: '{count, plural, one {# session ended.} other {# sessions ended.}}',
         licenses: 'Licences',
-        audit: 'Audit log'
+        audit: 'Audit log',
+        externalLogin: 'Log in with {name}',
+        externalFailed: 'Logging in with the other server did not work. Try again.',
+        externalNoEmail: 'The other server did not give an email address: an account needs one.',
+        externalEmailUnverified:
+            'The other server did not verify this email address: log in there with a verified address.',
+        externalEmailTaken:
+            'An account with this email address exists already. Log in with your password, or ask an admin to link it.',
+        externalOtherLinked: 'This account is linked to another account of the other server already.'
     },
     nl: {
         signIn: 'Inloggen',
@@ -333,7 +340,6 @@ export const OIDC_MESSAGES = {
         withdrawn: 'Uitnodiging ingetrokken.',
         openTenant: 'Openen',
         platformChoice: 'Platformbeheer (geen organisatie)',
-        chooseOrganisation: 'Je bent ingelogd zonder organisatie. Open er een op de pagina Platform.',
         noTenantsYet: 'Er zijn nog geen organisaties. Maak hieronder de eerste aan.',
         eidLogin: 'Inloggen met eID',
         or: 'of',
@@ -385,7 +391,15 @@ export const OIDC_MESSAGES = {
         sessionsEndOthers: 'Overal elders uitloggen',
         sessionsEnded: '{count, plural, one {# sessie beëindigd.} other {# sessies beëindigd.}}',
         licenses: 'Licenties',
-        audit: 'Logboek'
+        audit: 'Logboek',
+        externalLogin: 'Inloggen met {name}',
+        externalFailed: 'Inloggen via de andere server is niet gelukt. Probeer het opnieuw.',
+        externalNoEmail: 'De andere server gaf geen e-mailadres: een account heeft er een nodig.',
+        externalEmailUnverified:
+            'De andere server heeft dit e-mailadres niet bevestigd: log daar in met een bevestigd adres.',
+        externalEmailTaken:
+            'Er bestaat al een account met dit e-mailadres. Log in met je wachtwoord, of vraag een beheerder om het te koppelen.',
+        externalOtherLinked: 'Dit account is al gekoppeld aan een ander account van de andere server.'
     },
     fr: {
         signIn: 'Se connecter',
@@ -523,7 +537,6 @@ export const OIDC_MESSAGES = {
         withdrawn: 'Invitation retirée.',
         openTenant: 'Ouvrir',
         platformChoice: 'Gestion de la plateforme (sans organisation)',
-        chooseOrganisation: 'Vous êtes connecté sans organisation. Ouvrez-en une sur la page Plateforme.',
         noTenantsYet: "Il n'y a pas encore d'organisation. Créez la première ci-dessous.",
         eidLogin: "Se connecter avec l'eID",
         or: 'ou',
@@ -578,7 +591,15 @@ export const OIDC_MESSAGES = {
         sessionsEndOthers: 'Se déconnecter partout ailleurs',
         sessionsEnded: '{count, plural, one {# session terminée.} other {# sessions terminées.}}',
         licenses: 'Licences',
-        audit: "Journal d'audit"
+        audit: "Journal d'audit",
+        externalLogin: 'Se connecter avec {name}',
+        externalFailed: "La connexion via l'autre serveur n'a pas fonctionné. Réessayez.",
+        externalNoEmail: "L'autre serveur n'a pas donné d'adresse e-mail : un compte en a besoin.",
+        externalEmailUnverified:
+            "L'autre serveur n'a pas confirmé cette adresse e-mail : connectez-vous là-bas avec une adresse confirmée.",
+        externalEmailTaken:
+            'Un compte avec cette adresse e-mail existe déjà. Connectez-vous avec votre mot de passe, ou demandez à un administrateur de le lier.',
+        externalOtherLinked: "Ce compte est déjà lié à un autre compte de l'autre serveur."
     },
     de: {
         signIn: 'Anmelden',
@@ -715,7 +736,6 @@ export const OIDC_MESSAGES = {
         withdrawn: 'Einladung zurückgezogen.',
         openTenant: 'Öffnen',
         platformChoice: 'Plattformverwaltung (keine Organisation)',
-        chooseOrganisation: 'Du bist ohne Organisation angemeldet. Öffne eine auf der Seite Plattform.',
         noTenantsYet: 'Es gibt noch keine Organisationen. Lege unten die erste an.',
         eidLogin: 'Mit eID anmelden',
         or: 'oder',
@@ -767,7 +787,15 @@ export const OIDC_MESSAGES = {
         sessionsEndOthers: 'Überall sonst abmelden',
         sessionsEnded: '{count, plural, one {# Sitzung beendet.} other {# Sitzungen beendet.}}',
         licenses: 'Lizenzen',
-        audit: 'Protokoll'
+        audit: 'Protokoll',
+        externalLogin: 'Mit {name} anmelden',
+        externalFailed: 'Die Anmeldung über den anderen Server hat nicht funktioniert. Versuche es erneut.',
+        externalNoEmail: 'Der andere Server hat keine E-Mail-Adresse geliefert: ein Konto braucht eine.',
+        externalEmailUnverified:
+            'Der andere Server hat diese E-Mail-Adresse nicht bestätigt: melde dich dort mit einer bestätigten Adresse an.',
+        externalEmailTaken:
+            'Es gibt bereits ein Konto mit dieser E-Mail-Adresse. Melde dich mit deinem Passwort an oder bitte einen Admin, es zu verknüpfen.',
+        externalOtherLinked: 'Dieses Konto ist bereits mit einem anderen Konto des anderen Servers verknüpft.'
     }
 }
 
@@ -826,6 +854,7 @@ export const AUDIT_MESSAGES = {
             account_mfa_reset: 'Two-step verification reset',
             account_eid_linked: 'eID linked',
             account_eid_unlinked: 'eID unlinked',
+            account_external_linked: 'Account of another server linked',
             members_invited: 'Invitation sent',
             members_invitation_resent: 'Invitation sent again',
             members_invitation_withdrawn: 'Invitation withdrawn',
@@ -884,12 +913,14 @@ export const AUDIT_MESSAGES = {
             payment: 'Payment',
             days: 'Days',
             endsAt: 'Until',
-            count: 'Number'
+            count: 'Number',
+            provider: 'Server'
         },
         methods: {
             password: 'password',
             passwordCode: 'password and code',
-            eid: 'eID'
+            eid: 'eID',
+            external: 'another server'
         },
         reasons: {
             unknown_email: 'unknown email address',
@@ -949,6 +980,7 @@ export const AUDIT_MESSAGES = {
             account_mfa_reset: 'Tweestapsverificatie gereset',
             account_eid_linked: 'eID gekoppeld',
             account_eid_unlinked: 'eID ontkoppeld',
+            account_external_linked: 'Account van een andere server gekoppeld',
             members_invited: 'Uitnodiging verstuurd',
             members_invitation_resent: 'Uitnodiging opnieuw verstuurd',
             members_invitation_withdrawn: 'Uitnodiging ingetrokken',
@@ -1007,12 +1039,14 @@ export const AUDIT_MESSAGES = {
             payment: 'Betaling',
             days: 'Dagen',
             endsAt: 'Tot',
-            count: 'Aantal'
+            count: 'Aantal',
+            provider: 'Server'
         },
         methods: {
             password: 'wachtwoord',
             passwordCode: 'wachtwoord en code',
-            eid: 'eID'
+            eid: 'eID',
+            external: 'een andere server'
         },
         reasons: {
             unknown_email: 'onbekend e-mailadres',
@@ -1072,6 +1106,7 @@ export const AUDIT_MESSAGES = {
             account_mfa_reset: 'Vérification en deux étapes réinitialisée',
             account_eid_linked: 'eID liée',
             account_eid_unlinked: 'eID dissociée',
+            account_external_linked: "Compte d'un autre serveur lié",
             members_invited: 'Invitation envoyée',
             members_invitation_resent: 'Invitation renvoyée',
             members_invitation_withdrawn: 'Invitation retirée',
@@ -1130,12 +1165,14 @@ export const AUDIT_MESSAGES = {
             payment: 'Paiement',
             days: 'Jours',
             endsAt: "Jusqu'au",
-            count: 'Nombre'
+            count: 'Nombre',
+            provider: 'Serveur'
         },
         methods: {
             password: 'mot de passe',
             passwordCode: 'mot de passe et code',
-            eid: 'eID'
+            eid: 'eID',
+            external: 'un autre serveur'
         },
         reasons: {
             unknown_email: 'adresse e-mail inconnue',
@@ -1195,6 +1232,7 @@ export const AUDIT_MESSAGES = {
             account_mfa_reset: 'Zwei-Faktor-Authentifizierung zurückgesetzt',
             account_eid_linked: 'eID verknüpft',
             account_eid_unlinked: 'eID-Verknüpfung entfernt',
+            account_external_linked: 'Konto eines anderen Servers verknüpft',
             members_invited: 'Einladung gesendet',
             members_invitation_resent: 'Einladung erneut gesendet',
             members_invitation_withdrawn: 'Einladung zurückgezogen',
@@ -1253,12 +1291,14 @@ export const AUDIT_MESSAGES = {
             payment: 'Zahlung',
             days: 'Tage',
             endsAt: 'Bis',
-            count: 'Anzahl'
+            count: 'Anzahl',
+            provider: 'Server'
         },
         methods: {
             password: 'Passwort',
             passwordCode: 'Passwort und Code',
-            eid: 'eID'
+            eid: 'eID',
+            external: 'einen anderen Server'
         },
         reasons: {
             unknown_email: 'unbekannte E-Mail-Adresse',
@@ -1278,7 +1318,6 @@ export const LICENSE_MESSAGES = {
         sessionExpired: 'Your session expired. Log in again.',
         signIn: 'Log in',
         noAccess: 'Only admins of the organisation manage its licences.',
-        chooseOrganisation: 'You are logged in without an organisation. Open one on the Platform page first.',
         title: 'Licences',
         intro: 'Every member first gets a free trial of every product. After it, they need a seat: buy seats per month or per year, and give them to members.',
         busy: 'One moment…',
@@ -1393,7 +1432,6 @@ export const LICENSE_MESSAGES = {
         sessionExpired: 'Je sessie is verlopen. Log opnieuw in.',
         signIn: 'Inloggen',
         noAccess: 'Alleen beheerders van de organisatie beheren de licenties.',
-        chooseOrganisation: 'Je bent ingelogd zonder organisatie. Open er eerst een op de pagina Platform.',
         title: 'Licenties',
         intro: 'Elk lid krijgt eerst een gratis proefperiode voor elk product. Daarna heeft het een plaats nodig: koop plaatsen per maand of per jaar en geef ze aan leden.',
         busy: 'Even geduld…',
@@ -1508,7 +1546,6 @@ export const LICENSE_MESSAGES = {
         sessionExpired: 'Votre session a expiré. Reconnectez-vous.',
         signIn: 'Se connecter',
         noAccess: "Seuls les administrateurs de l'organisation gèrent ses licences.",
-        chooseOrganisation: "Vous êtes connecté sans organisation. Ouvrez-en d'abord une sur la page Plateforme.",
         title: 'Licences',
         intro: "Chaque membre reçoit d'abord un essai gratuit de chaque produit. Ensuite, il lui faut une place : achetez des places au mois ou à l'année et attribuez-les aux membres.",
         busy: 'Un instant…',
@@ -1624,7 +1661,6 @@ export const LICENSE_MESSAGES = {
         sessionExpired: 'Deine Sitzung ist abgelaufen. Melde dich erneut an.',
         signIn: 'Anmelden',
         noAccess: 'Nur Administratoren der Organisation verwalten ihre Lizenzen.',
-        chooseOrganisation: 'Du bist ohne Organisation angemeldet. Öffne zuerst eine auf der Seite Plattform.',
         title: 'Lizenzen',
         intro: 'Jedes Mitglied bekommt zuerst eine kostenlose Testphase für jedes Produkt. Danach braucht es einen Platz: Kaufe Plätze pro Monat oder pro Jahr und gib sie Mitgliedern.',
         busy: 'Einen Moment…',

@@ -64,20 +64,40 @@ export function sendPage(response: Response, { lang, title, body, status = 200, 
 
 export function loginPage(
     t: Translate,
-    options: { action: string; csrf: string; clientName: string; email?: string; error?: string }
+    options: {
+        action: string
+        csrf: string
+        clientName: string
+        email?: string
+        error?: string
+        /** Email and password (false: only the other OpenID Connect server). */
+        password?: boolean
+        /** "Log in with <name>": another OpenID Connect server. */
+        external?: { name: string; action: string }
+    }
 ) {
     const error = options.error ? `<p class="error" role="alert">${escapeHtml(options.error)}</p>` : ''
+    const password =
+        options.password === false
+            ? ''
+            : `<form method="post" action="${escapeHtml(options.action)}">` +
+              `<input type="hidden" name="csrf" value="${escapeHtml(options.csrf)}">` +
+              `<label>${escapeHtml(t('oidc.EMAIL'))}<input name="email" type="email" autocomplete="username" required maxlength="254" value="${escapeHtml(options.email ?? '')}"></label>` +
+              `<label>${escapeHtml(t('oidc.PASSWORD'))}<input name="password" type="password" autocomplete="current-password" required maxlength="128"></label>` +
+              `<button type="submit">${escapeHtml(t('oidc.LOGIN_SUBMIT'))}</button></form>`
+    const external = options.external
+        ? `<form method="post" action="${escapeHtml(options.external.action)}">` +
+          `<input type="hidden" name="csrf" value="${escapeHtml(options.csrf)}">` +
+          `<button type="submit"${options.password === false ? '' : ' class="choice"'}>${escapeHtml(t('oidc.EXTERNAL_LOGIN', { name: options.external.name }))}</button></form>`
+        : ''
     return {
         title: t('oidc.LOGIN_TITLE'),
         body:
             `<h1>${escapeHtml(t('oidc.LOGIN_TITLE'))}</h1>` +
             `<p class="muted">${escapeHtml(t('oidc.LOGIN_SUBTITLE', { client: options.clientName }))}</p>` +
             error +
-            `<form method="post" action="${escapeHtml(options.action)}">` +
-            `<input type="hidden" name="csrf" value="${escapeHtml(options.csrf)}">` +
-            `<label>${escapeHtml(t('oidc.EMAIL'))}<input name="email" type="email" autocomplete="username" required maxlength="254" value="${escapeHtml(options.email ?? '')}"></label>` +
-            `<label>${escapeHtml(t('oidc.PASSWORD'))}<input name="password" type="password" autocomplete="current-password" required maxlength="128"></label>` +
-            `<button type="submit">${escapeHtml(t('oidc.LOGIN_SUBMIT'))}</button></form>`
+            password +
+            external
     }
 }
 

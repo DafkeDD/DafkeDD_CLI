@@ -301,6 +301,11 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   ones), accounts, members, the platform and licences. Append-only in PostgreSQL (a trigger refuses changes), kept
   `AUDIT_RETENTION_DAYS` (365) days. Admins read their organisation on `/audit`, superadmins the whole platform, every
   account its own recent activity on `/security`.
+- **Log in with another OpenID Connect server** (Microsoft Entra ID, Keycloak, Google, ...): the CLI asks whether that
+  is wanted (no / next to the password / only that), the issuer, the client id and secret, and the text of the button.
+  The login page shows "Log in with <name>"; that server proves who someone is (PKCE, state, nonce, its ID token checked
+  with its JWKS), and accounts, organisations, roles, licences and the audit log stay here. A verified email address
+  joins an existing account; two-step verification there counts when it says so.
 - **Not yet** (next phases): passkeys, back-channel logout, a consent screen for external clients.
 
 The TypeScript files of this feature live as real files in `templates/backend-oidc` and `templates/frontend-oidc` (see
@@ -447,6 +452,14 @@ git switch developer
 
 ## Changelog
 
+- **0.29.0**: log in with another OpenID Connect server (federation). New CLI question; `OIDC_EXTERNAL_*` in `.env`;
+  `POST /oidc/interaction/:id/external`, `GET /oidc/external/callback` and `POST /oidc/interaction/:id/resume`. Our own
+  client code (discovery, PKCE, state, nonce, client_secret_basic) and ID token check (RS/PS/ES 256-512 with its JWKS,
+  issuer, audience, azp, expiry, nonce). Accounts are linked by an HMAC of issuer and subject (migration 6), or by a
+  verified email address at the first login. `OIDC_EXTERNAL_ONLY` (no password, eID or registration here) and
+  `OIDC_EXTERNAL_MFA` (external, trust, local). Login page of the frontend and of the API with "Log in with <name>".
+- **0.28.1**: a superadmin who is logged in to the platform (without an organisation) and opens `/members` or
+  `/licenses` goes to the platform page (`/admin`) to open an organisation there, instead of getting an error message.
 - **0.28.0**: audit log. Every login (also failed ones), account change, member change, platform change and licence
   change is recorded with who, about whom, the organisation, the details, the IP address and the browser
   (`AuditService`, global). Migration 5: `audit_events`, append-only (a trigger refuses UPDATE, DELETE and TRUNCATE),

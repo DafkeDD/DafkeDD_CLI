@@ -401,5 +401,14 @@ ${isolate('audit_events', 'tenant_id')}
 -- its own events (never the platform and account events, whose tenant_id is NULL)
 GRANT SELECT ON audit_events TO ${role};
 `
+    },
+    {
+        id: 6,
+        name: 'login at another OpenID Connect server',
+        sql: `
+-- external: an HMAC of the issuer and the subject (sub) of the other server, like the eID never in plain text
+ALTER TABLE user_identifiers DROP CONSTRAINT user_identifiers_type_check;
+ALTER TABLE user_identifiers ADD CONSTRAINT user_identifiers_type_check CHECK (type IN ('eid', 'external'));
+`
     }
 ]

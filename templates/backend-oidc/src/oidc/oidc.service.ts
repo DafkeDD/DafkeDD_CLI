@@ -1,10 +1,11 @@
-import { randomUUID } from 'node:crypto'
+import { createHmac, randomUUID } from 'node:crypto'
 import { AuditService } from '../audit/audit.service.js'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { PKCE_CHALLENGE, randomToken, safeEqual, sha256 } from './crypto.js'
+import { decrypt, deriveKey, encrypt, PKCE_CHALLENGE, randomToken, safeEqual, sha256 } from './crypto.js'
+import { type ExternalAttempt, type ExternalIdentity, ExternalService } from './external/external.service.js'
 import { type Interaction, interactionKey, openInteraction, sealInteraction } from './interaction.js'
 import { JoseError, verifyJwt } from './jose.js'
 import { AppException } from '../common/app.exception.js'
@@ -23,6 +24,26 @@ import {
     type Session,
     type StoredUser
 } from './store/oidc.store.js'
+
+/** How the user logged in after the second factor: password or the other server (fed), and the code. */
+function secondFactorAmr(interaction: Interaction, factor: SecondFactor): string[] {
+    return interaction.amr.includes('fed')
+        ? ['fed', ...MFA_AMR[factor].filter(value => value !== 'pwd')]
+        : MFA_AMR[factor]
+}
+
+/**
+ * The cookie of a login at the other server is named after its state: logins in several tabs do not overwrite each
+ * other, and a callback with another state never touches it.
+ */
+export const externalCookieName = (state: string) => 'oidc_ext_' + sha256('external:' + state).slice(0, 16)
+
+/** The cookie of a login at the other server, from the start until its callback (path /oidc/external). */
+interface ExternalCookie {
+    id: string
+    interaction: string
+    attempt: ExternalAttempt
+}
 
 // Checked when the email does not exist, so a login attempt takes equally long either way.
 const DUMMY_HASH = await hashPassword('not-a-real-password')
@@ -77,6 +98,8 @@ export type LoginResult =
     | { kind: 'recovery-codes'; interaction: Interaction; recoveryCodes: string[]; cookie: InteractionCookie }
     /** A nonce for the eID bridge (JSON only). */
     | { kind: 'eid-challenge'; nonce: string; cookie: InteractionCookie }
+    /** To the other OpenID Connect server; `external` is the cookie that remembers this login until it comes back. */
+    | { kind: 'external'; location: string; external: string; cookieName: string }
 
 export type Params = Record<string, unknown>
 
@@ -103,7 +126,8 @@ export class OidcService implements OnApplicationBootstrap {
         private readonly eid: EidService,
         private readonly config: OidcConfig,
         private readonly env: ConfigService,
-        private readonly audit: AuditService
+        private readonly audit: AuditService,
+        private readonly external: ExternalService
     ) {}
 
     onApplicationBootstrap() {
@@ -413,6 +437,8 @@ export class OidcService implements OnApplicationBootstrap {
         const { interaction, client } = found
         const email = typeof form.email === 'string' ? form.email.trim().toLowerCase().slice(0, 254) : ''
         const password = typeof form.password === 'string' ? form.password.slice(0, 128) : ''
+        if (this.config.externalOnly)
+            return { kind: 'form', interaction, client, errorKey: 'oidc.PASSWORD_LOGIN_OFF', email }
         if (!allowed) {
             await this.loginFailed('password', 'too_many_attempts', email, null)
             return { kind: 'form', interaction, client, errorKey: 'oidc.TOO_MANY_ATTEMPTS', email }
@@ -499,6 +525,185 @@ export class OidcService implements OnApplicationBootstrap {
         )
     }
 
+    // ------------------------------------------------------------------ login at another OpenID Connect server
+
+    private externalKey() {
+        return deriveKey(this.config.masterKey(), 'oidc external login v1')
+    }
+
+    /** Opens the cookie of a login at the other server; null when it is missing, changed or expired. */
+    openExternal(sealed: string | undefined): ExternalCookie | null {
+        if (!sealed) return null
+        try {
+            const value = JSON.parse(decrypt(sealed, this.externalKey(), 'external')) as ExternalCookie & { e: number }
+            return value.e > Date.now() ? value : null
+        } catch {
+            return null
+        }
+    }
+
+    /** "Log in with ...": the browser goes to the other server; this login waits in a cookie until it comes back. */
+    async externalStart(id: string, sealed: string | undefined, form: Params): Promise<LoginResult> {
+        const found = await this.findInteraction(id, sealed)
+        if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
+            return { kind: 'expired' }
+        if (!this.external.enabled) throw new AppException('oidc.EXTERNAL_DISABLED', HttpStatus.NOT_FOUND)
+        const { location, attempt } = await this.external.start(found.interaction.params.loginHint)
+        const cookie = { id, interaction: this.seal(found.interaction), attempt, e: found.interaction.expiresAt }
+        return {
+            kind: 'external',
+            location,
+            external: encrypt(JSON.stringify(cookie), this.externalKey(), 'external'),
+            cookieName: externalCookieName(attempt.state)
+        }
+    }
+
+    /**
+     * Back from the other server: who it says logged in becomes (or is linked to) an account here, then the login goes
+     * on as with a password: two-step verification (unless the other server did it), the organisation, the client.
+     */
+    async externalCallback(
+        query: Params,
+        sealed: string | undefined
+    ): Promise<{ id: string | null; result: LoginResult }> {
+        const saved = this.openExternal(sealed)
+        const interaction = saved
+            ? openInteraction(saved.id, saved.interaction, interactionKey(this.config.masterKey()))
+            : null
+        const client = interaction ? await this.store.findClient(interaction.params.clientId) : null
+        if (!saved || !interaction || !client) return { id: null, result: { kind: 'expired' } }
+        const id = interaction.id
+        const cookie = { id, value: this.seal(interaction) }
+        const refused = async (errorKey: string, reason: string, userId: string | null = null) => {
+            await this.loginFailed('external', reason, null, userId)
+            return { id, result: { kind: 'form' as const, interaction, client, errorKey, email: '', cookie } }
+        }
+
+        let identity: ExternalIdentity
+        try {
+            identity = await this.external.finish(query, saved.attempt)
+        } catch (error) {
+            this.external.warn(error instanceof Error ? error.message : String(error))
+            return refused('oidc.EXTERNAL_FAILED', 'external_failed')
+        }
+        const found = await this.externalAccount(identity)
+        if (typeof found === 'string') return refused(found, found.replace(/^oidc\./, '').toLowerCase())
+        const { user, linkedNow } = found
+        if (user.status !== 'active') return refused('oidc.ACCOUNT_DISABLED', 'account_blocked', user.id)
+
+        const settings = this.config.external
+        // The first login that joins an existing account proves it with OUR second factor (when it has one, or
+        // OIDC_MFA=required): control over an email address at the other server alone never takes over an account
+        const mfaThere =
+            !linkedNow && (settings?.mfa === 'trust' || (settings?.mfa === 'external' && identity.amr.includes('mfa')))
+        if (mfaThere)
+            return {
+                id,
+                result: await this.authenticated(
+                    { ...interaction, userId: user.id, mfaPending: false, enrolling: false, amr: ['fed', 'mfa'] },
+                    user
+                )
+            }
+        if (user.mfaEnabled) {
+            const waiting = { ...interaction, userId: user.id, mfaPending: true, enrolling: false, amr: ['fed'] }
+            return {
+                id,
+                result: { kind: 'mfa', interaction: waiting, client, cookie: { id, value: this.seal(waiting) } }
+            }
+        }
+        if (this.config.mfaRequired) {
+            const waiting = { ...interaction, userId: user.id, mfaPending: true, enrolling: true, amr: ['fed'] }
+            const setup = await this.mfa.pendingSetup(user)
+            return {
+                id,
+                result: {
+                    kind: 'mfa-setup',
+                    interaction: waiting,
+                    client,
+                    setup,
+                    cookie: { id, value: this.seal(waiting) }
+                }
+            }
+        }
+        return {
+            id,
+            result: await this.authenticated(
+                { ...interaction, userId: user.id, mfaPending: false, enrolling: false, amr: ['fed'] },
+                user
+            )
+        }
+    }
+
+    /**
+     * The account of a person of the other server: the one linked to its subject; at the first login the account with
+     * the same (verified) email address, or a new account. Returns an error key when that is not possible.
+     */
+    private async externalAccount(
+        identity: ExternalIdentity
+    ): Promise<{ user: StoredUser; linkedNow: boolean } | string> {
+        const hash = createHmac('sha256', deriveKey(this.config.masterKey(), 'oidc external subject v1'))
+            .update(identity.issuer + '\n' + identity.subject)
+            .digest('hex')
+        const linked = await this.store.findUserByIdentifier('external', hash)
+        if (linked) {
+            await this.store.touchIdentifier('external', hash)
+            return { user: linked, linkedNow: false }
+        }
+        // Only an address the other server verified says who someone is
+        if (!identity.email) return 'oidc.EXTERNAL_NO_EMAIL'
+        if (!identity.emailVerified) return 'oidc.EXTERNAL_EMAIL_UNVERIFIED'
+        const settings = this.config.external
+        const existing = await this.store.findUserByEmail(identity.email)
+        if (existing) {
+            // Never an account whose own address was not verified here (someone may have registered it first)
+            if (!settings?.linkByEmail || !existing.emailVerified) return 'oidc.EXTERNAL_EMAIL_TAKEN'
+            const result = await this.store.linkIdentifier(existing.id, 'external', hash)
+            if (result !== 'ok') return 'oidc.EXTERNAL_OTHER_LINKED'
+            await this.audit.record('account.external_linked', {
+                tenantId: null,
+                actorId: existing.id,
+                target: { type: 'user', id: existing.id },
+                details: { provider: settings.name }
+            })
+            return { user: existing, linkedNow: true }
+        }
+        const created = await this.store.createUser({
+            email: identity.email,
+            name: identity.name ?? identity.email,
+            passwordHash: null,
+            emailVerified: true,
+            locale: null
+        })
+        if (!created) return 'oidc.EXTERNAL_EMAIL_TAKEN'
+        if ((await this.store.linkIdentifier(created.id, 'external', hash)) !== 'ok')
+            return 'oidc.EXTERNAL_OTHER_LINKED'
+        await this.audit.record('account.registered', {
+            tenantId: null,
+            actorId: created.id,
+            target: { type: 'user', id: created.id },
+            details: { method: 'external', provider: settings?.name ?? null }
+        })
+        return { user: created, linkedNow: false }
+    }
+
+    /**
+     * The login page of the frontend after the callback of the other server: goes on where this login is (the second
+     * factor, setting it up, or the organisation).
+     */
+    async resume(id: string, sealed: string | undefined, form: Params): Promise<LoginResult> {
+        const found = await this.findInteraction(id, sealed)
+        if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
+            return { kind: 'expired' }
+        const { interaction, client } = found
+        const user = interaction.userId ? await this.store.findUserById(interaction.userId) : null
+        if (user?.status !== 'active') return { kind: 'expired' }
+        const cookie = { id, value: sealed ?? null }
+        if (interaction.mfaPending && interaction.enrolling)
+            return { kind: 'mfa-setup', interaction, client, setup: await this.mfa.pendingSetup(user), cookie }
+        if (interaction.mfaPending) return { kind: 'mfa', interaction, client, cookie }
+        return this.authenticated(interaction, user)
+    }
+
     /** The second factor: a code of the authenticator app or a recovery code, after the right password. */
     async verifyMfa(id: string, sealed: string | undefined, form: Params): Promise<LoginResult> {
         const found = await this.findInteraction(id, sealed)
@@ -526,7 +731,10 @@ export class OidcService implements OnApplicationBootstrap {
             })
             return { kind: 'mfa', interaction, client, cookie, errorKey: 'oidc.MFA_INVALID_CODE' }
         }
-        return this.authenticated({ ...interaction, mfaPending: false, amr: MFA_AMR[factor] }, user)
+        return this.authenticated(
+            { ...interaction, mfaPending: false, amr: secondFactorAmr(interaction, factor) },
+            user
+        )
     }
 
     /** Setting up two-step verification during the login: the first code confirms it, then the recovery codes. */
@@ -539,7 +747,12 @@ export class OidcService implements OnApplicationBootstrap {
         const cookie = { id: interaction.id, value: this.seal(interaction) }
         try {
             const { recoveryCodes } = await this.mfa.enable(user.id, code)
-            const next = { ...interaction, mfaPending: false, enrolling: false, amr: MFA_AMR.totp }
+            const next = {
+                ...interaction,
+                mfaPending: false,
+                enrolling: false,
+                amr: secondFactorAmr(interaction, 'totp')
+            }
             return {
                 kind: 'recovery-codes',
                 interaction: next,

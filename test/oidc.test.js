@@ -220,10 +220,13 @@ test('ask: only the superadmin email (no organisation), a random temporary passw
         input: async config => {
             asked.push(config)
             return '  Admin@Example.COM '
-        }
+        },
+        // No other OpenID Connect server
+        select: async () => 'no'
     }
     const answers = await oidc.ask({ projectDir: '/projects/acme', prompts })
     assert.equal(asked.length, 1, 'one question')
+    assert.equal(answers.external, null)
     assert.match(asked[0].message, /superadmin/)
     assert.equal(answers.tenantName, undefined)
     assert.equal(answers.adminEmail, 'admin@example.com')

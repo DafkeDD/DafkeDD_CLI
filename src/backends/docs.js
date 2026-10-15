@@ -323,6 +323,25 @@ export function backendReadme({
                       '(origin of APP_URL)',
                       'The website that asks for the PIN (the bridge signs its origin); only when it is not APP_URL'
                   ],
+                  [
+                      'OIDC_EXTERNAL_ISSUER',
+                      '(empty)',
+                      'Another OpenID Connect server to log in with (Entra ID, Keycloak, Google, ...); empty: off'
+                  ],
+                  ['OIDC_EXTERNAL_CLIENT_ID', '(empty)', 'Our client id at that server'],
+                  ['OIDC_EXTERNAL_CLIENT_SECRET', '(empty)', 'Our secret there; empty: a public client (PKCE)'],
+                  ['OIDC_EXTERNAL_NAME', '(its host name)', 'The button: "Log in with <name>"'],
+                  ['OIDC_EXTERNAL_ONLY', 'false', '`true`: only that server (no password, eID or registration here)'],
+                  [
+                      'OIDC_EXTERNAL_MFA',
+                      'external',
+                      'Two-step verification there counts: `external` when its token says so (amr mfa), `trust` always, `local` never'
+                  ],
+                  [
+                      'OIDC_EXTERNAL_LINK_EMAIL',
+                      'true',
+                      'A first login with a verified email address joins the account with that address'
+                  ],
                   ['APP_URL', origin, 'The frontend: the links in emails open its pages'],
                   ['APP_NAME', '(project name)', 'Name of the application in emails'],
                   ['SMTP_HOST', 'localhost', 'Mail server; empty prints the mails in the console (development only)'],
@@ -683,6 +702,34 @@ the PC of the user, which talks to the card reader on http://127.0.0.1:47820.
 - The hash in \`user_identifiers\` depends on \`OIDC_MASTER_KEY\`: another key means every eID has to be linked again.
   The national register number is personal data with legal rules for its use in Belgium: check with your DPO that
   your application may use it as a login key.
+
+### Another OpenID Connect server (Entra ID, Keycloak, Google, ...)
+
+The login page can also show **"Log in with <name>"**: the person logs in at another OpenID Connect server (your
+company login), and comes back here. That server only proves **who** it is: the account, its organisations and roles,
+licences, sessions, two-step verification and the audit log stay in this server, so everything else works the same.
+
+1. Register a client (an "app registration") at that server with this **redirect URI**:
+   \`http://localhost:${port}/oidc/external/callback\` (in production the public address of the API, \`OIDC_ISSUER\` +
+   \`/external/callback\`). Scopes \`openid profile email\`.
+2. Fill in \`OIDC_EXTERNAL_ISSUER\` (exactly the \`issuer\` of its \`/.well-known/openid-configuration\`, for example
+   \`https://login.microsoftonline.com/<tenant-id>/v2.0\` or \`https://keycloak.example.com/realms/<realm>\`),
+   \`OIDC_EXTERNAL_CLIENT_ID\`, and \`OIDC_EXTERNAL_CLIENT_SECRET\` for a confidential client (empty: a public client,
+   PKCE only). \`OIDC_EXTERNAL_ONLY=true\` leaves only that button (no password, no eID, no registration here).
+
+| Step | What happens |
+| --- | --- |
+| Start | \`POST /oidc/interaction/:id/external\`: to the authorization endpoint of that server with PKCE (S256), \`state\` and \`nonce\`. The running login waits in an encrypted cookie \`oidc_ext_<...>\` named after its state (only sent to the callback, 10 minutes; logins in several tabs do not get in each other's way). |
+| Callback | \`GET /oidc/external/callback\`: the state must match, the code is exchanged (client_secret_basic, or the client id for a public client) and the **ID token is checked with the keys of that server** (its JWKS: RS256/384/512, PS256/384/512, ES256/384/512; never \`none\` or HMAC), its issuer, audience (and \`azp\`), expiry and nonce. Only https (http to this computer outside production), no redirects. Our own code, no library. |
+| Account | The account linked to that person (an HMAC of issuer and \`sub\` in \`user_identifiers\`, type \`external\`). At the first login: the account with the same email address, **only when that server says it is verified and it is verified here too** (\`OIDC_EXTERNAL_LINK_EMAIL\`), or else a new account (no password). An address that server did not verify is refused (\`oidc.EXTERNAL_EMAIL_UNVERIFIED\`). |
+| Two-step verification | \`OIDC_EXTERNAL_MFA=external\` (default): counts when the ID token says \`amr\` contains \`mfa\`; otherwise our own code follows (and its setup when \`OIDC_MFA=required\`). \`trust\`: that server always requires it. \`local\`: always our own code. **The login that links an existing account always asks our own code** (when it has one, or \`OIDC_MFA=required\`): control over an email address at the other server alone never takes over an account. |
+| Organisation | As with a password: the only one, the choice, or "you are not a member": a new person joins through an invitation (the invitation joins the account with that email address). |
+
+- The login page of the frontend continues after the callback: \`GET /oidc/interaction/:id\` answers \`pending: true\`,
+  then \`POST /oidc/interaction/:id/resume\` gives the next step. Errors come back as \`/login?interaction=...&error=EXTERNAL_FAILED\`.
+- The audit log shows \`account.external_linked\`, \`account.registered\` (method external) and logins with method
+  \`fed\` (federation). Why a login there failed is logged as a warning (never tokens).
+- Logging out here does not log out at that server (its own session stays).
 
 ### Accounts: registration, email verification, forgotten password, invitations
 
