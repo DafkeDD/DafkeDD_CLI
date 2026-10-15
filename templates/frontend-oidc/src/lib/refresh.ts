@@ -8,6 +8,7 @@ import {
     unseal,
     verifyIdToken
 } from './oidc'
+import { sessionEnded } from './ended'
 
 /** What to do with the session cookie after renewing: keep it, replace it, or delete it (logged out). */
 export type Renewed = { session: Session; cookie: string | null } | { session: null; cookie: 'delete' | null }
@@ -35,7 +36,7 @@ async function renew(session: Session): Promise<Session | null> {
         if (tokens.refresh_token) await revokeRefreshToken(tokens.refresh_token)
         return null
     }
-    const { tenant, superadmin } = claims
+    const { tenant, superadmin, sid } = claims
     return {
         ...session,
         // The role (and organisation name) as the login server knows it now
@@ -44,7 +45,8 @@ async function renew(session: Session): Promise<Session | null> {
         accessToken: tokens.access_token,
         expiresAt: Date.now() + tokens.expires_in * 1000,
         refreshToken: tokens.refresh_token ?? session.refreshToken,
-        idToken: tokens.id_token
+        idToken: tokens.id_token,
+        sid: sid ?? session.sid
     }
 }
 
@@ -56,6 +58,8 @@ async function renew(session: Session): Promise<Session | null> {
 export async function freshSession(sealed: string | undefined): Promise<Renewed> {
     const session = unseal<Session>(sealed, SESSION_COOKIE)
     if (!session) return { session: null, cookie: sealed ? 'delete' : null }
+    // The login server ended this session (back-channel logout): logged out here too
+    if (sessionEnded(session.sid)) return { session: null, cookie: 'delete' }
     if (session.expiresAt - RENEW_BEFORE_MS > Date.now()) return { session, cookie: null }
     const key = session.refreshToken ?? ''
     let pending = running.get(key)

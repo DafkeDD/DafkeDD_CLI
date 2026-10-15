@@ -339,6 +339,11 @@ export function backendReadme({
                       'The websites that may use the passkeys (comma separated), e.g. the login page of the frontend'
                   ],
                   [
+                      'OIDC_BACKCHANNEL_INTERVAL',
+                      '5',
+                      'Seconds between deliveries of back-channel logout tokens to the clients; `0` turns delivery off'
+                  ],
+                  [
                       'OIDC_EXTERNAL_ISSUER',
                       '(empty)',
                       'Another OpenID Connect server to log in with (Entra ID, Keycloak, Google, ...); empty: off'
@@ -829,7 +834,44 @@ was already so for the \`oidc_session\` cookie (single sign-on).
 | \`postLogoutRedirectUris\` | Exact addresses the browser may go to after logging out (\`post_logout_redirect_uri\`) |
 | \`grantTypes\` | \`authorization_code\` (default), and \`refresh_token\` to get refresh tokens |
 | \`scopes\` | Scopes the client may ask for: \`openid\`, \`profile\`, \`email\`, \`tenant\` |
-| \`firstParty\` | Your own application (no consent screen) |
+| \`firstParty\` | \`true\`: your own application (no consent screen). \`false\` (default): an application of others, which asks the user once which data it may have |
+| \`backchannelLogoutUri\` | Optional: where the server POSTs a logout token when a session with this client ends (https; http only on localhost) |
+| \`backchannelLogoutSessionRequired\` | Optional, \`true\` when the client needs \`sid\` in the logout token (it is always there) |
+
+### Applications of others: consent screen and back-channel logout
+
+An application of another company (a partner, an app of a customer) gets its own entry in
+\`config/oidc-clients.json\` with \`"firstParty": false\`:
+
+${fence}json
+{
+    "clientId": "partner.app",
+    "name": "Partner Planner",
+    "type": "confidential",
+    "secretEnv": "OIDC_CLIENT_PARTNER_SECRET",
+    "redirectUris": ["https://planner.partner.com/callback"],
+    "postLogoutRedirectUris": ["https://planner.partner.com"],
+    "backchannelLogoutUri": "https://planner.partner.com/backchannel-logout",
+    "grantTypes": ["authorization_code", "refresh_token"],
+    "scopes": ["openid", "profile", "email"],
+    "firstParty": false
+}
+${fence}
+
+| What | How |
+| --- | --- |
+| Consent screen | After the login (or at once with single sign-on) the page **"Allow Partner Planner?"** shows the account and what the application gets per scope (\`openid\`: an id, \`profile\`: name and language, \`email\`, \`tenant\`: organisation and role). "Allow" remembers it (\`oidc_consents\`, per account and application) and sends the code; "Do not allow" sends \`error=access_denied\`. It asks again for more scopes than before or with \`prompt=consent\`; \`prompt=none\` without consent gives \`error=consent_required\`. With the \`tenant\` scope the consent counts per organisation: another organisation (\`tenant_hint\`) asks again. The screen answers once (\`oidc_used_interactions\`). The login page of the frontend shows the same step (\`status: "consent"\`). |
+| What it gets | Its ID token and \`/oidc/userinfo\` with the allowed scopes; the organisation (and \`superadmin\`) only with the \`tenant\` scope. **Not our own API**: \`@Access(...)\` endpoints (\`/me\`, \`/tenants\`, \`/admin\`) answer 403 to a token of an application that is not \`firstParty\`. |
+| Take it back | \`/security\` of the frontend lists the applications with access (\`GET /me/consents\`); "Take back" (\`DELETE /me/consents/:clientId\`) revokes every refresh token of that application for the account at once, and the next login asks again. |
+| Back-channel logout | OpenID Connect Back-Channel Logout 1.0. Every client that got a code in a session is remembered (\`oidc_session_clients\`). When that session **ends** (logout, ended on \`/security\`, password reset, two-step verification reset, member disabled or removed, a stolen refresh token) a trigger queues a job (\`oidc_logout_queue\`) for every such client with a \`backchannelLogoutUri\`, whatever code ended it. \`BackchannelService\` POSTs \`logout_token=<JWT>\` (form-encoded, every \`OIDC_BACKCHANNEL_INTERVAL\` seconds): signed with the RS256 key of the ID tokens, \`typ: logout+jwt\`, \`iss\`, \`aud\` (the client), \`iat\`, \`exp\` (2 minutes), \`jti\`, \`sub\`, \`sid\` and the event \`http://schemas.openid.net/event/backchannel-logout\`, never a nonce. A session that simply runs out (12 hours) sends nothing. |
+| Retries | A client that does not answer 2xx within 5 seconds (or redirects) is tried again after 30 seconds, 2, 8 and 32 minutes; after 5 tries it is given up (warning in the log, \`login.backchannel_failed\` in the audit log). With several API processes each token goes out once (\`FOR UPDATE SKIP LOCKED\`). |
+
+The frontend is a client too: \`backchannelLogoutUri\` \`http://localhost:3000/api/auth/backchannel-logout\`. A
+browser that is logged in there is logged out at its next request when its session ended elsewhere.
+
+What the client does with a logout token: check the signature with \`/oidc/jwks\`, \`typ\` \`logout+jwt\`, \`iss\`,
+\`aud\`, \`iat\`, the event, no \`nonce\`, and that the \`jti\` is new; then end its own session with that \`sid\`
+and answer \`200\`.
 
 ### Keys
 
@@ -980,7 +1022,11 @@ ${fence}
 | \`tenant_invitations\` | Open invitations (email, role, who invited, expiry) | yes |
 | \`user_identifiers\` | Linked eIDs: an HMAC of the national register number per account (one eID per account, one account per eID), linked and last used | no |
 | \`user_passkeys\` | Passkeys: the credential id (unique), public key (SPKI), COSE algorithm, signature counter, name, synced or not, transports, added and last used; no secrets | no |
-| \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\`) | no |
+| \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\`), with their back-channel logout URI | no |
+| \`oidc_consents\` | What an account allowed an application of others: the scopes (with \`tenant\`: the organisations), when, until revoked | no |
+| \`oidc_used_interactions\` | Consent screens answered already (until their login expires): a copy of the login cookie cannot answer twice | no |
+| \`oidc_session_clients\` | Which clients got a code in which session (they hear about its end) | no |
+| \`oidc_logout_queue\` | Logout tokens still to deliver (back-channel logout), with the number of tries and the next try; filled by a trigger on \`oidc_sessions\` | no |
 | \`oidc_signing_keys\` | Signing keys (private part encrypted) | no |
 | \`oidc_sessions\` | Browser sessions: a public id (\`sid\`), the hash of the cookie and of the login that created it, the browser (User-Agent) and when it was last used; no tenant for a platform login | yes |
 | \`oidc_codes\` | Authorization codes (hash, once, 60 seconds) | yes |

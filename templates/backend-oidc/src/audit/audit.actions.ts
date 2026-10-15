@@ -10,7 +10,8 @@ export const AUDIT_ACTIONS = {
         'login.logout',
         'login.session_ended',
         'login.sessions_ended',
-        'login.token_reuse'
+        'login.token_reuse',
+        'login.backchannel_failed'
     ],
     account: [
         'account.registered',
@@ -24,7 +25,9 @@ export const AUDIT_ACTIONS = {
         'account.eid_unlinked',
         'account.external_linked',
         'account.passkey_added',
-        'account.passkey_removed'
+        'account.passkey_removed',
+        'account.consent_granted',
+        'account.consent_revoked'
     ],
     members: [
         'members.invited',

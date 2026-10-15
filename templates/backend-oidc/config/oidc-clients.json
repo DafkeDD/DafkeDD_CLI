@@ -6,6 +6,7 @@
             "type": "public",
             "redirectUris": ["http://localhost:3000/api/auth/callback"],
             "postLogoutRedirectUris": ["http://localhost:3000"],
+            "backchannelLogoutUri": "http://localhost:3000/api/auth/backchannel-logout",
             "grantTypes": ["authorization_code", "refresh_token"],
             "scopes": ["openid", "profile", "email", "tenant"],
             "firstParty": true

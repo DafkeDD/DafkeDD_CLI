@@ -87,6 +87,21 @@ export type LoginResult =
           cookie: InteractionCookie
       }
     | { kind: 'done'; location: string; sessionId: string; cookie: InteractionCookie }
+    /**
+     * An application that is not our own asks for data of the account: "Allow <client>?". `sessionId` is the new session
+     * cookie when the login just happened (it is set already, also when the user says no).
+     */
+    | {
+          kind: 'consent'
+          interaction: Interaction
+          client: OidcClient
+          scopes: string[]
+          email: string
+          sessionId?: string
+          cookie: InteractionCookie
+      }
+    /** Back to the client (after the consent screen: with a code, or with error=access_denied). */
+    | { kind: 'redirect'; location: string; cookie: InteractionCookie }
     | { kind: 'mfa'; interaction: Interaction; client: OidcClient; cookie: InteractionCookie; errorKey?: string }
     | {
           kind: 'mfa-setup'
@@ -175,6 +190,8 @@ export class OidcService implements OnApplicationBootstrap {
                 ? raw.postLogoutRedirectUris.map(String)
                 : []
             for (const uri of [...redirectUris, ...postLogoutRedirectUris]) assertRedirectUri(uri)
+            const backchannelLogoutUri = text(raw.backchannelLogoutUri) || null
+            if (backchannelLogoutUri) assertRedirectUri(backchannelLogoutUri)
             let secretHash: string | null = null
             if (type === 'confidential') {
                 const secretEnv = text(raw.secretEnv)
@@ -197,7 +214,9 @@ export class OidcService implements OnApplicationBootstrap {
                     ? GRANT_TYPES.filter(type => (raw.grantTypes as unknown[]).includes(type))
                     : ['authorization_code'],
                 scopes: Array.isArray(raw.scopes) ? raw.scopes.map(String) : ['openid'],
-                firstParty: raw.firstParty === true
+                firstParty: raw.firstParty === true,
+                backchannelLogoutUri,
+                backchannelLogoutSessionRequired: raw.backchannelLogoutSessionRequired === true
             } satisfies OidcClient
         })
     }
@@ -213,6 +232,9 @@ export class OidcService implements OnApplicationBootstrap {
             userinfo_endpoint: issuer + '/userinfo',
             jwks_uri: issuer + '/jwks',
             end_session_endpoint: issuer + '/logout',
+            // Back-channel logout: clients with a backchannelLogoutUri get a logout token (with sid) when a session ends
+            backchannel_logout_supported: true,
+            backchannel_logout_session_supported: true,
             revocation_endpoint: issuer + '/revoke',
             introspection_endpoint: issuer + '/introspect',
             scopes_supported: [...OIDC.SCOPES],
@@ -291,7 +313,22 @@ export class OidcService implements OnApplicationBootstrap {
         }
 
         const session = sessionId ? await this.usableSession(sessionId, params) : null
-        if (session) return this.issueCode(params, session.session, session.user, session.membership)
+        if (session) {
+            if (!(await this.needsConsent(client, session.user.id, params, session.membership?.tenantId ?? null)))
+                return this.issueCode(params, session.session, session.user, session.membership)
+            // Logged in already, but this application may not have the data yet: the consent screen
+            if (params.prompt.includes('none'))
+                return this.errorRedirect(
+                    redirectUri,
+                    new OAuthError('consent_required', 'The user did not allow this application yet'),
+                    params.state
+                )
+            return this.startInteraction(params, userAgent, {
+                userId: session.user.id,
+                amr: session.session.amr,
+                consent: { sessionId: session.session.id, tenantId: session.membership?.tenantId ?? null }
+            })
+        }
         if (params.prompt.includes('none')) {
             return this.errorRedirect(
                 redirectUri,
@@ -300,25 +337,32 @@ export class OidcService implements OnApplicationBootstrap {
             )
         }
 
-        // The login itself is not stored: it goes into an encrypted cookie for /oidc/interaction/<id>.
+        return this.startInteraction(params, userAgent)
+    }
+
+    /** A new login (or consent screen): it is not stored, it goes into an encrypted cookie for /oidc/interaction/<id>. */
+    private startInteraction(
+        params: AuthorizationParams,
+        userAgent: string,
+        known: Pick<Interaction, 'userId' | 'amr' | 'consent'> = { userId: null, amr: [], consent: null }
+    ): AuthorizeResult {
         const id = randomToken()
         const sealed = this.seal({
             id,
             params,
             csrf: randomToken(),
-            userId: null,
             mfaPending: false,
             enrolling: false,
-            amr: [],
             eidNonce: null,
             passkeyChallenge: null,
+            ...known,
             // Shown on /me/sessions ("Chrome on Windows"); shortened so the login cookie stays small
             userAgent: userAgent.slice(0, OIDC.USER_AGENT_MAX),
             expiresAt: Date.now() + OIDC.INTERACTION_SECONDS * 1000
         })
         if (sealed.length > OIDC.MAX_INTERACTION_COOKIE) {
             return this.errorRedirect(
-                redirectUri,
+                params.redirectUri,
                 new OAuthError(
                     'invalid_request',
                     'The authorization request is too large (state, nonce or login_hint)'
@@ -464,17 +508,31 @@ export class OidcService implements OnApplicationBootstrap {
 
         // Two-step verification: the password was right, now the code of the authenticator app
         if (user.mfaEnabled) {
-            const waiting = { ...interaction, userId: user.id, mfaPending: true, enrolling: false, amr: ['pwd'] }
+            const waiting = {
+                ...interaction,
+                userId: user.id,
+                consent: null,
+                mfaPending: true,
+                enrolling: false,
+                amr: ['pwd']
+            }
             return { kind: 'mfa', interaction: waiting, client, cookie: { id, value: this.seal(waiting) } }
         }
         // Required but not set up yet: set it up now (QR code), before there is a session
         if (this.config.mfaRequired) {
-            const waiting = { ...interaction, userId: user.id, mfaPending: true, enrolling: true, amr: ['pwd'] }
+            const waiting = {
+                ...interaction,
+                userId: user.id,
+                consent: null,
+                mfaPending: true,
+                enrolling: true,
+                amr: ['pwd']
+            }
             const setup = await this.mfa.pendingSetup(user)
             return { kind: 'mfa-setup', interaction: waiting, client, setup, cookie: { id, value: this.seal(waiting) } }
         }
         return this.authenticated(
-            { ...interaction, userId: user.id, mfaPending: false, enrolling: false, amr: ['pwd'] },
+            { ...interaction, userId: user.id, consent: null, mfaPending: false, enrolling: false, amr: ['pwd'] },
             user
         )
     }
@@ -525,7 +583,14 @@ export class OidcService implements OnApplicationBootstrap {
         if (!user.emailVerified) return refused('oidc.EMAIL_NOT_VERIFIED', user.id)
         await this.store.touchIdentifier('eid', person.valueHash)
         return this.authenticated(
-            { ...interaction, userId: user.id, mfaPending: false, enrolling: false, amr: [...OIDC.EID_AMR] },
+            {
+                ...interaction,
+                userId: user.id,
+                consent: null,
+                mfaPending: false,
+                enrolling: false,
+                amr: [...OIDC.EID_AMR]
+            },
             user
         )
     }
@@ -605,19 +670,40 @@ export class OidcService implements OnApplicationBootstrap {
             return {
                 id,
                 result: await this.authenticated(
-                    { ...interaction, userId: user.id, mfaPending: false, enrolling: false, amr: ['fed', 'mfa'] },
+                    {
+                        ...interaction,
+                        userId: user.id,
+                        consent: null,
+                        mfaPending: false,
+                        enrolling: false,
+                        amr: ['fed', 'mfa']
+                    },
                     user
                 )
             }
         if (user.mfaEnabled) {
-            const waiting = { ...interaction, userId: user.id, mfaPending: true, enrolling: false, amr: ['fed'] }
+            const waiting = {
+                ...interaction,
+                userId: user.id,
+                consent: null,
+                mfaPending: true,
+                enrolling: false,
+                amr: ['fed']
+            }
             return {
                 id,
                 result: { kind: 'mfa', interaction: waiting, client, cookie: { id, value: this.seal(waiting) } }
             }
         }
         if (this.config.mfaRequired) {
-            const waiting = { ...interaction, userId: user.id, mfaPending: true, enrolling: true, amr: ['fed'] }
+            const waiting = {
+                ...interaction,
+                userId: user.id,
+                consent: null,
+                mfaPending: true,
+                enrolling: true,
+                amr: ['fed']
+            }
             const setup = await this.mfa.pendingSetup(user)
             return {
                 id,
@@ -633,7 +719,7 @@ export class OidcService implements OnApplicationBootstrap {
         return {
             id,
             result: await this.authenticated(
-                { ...interaction, userId: user.id, mfaPending: false, enrolling: false, amr: ['fed'] },
+                { ...interaction, userId: user.id, consent: null, mfaPending: false, enrolling: false, amr: ['fed'] },
                 user
             )
         }
@@ -703,10 +789,78 @@ export class OidcService implements OnApplicationBootstrap {
         const user = interaction.userId ? await this.store.findUserById(interaction.userId) : null
         if (user?.status !== 'active') return { kind: 'expired' }
         const cookie = { id, value: sealed ?? null }
+        if (interaction.consent)
+            return { kind: 'consent', interaction, client, scopes: interaction.params.scope, email: user.email, cookie }
         if (interaction.mfaPending && interaction.enrolling)
             return { kind: 'mfa-setup', interaction, client, setup: await this.mfa.pendingSetup(user), cookie }
         if (interaction.mfaPending) return { kind: 'mfa', interaction, client, cookie }
         return this.authenticated(interaction, user)
+    }
+
+    // ------------------------------------------------------------------ consent (applications that are not our own)
+
+    /**
+     * Must the user allow this client first? Never for our own applications (firstParty). Otherwise when nothing was
+     * allowed yet, when it asks for more scopes than before, with prompt=consent, or (with the tenant scope) for an
+     * organisation it may not see yet.
+     */
+    private async needsConsent(
+        client: OidcClient,
+        userId: string,
+        params: AuthorizationParams,
+        tenantId: string | null
+    ): Promise<boolean> {
+        if (client.firstParty) return false
+        if (params.prompt.includes('consent')) return true
+        const consent = await this.store.findConsent(userId, client.clientId)
+        if (!consent || params.scope.some(scope => !consent.scopes.includes(scope))) return true
+        return params.scope.includes('tenant') && tenantId !== null && !consent.tenantIds.includes(tenantId)
+    }
+
+    /** The answer on the consent screen: `decision` "allow" (a code for the client) or anything else (access_denied). */
+    async consent(id: string, sealed: string | undefined, form: Params): Promise<LoginResult> {
+        const found = await this.findInteraction(id, sealed)
+        if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
+            return { kind: 'expired' }
+        const { interaction, client } = found
+        const pending = interaction.consent
+        if (!pending || !interaction.userId) return { kind: 'expired' }
+        // Answered once: a copy of the login cookie cannot answer again (also not on another API process)
+        if (!(await this.store.useInteraction(sha256('consent:' + id), new Date(interaction.expiresAt))))
+            return { kind: 'expired' }
+        const done = { id, value: null }
+        const session = await this.store.findSessionById(pending.sessionId)
+        const user = await this.store.findUserById(interaction.userId)
+        // The session must still run (not logged out meanwhile), for the same active account
+        if (!session || !user || session.userId !== user.id || user.status !== 'active') return { kind: 'expired' }
+        const params = interaction.params
+        if (form.decision !== 'allow') {
+            const denied = this.errorRedirect(
+                params.redirectUri,
+                new OAuthError('access_denied', 'The user did not allow this application'),
+                params.state
+            )
+            return { kind: 'redirect', location: denied.kind === 'redirect' ? denied.location : '', cookie: done }
+        }
+        let membership: Membership | null = null
+        if (pending.tenantId !== null) {
+            membership = (await this.memberships(user)).find(item => item.tenantId === pending.tenantId) ?? null
+            if (!membership) return { kind: 'expired' }
+        } else if (!user.isSuperadmin) return { kind: 'expired' }
+        await this.store.saveConsent(
+            user.id,
+            client.clientId,
+            params.scope,
+            params.scope.includes('tenant') ? pending.tenantId : null
+        )
+        await this.audit.record('account.consent_granted', {
+            tenantId: null,
+            actorId: user.id,
+            target: { type: 'user', id: user.id },
+            details: { client: client.clientId, name: client.name, scopes: params.scope.join(' ') }
+        })
+        const result = await this.issueCode(params, session, user, membership)
+        return { kind: 'redirect', location: result.kind === 'redirect' ? result.location : '', cookie: done }
     }
 
     // ------------------------------------------------------------------ passkeys
@@ -749,7 +903,14 @@ export class OidcService implements OnApplicationBootstrap {
         if (typeof user === 'string') return refused(user)
         if (user.status !== 'active') return refused('oidc.ACCOUNT_DISABLED', user.id)
         return this.authenticated(
-            { ...interaction, userId: user.id, mfaPending: false, enrolling: false, amr: ['pop', 'user', 'mfa'] },
+            {
+                ...interaction,
+                userId: user.id,
+                consent: null,
+                mfaPending: false,
+                enrolling: false,
+                amr: ['pop', 'user', 'mfa']
+            },
             user
         )
     }
@@ -830,7 +991,8 @@ export class OidcService implements OnApplicationBootstrap {
             return { kind: 'expired' }
         const { interaction } = found
         const user = interaction.userId ? await this.store.findUserById(interaction.userId) : null
-        if (user?.status !== 'active' || interaction.mfaPending) return { kind: 'expired' }
+        // A consent screen (logged in already) never makes a second session
+        if (user?.status !== 'active' || interaction.mfaPending || interaction.consent) return { kind: 'expired' }
         return this.authenticated(interaction, user)
     }
 
@@ -868,8 +1030,8 @@ export class OidcService implements OnApplicationBootstrap {
             return { kind: 'expired' }
         const { interaction } = found
         const user = interaction.userId ? await this.store.findUserById(interaction.userId) : null
-        // Only after the password and (when it is on) the second factor
-        if (user?.status !== 'active' || interaction.mfaPending) return { kind: 'expired' }
+        // Only after the password and (when it is on) the second factor; never from a consent screen
+        if (user?.status !== 'active' || interaction.mfaPending || interaction.consent) return { kind: 'expired' }
         if (form.tenant === PLATFORM && user.isSuperadmin) return this.finish(interaction, user, null)
         const memberships = await this.memberships(user)
         const membership = memberships.find(item => item.tenantId === form.tenant)
@@ -920,6 +1082,25 @@ export class OidcService implements OnApplicationBootstrap {
         })
         // Logged in: online for the admins of the tenant
         if (membership) await this.store.touchMember(membership.tenantId, user.id).catch(() => undefined)
+        const client = await this.store.findClient(interaction.params.clientId)
+        if (client && (await this.needsConsent(client, user.id, interaction.params, membership?.tenantId ?? null))) {
+            const next: Interaction = {
+                ...interaction,
+                userId: user.id,
+                mfaPending: false,
+                enrolling: false,
+                consent: { sessionId: session.id, tenantId: membership?.tenantId ?? null }
+            }
+            return {
+                kind: 'consent',
+                interaction: next,
+                client,
+                scopes: interaction.params.scope,
+                email: user.email,
+                sessionId,
+                cookie: { id: interaction.id, value: this.seal(next) }
+            }
+        }
         const result = await this.issueCode(interaction.params, session, user, membership)
         return {
             kind: 'done',
@@ -949,6 +1130,8 @@ export class OidcService implements OnApplicationBootstrap {
         membership: Membership | null
     ): Promise<AuthorizeResult> {
         const code = randomToken()
+        // This client hears about the end of the session (back-channel logout)
+        await this.store.addSessionClient(session.id, params.clientId)
         await this.store.createCode({
             codeHash: sha256(code),
             clientId: params.clientId,

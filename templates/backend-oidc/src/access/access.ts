@@ -52,6 +52,7 @@ const TOUCH_MS = 60_000
 @Injectable()
 export class AccessGuard implements CanActivate {
     private readonly touched = new Map<string, number>()
+    private readonly clients = new Map<string, { at: number; firstParty: boolean }>()
 
     constructor(
         private readonly oidc: OidcService,
@@ -70,6 +71,9 @@ export class AccessGuard implements CanActivate {
             if (error instanceof OAuthError) throw new AppException('errors.UNAUTHORIZED', HttpStatus.UNAUTHORIZED)
             throw error
         }
+        // Only our own applications (firstParty) call this API as the user. An application of others gets tokens for the
+        // login (ID token, userinfo) with what the user allowed on the consent screen, never access to /me, /tenants or /admin.
+        if (!(await this.firstParty(claims.client_id))) throw new AppException('errors.FORBIDDEN', HttpStatus.FORBIDDEN)
         const tenant = claims.tenant as { id?: unknown; name?: unknown } | undefined
         const user = typeof claims.sub === 'string' ? await this.store.findUserById(claims.sub) : null
         if (user?.status !== 'active') throw new AppException('errors.UNAUTHORIZED', HttpStatus.UNAUTHORIZED)
@@ -111,6 +115,17 @@ export class AccessGuard implements CanActivate {
         // The audit log knows who does what in this request
         setActor(user.id, found.id)
         return true
+    }
+
+    /** Whether the client of a token is one of our own applications; looked up at most once a minute per client. */
+    private async firstParty(clientId: unknown): Promise<boolean> {
+        if (typeof clientId !== 'string') return false
+        const cached = this.clients.get(clientId)
+        if (cached && Date.now() - cached.at < TOUCH_MS) return cached.firstParty
+        const firstParty = (await this.store.findClient(clientId))?.firstParty === true
+        if (this.clients.size > 1000) this.clients.clear()
+        this.clients.set(clientId, { at: Date.now(), firstParty })
+        return firstParty
     }
 
     /**

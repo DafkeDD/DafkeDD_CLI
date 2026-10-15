@@ -330,6 +330,16 @@ export const MESSAGES = {
             'An account with this email address exists already. Log in with it, or ask an admin to link it.',
         EXTERNAL_OTHER_LINKED: 'This account is linked to another account of the other server already.',
         PASSWORD_LOGIN_OFF: 'Logging in with a password is turned off: use the button below.',
+        CONSENT_TITLE: 'Allow {client}?',
+        CONSENT_TEXT: '{client} wants to use your account {email}. It gets:',
+        CONSENT_NOTE: 'You can take this back at any time on Security.',
+        CONSENT_ALLOW: 'Allow',
+        CONSENT_DENY: 'Do not allow',
+        CONSENT_NOT_FOUND: 'This application has no permission of this account.',
+        SCOPE_OPENID: 'Who you are (an id, no personal data)',
+        SCOPE_PROFILE: 'Your name and language',
+        SCOPE_EMAIL: 'Your email address',
+        SCOPE_TENANT: 'Your organisation and your role there',
         PASSKEYS_DISABLED: 'Passkeys are not available on this server.',
         PASSKEY_EXPIRED: 'The passkey request expired. Please try again.',
         PASSKEY_INVALID: 'The passkey could not be verified. Please try again.',
@@ -416,6 +426,16 @@ export const MESSAGES = {
             'Er bestaat al een account met dit e-mailadres. Log daarmee in, of vraag een beheerder om het te koppelen.',
         EXTERNAL_OTHER_LINKED: 'Dit account is al gekoppeld aan een ander account van de andere server.',
         PASSWORD_LOGIN_OFF: 'Inloggen met een wachtwoord staat uit: gebruik de knop hieronder.',
+        CONSENT_TITLE: '{client} toestaan?',
+        CONSENT_TEXT: '{client} wil je account {email} gebruiken. Het krijgt:',
+        CONSENT_NOTE: 'Je kunt dit altijd intrekken onder Beveiliging.',
+        CONSENT_ALLOW: 'Toestaan',
+        CONSENT_DENY: 'Niet toestaan',
+        CONSENT_NOT_FOUND: 'Deze toepassing heeft geen toestemming van dit account.',
+        SCOPE_OPENID: 'Wie je bent (een id, geen persoonsgegevens)',
+        SCOPE_PROFILE: 'Je naam en taal',
+        SCOPE_EMAIL: 'Je e-mailadres',
+        SCOPE_TENANT: 'Je organisatie en je rol daar',
         PASSKEYS_DISABLED: 'Passkeys zijn niet beschikbaar op deze server.',
         PASSKEY_EXPIRED: 'De passkey-aanvraag is verlopen. Probeer opnieuw.',
         PASSKEY_INVALID: 'De passkey kon niet gecontroleerd worden. Probeer opnieuw.',
@@ -503,6 +523,16 @@ export const MESSAGES = {
             'Un compte avec cette adresse e-mail existe déjà. Connectez-vous avec celui-ci, ou demandez à un administrateur de le lier.',
         EXTERNAL_OTHER_LINKED: "Ce compte est déjà lié à un autre compte de l'autre serveur.",
         PASSWORD_LOGIN_OFF: 'La connexion par mot de passe est désactivée : utilisez le bouton ci-dessous.',
+        CONSENT_TITLE: 'Autoriser {client} ?',
+        CONSENT_TEXT: '{client} souhaite utiliser votre compte {email}. Il reçoit :',
+        CONSENT_NOTE: 'Vous pouvez retirer cette autorisation à tout moment dans Sécurité.',
+        CONSENT_ALLOW: 'Autoriser',
+        CONSENT_DENY: 'Ne pas autoriser',
+        CONSENT_NOT_FOUND: "Cette application n'a pas d'autorisation de ce compte.",
+        SCOPE_OPENID: 'Qui vous êtes (un identifiant, aucune donnée personnelle)',
+        SCOPE_PROFILE: 'Votre nom et votre langue',
+        SCOPE_EMAIL: 'Votre adresse e-mail',
+        SCOPE_TENANT: 'Votre organisation et votre rôle',
         PASSKEYS_DISABLED: "Les clés d'accès ne sont pas disponibles sur ce serveur.",
         PASSKEY_EXPIRED: "La demande de clé d'accès a expiré. Veuillez réessayer.",
         PASSKEY_INVALID: "La clé d'accès n'a pas pu être vérifiée. Veuillez réessayer.",
@@ -597,6 +627,16 @@ export const MESSAGES = {
             'Es gibt bereits ein Konto mit dieser E-Mail-Adresse. Melde dich damit an oder bitte einen Admin, es zu verknüpfen.',
         EXTERNAL_OTHER_LINKED: 'Dieses Konto ist bereits mit einem anderen Konto des anderen Servers verknüpft.',
         PASSWORD_LOGIN_OFF: 'Die Anmeldung mit Passwort ist ausgeschaltet: nutze die Schaltfläche unten.',
+        CONSENT_TITLE: '{client} erlauben?',
+        CONSENT_TEXT: '{client} möchte dein Konto {email} verwenden. Es erhält:',
+        CONSENT_NOTE: 'Du kannst das jederzeit unter Sicherheit widerrufen.',
+        CONSENT_ALLOW: 'Erlauben',
+        CONSENT_DENY: 'Nicht erlauben',
+        CONSENT_NOT_FOUND: 'Diese Anwendung hat keine Erlaubnis dieses Kontos.',
+        SCOPE_OPENID: 'Wer du bist (eine ID, keine persönlichen Daten)',
+        SCOPE_PROFILE: 'Deinen Namen und deine Sprache',
+        SCOPE_EMAIL: 'Deine E-Mail-Adresse',
+        SCOPE_TENANT: 'Deine Organisation und deine Rolle dort',
         PASSKEYS_DISABLED: 'Passkeys sind auf diesem Server nicht verfügbar.',
         PASSKEY_EXPIRED: 'Die Passkey-Anfrage ist abgelaufen. Bitte versuche es erneut.',
         PASSKEY_INVALID: 'Der Passkey konnte nicht geprüft werden. Bitte versuche es erneut.',
@@ -827,6 +867,8 @@ export function envLines(oidc, { port, example = false }) {
         '# the origin of APP_URL, comma separated). A passkey only works on its domain: changing it later loses them all.',
         'OIDC_PASSKEY_RP_ID=',
         'OIDC_PASSKEY_ORIGINS=',
+        '# Back-channel logout: how often (seconds) the logout tokens of ended sessions go to the applications; 0: never',
+        'OIDC_BACKCHANNEL_INTERVAL=5',
         '',
         '# Log in at another OpenID Connect server (Microsoft Entra ID, Keycloak, Google, ...). Register this redirect URI',
         `# there: http://localhost:${port}${ISSUER_PATH}/external/callback. Leave OIDC_EXTERNAL_ISSUER empty to turn it off.`,
@@ -1280,6 +1322,26 @@ export const endpoints = ({ port = 4000 } = {}) => [
             fields: [['csrf', 'string', 'required, from GET /oidc/interaction/:id']]
         },
         response: { status: 200, example: { status: 'mfa', csrf: 'from-the-page' } },
+        errors: [[410, 'oidc.EXPIRED']]
+    },
+    {
+        method: 'POST',
+        path: '/oidc/interaction/:id/consent',
+        tag: 'oidc',
+        summary:
+            'The consent screen "Allow <client>?" of an application that is not our own (`firstParty: false`): it appears after the login (or straight away with single sign-on) when the account did not allow those scopes yet, or with `prompt=consent`. Form-encoded (303) or JSON. `decision: "allow"` remembers the scopes and sends the code; anything else sends `error=access_denied`. Answers once. With `prompt=none` and no consent the client gets `error=consent_required`.',
+        form: true,
+        body: {
+            example: { csrf: 'from-the-page', decision: 'allow' },
+            fields: [
+                ['csrf', 'string', 'required, the hidden field of the page (or from GET /oidc/interaction/:id)'],
+                ['decision', 'string', '`allow`, or `deny` (anything else counts as deny)']
+            ]
+        },
+        response: {
+            status: 200,
+            example: { status: 'redirect', location: 'https://partner.example.com/callback?code=...&state=xyz&iss=...' }
+        },
         errors: [[410, 'oidc.EXPIRED']]
     },
     {
@@ -2084,6 +2146,42 @@ export const endpoints = ({ port = 4000 } = {}) => [
         errors: [
             [401, 'errors.UNAUTHORIZED'],
             [404, 'oidc.SESSION_NOT_FOUND']
+        ]
+    },
+    // ---------------------------------------------------------------- applications the own account allowed
+    {
+        method: 'GET',
+        path: '/me/consents',
+        tag: 'consents',
+        summary:
+            'The applications that are not our own which the logged in account allowed on the consent screen, with the scopes, newest first.',
+        bearer: true,
+        response: {
+            status: 200,
+            example: [
+                {
+                    clientId: 'partner.app',
+                    clientName: 'Partner Planner',
+                    scopes: ['email', 'openid', 'profile'],
+                    createdAt: '2026-10-15T09:00:00.000Z',
+                    updatedAt: '2026-10-15T09:00:00.000Z'
+                }
+            ]
+        },
+        errors: [[401, 'errors.UNAUTHORIZED']]
+    },
+    {
+        method: 'DELETE',
+        path: '/me/consents/:clientId',
+        tag: 'consents',
+        summary:
+            'Takes the permission back: every refresh token of that application for this account stops at once (its access tokens run out within 10 minutes) and the next login asks again.',
+        pathExample: '/me/consents/partner.app',
+        bearer: true,
+        response: { status: 200, example: { revoked: true } },
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [404, 'oidc.CONSENT_NOT_FOUND']
         ]
     },
     // ---------------------------------------------------------------- passkeys of the own account

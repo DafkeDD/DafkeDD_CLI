@@ -157,7 +157,7 @@ function AuditRow({ event, showTenant }: { event: AuditEvent; showTenant: boolea
     const what = t.has(`actions.${key}`) ? t(`actions.${key}`) : event.action
     const who = event.actor
         ? (event.actor.name ?? event.actor.email ?? event.actor.id)
-        : event.action.startsWith('licences.')
+        : event.action.startsWith('licences.') || event.action === 'login.backchannel_failed'
           ? t('system')
           : t('anonymous')
 

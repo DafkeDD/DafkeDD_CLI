@@ -31,6 +31,8 @@ type State =
     | { step: 'mfa'; csrf: string }
     | { step: 'mfa-setup'; csrf: string; secret: string; qrSvg: string }
     | { step: 'recovery-codes'; csrf: string; codes: string[] }
+    /** An application that is not our own asks for data of the account: allow or not. */
+    | { step: 'consent'; csrf: string; clientName: string; email: string; scopes: string[] }
     | { step: 'fatal'; message: string }
 
 type Answer = {
@@ -54,11 +56,29 @@ type Answer = {
     secret?: string
     qrSvg?: string
     recoveryCodes?: string[]
+    scopes?: string[]
+    email?: string
     platform?: boolean
 }
 
 const CHOICE =
     'flex h-11 items-center justify-between gap-3 rounded-xl border border-black/15 px-4 text-left text-sm font-semibold hover:border-[var(--accent,#6366f1)] disabled:opacity-60 dark:border-white/20'
+/** What a scope gives an application, in words (the consent screen and /security). */
+export function scopeLabel(t: (key: string) => string, scope: string): string {
+    switch (scope) {
+        case 'openid':
+            return t('scopeOpenid')
+        case 'profile':
+            return t('scopeProfile')
+        case 'email':
+            return t('scopeEmail')
+        case 'tenant':
+            return t('scopeTenant')
+        default:
+            return scope
+    }
+}
+
 /** From this many organisations on, the choice gets a search field. */
 const SEARCH_FROM = 7
 
@@ -168,7 +188,16 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
             setBusy(false)
             return
         }
-        if (answer.status === 'choose-tenant' && answer.csrf) {
+        if (answer.status === 'consent' && answer.csrf) {
+            setState({
+                step: 'consent',
+                csrf: answer.csrf,
+                clientName: answer.clientName ?? '',
+                email: answer.email ?? '',
+                scopes: answer.scopes ?? []
+            })
+            setError(null)
+        } else if (answer.status === 'choose-tenant' && answer.csrf) {
             setState({
                 step: 'tenant',
                 csrf: answer.csrf,
@@ -348,6 +377,48 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                     onClick={() => void submit('/continue', { csrf: state.csrf })}
                 >
                     {busy ? t('busy') : t('continue')}
+                </button>
+            </section>
+        )
+    }
+
+    if (state.step === 'consent') {
+        return (
+            <section className={CARD}>
+                <div className='flex flex-col gap-1.5'>
+                    <h1 className='text-2xl font-bold tracking-tight'>
+                        {t('consentTitle', { client: state.clientName })}
+                    </h1>
+                    <p className='text-sm opacity-80'>
+                        {t('consentText', { client: state.clientName, email: state.email })}
+                    </p>
+                </div>
+                <ul className='flex list-disc flex-col gap-1 pl-5 text-sm'>
+                    {state.scopes.map(scope => (
+                        <li key={scope}>{scopeLabel(t, scope)}</li>
+                    ))}
+                </ul>
+                <p className='text-xs opacity-70'>{t('consentNote')}</p>
+                {error && (
+                    <div role='alert' className='text-sm text-red-600 dark:text-red-400'>
+                        {error}
+                    </div>
+                )}
+                <button
+                    type='button'
+                    disabled={busy}
+                    className={BUTTON}
+                    onClick={() => void submit('/consent', { csrf: state.csrf, decision: 'allow' })}
+                >
+                    {busy ? t('busy') : t('consentAllow')}
+                </button>
+                <button
+                    type='button'
+                    disabled={busy}
+                    className={OUTLINE}
+                    onClick={() => void submit('/consent', { csrf: state.csrf, decision: 'deny' })}
+                >
+                    {t('consentDeny')}
                 </button>
             </section>
         )

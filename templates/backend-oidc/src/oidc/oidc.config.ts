@@ -31,6 +31,8 @@ export const OIDC = {
     ACCESS_TOKEN_SECONDS: 10 * 60,
     ID_TOKEN_SECONDS: 5 * 60,
     SESSION_SECONDS: 12 * 60 * 60,
+    /** A logout token (back-channel logout) is valid this long after it was made. */
+    LOGOUT_TOKEN_SECONDS: 2 * 60,
     /**
      * A refresh token lives as long as its session (at most 12 hours). A used one is accepted once more within this
      * many seconds (two requests of the same browser at once); later it counts as stolen: the family and the session end.
@@ -194,6 +196,15 @@ export class OidcConfig {
                   .map(origin => origin.trim())
                   .filter(Boolean)
             : [new URL(this.appUrl).origin]
+    }
+
+    /** How often the logout tokens of ended sessions are delivered (OIDC_BACKCHANNEL_INTERVAL, seconds, default 5; 0: never). */
+    get backchannelIntervalSeconds(): number {
+        const raw = this.config.get<string>('OIDC_BACKCHANNEL_INTERVAL')
+        // The tests deliver themselves (BackchannelService.flush()): no timer unless they ask for one
+        if (raw === undefined && this.config.get<string>('NODE_ENV') === 'test') return 0
+        const value = Number(raw ?? 5)
+        return Number.isFinite(value) && value >= 0 ? value : 5
     }
 
     /** Only the other server: no password and no eID login, no registration with them (OIDC_EXTERNAL_ONLY=true). */

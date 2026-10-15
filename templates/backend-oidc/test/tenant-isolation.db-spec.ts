@@ -115,6 +115,8 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
             'SELECT * FROM oidc_signing_keys',
             'SELECT * FROM oidc_sessions',
             'SELECT * FROM user_passkeys',
+            'SELECT * FROM oidc_consents',
+            'SELECT * FROM oidc_logout_queue',
             `SELECT password_hash FROM ${users}`
         ]) {
             await expect(database.withTenant(tenant.a, db => db.query(statement))).rejects.toThrow(/permission denied/)
@@ -893,6 +895,117 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
                 [owner.id]
             )
         ).rejects.toThrow(/user_passkeys_algorithm_check/)
+    })
+
+    it('applications: consent per account, revoking it stops their refresh tokens, and ended sessions queue logout tokens', async () => {
+        const store = new PgOidcStore(database)
+        const client = (clientId: string, backchannelLogoutUri: string | null) => ({
+            clientId,
+            name: 'App ' + clientId,
+            type: 'public' as const,
+            secretHash: null,
+            redirectUris: ['https://' + clientId + '.example.com/cb'],
+            postLogoutRedirectUris: [],
+            grantTypes: ['authorization_code', 'refresh_token'],
+            scopes: ['openid', 'email'],
+            firstParty: false,
+            backchannelLogoutUri,
+            backchannelLogoutSessionRequired: true
+        })
+        await store.upsertClient(client('partner', 'https://partner.example.com/backchannel'))
+        await store.upsertClient(client('quiet', null))
+        expect(await store.findClient('partner')).toMatchObject({
+            backchannelLogoutUri: 'https://partner.example.com/backchannel',
+            backchannelLogoutSessionRequired: true
+        })
+        const owner = (await store.createUser({
+            email: 'consent@example.com',
+            name: 'Consent',
+            passwordHash: 'x',
+            emailVerified: true,
+            locale: null
+        }))!
+
+        // Consent: the scopes add up, per account and application
+        expect(await store.findConsent(owner.id, 'partner')).toBeNull()
+        await store.saveConsent(owner.id, 'partner', ['openid', 'email'])
+        await store.saveConsent(owner.id, 'partner', ['openid', 'profile'])
+        expect((await store.findConsent(owner.id, 'partner'))?.scopes).toEqual(['email', 'openid', 'profile'])
+        expect((await store.listConsents(owner.id)).map(item => item.clientName)).toEqual(['App partner'])
+        await store.saveConsent(owner.id, 'partner', ['tenant'], tenant.a)
+        await store.saveConsent(owner.id, 'partner', ['tenant'], tenant.a)
+        expect((await store.findConsent(owner.id, 'partner'))?.tenantIds).toEqual([tenant.a])
+        // A consent screen answers once, also from two processes at the same moment
+        const hash = randomBytes(16).toString('hex')
+        const answers = await Promise.all([
+            store.useInteraction(hash, new Date(Date.now() + 60_000)),
+            store.useInteraction(hash, new Date(Date.now() + 60_000))
+        ])
+        expect(answers.filter(Boolean)).toHaveLength(1)
+
+        const session = {
+            id: randomUUID(),
+            idHash: randomBytes(16).toString('hex'),
+            interactionHash: randomBytes(16).toString('hex'),
+            userId: owner.id,
+            tenantId: null,
+            authTime: new Date(),
+            acr: 'loa2',
+            amr: ['pwd', 'otp', 'mfa'],
+            expiresAt: new Date(Date.now() + 60_000),
+            userAgent: null
+        }
+        expect(await store.createSession(session)).toBe(true)
+        await store.createRefreshToken({
+            tokenHash: randomBytes(16).toString('hex'),
+            familyId: randomUUID(),
+            sessionId: session.id,
+            clientId: 'partner',
+            userId: owner.id,
+            tenantId: null,
+            scope: 'openid email',
+            expiresAt: new Date(Date.now() + 60_000)
+        })
+        // Revoked: gone, and its refresh tokens stop in the same transaction
+        expect(await store.deleteConsent(owner.id, 'partner')).toBe(true)
+        expect(await store.deleteConsent(owner.id, 'partner')).toBe(false)
+        const { rows } = await database.query<{ revoked: boolean }>(
+            `SELECT revoked_at IS NOT NULL AS revoked FROM oidc_refresh_tokens WHERE client_id = 'partner' AND user_id = $1`,
+            [owner.id]
+        )
+        expect(rows.map(row => row.revoked)).toEqual([true])
+
+        // Both applications got a code in the session; only the one with a back-channel URI is told about its end
+        await store.addSessionClient(session.id, 'partner')
+        await store.addSessionClient(session.id, 'partner')
+        await store.addSessionClient(session.id, 'quiet')
+        await store.endSession(session.idHash)
+        await store.endSession(session.idHash)
+        // Two processes at the same moment: each job once
+        const [a, b] = await Promise.all([store.claimLogouts(10, 5), store.claimLogouts(10, 5)])
+        const jobs = [...a, ...b]
+        expect(jobs).toHaveLength(1)
+        expect(jobs[0]).toMatchObject({ sessionId: session.id, userId: owner.id, clientId: 'partner', attempts: 1 })
+        // Not due again at once (the next try is later), and gone once delivered
+        expect(await store.claimLogouts(10, 5)).toEqual([])
+        await store.finishLogout(jobs[0]!.id)
+        const left = await database.query('SELECT 1 FROM oidc_logout_queue WHERE session_id = $1', [session.id])
+        expect(left.rows).toHaveLength(0)
+
+        // A session that simply runs out: nothing to tell
+        const quiet = {
+            ...session,
+            id: randomUUID(),
+            idHash: randomBytes(16).toString('hex'),
+            interactionHash: randomBytes(16).toString('hex')
+        }
+        await store.createSession({ ...quiet, expiresAt: new Date(Date.now() - 1000) })
+        await store.addSessionClient(quiet.id, 'partner')
+        await database.query(`UPDATE oidc_sessions SET expires_at = expires_at - interval '1 minute' WHERE id = $1`, [
+            quiet.id
+        ])
+        const none = await database.query('SELECT 1 FROM oidc_logout_queue WHERE session_id = $1', [quiet.id])
+        expect(none.rows).toHaveLength(0)
     })
 
     it('the tenant role exists and owns nothing', async () => {

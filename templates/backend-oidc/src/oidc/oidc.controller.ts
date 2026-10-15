@@ -25,6 +25,7 @@ import {
 import { type LogoutResult, SessionsService } from './sessions.service.js'
 import { TokensService } from './tokens.service.js'
 import {
+    consentPage,
     loginPage,
     logoutPage,
     messagePage,
@@ -297,10 +298,18 @@ export class OidcController {
         if (sealed) response.clearCookie(name, this.externalCookieOptions())
         const { id, result } = await this.oidc.externalCallback(request.query as Params, sealed)
         const ui = this.config.loginUiUrl
-        if (!id || !ui || result.kind === 'done' || result.kind === 'expired' || result.kind === 'no-tenant')
+        if (
+            !id ||
+            !ui ||
+            result.kind === 'done' ||
+            result.kind === 'redirect' ||
+            result.kind === 'expired' ||
+            result.kind === 'no-tenant'
+        )
             return this.loginAnswer(id ?? '', result, request, response, i18n)
         // The login page of the frontend goes on (GET .../interaction/<id> says "pending", or shows the error)
         if ('cookie' in result && result.cookie) this.setInteractionCookie(response, result.cookie)
+        if (result.kind === 'consent' && result.sessionId) this.setSessionCookie(response, result.sessionId)
         const location = new URL(ui)
         location.searchParams.set('interaction', id)
         if (typeof request.query.lang === 'string') location.searchParams.set('lang', request.query.lang)
@@ -322,6 +331,25 @@ export class OidcController {
         @I18n() i18n: I18nContext
     ) {
         const result = await this.oidc.resume(id, this.interactionCookie(request, id), (request.body ?? {}) as Params)
+        this.loginAnswer(id, result, request, response, i18n)
+    }
+
+    @Post('interaction/:id/consent')
+    @ApiOperation({
+        summary:
+            'The consent screen of an application that is not our own (form-encoded or JSON { csrf, decision }): "allow" gives the client its code and remembers the scopes; anything else sends error=access_denied'
+    })
+    @ApiProduces('text/html', 'application/json')
+    @ApiResponse({ status: 303, description: 'Back to the client: with a code, or with error=access_denied' })
+    @ApiOkResponse({ description: '{ status: "redirect", location } (JSON)' })
+    @ApiResponse({ status: 410, description: 'The login request expired, or the session ended meanwhile' })
+    async consent(
+        @Param('id') id: string,
+        @Req() request: Request,
+        @Res() response: Response,
+        @I18n() i18n: I18nContext
+    ) {
+        const result = await this.oidc.consent(id, this.interactionCookie(request, id), (request.body ?? {}) as Params)
         this.loginAnswer(id, result, request, response, i18n)
     }
 
@@ -605,7 +633,11 @@ export class OidcController {
     }
 
     /** Action URL of a form on the login page; keeps ?lang= so errors come back in the same language. */
-    private action(id: string, step: 'login' | 'mfa' | 'continue' | 'tenant' | 'external', request: Request): string {
+    private action(
+        id: string,
+        step: 'login' | 'mfa' | 'continue' | 'tenant' | 'external' | 'consent',
+        request: Request
+    ): string {
         const url = new URL(this.config.issuer + '/interaction/' + encodeURIComponent(id) + '/' + step)
         if (typeof request.query.lang === 'string') url.searchParams.set('lang', request.query.lang)
         return url.toString()
@@ -662,6 +694,8 @@ export class OidcController {
     private loginAnswer(id: string, result: LoginResult, request: Request, response: Response, i18n: I18nContext) {
         const t = translator(i18n)
         if ('cookie' in result && result.cookie) this.setInteractionCookie(response, result.cookie)
+        // Logged in just now, the consent screen follows: the browser keeps the session either way
+        if (result.kind === 'consent' && result.sessionId) this.setSessionCookie(response, result.sessionId)
         if (result.kind === 'external') {
             response.cookie(result.cookieName, result.external, {
                 ...this.externalCookieOptions(),
@@ -744,6 +778,21 @@ export class OidcController {
                         platform: result.platform
                     })
                 })
+            case 'consent':
+                return sendPage(response, {
+                    lang: i18n.lang,
+                    formTargets: [new URL(result.interaction.params.redirectUri).origin],
+                    ...consentPage(t, {
+                        action: this.action(id, 'consent', request),
+                        csrf: result.interaction.csrf,
+                        clientName: result.client.name,
+                        email: result.email,
+                        scopes: result.scopes
+                    })
+                })
+            case 'redirect':
+                response.set('Cache-Control', 'no-store').redirect(HttpStatus.SEE_OTHER, result.location)
+                return
             case 'done':
                 this.setSessionCookie(response, result.sessionId)
                 response.set('Cache-Control', 'no-store').redirect(HttpStatus.SEE_OTHER, result.location)
@@ -811,6 +860,17 @@ export class OidcController {
                 return this.json(response, 200, { status: 'redirect', location: result.location })
             case 'passkey-challenge':
                 return this.json(response, 200, { status: 'passkey-challenge', options: result.options })
+            case 'consent':
+                return this.json(response, 200, {
+                    status: 'consent',
+                    csrf: result.interaction.csrf,
+                    clientName: result.client.name,
+                    email: result.email,
+                    // openid, profile, email, tenant: the frontend shows what each one gives
+                    scopes: result.scopes
+                })
+            case 'redirect':
+                return this.json(response, 200, { status: 'redirect', location: result.location })
             case 'done':
                 this.setSessionCookie(response, result.sessionId)
                 return this.json(response, 200, { status: 'redirect', location: result.location })

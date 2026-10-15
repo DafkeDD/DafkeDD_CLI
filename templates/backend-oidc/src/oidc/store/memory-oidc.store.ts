@@ -5,9 +5,11 @@ import type {
     AuthorizationCode,
     BootstrapAdmin,
     ChangeResult,
+    Consent,
     IdentifierType,
     Invitation,
     LinkResult,
+    LogoutJob,
     MemberStatus,
     Membership,
     MfaState,
@@ -40,6 +42,28 @@ export class MemoryOidcStore implements OidcStore {
     mfa = new Map<string, MfaState>()
     codes = new Map<string, AuthorizationCode & { usedAt: Date | null; refreshFamily?: string }>()
     identifiers: UserIdentifier[] = []
+    consents: (Consent & { userId: string })[] = []
+    usedInteractions = new Map<string, Date>()
+    sessionClients: { sessionId: string; clientId: string }[] = []
+    logoutQueue: (LogoutJob & { nextAt: number; createdAt: number })[] = []
+    private logoutIds = 0
+
+    /** An active session ends: like the trigger of PostgreSQL, a logout token for each client that hears about it. */
+    private end(session: Session, now = new Date()) {
+        if (session.expiresAt <= now) return
+        session.expiresAt = now
+        for (const link of this.sessionClients.filter(item => item.sessionId === session.id))
+            if (this.clients.get(link.clientId)?.backchannelLogoutUri)
+                this.logoutQueue.push({
+                    id: String(++this.logoutIds),
+                    sessionId: session.id,
+                    userId: session.userId,
+                    clientId: link.clientId,
+                    attempts: 0,
+                    nextAt: now.getTime(),
+                    createdAt: now.getTime()
+                })
+    }
 
     /** Test helper: adds a user (and memberships). */
     addUser(
@@ -96,6 +120,93 @@ export class MemoryOidcStore implements OidcStore {
 
     async upsertClient(client: OidcClient) {
         this.clients.set(client.clientId, client)
+    }
+
+    async findConsent(userId: string, clientId: string) {
+        const row = this.consents.find(item => item.userId === userId && item.clientId === clientId)
+        return row
+            ? {
+                  clientId: row.clientId,
+                  scopes: [...row.scopes],
+                  tenantIds: [...row.tenantIds],
+                  createdAt: row.createdAt,
+                  updatedAt: row.updatedAt
+              }
+            : null
+    }
+
+    async saveConsent(userId: string, clientId: string, scopes: string[], tenantId: string | null = null) {
+        const row = this.consents.find(item => item.userId === userId && item.clientId === clientId)
+        const now = new Date()
+        const tenants = tenantId ? [tenantId] : []
+        if (row) {
+            row.scopes = [...new Set([...row.scopes, ...scopes])].sort()
+            row.tenantIds = [...new Set([...row.tenantIds, ...tenants])]
+            row.updatedAt = now
+        } else
+            this.consents.push({
+                userId,
+                clientId,
+                scopes: [...new Set(scopes)].sort(),
+                tenantIds: tenants,
+                createdAt: now,
+                updatedAt: now
+            })
+    }
+
+    async useInteraction(interactionHash: string, expiresAt: Date) {
+        const until = this.usedInteractions.get(interactionHash)
+        if (until && until > new Date()) return false
+        this.usedInteractions.set(interactionHash, expiresAt)
+        return true
+    }
+
+    async listConsents(userId: string) {
+        return this.consents
+            .filter(item => item.userId === userId && this.clients.has(item.clientId))
+            .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+            .map(item => ({
+                clientId: item.clientId,
+                clientName: this.clients.get(item.clientId)!.name,
+                scopes: [...item.scopes],
+                tenantIds: [...item.tenantIds],
+                createdAt: item.createdAt,
+                updatedAt: item.updatedAt
+            }))
+    }
+
+    async deleteConsent(userId: string, clientId: string) {
+        const before = this.consents.length
+        this.consents = this.consents.filter(item => !(item.userId === userId && item.clientId === clientId))
+        if (this.consents.length === before) return false
+        for (const token of this.refreshTokens.values())
+            if (token.userId === userId && token.clientId === clientId && !token.revokedAt) token.revokedAt = new Date()
+        return true
+    }
+
+    async addSessionClient(sessionId: string, clientId: string) {
+        if (!this.sessionClients.some(item => item.sessionId === sessionId && item.clientId === clientId))
+            this.sessionClients.push({ sessionId, clientId })
+    }
+
+    async claimLogouts(limit: number, maxAttempts: number) {
+        const now = Date.now()
+        const due = this.logoutQueue.filter(job => job.nextAt <= now && job.attempts < maxAttempts).slice(0, limit)
+        for (const job of due) {
+            job.nextAt = now + 30_000 * 4 ** job.attempts
+            job.attempts++
+        }
+        return due.map(({ id, sessionId, userId, clientId, attempts }) => ({
+            id,
+            sessionId,
+            userId,
+            clientId,
+            attempts
+        }))
+    }
+
+    async finishLogout(id: string) {
+        this.logoutQueue = this.logoutQueue.filter(job => job.id !== id)
     }
 
     async listKeys() {
@@ -156,7 +267,7 @@ export class MemoryOidcStore implements OidcStore {
     async endUserSession(userId: string, id: string) {
         const session = this.activeSession(id)
         if (session?.userId !== userId) return false
-        session.expiresAt = new Date()
+        this.end(session)
         return true
     }
 
@@ -165,7 +276,7 @@ export class MemoryOidcStore implements OidcStore {
         let ended = 0
         for (const session of this.sessions.values())
             if (session.userId === userId && session.id !== keepId && session.expiresAt > now) {
-                session.expiresAt = now
+                this.end(session, now)
                 ended++
             }
         return ended
@@ -215,7 +326,7 @@ export class MemoryOidcStore implements OidcStore {
 
     async endSession(idHash: string) {
         const session = this.sessions.get(idHash)
-        if (session && session.expiresAt > new Date()) session.expiresAt = new Date()
+        if (session) this.end(session)
     }
 
     async createCode(code: AuthorizationCode) {
@@ -374,8 +485,7 @@ export class MemoryOidcStore implements OidcStore {
 
     async endUserSessions(userId: string) {
         const now = new Date()
-        for (const session of this.sessions.values())
-            if (session.userId === userId && session.expiresAt > now) session.expiresAt = now
+        for (const session of this.sessions.values()) if (session.userId === userId) this.end(session, now)
     }
 
     // ---------------------------------------------------------------- two-factor authentication
@@ -479,8 +589,7 @@ export class MemoryOidcStore implements OidcStore {
     async endTenantSessions(tenantId: string, userId: string) {
         const now = new Date()
         for (const session of this.sessions.values())
-            if (session.tenantId === tenantId && session.userId === userId && session.expiresAt > now)
-                session.expiresAt = now
+            if (session.tenantId === tenantId && session.userId === userId) this.end(session, now)
     }
 
     async setMemberStatus(tenantId: string, userId: string, status: MemberStatus) {
@@ -592,7 +701,12 @@ export class MemoryOidcStore implements OidcStore {
 
     async deleteExpired(now: Date) {
         const ended = now.getTime() - 60 * 60 * 1000
-        for (const [id, session] of this.sessions) if (session.expiresAt.getTime() <= ended) this.sessions.delete(id)
+        for (const [id, session] of this.sessions)
+            if (session.expiresAt.getTime() <= ended) {
+                this.sessions.delete(id)
+                this.sessionClients = this.sessionClients.filter(item => item.sessionId !== session.id)
+            }
+        this.logoutQueue = this.logoutQueue.filter(job => job.createdAt > now.getTime() - 24 * 60 * 60 * 1000)
         for (const [id, code] of this.codes) if (code.expiresAt <= now) this.codes.delete(id)
         for (const [hash, token] of this.refreshTokens) if (token.expiresAt <= now) this.refreshTokens.delete(hash)
         this.invitations = this.invitations.filter(item => item.expiresAt > now)

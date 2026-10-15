@@ -117,8 +117,9 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | Path | What it does |
 | --- | --- |
 | \`/api/auth/login\` | Starts a login: state, nonce and a PKCE verifier go into an encrypted cookie, then to the login server |
-| \`/login?interaction=<id>\` | The login page of the login server (email, password, passkey, eID, "Log in with <name>" for another OpenID Connect server, second factor, organisation choice), shown by this frontend. Back from the other server it goes on where the login is (\`pending\`); \`&error=EXTERNAL_...\` shows why that login failed |
+| \`/login?interaction=<id>\` | The login page of the login server (email, password, passkey, eID, "Log in with <name>" for another OpenID Connect server, second factor, organisation choice, and "Allow <application>?" for applications of others), shown by this frontend. Back from the other server it goes on where the login is (\`pending\`); \`&error=EXTERNAL_...\` shows why that login failed |
 | \`/api/auth/callback\` | Back from the login server: checks state and \`iss\`, exchanges the code, verifies the ID token |
+| \`/api/auth/backchannel-logout\` | POST from the login server (back-channel logout): a signed logout token when a session ended there; every browser of that session is logged out here at its next request |
 | \`/profile\` | Protected: name, email, organisation, role, and whether the API accepts the access token |
 | \`/api/auth/logout\` | POST: logs out: revokes the refresh token, forgets the session and logs out of the login server too (\`end_session_endpoint\`), then back to the home page |
 | \`/register\` | Create an account and a new organisation (you become its admin), with a password or with the Belgian eID; a confirmation email follows |
@@ -126,13 +127,13 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | \`/forgot-password\` | Ask for a link to choose a new password |
 | \`/reset-password?token=\` | The link in that email: a new password (the link works once; you are logged out everywhere) |
 | \`/invite?token=\` | The link in an invitation: join the organisation, or create your account for it |
-| \`/security\` | Two-step verification of the own account (status, recovery codes left, new recovery codes), passkeys (add, rename, remove), the eID (link, unlink), where the account is logged in (end one session, or all others) and its recent activity (logins, also failed ones, and security changes) |
+| \`/security\` | Two-step verification of the own account (status, recovery codes left, new recovery codes), passkeys (add, rename, remove), the eID (link, unlink), the applications of others with access (take back), where the account is logged in (end one session, or all others) and its recent activity (logins, also failed ones, and security changes) |
 | \`/members\` | Admins: the members of the organisation with who is online, invite by email, open invitations (send again, withdraw), change roles (user, admin), disable or enable, remove |
 | \`/admin\` | Superadmins: every organisation (create, suspend), who is superadmin, the products for sale (prices per month and per year, stop selling) and the discount codes (percentage or amount, 100% is free) |
 | \`/licenses\` | Admins: per product the seats (bought, free, in use), buy seats per month or per year with a discount code, more or fewer seats, cancel, give or take back the seat of a member and start trials. Superadmins open an organisation on \`/admin\` and also give free seats and extend trials here |
 | \`/licenses/return\` | Back from the checkout of Mollie: asks the API how the payment went (no webhook needed on localhost) |
 | \`/audit\` | Admins: the audit log of the organisation (who did what and when, from which IP address and browser), with a filter per kind of event and "Show more". Superadmins: also \`/audit?scope=platform\`, every organisation and the events without one (failed logins, accounts) |
-| \`/api/backend/...\` | Route handler: calls \`/tenants/current/...\`, \`/admin/...\`, \`/me/mfa\`, \`/me/eid\`, \`/me/sessions\`, \`/me/passkeys\`, \`/me/licenses\` and \`/me/audit\` of the API with the access token of the session (the token stays on the server; changes only from pages of this app) |
+| \`/api/backend/...\` | Route handler: calls \`/tenants/current/...\`, \`/admin/...\`, \`/me/mfa\`, \`/me/eid\`, \`/me/sessions\`, \`/me/passkeys\`, \`/me/consents\`, \`/me/licenses\` and \`/me/audit\` of the API with the access token of the session (the token stays on the server; changes only from pages of this app) |
 
 **Flow**: "Log in" → \`/api/auth/login\` → the API (\`/oidc/authorize\`) → \`/login?interaction=...\` (this frontend talks to
 \`/oidc/interaction/...\` of the API with \`fetch\` and \`credentials: 'include'\`, so the browser sends the encrypted
@@ -159,6 +160,16 @@ again on every call, from the database.
 
 **Two-step verification** is required: after the password the login page asks the code of the authenticator app; the
 first time it shows the QR code (\`src/components/mfa-ui.tsx\`) and then the recovery codes, before the login goes on.
+
+**Back-channel logout** (\`src/app/api/auth/backchannel-logout/route.ts\`, \`src/lib/ended.ts\`): when a session ends at
+the login server (logged out in another application, ended on \`/security\`, password reset, member disabled), the API
+POSTs a logout token here. It is checked (RS256 with the JWKS, \`typ\` \`logout+jwt\`, issuer, audience, at most 5
+minutes old, the logout event, no nonce, a \`jti\` that was not seen before) and its \`sid\` is remembered: the session
+cookie of a browser with that \`sid\` no longer counts. The list lives in the memory of the Next.js server; with
+several servers behind a load balancer, keep it in Redis or the database instead.
+
+**Applications of others** (\`src/components/consents.tsx\`): the login page shows "Allow <application>?" with what it
+gets, and \`/security\` lists the applications with access with "Take back".
 
 **Passkeys** (\`src/lib/webauthn.ts\`, \`src/components/passkeys.tsx\`): "Log in with a passkey" on the login page
 (only when the API has \`OIDC_PASSKEYS\` on and the browser supports WebAuthn) and the card "Passkeys" on \`/security\`

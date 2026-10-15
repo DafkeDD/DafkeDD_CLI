@@ -27,6 +27,7 @@ const interaction = (overrides: Partial<Interaction> = {}): Interaction => ({
     amr: [],
     eidNonce: null,
     passkeyChallenge: null,
+    consent: null,
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/141.0',
     expiresAt: Date.now() + 60_000,
     ...overrides

@@ -138,7 +138,32 @@ export interface OidcClient {
     postLogoutRedirectUris: string[]
     grantTypes: string[]
     scopes: string[]
+    /** Our own application: no consent screen. Others ask the user once which data they may have. */
     firstParty: boolean
+    /** Back-channel logout: the server POSTs a logout token here when a session with this client ends. */
+    backchannelLogoutUri?: string | null
+    /** The logout token always has `sid`; true only says the client relies on it. */
+    backchannelLogoutSessionRequired?: boolean
+}
+
+/** What a user allowed an application that is not our own: these scopes, until revoked on /security. */
+export interface Consent {
+    clientId: string
+    scopes: string[]
+    /** With the tenant scope: the organisations the application may see (name and role). */
+    tenantIds: string[]
+    createdAt: Date
+    updatedAt: Date
+}
+
+/** A logout token still to deliver: the session that ended, for one client with a back-channel logout URI. */
+export interface LogoutJob {
+    id: string
+    sessionId: string
+    userId: string
+    clientId: string
+    /** How many times it was tried, this one included. */
+    attempts: number
 }
 
 export interface StoredKey {
@@ -357,6 +382,30 @@ export interface OidcStore {
 
     findClient(clientId: string): Promise<OidcClient | null>
     upsertClient(client: OidcClient): Promise<void>
+
+    // ---------------------------------------------------------------- consent and back-channel logout
+
+    findConsent(userId: string, clientId: string): Promise<Consent | null>
+    /** Adds the scopes (and the organisation, when not null) to what the user allowed this client. */
+    saveConsent(userId: string, clientId: string, scopes: string[], tenantId?: string | null): Promise<void>
+    /** The applications the user allowed, with their names, newest first. */
+    listConsents(userId: string): Promise<(Consent & { clientName: string })[]>
+    /**
+     * Revokes a consent and, in the same transaction, every refresh token of that client for this user. False when
+     * there was none.
+     */
+    deleteConsent(userId: string, clientId: string): Promise<boolean>
+    /** Marks a login (sha256 of its id) as answered; false when it was answered before. */
+    useInteraction(interactionHash: string, expiresAt: Date): Promise<boolean>
+    /** Remembers that this client got a code in this session (it hears about the end of the session). */
+    addSessionClient(sessionId: string, clientId: string): Promise<void>
+    /**
+     * Takes up to `limit` logout tokens that are due, for this process only (others skip them), and schedules their
+     * next try in case this one fails. Only jobs with fewer than `maxAttempts` tries.
+     */
+    claimLogouts(limit: number, maxAttempts: number): Promise<LogoutJob[]>
+    /** Delivered: forget it. */
+    finishLogout(id: string): Promise<void>
 
     listKeys(): Promise<StoredKey[]>
     /**

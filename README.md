@@ -310,7 +310,11 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   security key) and logs in with "Log in with a passkey": no password, and it counts as two-step verification
   (`acr: loa2`). Our own WebAuthn code (CBOR, COSE keys ES256, RS256 and EdDSA, signature counter), no attestation.
   `OIDC_PASSKEYS=off` turns them off.
-- **Not yet** (next phase): back-channel logout, a consent screen for external clients.
+- **Applications of others**: clients with `"firstParty": false` in `config/oidc-clients.json` show a **consent screen**
+  ("Allow Partner Planner?", with what it gets per scope) and remember the answer per account; `/security` lists them
+  and takes access back (their refresh tokens stop at once). **Back-channel logout** (OpenID Connect Back-Channel Logout
+  1.0): when a session ends, every client that was used in it and has a `backchannelLogoutUri` gets a signed logout
+  token, with retries; the frontend is one of them and logs the browser out too.
 
 The TypeScript files of this feature live as real files in `templates/backend-oidc` and `templates/frontend-oidc` (see
 Development).
@@ -456,6 +460,14 @@ git switch developer
 
 ## Changelog
 
+- **0.31.0**: applications of others and back-channel logout. Clients with `"firstParty": false` get a consent screen
+  after the login (HTML page of the API and the login page of the frontend; `POST /oidc/interaction/:id/consent`), with
+  `prompt=consent`, more scopes than before and `consent_required` for `prompt=none`. `GET /me/consents` and
+  `DELETE /me/consents/:clientId` (revokes the refresh tokens of that application), "Applications with access" on
+  `/security`. Back-channel logout: `backchannelLogoutUri` per client, logout tokens (`typ: logout+jwt`, `sid`, the
+  logout event) queued by a trigger whenever a session ends and delivered with retries (`OIDC_BACKCHANNEL_INTERVAL`);
+  the frontend receives them on `/api/auth/backchannel-logout`. Migration 8: `oidc_consents`, `oidc_session_clients`,
+  `oidc_logout_queue`. Audit log: `account.consent_granted`, `account.consent_revoked`, `login.backchannel_failed`.
 - **0.30.0**: passkeys (WebAuthn). `/security` adds, renames and removes passkeys (`GET/POST /me/passkeys`,
   `POST /me/passkeys/options`, `PATCH/DELETE /me/passkeys/:id`); the login page has "Log in with a passkey"
   (`POST /oidc/interaction/:id/passkey/challenge` and `/passkey`), which counts as two-step verification (amr

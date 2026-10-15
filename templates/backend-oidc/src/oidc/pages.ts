@@ -27,6 +27,7 @@ button{height:44px;border:0;border-radius:10px;background:var(--accent);color:#f
 .choice{justify-content:flex-start;padding:0 14px;background:transparent;color:inherit;border:1px solid var(--line);text-align:left}
 .qr{align-self:center;width:200px;height:200px;padding:8px;background:#fff;border-radius:12px}.qr svg{width:100%;height:100%;display:block}
 .secret{font-family:ui-monospace,monospace;font-size:.95rem;letter-spacing:.04em;word-break:break-all}
+.scopes{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
 .codes{margin:0;padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;list-style:none;border:1px solid var(--line);border-radius:10px;font-family:ui-monospace,monospace}
 `
 
@@ -178,6 +179,26 @@ export function tenantPage(
             `<p class="muted">${escapeHtml(t('oidc.TENANT_SUBTITLE'))}</p>` +
             `<form method="post" action="${escapeHtml(options.action)}">` +
             `<input type="hidden" name="csrf" value="${escapeHtml(options.csrf)}">${buttons}</form>`
+    }
+}
+
+/** "Allow <client>?": what an application that is not our own gets (per scope), allow or not. */
+export function consentPage(
+    t: Translate,
+    options: { action: string; csrf: string; clientName: string; email: string; scopes: string[] }
+) {
+    const items = options.scopes.map(scope => `<li>${escapeHtml(t('oidc.SCOPE_' + scope.toUpperCase()))}</li>`).join('')
+    return {
+        title: t('oidc.CONSENT_TITLE', { client: options.clientName }),
+        body:
+            `<h1>${escapeHtml(t('oidc.CONSENT_TITLE', { client: options.clientName }))}</h1>` +
+            `<p class="muted">${escapeHtml(t('oidc.CONSENT_TEXT', { client: options.clientName, email: options.email }))}</p>` +
+            `<ul class="scopes">${items}</ul>` +
+            `<p class="muted">${escapeHtml(t('oidc.CONSENT_NOTE'))}</p>` +
+            `<form method="post" action="${escapeHtml(options.action)}">` +
+            `<input type="hidden" name="csrf" value="${escapeHtml(options.csrf)}">` +
+            `<button type="submit" name="decision" value="allow">${escapeHtml(t('oidc.CONSENT_ALLOW'))}</button>` +
+            `<button class="choice" type="submit" name="decision" value="deny">${escapeHtml(t('oidc.CONSENT_DENY'))}</button></form>`
     }
 }
 

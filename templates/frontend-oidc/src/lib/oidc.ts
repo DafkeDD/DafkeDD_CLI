@@ -52,6 +52,8 @@ export interface Session {
     refreshToken: string | null
     /** The last ID token: it tells the login server who logs out (id_token_hint). */
     idToken: string
+    /** The session at the login server (sid): a back-channel logout of it ends this session too. */
+    sid?: string
 }
 
 /** A login in progress (between /api/auth/login and /api/auth/callback). */
@@ -181,6 +183,9 @@ let keyCache: { at: number; keys: Jwk[] } | null = null
 
 async function signingKey(kid: string) {
     for (const fresh of [false, true]) {
+        // An unknown key id fetches the keys again (a new key), at most every 30 seconds: anyone can POST a logout
+        // token with a made-up key id, that must not make this server hammer the login server
+        if (fresh && keyCache && Date.now() - keyCache.at < 30_000) break
         if (fresh || !keyCache || Date.now() - keyCache.at > 5 * 60_000) {
             const response = await fetch((await discovery()).jwks_uri, { cache: 'no-store' })
             if (!response.ok) throw new Error('JWKS failed: ' + response.status)
@@ -200,7 +205,7 @@ export async function verifyIdToken(
     idToken: string,
     nonce: string | null,
     accessToken: string
-): Promise<{ sub: string; tenant: Tenant | null; superadmin: boolean }> {
+): Promise<{ sub: string; sid: string | undefined; tenant: Tenant | null; superadmin: boolean }> {
     const [header, payload, signature] = idToken.split('.')
     if (!header || !payload || !signature) throw new Error('Malformed ID token')
     const head = JSON.parse(Buffer.from(header, 'base64url').toString('utf8')) as { alg?: string; kid?: string }
@@ -224,7 +229,58 @@ export async function verifyIdToken(
     if (claims.at_hash !== atHash) throw new Error('The access token does not belong to the ID token')
     if (typeof claims.sub !== 'string') throw new Error('Missing subject')
     const tenant = (claims.tenant as Tenant | undefined) ?? null
-    return { sub: claims.sub, tenant, superadmin: claims.superadmin === true }
+    return {
+        sub: claims.sub,
+        sid: typeof claims.sid === 'string' ? claims.sid : undefined,
+        tenant,
+        superadmin: claims.superadmin === true
+    }
+}
+
+const BACKCHANNEL_EVENT = 'http://schemas.openid.net/event/backchannel-logout'
+/** Logout tokens seen (jti), so a copy cannot be sent twice; on globalThis, shared by all route handlers. */
+const seenLogouts = ((globalThis as typeof globalThis & { __oidcLogoutJti?: Map<string, number> }).__oidcLogoutJti ??=
+    new Map<string, number>())
+
+/**
+ * Checks a logout token of the login server (OpenID Connect Back-Channel Logout 1.0): RS256 signature with the JWKS,
+ * typ logout+jwt, issuer, audience, issued within the last 5 minutes, the logout event, a session id (sid), no nonce,
+ * and never the same token twice. Returns the session and the user.
+ */
+export async function verifyLogoutToken(token: string): Promise<{ sid: string; sub: string | undefined }> {
+    const [header, payload, signature] = token.split('.')
+    if (!header || !payload || !signature || token.length > 8000) throw new Error('Malformed logout token')
+    const head = JSON.parse(Buffer.from(header, 'base64url').toString('utf8')) as {
+        alg?: string
+        kid?: string
+        typ?: string
+    }
+    if (head.alg !== 'RS256' || !head.kid || head.typ !== 'logout+jwt') throw new Error('Unexpected logout token')
+    const jwk = await signingKey(head.kid)
+    if (jwk.alg !== 'RS256') throw new Error('The key does not fit the logout token')
+    const valid = verify(
+        'sha256',
+        Buffer.from(header + '.' + payload),
+        createPublicKey({ key: jwk, format: 'jwk' }),
+        Buffer.from(signature, 'base64url')
+    )
+    if (!valid) throw new Error('Invalid logout token signature')
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Record<string, unknown>
+    const now = Math.floor(Date.now() / 1000)
+    if (claims.iss !== OIDC_ISSUER) throw new Error('Wrong issuer')
+    if (claims.aud !== OIDC_CLIENT_ID && !(Array.isArray(claims.aud) && claims.aud.includes(OIDC_CLIENT_ID)))
+        throw new Error('Wrong audience')
+    if (typeof claims.iat !== 'number' || claims.iat < now - 300 || claims.iat > now + 60) throw new Error('Too old')
+    if (typeof claims.exp === 'number' && claims.exp < now - 30) throw new Error('Expired')
+    const events = claims.events as Record<string, unknown> | undefined
+    if (!events || typeof events[BACKCHANNEL_EVENT] !== 'object') throw new Error('Not a logout event')
+    if (claims.nonce !== undefined) throw new Error('A logout token has no nonce')
+    if (typeof claims.sid !== 'string' || !claims.sid) throw new Error('No session id')
+    if (typeof claims.jti !== 'string' || !claims.jti) throw new Error('No jti')
+    for (const [jti, until] of seenLogouts) if (until < Date.now()) seenLogouts.delete(jti)
+    if (seenLogouts.has(claims.jti)) throw new Error('Logout token used before')
+    seenLogouts.set(claims.jti, Date.now() + 10 * 60_000)
+    return { sid: claims.sid, sub: typeof claims.sub === 'string' ? claims.sub : undefined }
 }
 
 /** Exchanges the code for tokens (public client: client_id + code_verifier, no secret). */

@@ -5,6 +5,8 @@ import { AuditModule } from '../audit/audit.module.js'
 import { MailModule } from '../mail/mail.module.js'
 import { AccountController } from './account.controller.js'
 import { AccountService } from './account.service.js'
+import { BackchannelService } from './backchannel.service.js'
+import { ConsentsController } from './consents.controller.js'
 import { EidController } from './eid.controller.js'
 import { EidService } from './eid.service.js'
 import { KeysService } from './keys.service.js'
@@ -33,6 +35,7 @@ import { WellKnownController } from './well-known.controller.js'
         EidController,
         SessionsController,
         PasskeysController,
+        ConsentsController,
         WellKnownController
     ],
     providers: [
@@ -40,6 +43,7 @@ import { WellKnownController } from './well-known.controller.js'
         OidcService,
         ExternalService,
         PasskeyService,
+        BackchannelService,
         AccountService,
         MfaService,
         EidService,
@@ -54,6 +58,7 @@ import { WellKnownController } from './well-known.controller.js'
         OidcService,
         ExternalService,
         PasskeyService,
+        BackchannelService,
         TokensService,
         SessionsService,
         AccountService,

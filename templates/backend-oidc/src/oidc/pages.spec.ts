@@ -2,7 +2,7 @@ import { ConfigService } from '@nestjs/config'
 import type { Response } from 'express'
 import { LoginLimiter } from './login-limiter.js'
 import { OidcConfig } from './oidc.config.js'
-import { escapeHtml, loginPage, logoutPage, sendPage } from './pages.js'
+import { consentPage, escapeHtml, loginPage, logoutPage, sendPage } from './pages.js'
 
 describe('pages', () => {
     const t = (key: string, args?: Record<string, string>) => key + (args ? JSON.stringify(args) : '')
@@ -23,6 +23,23 @@ describe('pages', () => {
         })
         expect(page.body).not.toContain('<script>')
         expect(page.body).not.toContain('<Evil>')
+        expect(page.body).toContain('value="c&quot;srf"')
+    })
+
+    it('shows the consent screen with every scope and escaped names, and both answers', () => {
+        const page = consentPage(t, {
+            action: '/consent',
+            csrf: 'c"srf',
+            clientName: '<Evil App>',
+            email: '"><img>',
+            scopes: ['openid', 'email', 'tenant']
+        })
+        expect(page.body).not.toContain('<Evil App>')
+        expect(page.body).not.toContain('<img>')
+        for (const key of ['oidc.SCOPE_OPENID', 'oidc.SCOPE_EMAIL', 'oidc.SCOPE_TENANT'])
+            expect(page.body).toContain(key)
+        expect(page.body).toContain('name="decision" value="allow"')
+        expect(page.body).toContain('name="decision" value="deny"')
         expect(page.body).toContain('value="c&quot;srf"')
     })
 

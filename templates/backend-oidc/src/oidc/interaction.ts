@@ -25,6 +25,11 @@ export interface Interaction {
     eidNonce: string | null
     /** The WebAuthn challenge of a passkey login (used once), or null. */
     passkeyChallenge: string | null
+    /**
+     * Logged in, waiting for the consent of the user (an application that is not our own): its session (public id)
+     * and the organisation of this login (null: the platform). Null otherwise.
+     */
+    consent?: { sessionId: string; tenantId: string | null } | null
     /** The User-Agent of the browser that started the login (for the list of sessions), shortened. */
     userAgent: string
     /** Milliseconds since 1970. */
@@ -53,6 +58,7 @@ export function sealInteraction(interaction: Interaction, key: Buffer): string {
         a: interaction.amr,
         x: interaction.eidNonce,
         k: interaction.passkeyChallenge,
+        o: interaction.consent ?? null,
         g: interaction.userAgent,
         e: interaction.expiresAt
     }
@@ -77,6 +83,7 @@ export function openInteraction(
             a?: string[]
             x?: string | null
             k?: string | null
+            o?: { sessionId?: unknown; tenantId?: unknown } | null
             g?: string
             e: number
         }
@@ -91,6 +98,13 @@ export function openInteraction(
             amr: Array.isArray(data.a) ? data.a : [],
             eidNonce: typeof data.x === 'string' ? data.x : null,
             passkeyChallenge: typeof data.k === 'string' ? data.k : null,
+            consent:
+                data.o && typeof data.o.sessionId === 'string'
+                    ? {
+                          sessionId: data.o.sessionId,
+                          tenantId: typeof data.o.tenantId === 'string' ? data.o.tenantId : null
+                      }
+                    : null,
             userAgent: typeof data.g === 'string' ? data.g : '',
             expiresAt: data.e
         }

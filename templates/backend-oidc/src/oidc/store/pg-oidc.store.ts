@@ -8,9 +8,11 @@ import type {
     AuthorizationCode,
     BootstrapAdmin,
     ChangeResult,
+    Consent,
     IdentifierType,
     Invitation,
     LinkResult,
+    LogoutJob,
     MemberStatus,
     Membership,
     MfaState,
@@ -84,7 +86,8 @@ const REFRESH_COLUMNS =
 
 const CLIENT_COLUMNS =
     'client_id AS "clientId", name, type, secret_hash AS "secretHash", redirect_uris AS "redirectUris", ' +
-    'post_logout_redirect_uris AS "postLogoutRedirectUris", grant_types AS "grantTypes", scopes, first_party AS "firstParty"'
+    'post_logout_redirect_uris AS "postLogoutRedirectUris", grant_types AS "grantTypes", scopes, first_party AS "firstParty", ' +
+    'backchannel_logout_uri AS "backchannelLogoutUri", backchannel_logout_session_required AS "backchannelLogoutSessionRequired"'
 const CODE_COLUMNS =
     'code_hash AS "codeHash", client_id AS "clientId", user_id AS "userId", tenant_id AS "tenantId", ' +
     'session_hash AS "sessionHash", redirect_uri AS "redirectUri", scope, nonce, code_challenge AS "codeChallenge", ' +
@@ -136,12 +139,15 @@ export class PgOidcStore implements OidcStore {
 
     async upsertClient(client: OidcClient) {
         await this.query(
-            `INSERT INTO oidc_clients (client_id, name, type, secret_hash, redirect_uris, post_logout_redirect_uris, grant_types, scopes, first_party)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            `INSERT INTO oidc_clients (client_id, name, type, secret_hash, redirect_uris, post_logout_redirect_uris, grant_types, scopes,
+                           first_party, backchannel_logout_uri, backchannel_logout_session_required)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        ON CONFLICT (client_id) DO UPDATE SET
          name = EXCLUDED.name, type = EXCLUDED.type, secret_hash = EXCLUDED.secret_hash,
          redirect_uris = EXCLUDED.redirect_uris, post_logout_redirect_uris = EXCLUDED.post_logout_redirect_uris,
-         grant_types = EXCLUDED.grant_types, scopes = EXCLUDED.scopes, first_party = EXCLUDED.first_party, updated_at = now()`,
+         grant_types = EXCLUDED.grant_types, scopes = EXCLUDED.scopes, first_party = EXCLUDED.first_party,
+         backchannel_logout_uri = EXCLUDED.backchannel_logout_uri,
+         backchannel_logout_session_required = EXCLUDED.backchannel_logout_session_required, updated_at = now()`,
             [
                 client.clientId,
                 client.name,
@@ -151,9 +157,100 @@ export class PgOidcStore implements OidcStore {
                 client.postLogoutRedirectUris,
                 client.grantTypes,
                 client.scopes,
-                client.firstParty
+                client.firstParty,
+                client.backchannelLogoutUri ?? null,
+                client.backchannelLogoutSessionRequired ?? false
             ]
         )
+    }
+
+    // ---------------------------------------------------------------- consent and back-channel logout
+
+    async findConsent(userId: string, clientId: string) {
+        const rows = await this.query<Consent>(
+            `SELECT client_id AS "clientId", scopes, tenant_ids::text[] AS "tenantIds", created_at AS "createdAt",
+              updated_at AS "updatedAt"
+         FROM oidc_consents WHERE user_id = $1 AND client_id = $2`,
+            [userId, clientId]
+        )
+        return rows[0] ?? null
+    }
+
+    async saveConsent(userId: string, clientId: string, scopes: string[], tenantId: string | null = null) {
+        await this.query(
+            `INSERT INTO oidc_consents (user_id, client_id, scopes, tenant_ids) VALUES ($1, $2, $3, $4::uuid[])
+       ON CONFLICT (user_id, client_id) DO UPDATE
+         SET scopes = ARRAY(SELECT DISTINCT unnest(oidc_consents.scopes || EXCLUDED.scopes) ORDER BY 1),
+             tenant_ids = ARRAY(SELECT DISTINCT unnest(oidc_consents.tenant_ids || EXCLUDED.tenant_ids)),
+             updated_at = now()`,
+            [userId, clientId, [...new Set(scopes)].sort(), tenantId ? [tenantId] : []]
+        )
+    }
+
+    async useInteraction(interactionHash: string, expiresAt: Date) {
+        const rows = await this.query(
+            `INSERT INTO oidc_used_interactions (interaction_hash, expires_at) VALUES ($1, $2)
+       ON CONFLICT (interaction_hash) DO NOTHING RETURNING 1`,
+            [interactionHash, expiresAt]
+        )
+        return rows.length === 1
+    }
+
+    async listConsents(userId: string) {
+        return this.query<Consent & { clientName: string }>(
+            `SELECT k.client_id AS "clientId", c.name AS "clientName", k.scopes, k.tenant_ids::text[] AS "tenantIds",
+              k.created_at AS "createdAt",
+              k.updated_at AS "updatedAt"
+         FROM oidc_consents k JOIN oidc_clients c ON c.client_id = k.client_id
+        WHERE k.user_id = $1 ORDER BY k.updated_at DESC`,
+            [userId]
+        )
+    }
+
+    async deleteConsent(userId: string, clientId: string) {
+        await this.database.ready()
+        return this.database.transaction(async db => {
+            const { rowCount } = await db.query('DELETE FROM oidc_consents WHERE user_id = $1 AND client_id = $2', [
+                userId,
+                clientId
+            ])
+            if (!rowCount) return false
+            // The application loses its access at once: no new access tokens with its refresh tokens
+            await db.query(
+                `UPDATE oidc_refresh_tokens SET revoked_at = now()
+          WHERE user_id = $1 AND client_id = $2 AND revoked_at IS NULL`,
+                [userId, clientId]
+            )
+            return true
+        })
+    }
+
+    async addSessionClient(sessionId: string, clientId: string) {
+        await this.query(
+            'INSERT INTO oidc_session_clients (session_id, client_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [sessionId, clientId]
+        )
+    }
+
+    async claimLogouts(limit: number, maxAttempts: number) {
+        // SKIP LOCKED: several API processes never deliver the same token twice at the same moment. The next try is
+        // set before delivering (30 seconds, 2, 8, 32 minutes, ...): a crash in between only delays it.
+        const rows = await this.query<LogoutJob & { id: string }>(
+            `UPDATE oidc_logout_queue q
+          SET attempts = q.attempts + 1, next_at = now() + make_interval(secs => 30 * power(4, q.attempts))
+        WHERE q.id IN (SELECT id FROM oidc_logout_queue
+                        WHERE next_at <= now() AND attempts < $2
+                        ORDER BY id LIMIT $1 FOR UPDATE SKIP LOCKED)
+        RETURNING q.id::text AS id, q.session_id AS "sessionId", q.user_id AS "userId", q.client_id AS "clientId",
+                  q.attempts`,
+            [limit, maxAttempts]
+        )
+        return rows
+    }
+
+    async finishLogout(id: string) {
+        if (!/^\d{1,19}$/.test(id)) return
+        await this.query('DELETE FROM oidc_logout_queue WHERE id = $1', [id])
     }
 
     async listKeys() {
@@ -879,6 +976,9 @@ export class PgOidcStore implements OidcStore {
 
     async deleteExpired(now: Date) {
         await this.query(`DELETE FROM oidc_sessions WHERE expires_at <= $1::timestamptz - interval '1 hour'`, [now])
+        // Logout tokens that could not be delivered in a day: the client was down too long
+        await this.query(`DELETE FROM oidc_logout_queue WHERE created_at <= $1::timestamptz - interval '1 day'`, [now])
+        await this.query('DELETE FROM oidc_used_interactions WHERE expires_at <= $1', [now])
         await this.query('DELETE FROM oidc_codes WHERE expires_at <= $1', [now])
         await this.query('DELETE FROM oidc_refresh_tokens WHERE expires_at <= $1', [now])
         await this.query('DELETE FROM tenant_invitations WHERE expires_at <= $1', [now])

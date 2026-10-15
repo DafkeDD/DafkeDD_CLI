@@ -433,5 +433,66 @@ CREATE TABLE user_passkeys (
 );
 CREATE INDEX user_passkeys_user ON user_passkeys (user_id);
 `
+    },
+    {
+        id: 8,
+        name: 'external applications: consent and back-channel logout',
+        sql: `
+-- Back-channel logout (OpenID Connect Back-Channel Logout 1.0): where the server tells a client that a session ended
+ALTER TABLE oidc_clients ADD COLUMN backchannel_logout_uri text;
+ALTER TABLE oidc_clients ADD COLUMN backchannel_logout_session_required boolean NOT NULL DEFAULT false;
+
+-- What a user allowed an application that is not our own (firstParty false): the scopes, until revoked
+CREATE TABLE oidc_consents (
+  user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
+  client_id text NOT NULL REFERENCES oidc_clients (client_id) ON DELETE CASCADE,
+  scopes text[] NOT NULL,
+  -- With the tenant scope: the organisations whose name and role the application may see
+  tenant_ids uuid[] NOT NULL DEFAULT '{}',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, client_id)
+);
+
+-- Consent screens answered already: a copy of the login cookie cannot answer twice (also with several API processes)
+CREATE TABLE oidc_used_interactions (
+  interaction_hash text PRIMARY KEY,
+  expires_at timestamptz NOT NULL
+);
+
+-- Which clients got a code in a session: they hear about its end
+CREATE TABLE oidc_session_clients (
+  session_id uuid NOT NULL REFERENCES oidc_sessions (id) ON DELETE CASCADE,
+  client_id text NOT NULL REFERENCES oidc_clients (client_id) ON DELETE CASCADE,
+  PRIMARY KEY (session_id, client_id)
+);
+
+-- Logout tokens still to deliver (with retries); filled by the trigger below, whatever ended the session
+CREATE TABLE oidc_logout_queue (
+  id bigserial PRIMARY KEY,
+  session_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  client_id text NOT NULL REFERENCES oidc_clients (client_id) ON DELETE CASCADE,
+  attempts integer NOT NULL DEFAULT 0,
+  next_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX oidc_logout_queue_next ON oidc_logout_queue (next_at);
+
+CREATE FUNCTION oidc_session_ended() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO oidc_logout_queue (session_id, user_id, client_id)
+  SELECT NEW.id, NEW.user_id, sc.client_id
+    FROM oidc_session_clients sc JOIN oidc_clients c ON c.client_id = sc.client_id
+   WHERE sc.session_id = NEW.id AND c.backchannel_logout_uri IS NOT NULL;
+  RETURN NEW;
+END;
+$$;
+-- Only when an active session ends (logout, ended on /security, password reset, member disabled, a stolen refresh
+-- token): not when it simply runs out after 12 hours
+CREATE TRIGGER oidc_session_ended AFTER UPDATE OF expires_at ON oidc_sessions
+  FOR EACH ROW WHEN (OLD.expires_at > now() AND NEW.expires_at <= now())
+  EXECUTE FUNCTION oidc_session_ended();
+`
     }
 ]

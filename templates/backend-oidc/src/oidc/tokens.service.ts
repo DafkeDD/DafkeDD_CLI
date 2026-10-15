@@ -198,10 +198,13 @@ export class TokensService {
     ): Promise<TokenResponse> {
         const now = Math.floor(Date.now() / 1000)
         const authTime = Math.floor(grant.session.authTime.getTime() / 1000)
-        const tenantClaim = membership
-            ? { tenant: { id: membership.tenantId, name: membership.name, role: membership.role } }
-            : {}
-        const superadmin = user.isSuperadmin ? { superadmin: true } : {}
+        // An application of others only sees the organisation (and superadmin) when the user allowed the tenant scope
+        const tenantVisible = client.firstParty || grant.scope.split(' ').includes('tenant')
+        const tenantClaim =
+            membership && tenantVisible
+                ? { tenant: { id: membership.tenantId, name: membership.name, role: membership.role } }
+                : {}
+        const superadmin = user.isSuperadmin && tenantVisible ? { superadmin: true } : {}
         const accessKey = await this.keys.signingKey('ES256')
         const accessToken = signJwt(
             {
