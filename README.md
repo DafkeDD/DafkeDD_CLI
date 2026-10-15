@@ -464,6 +464,10 @@ git switch developer
 
 ## Changelog
 
+- **0.32.1**: the test folders of the templates (`templates/backend-oidc/test`: the e2e and database tests and the
+  virtual passkey device) are in the package again. `.npmignore` left out every folder called `test`, so a new backend
+  missed `test/virtual-authenticator.ts` and `npm test` failed. Now only the tests of the CLI itself stay out, and a
+  test checks that every template file is packed.
 - **0.32.0**: apps on `/admin`. `GET/POST /admin/clients`, `PUT/PATCH/DELETE /admin/clients/:clientId` and
   `POST /admin/clients/:clientId/secret` (superadmins): make an app (public or confidential, a client id of your choice
   or made from the name), change it, a new secret (32 random bytes, shown once, only its sha256 stored), disable it (its
