@@ -103,13 +103,13 @@ export function PasskeysSecurity() {
             {error && <Notice tone='error'>{error}</Notice>}
             {notice && <Notice tone='success'>{notice}</Notice>}
             {status.passkeys.length === 0 ? (
-                <p className='text-sm opacity-70'>{t('passkeysNone')}</p>
+                <p className='text-sm text-[var(--text-3)]'>{t('passkeysNone')}</p>
             ) : (
                 <ul className='flex flex-col gap-3'>
                     {status.passkeys.map(passkey => (
                         <li
                             key={passkey.id}
-                            className='flex flex-col gap-2 rounded-xl border border-black/10 p-3 text-sm dark:border-white/15'
+                            className='flex flex-col gap-2 rounded-[var(--r-md)] border border-[var(--border)] p-3 text-sm'
                         >
                             {editing === passkey.id ? (
                                 <form className='flex gap-2' onSubmit={event => void rename(event, passkey.id)}>
@@ -128,7 +128,7 @@ export function PasskeysSecurity() {
                             ) : (
                                 <div className='flex flex-col gap-0.5'>
                                     <span className='font-semibold'>{passkey.name}</span>
-                                    <span className='text-xs opacity-70'>
+                                    <span className='text-xs text-[var(--text-3)]'>
                                         {passkey.synced ? t('passkeySynced') : t('passkeyDevice')} ·{' '}
                                         {t('passkeyAddedOn', {
                                             date: format.dateTime(new Date(passkey.createdAt), { dateStyle: 'medium' })
@@ -179,7 +179,7 @@ export function PasskeysSecurity() {
                     </button>
                 </form>
             ) : (
-                <p className='text-sm opacity-80'>{t('passkeyUnsupported')}</p>
+                <p className='text-sm text-[var(--text-2)]'>{t('passkeyUnsupported')}</p>
             )}
         </section>
     )

@@ -106,7 +106,7 @@ export function EidPin({
 
     const message = error || (signFailed ? errorMessage(t, signer.error?.code, signer.triesLeft) : '')
 
-    if (eid.phase === 'connecting') return <p className='text-sm opacity-70'>{t('eidConnecting')}</p>
+    if (eid.phase === 'connecting') return <p className='text-sm text-[var(--text-3)]'>{t('eidConnecting')}</p>
     if (eid.phase === 'no-bridge' || eid.phase === 'bridge-outdated')
         return (
             <div className='flex flex-col gap-2 text-sm'>

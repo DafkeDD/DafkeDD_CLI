@@ -7,7 +7,16 @@ import { denyInstallScripts } from '../npm.js'
 import { run } from '../runner.js'
 import { AUTH_MESSAGES, authFiles } from './auth.js'
 import { frontendReadme } from './docs.js'
-import { APPS_MESSAGES, AUDIT_MESSAGES, envLocal, LICENSE_MESSAGES, OIDC_MESSAGES, oidcFrontendFiles } from './oidc.js'
+import {
+    APPS_MESSAGES,
+    AUDIT_MESSAGES,
+    envLocal,
+    LICENSE_MESSAGES,
+    NAV_MESSAGES,
+    OIDC_MESSAGES,
+    oidcFrontendFiles,
+    SHELL_MESSAGES
+} from './oidc.js'
 
 export const DIR = 'frontend'
 export const LOCALES = ['en', 'nl', 'fr', 'de']
@@ -613,6 +622,12 @@ export const UI_GLOBALS_CSS = `@import 'tailwindcss';
   --font-sans: var(--font);
   --font-mono: var(--mono);
 }
+
+/* The fonts of the design (@fontsource-variable, loaded by the layout with the OIDC login) */
+:root {
+  --font: 'Hanken Grotesk Variable', 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
 `
 
 /**
@@ -822,13 +837,20 @@ const replaceOnce = (text, from, to) => {
     return text.replace(from, () => to)
 }
 
-/** Adds the backend connection to a set of frontend files: API client, status card, texts and the card on the page. */
+/**
+ * Adds the backend connection to a set of frontend files: API client, status card, texts and the card on the page.
+ * With the OIDC login (the login server itself, or an app linked to it) the frontend gets the Pasport design: its own
+ * layout, home page, shell and login screen, built with DafkeDD UI (see oidcSteps: always installed then).
+ */
 export function withApi(fileMap, api, { ui }) {
     const result = {
         ...fileMap,
+        ...(api.oidc ? uiFiles : {}),
         ...apiFiles(api),
         ...(api.auth ? authFiles() : {}),
-        ...(api.oidc ? oidcFrontendFiles({ apiPort: api.port, linked: Boolean(api.linked) }) : {})
+        ...(api.oidc
+            ? oidcFrontendFiles({ apiPort: api.port, linked: Boolean(api.linked), appName: api.linked?.name ?? null })
+            : {})
     }
     for (const locale of LOCALES) {
         result[`messages/${locale}.json`] =
@@ -842,7 +864,9 @@ export function withApi(fileMap, api, { ui }) {
                               Oidc: OIDC_MESSAGES[locale],
                               Licenses: LICENSE_MESSAGES[locale],
                               Audit: AUDIT_MESSAGES[locale],
-                              Apps: APPS_MESSAGES[locale]
+                              Apps: APPS_MESSAGES[locale],
+                              Shell: SHELL_MESSAGES[locale],
+                              Nav: NAV_MESSAGES[locale]
                           }
                         : {})
                 },
@@ -850,26 +874,15 @@ export function withApi(fileMap, api, { ui }) {
                 2
             ) + '\n'
     }
+    // The Pasport layout and home page come with the OIDC files (src/components/shell); the theme is a button there
+    if (api.oidc) {
+        delete result['src/components/theme-switcher.tsx']
+        return result
+    }
     const page = 'src/app/[locale]/page.tsx'
     const importAfter = ui
         ? "import { Badge, Button } from '@/components/ui';\n"
         : "import { setRequestLocale } from 'next-intl/server';\n"
-    if (api.linked) {
-        // Linked to an existing login server: no status card of an API of this project, the login links instead
-        let linked = replaceOnce(
-            result[page],
-            importAfter,
-            importAfter + "import { SessionLinks } from '@/components/session-links';\n"
-        )
-        linked = replaceOnce(linked, "import { use } from 'react';\n", "import { Suspense, use } from 'react';\n")
-        result[page] = replaceOnce(
-            linked,
-            '    </main>\n',
-            '      <Suspense fallback={null}>\n        <SessionLinks />\n      </Suspense>\n    </main>\n'
-        )
-        result['src/app/[locale]/layout.tsx'] = withHeaderNav(result['src/app/[locale]/layout.tsx'], { ui })
-        return result
-    }
     let content = replaceOnce(
         result[page],
         importAfter,
@@ -884,51 +897,8 @@ export function withApi(fileMap, api, { ui }) {
         )
         content = replaceOnce(content, '      <ApiStatus />\n', '      <ApiStatus />\n      <AuthLinks />\n')
     }
-    if (api.oidc) {
-        content = replaceOnce(
-            content,
-            "import { ApiStatus } from '@/components/api-status';\n",
-            "import { ApiStatus } from '@/components/api-status';\nimport { SessionLinks } from '@/components/session-links';\n"
-        )
-        // The session is read per request: inside Suspense the rest of the page can still be prerendered
-        content = replaceOnce(content, "import { use } from 'react';\n", "import { Suspense, use } from 'react';\n")
-        content = replaceOnce(
-            content,
-            '      <ApiStatus />\n',
-            '      <ApiStatus />\n      <Suspense fallback={null}>\n        <SessionLinks />\n      </Suspense>\n'
-        )
-    }
     result[page] = content
-    if (api.oidc) result['src/app/[locale]/layout.tsx'] = withHeaderNav(result['src/app/[locale]/layout.tsx'], { ui })
     return result
-}
-
-/**
- * Adds the header navigation of the login (Management, Platform, Profile, and the heartbeat for "who is online") to the
- * layout. It reads the session per request, so it sits inside Suspense.
- */
-function withHeaderNav(layout, { ui }) {
-    let content = replaceOnce(
-        layout,
-        "import type { ReactNode } from 'react';\n",
-        "import { Suspense, type ReactNode } from 'react';\n"
-    )
-    content = replaceOnce(
-        content,
-        "import { LocaleSwitcher } from '@/components/locale-switcher';\n",
-        "import { HeaderNav } from '@/components/header-nav';\nimport { LocaleSwitcher } from '@/components/locale-switcher';\n"
-    )
-    return ui
-        ? replaceOnce(
-              content,
-              '              </div>\n            </header>\n',
-              '              </div>\n              <Suspense fallback={null}>\n                <HeaderNav />\n              </Suspense>\n            </header>\n'
-          )
-        : replaceOnce(
-              content,
-              '          <header className="flex justify-end gap-2 p-4">\n',
-              '          <header className="flex justify-end gap-2 p-4">\n            <Suspense fallback={null}>\n              <HeaderNav />\n            </Suspense>\n'
-          )
 }
 
 /** next dev and next start on another port (package.json scripts). */
@@ -978,11 +948,35 @@ export async function patchGlobalsCss(root) {
     await fs.writeFile(file, content)
 }
 
+/**
+ * ESLint leaves the DafkeDD UI components alone (src/components/ui): they are the library's code, updated with
+ * 'dafke-ui update', just like Prettier (.prettierignore).
+ */
+export async function ignoreUiInEslint(root) {
+    const file = path.join(root, 'eslint.config.mjs')
+    const content = await fs.readFile(file, 'utf8').catch(() => null)
+    if (!content || content.includes('src/components/ui/**')) return
+    const patched = content.replace(
+        /globalIgnores\(\[/,
+        "globalIgnores([\n        // DafkeDD UI: the library's own code (dafke-ui update)\n        'src/components/ui/**',"
+    )
+    if (patched !== content) await fs.writeFile(file, patched)
+}
+
 export async function write(root, rel, content) {
     const target = path.join(root, rel)
     await fs.mkdir(path.dirname(target), { recursive: true })
     await fs.writeFile(target, content)
 }
+
+/** The fonts of the Pasport design (the layout of the OIDC login imports them). */
+export const FONT_PACKAGES = [
+    '@fontsource-variable/hanken-grotesk@latest',
+    '@fontsource-variable/jetbrains-mono@latest'
+]
+
+/** Which DafkeDD UI to install: always all of it with the OIDC login (its shell and login screen need it). */
+export const uiFor = (answers, api) => (api?.oidc ? 'all' : (answers?.ui ?? 'none'))
 
 export const nextjs = {
     id: 'nextjs',
@@ -1015,6 +1009,8 @@ export const nextjs = {
 
     async steps({ projectDir, answers, api = null, exec = run }) {
         const root = path.join(projectDir, DIR)
+        // The OIDC login (login server or linked app) is built with DafkeDD UI: the Pasport design, the same everywhere
+        const ui = uiFor(answers, api)
         const exists = await fs.stat(root).then(
             () => true,
             () => false
@@ -1072,6 +1068,16 @@ export const nextjs = {
                 weight: 2,
                 run: () => exec('npm', ['install', 'react-icons@latest'], { cwd: root })
             },
+            // The fonts of the Pasport design, self-hosted (the build never needs Google Fonts)
+            ...(api?.oidc
+                ? [
+                      {
+                          title: 'Lettertypen installeren (Hanken Grotesk, JetBrains Mono)',
+                          weight: 1,
+                          run: () => exec('npm', ['install', ...FONT_PACKAGES], { cwd: root })
+                      }
+                  ]
+                : []),
             // Login with the Belgian eID: the React hooks of DafkeDD eID (from its release on GitHub)
             ...(api?.oidc && !api.linked
                 ? [
@@ -1100,17 +1106,13 @@ export const nextjs = {
                     // Standaard template-pagina's vervangen door de [locale]-versie
                     await fs.rm(path.join(root, 'src/app/page.tsx'), { force: true })
                     await fs.rm(path.join(root, 'src/app/layout.tsx'), { force: true })
-                    const withUi = answers?.ui === 'all'
+                    const withUi = ui === 'all'
                     let all = { ...files, ...(withUi ? uiFiles : {}) }
                     // With a backend the frontend also gets the API client, the status card and their texts
                     if (api) all = withApi(all, api, { ui: withUi })
                     for (const [rel, content] of Object.entries(all)) await write(root, rel, content)
                     // Documentation of this frontend (replaces the README of create-next-app)
-                    await write(
-                        root,
-                        'README.md',
-                        frontendReadme({ ui: answers?.ui ?? 'none', api, locales: LOCALES, apiPort: api?.port })
-                    )
+                    await write(root, 'README.md', frontendReadme({ ui, api, locales: LOCALES, apiPort: api?.port }))
                     // Login through the OIDC server: where it is, and the secret of the session cookie (never committed)
                     if (api?.oidc)
                         await write(root, '.env.local', envLocal({ apiPort: api.port, linked: api.linked ?? null }))
@@ -1123,7 +1125,7 @@ export const nextjs = {
             }
         ]
 
-        if (answers?.ui && answers.ui !== 'none') {
+        if (ui !== 'none') {
             const cli = () => path.join(uiTmp, 'packages', 'cli', 'bin', 'dafke-ui.mjs')
             steps.push(
                 {
@@ -1155,7 +1157,8 @@ export const nextjs = {
                         try {
                             await write(root, 'dafke-ui.json', JSON.stringify(UI_CONFIG, null, 2) + '\n')
                             await exec('node', [cli(), 'init', '--yes'], { cwd: root })
-                            if (answers.ui === 'all') await exec('node', [cli(), 'add', '--all'], { cwd: root })
+                            await ignoreUiInEslint(root)
+                            if (ui === 'all') await exec('node', [cli(), 'add', '--all'], { cwd: root })
 
                             // CSS-verzamelbestand van DafkeDD UI laden in de globale stylesheet
                             const css = path.join(root, 'src/app/globals.css')

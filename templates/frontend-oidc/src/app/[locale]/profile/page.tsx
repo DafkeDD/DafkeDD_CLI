@@ -1,29 +1,27 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { getFormatter, getTranslations, setRequestLocale } from 'next-intl/server'
-import { LINK, roleLabel } from '@/components/account-ui'
-import { Link } from '@/i18n/navigation'
+import { BUTTON, CARD, LINK, roleLabel } from '@/components/account-ui'
+import { AppPage } from '@/components/shell/app-shell'
 import { API_URL } from '@/lib/api'
-import { userinfo } from '@/lib/oidc'
+import { ACCOUNT_URL, userinfo } from '@/lib/oidc'
 import { getSession } from '@/lib/session'
 
-const CARD =
-    'flex w-full max-w-md flex-col gap-5 rounded-2xl border border-black/10 bg-black/[.03] p-6 text-left dark:border-white/15 dark:bg-white/[.04]'
-const BUTTON =
-    'inline-flex h-11 w-full items-center justify-center rounded-xl bg-[var(--accent,#171717)] px-5 text-sm font-semibold text-[var(--accent-fg,#ffffff)] dark:bg-[var(--accent,#ededed)] dark:text-[var(--accent-fg,#0a0a0a)]'
-
-/** Protected page: the logged in user, the organisation (tenant) and whether the API accepts the access token. */
+/**
+ * Protected page: the logged in user, the organisation (tenant) and whether the API accepts the access token.
+ * The same page in every app: in an app linked to this login server the links go to these pages (OIDC_ACCOUNT_URL).
+ */
 export default async function ProfilePage({ params }: { params: Promise<{ locale: string }> }) {
     const { locale } = await params
     setRequestLocale(locale)
 
     return (
-        <main className='flex flex-1 flex-col items-center justify-center px-6 pt-10 pb-28'>
+        <AppPage>
             {/* The session cookie is only known per request: render that part when the request comes in */}
             <Suspense fallback={null}>
                 <Profile />
             </Suspense>
-        </main>
+        </AppPage>
     )
 }
 
@@ -51,36 +49,32 @@ async function Profile() {
     ]
 
     return (
-        <section className={CARD}>
-            <h1 className='text-2xl font-bold tracking-tight'>{t('profileTitle')}</h1>
+        <section className={CARD + ' max-w-xl'}>
+            <h1 className='text-xl font-semibold tracking-tight'>{t('profileTitle')}</h1>
             <dl className='flex flex-col gap-3 text-sm'>
                 {rows.map(([label, value]) => (
                     <div key={label} className='flex flex-col gap-0.5'>
-                        <dt className='text-xs opacity-70'>{label}</dt>
+                        <dt className='text-xs text-[var(--text-3)]'>{label}</dt>
                         <dd className='font-medium'>{value}</dd>
                     </div>
                 ))}
             </dl>
             <div className='flex flex-wrap gap-4 text-sm'>
-                <Link href='/security' className={LINK}>
+                <a href={ACCOUNT_URL + '/security'} className={LINK}>
                     {t('securityTitle')}
-                </Link>
+                </a>
                 {session.tenant?.role === 'admin' && (
-                    <Link href='/members' className={LINK}>
+                    <a href={ACCOUNT_URL + '/members'} className={LINK}>
                         {t('manageMembers')}
-                    </Link>
+                    </a>
                 )}
                 {session.superadmin && (
-                    <Link href='/admin' className={LINK}>
+                    <a href={ACCOUNT_URL + '/admin'} className={LINK}>
                         {t('platformTitle')}
-                    </Link>
+                    </a>
                 )}
             </div>
-            <div
-                className={
-                    api ? 'text-sm text-green-700 dark:text-green-400' : 'text-sm text-red-600 dark:text-red-400'
-                }
-            >
+            <div className={api ? 'text-sm text-[var(--green)]' : 'text-sm text-[var(--red)]'}>
                 {api ? t('apiCheck') : t('apiFailed')}
             </div>
             {licenses.length > 0 && (
@@ -90,7 +84,7 @@ async function Profile() {
                         {licenses.map(license => (
                             <li key={license.code}>
                                 <span className='font-medium'>{license.name}</span> ·{' '}
-                                <span className={license.access ? 'text-green-700 dark:text-green-400' : 'opacity-70'}>
+                                <span className={license.access ? 'text-[var(--green)]' : 'text-[var(--text-3)]'}>
                                     {license.via === 'trial' && license.endsAt
                                         ? l('trialUntil', {
                                               date: format.dateTime(new Date(license.endsAt), { dateStyle: 'medium' })
@@ -105,7 +99,7 @@ async function Profile() {
                 </div>
             )}
             <form method='post' action='/api/auth/logout'>
-                <button type='submit' className={BUTTON}>
+                <button type='submit' className={BUTTON + ' w-full'}>
                     {t('logout')}
                 </button>
             </form>

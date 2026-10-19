@@ -1,4 +1,5 @@
 import { getTranslations } from 'next-intl/server'
+import { BUTTON, CARD, LINK } from '@/components/account-ui'
 import { Link } from '@/i18n/navigation'
 import { getSession } from '@/lib/session'
 
@@ -9,24 +10,27 @@ export async function SessionLinks() {
     const session = await getSession()
 
     return (
-        <div className='relative flex flex-wrap items-center justify-center gap-3 text-sm'>
+        <section className={CARD}>
             {session ? (
-                <>
+                <div className='flex flex-wrap items-center justify-between gap-3 text-sm'>
                     <span>
                         {t('signedInAs', { name: session.name || session.email })} ·{' '}
                         {session.tenant?.name ?? t('platformTitle')}
                     </span>
-                    <Link href='/profile' className='font-semibold underline'>
+                    <Link href='/profile' className={LINK}>
                         {t('profile')}
                     </Link>
-                </>
+                </div>
             ) : (
-                <form action='/api/auth/login' method='get'>
-                    <button type='submit' className='cursor-pointer font-semibold underline'>
-                        {t('signIn')}
-                    </button>
-                </form>
+                <div className='flex flex-wrap items-center justify-between gap-3 text-sm'>
+                    <span>{t('startText')}</span>
+                    <form action='/api/auth/login' method='get'>
+                        <button type='submit' className={BUTTON}>
+                            {t('signIn')}
+                        </button>
+                    </form>
+                </div>
             )}
-        </div>
+        </section>
     )
 }

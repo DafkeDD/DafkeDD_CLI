@@ -121,16 +121,21 @@ test('ask: server, port and the code; a wrong code is asked again with the reaso
 })
 
 test('the linked frontend: login, session and profile only; account pages are on the frontend of the server', () => {
-    const own = oidcFrontendFiles({ linked: true })
+    const own = oidcFrontendFiles({ linked: true, appName: 'Planner' })
     assert.deepEqual(Object.keys(own).sort(), [...LINKED_FILES].sort())
     for (const page of ['register', 'security', 'members', 'admin', 'licenses', 'audit'])
         assert.ok(!Object.keys(own).some(rel => rel.includes(`/${page}/`)), page)
-    assert.match(own['src/components/header-nav.tsx'], /ACCOUNT_URL \+ '\/security'/)
+    // The same shell as the login server: its account pages through OIDC_ACCOUNT_URL, this app's name in the sidebar
+    assert.match(own['src/components/shell/app-shell.tsx'], /ACCOUNT_URL \+ path/)
     assert.match(own['src/app/[locale]/profile/page.tsx'], /ACCOUNT_URL \+ '\/members'/)
-    assert.ok(!own['src/app/[locale]/login/page.tsx'].includes('OidcLogin'))
+    assert.match(own['src/lib/brand.ts'], /export const APP_NAME: string \| null = "Planner"/)
+    // No login form of its own: /login starts the login at the login server at once
+    const login = own['src/app/[locale]/login/page.tsx']
+    assert.ok(!login.includes('OidcLogin'))
+    assert.match(login, /<StartLogin error=\{error\} \/>/)
     assert.match(own['src/lib/oidc.ts'], /OIDC_CLIENT_SECRET/)
     // The full frontend of the server itself is unchanged
-    assert.ok(oidcFrontendFiles()['src/components/header-nav.tsx'].includes("href='/members'"))
+    assert.match(oidcFrontendFiles()['src/lib/brand.ts'], /= null/)
 
     const all = withApi(
         { ...files },
@@ -140,7 +145,9 @@ test('the linked frontend: login, session and profile only; account pages are on
     const page = all['src/app/[locale]/page.tsx']
     assert.ok(!page.includes('<ApiStatus />'), 'no status card of an API of its own (another origin)')
     assert.match(page, /<SessionLinks \/>/)
-    assert.match(all['src/app/[locale]/layout.tsx'], /<HeaderNav \/>/)
+    assert.match(page, /<AppPage>/)
+    assert.match(all['src/app/[locale]/layout.tsx'], /<ThemeProvider>/)
+    assert.match(all['src/lib/brand.ts'], /"Planner"/)
     assert.match(all['src/lib/api.ts'], /'http:\/\/localhost:4000'/)
 })
 

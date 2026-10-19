@@ -19,6 +19,10 @@ export const OIDC_MESSAGES = {
         signedInAs: 'Signed in as {name}',
         profile: 'Profile',
         loginTitle: 'Log in',
+        loginTitleApp: 'Log in to {client}',
+        orEmail: 'or with email',
+        eidHint: 'Card reader needed',
+        passkeyHint: 'Fingerprint, face or PIN of this device',
         loginSubtitle: 'to continue to {client}',
         email: 'Email address',
         password: 'Password',
@@ -132,7 +136,6 @@ export const OIDC_MESSAGES = {
         resetMfaText:
             'Removes two-step verification of this person (phone lost); they set it up again at the next login.',
         resetMfaDone: 'Two-step verification was reset.',
-        management: 'Management',
         online: 'Online',
         neverSeen: 'Never logged in',
         lastSeen: 'Last seen {time}',
@@ -162,7 +165,6 @@ export const OIDC_MESSAGES = {
         scopeTenant: 'Your organisation and your role there',
         passkeyFailed: 'Logging in with the passkey failed. Please try again.',
         passkeyCancelled: 'The passkey request was cancelled or timed out.',
-        or: 'or',
         eidTitle: 'Log in with your eID',
         eidText: 'Put your eID in the card reader and enter its PIN code.',
         eidPin: 'PIN code',
@@ -235,8 +237,6 @@ export const OIDC_MESSAGES = {
         sessionEnd: 'End',
         sessionsEndOthers: 'Log out everywhere else',
         sessionsEnded: '{count, plural, one {# session ended.} other {# sessions ended.}}',
-        licenses: 'Licences',
-        audit: 'Audit log',
         externalLogin: 'Log in with {name}',
         externalFailed: 'Logging in with the other server did not work. Try again.',
         externalNoEmail: 'The other server did not give an email address: an account needs one.',
@@ -251,6 +251,10 @@ export const OIDC_MESSAGES = {
         signedInAs: 'Ingelogd als {name}',
         profile: 'Profiel',
         loginTitle: 'Inloggen',
+        loginTitleApp: 'Inloggen bij {client}',
+        orEmail: 'of met e-mail',
+        eidHint: 'Kaartlezer nodig',
+        passkeyHint: 'Vingerafdruk, gezicht of pincode van dit toestel',
         loginSubtitle: 'om verder te gaan naar {client}',
         email: 'E-mailadres',
         password: 'Wachtwoord',
@@ -364,7 +368,6 @@ export const OIDC_MESSAGES = {
         resetMfaText:
             'Verwijdert de tweestapsverificatie van deze persoon (telefoon kwijt); bij de volgende login stelt die het opnieuw in.',
         resetMfaDone: 'Tweestapsverificatie werd gereset.',
-        management: 'Beheer',
         online: 'Online',
         neverSeen: 'Nog nooit ingelogd',
         lastSeen: 'Laatst gezien {time}',
@@ -394,7 +397,6 @@ export const OIDC_MESSAGES = {
         scopeTenant: 'Je organisatie en je rol daar',
         passkeyFailed: 'Inloggen met de passkey is mislukt. Probeer het opnieuw.',
         passkeyCancelled: 'De passkey-aanvraag is geannuleerd of verlopen.',
-        or: 'of',
         eidTitle: 'Inloggen met je eID',
         eidText: 'Steek je eID in de kaartlezer en geef je pincode in.',
         eidPin: 'Pincode',
@@ -468,8 +470,6 @@ export const OIDC_MESSAGES = {
         sessionEnd: 'Beëindigen',
         sessionsEndOthers: 'Overal elders uitloggen',
         sessionsEnded: '{count, plural, one {# sessie beëindigd.} other {# sessies beëindigd.}}',
-        licenses: 'Licenties',
-        audit: 'Logboek',
         externalLogin: 'Inloggen met {name}',
         externalFailed: 'Inloggen via de andere server is niet gelukt. Probeer het opnieuw.',
         externalNoEmail: 'De andere server gaf geen e-mailadres: een account heeft er een nodig.',
@@ -484,6 +484,10 @@ export const OIDC_MESSAGES = {
         signedInAs: 'Connecté en tant que {name}',
         profile: 'Profil',
         loginTitle: 'Se connecter',
+        loginTitleApp: 'Se connecter à {client}',
+        orEmail: 'ou avec l’e-mail',
+        eidHint: 'Lecteur de carte nécessaire',
+        passkeyHint: 'Empreinte, visage ou code PIN de cet appareil',
         loginSubtitle: 'pour continuer vers {client}',
         email: 'Adresse e-mail',
         password: 'Mot de passe',
@@ -599,7 +603,6 @@ export const OIDC_MESSAGES = {
         resetMfaText:
             'Supprime la vérification en deux étapes de cette personne (téléphone perdu) ; elle la configure à nouveau à la prochaine connexion.',
         resetMfaDone: 'La vérification en deux étapes a été réinitialisée.',
-        management: 'Gestion',
         online: 'En ligne',
         neverSeen: 'Jamais connecté',
         lastSeen: 'Vu {time}',
@@ -629,7 +632,6 @@ export const OIDC_MESSAGES = {
         scopeTenant: 'Votre organisation et votre rôle',
         passkeyFailed: "La connexion avec la clé d'accès a échoué. Veuillez réessayer.",
         passkeyCancelled: "La demande de clé d'accès a été annulée ou a expiré.",
-        or: 'ou',
         eidTitle: 'Se connecter avec votre eID',
         eidText: 'Insérez votre eID dans le lecteur de cartes et saisissez votre code PIN.',
         eidPin: 'Code PIN',
@@ -707,8 +709,6 @@ export const OIDC_MESSAGES = {
         sessionEnd: 'Terminer',
         sessionsEndOthers: 'Se déconnecter partout ailleurs',
         sessionsEnded: '{count, plural, one {# session terminée.} other {# sessions terminées.}}',
-        licenses: 'Licences',
-        audit: "Journal d'audit",
         externalLogin: 'Se connecter avec {name}',
         externalFailed: "La connexion via l'autre serveur n'a pas fonctionné. Réessayez.",
         externalNoEmail: "L'autre serveur n'a pas donné d'adresse e-mail : un compte en a besoin.",
@@ -723,6 +723,10 @@ export const OIDC_MESSAGES = {
         signedInAs: 'Angemeldet als {name}',
         profile: 'Profil',
         loginTitle: 'Anmelden',
+        loginTitleApp: 'Bei {client} anmelden',
+        orEmail: 'oder mit E-Mail',
+        eidHint: 'Kartenleser nötig',
+        passkeyHint: 'Fingerabdruck, Gesicht oder PIN dieses Geräts',
         loginSubtitle: 'um mit {client} fortzufahren',
         email: 'E-Mail-Adresse',
         password: 'Passwort',
@@ -837,7 +841,6 @@ export const OIDC_MESSAGES = {
         resetMfaText:
             'Entfernt die Zwei-Schritt-Verifizierung dieser Person (Telefon verloren); sie richtet sie bei der nächsten Anmeldung neu ein.',
         resetMfaDone: 'Die Zwei-Schritt-Verifizierung wurde zurückgesetzt.',
-        management: 'Verwaltung',
         online: 'Online',
         neverSeen: 'Noch nie angemeldet',
         lastSeen: 'Zuletzt gesehen {time}',
@@ -867,7 +870,6 @@ export const OIDC_MESSAGES = {
         scopeTenant: 'Deine Organisation und deine Rolle dort',
         passkeyFailed: 'Die Anmeldung mit dem Passkey ist fehlgeschlagen. Bitte versuche es erneut.',
         passkeyCancelled: 'Die Passkey-Anfrage wurde abgebrochen oder ist abgelaufen.',
-        or: 'oder',
         eidTitle: 'Mit deiner eID anmelden',
         eidText: 'Stecke deine eID in das Kartenlesegerät und gib deine PIN ein.',
         eidPin: 'PIN',
@@ -941,8 +943,6 @@ export const OIDC_MESSAGES = {
         sessionEnd: 'Beenden',
         sessionsEndOthers: 'Überall sonst abmelden',
         sessionsEnded: '{count, plural, one {# Sitzung beendet.} other {# Sitzungen beendet.}}',
-        licenses: 'Lizenzen',
-        audit: 'Protokoll',
         externalLogin: 'Mit {name} anmelden',
         externalFailed: 'Die Anmeldung über den anderen Server hat nicht funktioniert. Versuche es erneut.',
         externalNoEmail: 'Der andere Server hat keine E-Mail-Adresse geliefert: ein Konto braucht eine.',
@@ -2295,14 +2295,132 @@ export const LICENSE_MESSAGES = {
     }
 }
 
+/**
+ * Texts of the Pasport shell (sidebar, topbar, user menu) and of the login screen around the forms (its teal panel).
+ * Every language needs the same keys (checked by the tests).
+ */
+export const SHELL_MESSAGES = {
+    en: {
+        account: 'Account',
+        superadmin: 'Superadmin',
+        sectionAccount: 'My account',
+        sectionOrganisation: 'Organisation',
+        sectionPlatform: 'Platform',
+        profile: 'My profile',
+        security: 'Security',
+        members: 'Users',
+        licenses: 'Licences',
+        audit: 'Activity',
+        platform: 'Platform management',
+        userMenu: 'Account menu',
+        logout: 'Log out',
+        signIn: 'Log in',
+        theme: 'Light or dark',
+        asideTitle: 'One login for all your apps',
+        asideText: 'Log in once with your eID or email and open every app of your practice.',
+        adminTitle: 'Platform management',
+        adminText: 'Organisations, products, apps and the support of the whole platform.',
+        idCard: 'Identity card',
+        cardName: 'Jan Peeters',
+        encrypted: 'Encrypted',
+        gdpr: 'GDPR'
+    },
+    nl: {
+        account: 'Account',
+        superadmin: 'Superadmin',
+        sectionAccount: 'Mijn account',
+        sectionOrganisation: 'Organisatie',
+        sectionPlatform: 'Platform',
+        profile: 'Mijn profiel',
+        security: 'Beveiliging',
+        members: 'Gebruikers',
+        licenses: 'Licenties',
+        audit: 'Activiteit',
+        platform: 'Platformbeheer',
+        userMenu: 'Accountmenu',
+        logout: 'Uitloggen',
+        signIn: 'Inloggen',
+        theme: 'Licht of donker',
+        asideTitle: 'Eén login voor al je apps',
+        asideText: 'Meld je één keer aan met je eID of e-mail en open elke app van je praktijk.',
+        adminTitle: 'Platformbeheer',
+        adminText: 'Organisaties, producten, apps en de support van het hele platform.',
+        idCard: 'Identiteitskaart',
+        cardName: 'Jan Peeters',
+        encrypted: 'Versleuteld',
+        gdpr: 'GDPR'
+    },
+    fr: {
+        account: 'Compte',
+        superadmin: 'Superadmin',
+        sectionAccount: 'Mon compte',
+        sectionOrganisation: 'Organisation',
+        sectionPlatform: 'Plateforme',
+        profile: 'Mon profil',
+        security: 'Sécurité',
+        members: 'Utilisateurs',
+        licenses: 'Licences',
+        audit: 'Activité',
+        platform: 'Gestion de la plateforme',
+        userMenu: 'Menu du compte',
+        logout: 'Se déconnecter',
+        signIn: 'Se connecter',
+        theme: 'Clair ou sombre',
+        asideTitle: 'Une seule connexion pour toutes vos applications',
+        asideText:
+            'Connectez-vous une fois avec votre eID ou votre e-mail et ouvrez chaque application de votre cabinet.',
+        adminTitle: 'Gestion de la plateforme',
+        adminText: 'Organisations, produits, applications et support de toute la plateforme.',
+        idCard: "Carte d'identité",
+        cardName: 'Jan Peeters',
+        encrypted: 'Chiffré',
+        gdpr: 'RGPD'
+    },
+    de: {
+        account: 'Konto',
+        superadmin: 'Superadmin',
+        sectionAccount: 'Mein Konto',
+        sectionOrganisation: 'Organisation',
+        sectionPlatform: 'Plattform',
+        profile: 'Mein Profil',
+        security: 'Sicherheit',
+        members: 'Benutzer',
+        licenses: 'Lizenzen',
+        audit: 'Aktivität',
+        platform: 'Plattformverwaltung',
+        userMenu: 'Kontomenü',
+        logout: 'Abmelden',
+        signIn: 'Anmelden',
+        theme: 'Hell oder dunkel',
+        asideTitle: 'Eine Anmeldung für alle deine Apps',
+        asideText: 'Melde dich einmal mit deiner eID oder E-Mail an und öffne jede App deiner Praxis.',
+        adminTitle: 'Plattformverwaltung',
+        adminText: 'Organisationen, Produkte, Apps und der Support der ganzen Plattform.',
+        idCard: 'Personalausweis',
+        cardName: 'Jan Peeters',
+        encrypted: 'Verschlüsselt',
+        gdpr: 'DSGVO'
+    }
+}
+
+/** The labels of this app's own pages in the sidebar (APP_NAV in src/lib/nav.ts): add a key per page you add. */
+export const NAV_MESSAGES = {
+    en: { home: 'Home' },
+    nl: { home: 'Start' },
+    fr: { home: 'Accueil' },
+    de: { home: 'Start' }
+}
+
 /** All files of templates/frontend-oidc with the placeholders filled in. */
-function readTemplates(dir, apiPort) {
+function readTemplates(dir, apiPort, appName = null) {
     const result = {}
     for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true })) {
         if (!entry.isFile()) continue
         const full = path.join(entry.parentPath ?? entry.path, entry.name)
         const rel = path.relative(dir, full).split(path.sep).join('/')
-        result[rel] = readFileSync(full, 'utf8').replaceAll('__API_PORT__', String(apiPort))
+        result[rel] = readFileSync(full, 'utf8')
+            .replaceAll('__API_PORT__', String(apiPort))
+            .replaceAll('__APP_NAME__', JSON.stringify(appName))
     }
     return result
 }
@@ -2312,6 +2430,8 @@ function readTemplates(dir, apiPort) {
  * the session and the profile. Account, management and platform pages stay on the frontend of that server.
  */
 export const LINKED_FILES = [
+    'src/app/[locale]/layout.tsx',
+    'src/app/[locale]/page.tsx',
     'src/app/[locale]/profile/page.tsx',
     'src/app/[locale]/login/page.tsx',
     'src/app/api/auth/backchannel-logout/route.ts',
@@ -2320,10 +2440,16 @@ export const LINKED_FILES = [
     'src/app/api/auth/logout/route.ts',
     'src/app/api/backend/[...path]/route.ts',
     'src/components/account-ui.tsx',
-    'src/components/header-nav.tsx',
+    'src/components/presence.tsx',
     'src/components/session-links.tsx',
+    'src/components/shell/app-shell.tsx',
+    'src/components/shell/auth-screen.tsx',
+    'src/components/shell/shell-view.tsx',
+    'src/components/shell/start-login.tsx',
     'src/lib/account.ts',
+    'src/lib/brand.ts',
     'src/lib/ended.ts',
+    'src/lib/nav.ts',
     'src/lib/oidc.ts',
     'src/lib/refresh.ts',
     'src/lib/session.ts',
@@ -2331,10 +2457,10 @@ export const LINKED_FILES = [
 ]
 
 /** The OIDC files of the frontend; `linked`: only those of a client of an existing login server. */
-export function oidcFrontendFiles({ apiPort = 4000, linked = false } = {}) {
-    const all = readTemplates(TEMPLATE_DIR, apiPort)
+export function oidcFrontendFiles({ apiPort = 4000, linked = false, appName = null } = {}) {
+    const all = readTemplates(TEMPLATE_DIR, apiPort, linked ? appName : null)
     if (!linked) return all
-    const own = readTemplates(LINKED_TEMPLATE_DIR, apiPort)
+    const own = readTemplates(LINKED_TEMPLATE_DIR, apiPort, appName)
     return Object.fromEntries(LINKED_FILES.map(rel => [rel, own[rel] ?? all[rel]]))
 }
 

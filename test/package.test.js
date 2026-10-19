@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execSync } from 'node:child_process'
 import { readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -16,15 +16,17 @@ const walk = dir =>
 
 test('the package ships every template file (also their test folders), but not the tests of the CLI', () => {
     // npx installs from the packed package: .npmignore decides what reaches the user
-    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-    const packed = JSON.parse(
-        execFileSync(npm, ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+    // One command string, no list of arguments: on Windows (npm.cmd through a shell) that list gives Node's DEP0190
+    const answer = JSON.parse(
+        execSync('npm pack --dry-run --json --ignore-scripts', {
             cwd: ROOT,
             encoding: 'utf8',
-            shell: process.platform === 'win32',
             stdio: ['ignore', 'pipe', 'ignore']
         })
-    )[0].files.map(file => file.path)
+    )
+    // npm 11 and older answer a list, npm 12 an object per package name
+    const pack = Array.isArray(answer) ? answer[0] : Object.values(answer)[0]
+    const packed = pack.files.map(file => file.path)
     const shipped = new Set(packed)
     for (const file of walk(join(ROOT, 'templates'))) assert.ok(shipped.has(file), `${file} is not in the package`)
     assert.ok(shipped.has('templates/backend-oidc/test/virtual-authenticator.ts'))

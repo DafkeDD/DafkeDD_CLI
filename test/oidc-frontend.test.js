@@ -1,13 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { files, uiFiles, withApi, LOCALES } from '../src/frontends/nextjs.js'
+import { files, ignoreUiInEslint, nextjs, uiFiles, uiFor, withApi, LOCALES } from '../src/frontends/nextjs.js'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import {
     APPS_MESSAGES,
     AUDIT_MESSAGES,
     envLocal,
     LICENSE_MESSAGES,
+    NAV_MESSAGES,
     OIDC_MESSAGES,
-    oidcFrontendFiles
+    oidcFrontendFiles,
+    SHELL_MESSAGES
 } from '../src/frontends/oidc.js'
 import { frontendReadme } from '../src/frontends/docs.js'
 import { main } from '../src/index.js'
@@ -43,8 +48,15 @@ test('the frontend login files are copied with the API port filled in', () => {
         'src/components/mfa-ui.tsx',
         'src/components/security.tsx',
         'src/lib/account.ts',
-        'src/components/header-nav.tsx',
-        'src/components/presence.tsx'
+        'src/components/presence.tsx',
+        'src/components/shell/app-shell.tsx',
+        'src/components/shell/shell-view.tsx',
+        'src/components/shell/auth-screen.tsx',
+        'src/components/shell/start-login.tsx',
+        'src/lib/brand.ts',
+        'src/lib/nav.ts',
+        'src/app/[locale]/layout.tsx',
+        'src/app/[locale]/page.tsx'
     ]) {
         assert.ok(templates[rel], rel)
     }
@@ -88,8 +100,17 @@ test('cookies are httpOnly and encrypted (AES-256-GCM, purpose bound), returnTo 
 })
 
 test('every text exists in all four languages, and every text the code uses exists', () => {
-    const namespaces = { Oidc: OIDC_MESSAGES, Licenses: LICENSE_MESSAGES, Audit: AUDIT_MESSAGES, Apps: APPS_MESSAGES }
-    const used = { Oidc: new Set(), Licenses: new Set(), Audit: new Set(), Apps: new Set() }
+    const namespaces = {
+        Oidc: OIDC_MESSAGES,
+        Licenses: LICENSE_MESSAGES,
+        Audit: AUDIT_MESSAGES,
+        Apps: APPS_MESSAGES,
+        Shell: SHELL_MESSAGES,
+        Nav: NAV_MESSAGES
+    }
+    // HomePage: the texts of the Next.js home page (nextjs.js); Nav: used with the label of APP_NAV as key
+    const dynamic = new Set(['Nav'])
+    const used = Object.fromEntries([...Object.keys(namespaces), 'HomePage'].map(name => [name, new Set()]))
     for (const content of Object.values(templates)) {
         // const t = useTranslations('Oidc'), const l = await getTranslations('Licenses'), ...
         const names = new Map()
@@ -115,7 +136,8 @@ test('every text exists in all four languages, and every text the code uses exis
         // Groups of texts (Audit.actions, .details, ...) are used with a variable key: only plain texts are checked here
         const keys = Object.keys(messages.en).filter(key => typeof messages.en[key] === 'string')
         for (const key of used[namespace]) assert.ok(keys.includes(key), `missing text ${namespace}.${key}`)
-        for (const key of keys) assert.ok(used[namespace].has(key), `unused text ${namespace}.${key}`)
+        if (!dynamic.has(namespace))
+            for (const key of keys) assert.ok(used[namespace].has(key), `unused text ${namespace}.${key}`)
     }
 })
 
@@ -130,9 +152,19 @@ for (const ui of [true, false]) {
             assert.deepEqual(messages.Licenses, LICENSE_MESSAGES[locale])
             assert.deepEqual(messages.Audit, AUDIT_MESSAGES[locale])
         }
+        for (const locale of LOCALES) {
+            const messages = JSON.parse(all[`messages/${locale}.json`])
+            assert.deepEqual(messages.Shell, SHELL_MESSAGES[locale])
+            assert.deepEqual(messages.Nav, NAV_MESSAGES[locale])
+        }
+        // The Pasport home page: in the shell, who is logged in and the API status
         const page = all['src/app/[locale]/page.tsx']
-        assert.match(page, /import \{ Suspense, use \} from 'react'/)
+        assert.match(page, /<AppPage>/)
         assert.match(page, /<Suspense fallback=\{null\}>\s*<SessionLinks \/>\s*<\/Suspense>/)
+        assert.match(page, /<ApiStatus \/>/)
+        // DafkeDD UI always: the theme script and the language choice of the shell come with it
+        assert.match(all['src/components/theme-script.tsx'], /lui-theme/)
+        assert.match(all['src/components/locale-switcher.tsx'], /@\/components\/ui/)
     })
 }
 
@@ -227,17 +259,73 @@ test('the QR code is shown as an image, never inserted as HTML', () => {
     assert.match(templates['src/components/mfa-ui.tsx'], /data:image\/svg\+xml/)
 })
 
-for (const ui of [true, false]) {
-    test(`the layout gets the header navigation with the heartbeat, inside Suspense (${ui ? 'DafkeDD UI' : 'plain'})`, () => {
-        const layout = withApi({ ...files, ...(ui ? uiFiles : {}) }, API, { ui })['src/app/[locale]/layout.tsx']
-        assert.match(layout, /import \{ HeaderNav \} from '@\/components\/header-nav';/)
-        assert.match(layout, /<Suspense fallback=\{null\}>\s*<HeaderNav \/>\s*<\/Suspense>/)
-        assert.match(templates['src/components/header-nav.tsx'], /<Presence \/>/)
-        assert.match(templates['src/components/presence.tsx'], /me\/heartbeat/)
-    })
-}
+test('the Pasport design: one layout, the shell around every page and the login screen around the forms', () => {
+    const layout = templates['src/app/[locale]/layout.tsx']
+    assert.match(layout, /import '@fontsource-variable\/hanken-grotesk'/)
+    assert.ok(!layout.includes('next/font'), 'no request to Google Fonts during the build')
+    assert.match(layout, /<ThemeProvider>/)
+    assert.ok(!layout.includes('HeaderNav'))
+    for (const page of ['members', 'licenses', 'admin', 'audit', 'security', 'profile'])
+        assert.match(templates[`src/app/[locale]/${page}/page.tsx`], /<AppPage/, page)
+    for (const page of ['login', 'register', 'forgot-password', 'reset-password', 'verify-email', 'invite'])
+        assert.match(templates[`src/app/[locale]/${page}/page.tsx`], /<AuthPage>/, page)
+    const shell = templates['src/components/shell/app-shell.tsx']
+    // Organisation pages for its admins, the platform for superadmins; ACCOUNT_URL is empty on the login server
+    assert.match(shell, /if \(admin\)/)
+    assert.match(shell, /if \(session\.superadmin\)/)
+    assert.match(shell, /ACCOUNT_URL \+ path/)
+    assert.match(shell, /APP_NAV\.map/)
+    const view = templates['src/components/shell/shell-view.tsx']
+    for (const part of ['<Sidebar>', '<SidebarBrand', '<Topbar>', '<ThemeToggle', '<LocaleSwitcher />', '<Presence />'])
+        assert.ok(view.includes(part), part)
+    assert.match(view, /action='\/api\/auth\/logout'/)
+    assert.match(templates['src/components/presence.tsx'], /me\/heartbeat/)
+    const screen = templates['src/components/shell/auth-screen.tsx']
+    assert.match(screen, /<AuthLayout asideTone=\{admin \? 'ink' : 'accent'\}/)
+    // The login screen says which app asks, eID first, registering only here (on the login server)
+    const login = templates['src/components/oidc-login.tsx']
+    assert.match(login, /t\('loginTitleApp', \{ client: state\.clientName \}\)/)
+    assert.ok(login.indexOf("t('eidLogin')") < login.indexOf("name='email'"), 'eID before the email field')
+    assert.match(login, /href='\/register'/)
+    assert.match(templates['src/lib/brand.ts'], /export const APP_NAME: string \| null = null/)
+    assert.match(templates['src/lib/nav.ts'], /export const APP_NAV: NavItem\[\]/)
+    // No hard-coded colours outside the login panel: everything comes from the DafkeDD UI tokens
+    for (const [rel, content] of Object.entries(templates))
+        if (rel.endsWith('.tsx') && !rel.endsWith('auth-screen.tsx'))
+            assert.ok(!/(?:bg|text|border)-(?:black|white|red|green|amber)[-/]\d/.test(content), rel)
+})
 
 test('a superadmin on the platform (no organisation) goes to /admin instead of seeing an error', () => {
     for (const page of ['src/app/[locale]/members/page.tsx', 'src/app/[locale]/licenses/page.tsx'])
         assert.match(templates[page], /if \(!session\.tenant && session\.superadmin\) redirect\('\/admin'\)/, page)
+})
+
+test('with the OIDC login DafkeDD UI is always installed, whatever the answer; ESLint skips its folder', async () => {
+    assert.equal(uiFor({ ui: 'none' }, { port: 4000, oidc: true }), 'all')
+    assert.equal(uiFor({ ui: 'init' }, { port: 4000, oidc: true, linked: {} }), 'all')
+    assert.equal(uiFor({ ui: 'none' }, { port: 4000 }), 'none')
+    assert.equal(uiFor({}, null), 'none')
+    const dir = await mkdtemp(path.join(tmpdir(), 'oidc-ui-'))
+    try {
+        const steps = await nextjs.steps({
+            projectDir: dir,
+            answers: { ui: 'none' },
+            api: { port: 4000, oidc: true },
+            exec: async () => {}
+        })
+        const titles = steps.map(step => step.title)
+        assert.ok(titles.includes('DafkeDD UI ophalen'))
+        assert.ok(titles.includes('DafkeDD UI installeren'))
+        assert.ok(titles.some(title => title.startsWith('Lettertypen installeren')))
+        await writeFile(
+            path.join(dir, 'eslint.config.mjs'),
+            "const c = defineConfig([...a, globalIgnores([\n        '.next/**'\n    ])])\n"
+        )
+        await ignoreUiInEslint(dir)
+        await ignoreUiInEslint(dir)
+        const config = await readFile(path.join(dir, 'eslint.config.mjs'), 'utf8')
+        assert.equal(config.split('src/components/ui/**').length, 2, 'added once')
+    } finally {
+        await rm(dir, { recursive: true, force: true })
+    }
 })

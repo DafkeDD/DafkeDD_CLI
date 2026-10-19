@@ -102,9 +102,9 @@ export function Security() {
         <section className={CARD}>
             <Heading title={t('securityTitle')} text={t('securityText')} />
             {!status ? (
-                <p className='text-sm opacity-70'>{t('busy')}</p>
+                <p className='text-sm text-[var(--text-3)]'>{t('busy')}</p>
             ) : status.enabled ? (
-                <div role='status' className='text-sm font-semibold text-green-700 dark:text-green-400'>
+                <div role='status' className='text-sm font-semibold text-[var(--green)]'>
                     {t('mfaOn')} · {t('recoveryLeft', { count: status.recoveryCodesLeft })}
                 </div>
             ) : eidOnly ? (
@@ -117,7 +117,7 @@ export function Security() {
             {codes.length > 0 && (
                 <div className='flex flex-col gap-2'>
                     <h2 className='text-base font-semibold'>{t('recoveryTitle')}</h2>
-                    <p className='text-sm opacity-80'>{t('recoveryText')}</p>
+                    <p className='text-sm text-[var(--text-2)]'>{t('recoveryText')}</p>
                     <RecoveryCodes codes={codes} copyLabel={t('copyCodes')} copiedLabel={t('copied')} />
                 </div>
             )}
@@ -125,7 +125,7 @@ export function Security() {
             {status?.enabled && (
                 <form onSubmit={event => void withCode(event, 'me/mfa/recovery-codes')} className='flex flex-col gap-3'>
                     <h2 className='text-base font-semibold'>{t('newRecoveryCodes')}</h2>
-                    <p className='text-sm opacity-80'>{t('newRecoveryCodesText')}</p>
+                    <p className='text-sm text-[var(--text-2)]'>{t('newRecoveryCodesText')}</p>
                     {codeField}
                     <button type='submit' disabled={busy} className={BUTTON}>
                         {t('newRecoveryCodes')}
@@ -140,7 +140,7 @@ export function Security() {
             )}
             {setup && (
                 <form onSubmit={event => void withCode(event, 'me/mfa/enable')} className='flex flex-col gap-3'>
-                    <p className='text-sm opacity-80'>{t('mfaSetupText')}</p>
+                    <p className='text-sm text-[var(--text-2)]'>{t('mfaSetupText')}</p>
                     <MfaQr qrSvg={setup.qrSvg} secret={setup.secret} label={t('mfaQr')} secretLabel={t('mfaSecret')} />
                     {codeField}
                     <button type='submit' disabled={busy} className={BUTTON}>
@@ -207,7 +207,7 @@ export function EidSecurity() {
         <section className={CARD}>
             <Heading title={t('eidSecurityTitle')} text={status.linked ? t('eidLinked') : t('eidNotLinked')} />
             {status.linked && status.linkedAt && (
-                <div role='status' className='text-sm font-semibold text-green-700 dark:text-green-400'>
+                <div role='status' className='text-sm font-semibold text-[var(--green)]'>
                     {t('eidLinkedSince', { date: new Date(status.linkedAt).toLocaleDateString(locale) })}
                 </div>
             )}
@@ -223,7 +223,7 @@ export function EidSecurity() {
                         {t('eidUnlink')}
                     </button>
                 ) : (
-                    <p className='text-sm opacity-80'>{t('eidOnlyLogin')}</p>
+                    <p className='text-sm text-[var(--text-2)]'>{t('eidOnlyLogin')}</p>
                 )
             ) : linking ? (
                 <EidBridge>
@@ -329,27 +329,27 @@ export function SessionsSecurity() {
             {error && <Notice tone='error'>{error}</Notice>}
             {notice && <Notice tone='success'>{notice}</Notice>}
             {!sessions ? (
-                <p className='text-sm opacity-70'>{t('busy')}</p>
+                <p className='text-sm text-[var(--text-3)]'>{t('busy')}</p>
             ) : (
                 <ul className='flex flex-col gap-3'>
                     {sessions.map(session => (
                         <li
                             key={session.id}
-                            className='flex items-start justify-between gap-3 rounded-xl border border-black/10 p-3 text-sm dark:border-white/15'
+                            className='flex items-start justify-between gap-3 rounded-[var(--r-md)] border border-[var(--border)] p-3 text-sm'
                         >
                             <div className='flex flex-col gap-0.5'>
                                 <span className='font-semibold'>
                                     {describeBrowser(session.userAgent) ?? t('unknownBrowser')}
                                     {session.current && (
-                                        <span className='ml-2 text-xs font-medium text-green-700 dark:text-green-400'>
+                                        <span className='ml-2 text-xs font-medium text-[var(--green)]'>
                                             {t('thisDevice')}
                                         </span>
                                     )}
                                 </span>
-                                <span className='text-xs opacity-70'>
+                                <span className='text-xs text-[var(--text-3)]'>
                                     {session.tenant?.name ?? t('platformTitle')} · {method(session.amr)}
                                 </span>
-                                <span className='text-xs opacity-70'>
+                                <span className='text-xs text-[var(--text-3)]'>
                                     {t('sessionSince', {
                                         date: format.dateTime(new Date(session.createdAt), {
                                             dateStyle: 'medium',

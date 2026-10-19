@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { BUTTON, Heading, INPUT, LoginButton, Notice, SECONDARY, WIDE_CARD } from '@/components/account-ui'
+import { BUTTON, DANGER, Heading, INPUT, LoginButton, Notice, SECONDARY, WIDE_CARD } from '@/components/account-ui'
 import { type Answer, useBackend } from '@/lib/account'
 
 type Tenant = { id: string; slug: string; name: string; status: 'active' | 'suspended'; members: number }
@@ -100,16 +100,16 @@ export function Platform({ me }: { me: string }) {
 
             <h2 className='text-base font-semibold'>{t('tenantsTitle')}</h2>
             {!tenants ? (
-                <p className='text-sm opacity-70'>{t('busy')}</p>
+                <p className='text-sm text-[var(--text-3)]'>{t('busy')}</p>
             ) : tenants.length === 0 ? (
-                <p className='text-sm opacity-80'>{t('noTenantsYet')}</p>
+                <p className='text-sm text-[var(--text-2)]'>{t('noTenantsYet')}</p>
             ) : (
-                <ul className='flex flex-col divide-y divide-black/10 dark:divide-white/10'>
+                <ul className='flex flex-col divide-y divide-[var(--border)]'>
                     {tenants.map(tenant => (
                         <li key={tenant.id} className='flex flex-wrap items-center gap-3 py-3'>
                             <div className='flex min-w-0 flex-1 flex-col'>
                                 <span className='truncate text-sm font-semibold'>{tenant.name}</span>
-                                <span className='truncate text-xs opacity-70'>
+                                <span className='truncate text-xs text-[var(--text-3)]'>
                                     {tenant.slug} · {t('memberCount', { count: tenant.members })}
                                 </span>
                             </div>
@@ -117,8 +117,8 @@ export function Platform({ me }: { me: string }) {
                                 className={
                                     'rounded-full px-2.5 py-0.5 text-xs font-semibold ' +
                                     (tenant.status === 'active'
-                                        ? 'bg-green-600/10 text-green-700 dark:text-green-400'
-                                        : 'bg-red-600/10 text-red-600 dark:text-red-400')
+                                        ? 'bg-[var(--green)]/10 text-[var(--green)]'
+                                        : 'bg-[var(--red)]/10 text-[var(--red)]')
                                 }
                             >
                                 {tenant.status === 'active' ? t('active') : t('suspended')}
@@ -152,10 +152,7 @@ export function Platform({ me }: { me: string }) {
                     ))}
                 </ul>
             )}
-            <form
-                onSubmit={createTenant}
-                className='flex flex-col gap-3 border-t border-black/10 pt-5 dark:border-white/10'
-            >
+            <form onSubmit={createTenant} className='flex flex-col gap-3 border-t border-[var(--border)] pt-5'>
                 <h2 className='text-base font-semibold'>{t('newTenant')}</h2>
                 <div className='flex flex-wrap gap-2.5'>
                     <input
@@ -181,25 +178,25 @@ export function Platform({ me }: { me: string }) {
                 </div>
             </form>
 
-            <div className='flex flex-col gap-3 border-t border-black/10 pt-5 dark:border-white/10'>
+            <div className='flex flex-col gap-3 border-t border-[var(--border)] pt-5'>
                 <h2 className='text-base font-semibold'>{t('superadminsTitle')}</h2>
-                <ul className='flex flex-col divide-y divide-black/10 dark:divide-white/10'>
+                <ul className='flex flex-col divide-y divide-[var(--border)]'>
                     {admins.map(admin => (
                         <li key={admin.userId} className='flex flex-wrap items-center gap-3 py-3'>
                             <div className='flex min-w-0 flex-1 flex-col'>
                                 <span className='truncate text-sm font-semibold'>
                                     {admin.name}
                                     {admin.userId === me && (
-                                        <span className='font-normal opacity-60'> ({t('you')})</span>
+                                        <span className='font-normal text-[var(--text-3)]'> ({t('you')})</span>
                                     )}
                                 </span>
-                                <span className='truncate text-xs opacity-70'>{admin.email}</span>
+                                <span className='truncate text-xs text-[var(--text-3)]'>{admin.email}</span>
                             </div>
                             {confirm === admin.userId ? (
                                 <button
                                     type='button'
                                     disabled={busy}
-                                    className={SECONDARY + ' border-red-500 text-red-600 dark:text-red-400'}
+                                    className={DANGER}
                                     onClick={() =>
                                         void change(
                                             'admin/superadmins/' + admin.userId,

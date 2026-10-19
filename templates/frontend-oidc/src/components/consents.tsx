@@ -57,23 +57,23 @@ export function ConsentsSecurity() {
             {error && <Notice tone='error'>{error}</Notice>}
             {notice && <Notice tone='success'>{notice}</Notice>}
             {consents?.length === 0 ? (
-                <p className='text-sm opacity-70'>{t('consentsNone')}</p>
+                <p className='text-sm text-[var(--text-3)]'>{t('consentsNone')}</p>
             ) : (
                 <ul className='flex flex-col gap-3'>
                     {consents?.map(consent => (
                         <li
                             key={consent.clientId}
-                            className='flex items-start justify-between gap-3 rounded-xl border border-black/10 p-3 text-sm dark:border-white/15'
+                            className='flex items-start justify-between gap-3 rounded-[var(--r-md)] border border-[var(--border)] p-3 text-sm'
                         >
                             <div className='flex flex-col gap-0.5'>
                                 <span className='font-semibold'>{consent.clientName}</span>
-                                <span className='text-xs opacity-70'>
+                                <span className='text-xs text-[var(--text-3)]'>
                                     {[...consent.scopes]
                                         .sort((a, b) => scopeOrder(a) - scopeOrder(b))
                                         .map(scope => scopeLabel(t, scope))
                                         .join(' · ')}
                                 </span>
-                                <span className='text-xs opacity-70'>
+                                <span className='text-xs text-[var(--text-3)]'>
                                     {t('consentSince', {
                                         date: format.dateTime(new Date(consent.createdAt), { dateStyle: 'medium' })
                                     })}

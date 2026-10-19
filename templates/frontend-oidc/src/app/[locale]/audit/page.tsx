@@ -1,12 +1,13 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { getTranslations, setRequestLocale } from 'next-intl/server'
-import { Notice, Page, SECONDARY, WIDE_CARD } from '@/components/account-ui'
+import { Notice, SECONDARY, WIDE_CARD } from '@/components/account-ui'
+import { AppPage } from '@/components/shell/app-shell'
 import { AuditLog } from '@/components/audit'
 import { Link } from '@/i18n/navigation'
 import { getSession } from '@/lib/session'
 
-const ACTIVE = SECONDARY + ' bg-black/[.06] dark:bg-white/10'
+const ACTIVE = SECONDARY + ' border-[var(--accent-border)]! bg-[var(--accent-tint)]! text-[var(--accent-active)]!'
 
 /**
  * The audit log. Admins: their organisation (GET /tenants/current/audit). Superadmins: also the whole platform
@@ -21,11 +22,11 @@ export default async function AuditPage({
 }) {
     setRequestLocale((await params).locale)
     return (
-        <Page wide>
+        <AppPage wide>
             <Suspense fallback={null}>
                 <Content searchParams={searchParams} />
             </Suspense>
-        </Page>
+        </AppPage>
     )
 }
 
@@ -46,7 +47,7 @@ async function Content({ searchParams }: { searchParams: Promise<{ scope?: strin
     // A superadmin in an organisation: its log, or the one of the whole platform
     const both = session.superadmin && session.tenant?.role === 'admin'
     return (
-        <div className='flex w-full max-w-3xl flex-col gap-4'>
+        <div className='flex w-full flex-col gap-4'>
             {both && (
                 <nav className='flex gap-2 text-sm'>
                     <Link

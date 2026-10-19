@@ -12,6 +12,17 @@ test('run resolves with the stdout of the command', async () => {
     assert.equal(out.trim(), '2')
 })
 
+test('run gives output without colour codes, also when the caller forces colours (npm 12 scripts)', async () => {
+    const before = process.env.FORCE_COLOR
+    process.env.FORCE_COLOR = '1'
+    try {
+        assert.equal((await run(node, ['-p', '1+1'])).trim(), '2')
+    } finally {
+        if (before === undefined) delete process.env.FORCE_COLOR
+        else process.env.FORCE_COLOR = before
+    }
+})
+
 test('run executes the command in the given cwd', async t => {
     const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-runner-')))
     t.after(() => fs.rm(dir, { recursive: true, force: true }))

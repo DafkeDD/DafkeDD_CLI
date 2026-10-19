@@ -116,7 +116,7 @@ test('the frontend: /audit, recent activity on /security, and the IP address and
     assert.ok(frontend['src/app/[locale]/audit/page.tsx'])
     assert.ok(frontend['src/components/audit.tsx'])
     assert.match(frontend['src/app/[locale]/security/page.tsx'], /<AuditLog scope='me' \/>/)
-    assert.match(frontend['src/components/header-nav.tsx'], /href='\/audit'/)
+    assert.match(frontend['src/components/shell/app-shell.tsx'], /account\('\/audit'\)/)
     const route = frontend['src/app/api/backend/[...path]/route.ts']
     assert.match(route, /me\\\/audit\$/)
     assert.match(route, /'X-Forwarded-For': forwardedFor\(request\)/)

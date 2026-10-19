@@ -11,10 +11,15 @@ export function quote(arg) {
 /** Voert een commando stil uit (in `cwd`) en gooit een fout met de output als het mislukt. */
 export function run(cmd, args, { cwd, env } = {}) {
     return new Promise((resolve, reject) => {
+        // No colour codes in the output (npm 12 sets FORCE_COLOR for its scripts); NO_COLOR next to FORCE_COLOR
+        // would make Node warn, so only FORCE_COLOR=0 is passed on
+        const { NO_COLOR, ...inherited } = process.env
+        void NO_COLOR
         const options = {
             cwd,
             env: {
-                ...process.env,
+                ...inherited,
+                FORCE_COLOR: '0',
                 CI: '1',
                 NEXT_TELEMETRY_DISABLED: '1',
                 NODE_NO_WARNINGS: '1',

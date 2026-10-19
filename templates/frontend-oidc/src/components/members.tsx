@@ -2,7 +2,18 @@
 
 import { type FormEvent, useEffect, useState } from 'react'
 import { useFormatter, useNow, useTranslations } from 'next-intl'
-import { BUTTON, Heading, INPUT, LoginButton, Notice, roleLabel, SECONDARY, WIDE_CARD } from '@/components/account-ui'
+import {
+    BUTTON,
+    DANGER,
+    Heading,
+    INPUT,
+    LoginButton,
+    Notice,
+    roleLabel,
+    SECONDARY,
+    SMALL_SELECT,
+    WIDE_CARD
+} from '@/components/account-ui'
 import { type Answer, useBackend } from '@/lib/account'
 
 type Role = 'user' | 'admin'
@@ -19,9 +30,7 @@ type Member = {
 type Invitation = { id: string; email: string; role: Role; invitedByName: string | null; expiresAt: string }
 
 const ROLES: Role[] = ['user', 'admin']
-const SELECT =
-    'h-9 rounded-lg border border-black/15 bg-transparent px-2 text-sm outline-none focus:border-[var(--accent,#6366f1)] dark:border-white/20 dark:[color-scheme:dark]'
-const DANGER = SECONDARY + ' border-red-500 text-red-600 dark:text-red-400'
+const SELECT = SMALL_SELECT
 /** The list is refreshed every 30 seconds, so "online" stays up to date. */
 const REFRESH_MS = 30_000
 
@@ -135,44 +144,42 @@ export function Members({
             {error && <Notice tone='error'>{error}</Notice>}
             {notice && <Notice tone='success'>{notice}</Notice>}
             {!members ? (
-                <p className='text-sm opacity-70'>{t('busy')}</p>
+                <p className='text-sm text-[var(--text-3)]'>{t('busy')}</p>
             ) : (
-                <ul className='flex flex-col divide-y divide-black/10 dark:divide-white/10'>
+                <ul className='flex flex-col divide-y divide-[var(--border)]'>
                     {members.map(member => {
                         const disabled = member.status === 'disabled'
                         return (
                             <li
                                 key={member.userId}
-                                className={'flex flex-wrap items-center gap-3 py-3' + (disabled ? ' opacity-60' : '')}
+                                className={
+                                    'flex flex-wrap items-center gap-3 py-3' + (disabled ? ' text-[var(--text-3)]' : '')
+                                }
                             >
                                 <span
                                     aria-hidden
                                     className={
                                         'size-2.5 shrink-0 rounded-full ' +
-                                        (member.online ? 'bg-green-500' : 'bg-black/20 dark:bg-white/25')
+                                        (member.online ? 'bg-[var(--green)]' : 'bg-[var(--surface-3)]')
                                     }
                                 />
                                 <div className='flex min-w-0 flex-1 flex-col'>
                                     <span className='truncate text-sm font-semibold'>
                                         {member.name}
                                         {member.userId === me && (
-                                            <span className='font-normal opacity-60'> ({t('you')})</span>
+                                            <span className='font-normal text-[var(--text-3)]'> ({t('you')})</span>
                                         )}
                                         {disabled && (
-                                            <span className='ml-2 rounded-full bg-red-600/10 px-2 py-0.5 text-xs font-semibold text-red-600 dark:text-red-400'>
+                                            <span className='ml-2 rounded-full bg-[var(--red)]/10 px-2 py-0.5 text-xs font-semibold text-[var(--red)]'>
                                                 {t('disabled')}
                                             </span>
                                         )}
                                     </span>
-                                    <span className='truncate text-xs opacity-70'>
+                                    <span className='truncate text-xs text-[var(--text-3)]'>
                                         {member.email}
                                         {!member.emailVerified && ` · ${t('notVerified')}`}
                                         {' · '}
-                                        <span
-                                            className={
-                                                member.online ? 'font-semibold text-green-700 dark:text-green-400' : ''
-                                            }
-                                        >
+                                        <span className={member.online ? 'font-semibold text-[var(--green)]' : ''}>
                                             {presence(member)}
                                         </span>
                                     </span>
@@ -259,7 +266,7 @@ export function Members({
                 </ul>
             )}
 
-            <form onSubmit={invite} className='flex flex-col gap-3 border-t border-black/10 pt-5 dark:border-white/10'>
+            <form onSubmit={invite} className='flex flex-col gap-3 border-t border-[var(--border)] pt-5'>
                 <h2 className='text-base font-semibold'>{t('inviteSomeone')}</h2>
                 <div className='flex flex-wrap gap-2.5'>
                     <input
@@ -285,19 +292,19 @@ export function Members({
             </form>
 
             {invitations.length > 0 && (
-                <div className='flex flex-col gap-2 border-t border-black/10 pt-5 dark:border-white/10'>
+                <div className='flex flex-col gap-2 border-t border-[var(--border)] pt-5'>
                     <h2 className='text-base font-semibold'>{t('openInvitations')}</h2>
-                    <ul className='flex flex-col divide-y divide-black/10 dark:divide-white/10'>
+                    <ul className='flex flex-col divide-y divide-[var(--border)]'>
                         {invitations.map(invitation => (
                             <li key={invitation.id} className='flex flex-wrap items-center gap-3 py-3'>
                                 <div className='flex min-w-0 flex-1 flex-col'>
                                     <span className='truncate text-sm font-semibold'>
                                         {invitation.email}{' '}
-                                        <span className='font-normal opacity-60'>
+                                        <span className='font-normal text-[var(--text-3)]'>
                                             · {roleLabel(t, invitation.role)}
                                         </span>
                                     </span>
-                                    <span className='truncate text-xs opacity-70'>
+                                    <span className='truncate text-xs text-[var(--text-3)]'>
                                         {t('invitedBy', {
                                             name: invitation.invitedByName ?? '?',
                                             until: format.dateTime(new Date(invitation.expiresAt), {

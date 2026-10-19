@@ -1,7 +1,8 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { getTranslations, setRequestLocale } from 'next-intl/server'
-import { Notice, Page, WIDE_CARD } from '@/components/account-ui'
+import { Notice, WIDE_CARD } from '@/components/account-ui'
+import { AppPage } from '@/components/shell/app-shell'
 import { Apps } from '@/components/apps'
 import { BillingAdmin } from '@/components/billing-admin'
 import { Platform } from '@/components/platform'
@@ -14,11 +15,11 @@ import { getSession } from '@/lib/session'
 export default async function AdminPage({ params }: { params: Promise<{ locale: string }> }) {
     setRequestLocale((await params).locale)
     return (
-        <Page wide>
+        <AppPage wide>
             <Suspense fallback={null}>
                 <Content />
             </Suspense>
-        </Page>
+        </AppPage>
     )
 }
 
@@ -34,7 +35,7 @@ async function Content() {
         )
     }
     return (
-        <div className='flex w-full max-w-3xl flex-col gap-6'>
+        <div className='flex w-full flex-col gap-6'>
             <Platform me={session.sub} />
             <BillingAdmin />
             <Apps />

@@ -3,7 +3,8 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
-import { BUTTON, CARD, INPUT, LINK, OUTLINE, roleLabel } from '@/components/account-ui'
+import { AUTH, AUTH_TEXT, AUTH_TITLE, BUTTON, INPUT, LINK, OUTLINE, roleLabel } from '@/components/account-ui'
+import { AuthDivider, Icon, SsoButton } from '@/components/ui'
 import { EidBridge, EidPin, type EidToken } from '@/components/eid'
 import { MfaQr, RecoveryCodes } from '@/components/mfa-ui'
 import { useAccountApi } from '@/lib/account'
@@ -62,7 +63,7 @@ type Answer = {
 }
 
 const CHOICE =
-    'flex h-11 items-center justify-between gap-3 rounded-xl border border-black/15 px-4 text-left text-sm font-semibold hover:border-[var(--accent,#6366f1)] disabled:opacity-60 dark:border-white/20'
+    'flex h-12 cursor-pointer items-center justify-between gap-3 rounded-[var(--r-md)] border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-left text-sm font-semibold hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-60'
 /** What a scope gives an application, in words (the consent screen and /security). */
 export function scopeLabel(t: (key: string) => string, scope: string): string {
     switch (scope) {
@@ -299,17 +300,22 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
         return answer.message ?? t('eidFailed')
     }
 
-    if (state.step === 'loading') return <p className='text-sm opacity-70'>{t('busy')}</p>
+    if (state.step === 'loading')
+        return (
+            <p className={AUTH_TEXT + ' flex items-center gap-2'}>
+                <Icon name='loader' size={16} className='animate-spin' /> {t('busy')}
+            </p>
+        )
 
     if (state.step === 'fatal') {
         return (
-            <section className={CARD}>
-                <h1 className='text-2xl font-bold tracking-tight'>{t('loginTitle')}</h1>
-                <div role='alert' className='text-sm text-red-600 dark:text-red-400'>
+            <section className={AUTH}>
+                <h1 className={AUTH_TITLE}>{t('loginTitle')}</h1>
+                <div role='alert' className='text-sm text-[var(--red)]'>
                     {state.message}
                 </div>
                 <form action='/api/auth/login' method='get' className='flex flex-col'>
-                    <button type='submit' className={BUTTON}>
+                    <button type='submit' className={BUTTON + ' w-full'}>
                         {t('startAgain')}
                     </button>
                 </form>
@@ -323,7 +329,7 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
             <form
                 // A new form (not the login form reused by React): the password must never end up in the code field
                 key={state.step}
-                className={CARD}
+                className={AUTH}
                 onSubmit={event => {
                     event.preventDefault()
                     const code = String(new FormData(event.currentTarget).get('code') ?? '')
@@ -331,8 +337,8 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                 }}
             >
                 <div className='flex flex-col gap-1.5'>
-                    <h1 className='text-2xl font-bold tracking-tight'>{setup ? t('mfaSetupTitle') : t('mfaTitle')}</h1>
-                    <p className='text-sm opacity-80'>{setup ? t('mfaSetupText') : t('mfaText')}</p>
+                    <h1 className={AUTH_TITLE}>{setup ? t('mfaSetupTitle') : t('mfaTitle')}</h1>
+                    <p className={AUTH_TEXT}>{setup ? t('mfaSetupText') : t('mfaText')}</p>
                 </div>
                 {setup && (
                     <MfaQr qrSvg={setup.qrSvg} secret={setup.secret} label={t('mfaQr')} secretLabel={t('mfaSecret')} />
@@ -351,11 +357,11 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                     />
                 </label>
                 {error && (
-                    <div role='alert' className='text-sm text-red-600 dark:text-red-400'>
+                    <div role='alert' className='text-sm text-[var(--red)]'>
                         {error}
                     </div>
                 )}
-                <button type='submit' disabled={busy} className={BUTTON}>
+                <button type='submit' disabled={busy} className={BUTTON + ' w-full'}>
                     {busy ? t('busy') : t('mfaSubmit')}
                 </button>
             </form>
@@ -364,10 +370,10 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
 
     if (state.step === 'recovery-codes') {
         return (
-            <section className={CARD}>
+            <section className={AUTH}>
                 <div className='flex flex-col gap-1.5'>
-                    <h1 className='text-2xl font-bold tracking-tight'>{t('recoveryTitle')}</h1>
-                    <p className='text-sm opacity-80'>{t('recoveryText')}</p>
+                    <h1 className={AUTH_TITLE}>{t('recoveryTitle')}</h1>
+                    <p className={AUTH_TEXT}>{t('recoveryText')}</p>
                 </div>
                 <RecoveryCodes codes={state.codes} copyLabel={t('copyCodes')} copiedLabel={t('copied')} />
                 <button
@@ -384,23 +390,19 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
 
     if (state.step === 'consent') {
         return (
-            <section className={CARD}>
+            <section className={AUTH}>
                 <div className='flex flex-col gap-1.5'>
-                    <h1 className='text-2xl font-bold tracking-tight'>
-                        {t('consentTitle', { client: state.clientName })}
-                    </h1>
-                    <p className='text-sm opacity-80'>
-                        {t('consentText', { client: state.clientName, email: state.email })}
-                    </p>
+                    <h1 className={AUTH_TITLE}>{t('consentTitle', { client: state.clientName })}</h1>
+                    <p className={AUTH_TEXT}>{t('consentText', { client: state.clientName, email: state.email })}</p>
                 </div>
                 <ul className='flex list-disc flex-col gap-1 pl-5 text-sm'>
                     {state.scopes.map(scope => (
                         <li key={scope}>{scopeLabel(t, scope)}</li>
                     ))}
                 </ul>
-                <p className='text-xs opacity-70'>{t('consentNote')}</p>
+                <p className='text-xs text-[var(--text-3)]'>{t('consentNote')}</p>
                 {error && (
-                    <div role='alert' className='text-sm text-red-600 dark:text-red-400'>
+                    <div role='alert' className='text-sm text-[var(--red)]'>
                         {error}
                     </div>
                 )}
@@ -428,9 +430,9 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
         const query = search.trim().toLowerCase()
         const shown = state.tenants.filter(tenant => tenant.name.toLowerCase().includes(query))
         return (
-            <section className={CARD}>
-                <h1 className='text-2xl font-bold tracking-tight'>{t('tenantTitle')}</h1>
-                <p className='text-sm opacity-80'>{t('tenantSubtitle')}</p>
+            <section className={AUTH}>
+                <h1 className={AUTH_TITLE}>{t('tenantTitle')}</h1>
+                <p className={AUTH_TEXT}>{t('tenantSubtitle')}</p>
                 {state.tenants.length >= SEARCH_FROM && (
                     <input
                         type='search'
@@ -451,7 +453,7 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                             onClick={() => void submit('/tenant', { csrf: state.csrf, tenant: 'platform' })}
                         >
                             <span>{t('platformChoice')}</span>
-                            <span className='text-xs font-medium opacity-60'>{t('superadmin')}</span>
+                            <span className='text-xs font-medium text-[var(--text-3)]'>{t('superadmin')}</span>
                         </button>
                     )}
                     {shown.map(tenant => (
@@ -464,11 +466,13 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                         >
                             <span>{tenant.name}</span>
                             {tenant.role && (
-                                <span className='text-xs font-medium opacity-60'>{roleLabel(t, tenant.role)}</span>
+                                <span className='text-xs font-medium text-[var(--text-3)]'>
+                                    {roleLabel(t, tenant.role)}
+                                </span>
                             )}
                         </button>
                     ))}
-                    {shown.length === 0 && <p className='text-sm opacity-70'>{t('noTenantFound')}</p>}
+                    {shown.length === 0 && <p className='text-sm text-[var(--text-3)]'>{t('noTenantFound')}</p>}
                 </div>
             </section>
         )
@@ -476,10 +480,10 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
 
     if (state.step === 'eid') {
         return (
-            <section className={CARD}>
+            <section className={AUTH}>
                 <div className='flex flex-col gap-1.5'>
-                    <h1 className='text-2xl font-bold tracking-tight'>{t('eidTitle')}</h1>
-                    <p className='text-sm opacity-80'>{t('eidText')}</p>
+                    <h1 className={AUTH_TITLE}>{t('eidTitle')}</h1>
+                    <p className={AUTH_TEXT}>{t('eidText')}</p>
                 </div>
                 <EidBridge>
                     <EidPin submitLabel={t('eidSubmit')} getNonce={eidNonce} onToken={eidSubmit} />
@@ -499,7 +503,7 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
     }
 
     const externalButton = state.external && (
-        <button type='button' disabled={busy} className={state.password ? OUTLINE : BUTTON} onClick={onExternal}>
+        <button type='button' disabled={busy} className={BUTTON} onClick={onExternal}>
             {t('externalLogin', { name: state.external.name })}
         </button>
     )
@@ -507,13 +511,15 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
     // Only the other OpenID Connect server (OIDC_EXTERNAL_ONLY)
     if (!state.password) {
         return (
-            <section className={CARD}>
+            <section className={AUTH}>
                 <div className='flex flex-col gap-1.5'>
-                    <h1 className='text-2xl font-bold tracking-tight'>{t('loginTitle')}</h1>
-                    <p className='text-sm opacity-80'>{t('loginSubtitle', { client: state.clientName })}</p>
+                    <h1 className={AUTH_TITLE}>
+                        {state.clientName ? t('loginTitleApp', { client: state.clientName }) : t('loginTitle')}
+                    </h1>
+                    <p className={AUTH_TEXT}>{t('loginSubtitle', { client: state.clientName })}</p>
                 </div>
                 {error && (
-                    <div role='alert' className='text-sm text-red-600 dark:text-red-400'>
+                    <div role='alert' className='text-sm text-[var(--red)]'>
                         {error}
                     </div>
                 )}
@@ -522,14 +528,45 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
         )
     }
 
+    const title = state.clientName ? t('loginTitleApp', { client: state.clientName }) : t('loginTitle')
+    const others = state.eid || state.external || state.passkey
     return (
-        <form key='login' onSubmit={onLogin} className={CARD}>
+        <form key='login' onSubmit={onLogin} className={AUTH}>
             <div className='flex flex-col gap-1.5'>
-                <h1 className='text-2xl font-bold tracking-tight'>{t('loginTitle')}</h1>
-                <p className='text-sm opacity-80'>{t('loginSubtitle', { client: state.clientName })}</p>
+                <h1 className={AUTH_TITLE}>{title}</h1>
+                <p className={AUTH_TEXT}>{t('loginSubtitle', { client: state.clientName })}</p>
             </div>
-            <label className='flex flex-col gap-1.5 text-sm font-medium'>
-                {t('email')}
+            {state.eid && (
+                <SsoButton
+                    icon={<Icon name='idcard' />}
+                    label={t('eidLogin')}
+                    description={t('eidHint')}
+                    onClick={() => {
+                        setError(null)
+                        setState({ ...state, step: 'eid' })
+                    }}
+                />
+            )}
+            {state.passkey && (
+                <SsoButton
+                    icon={<Icon name='key' />}
+                    label={t('passkeyLogin')}
+                    description={t('passkeyHint')}
+                    disabled={busy}
+                    onClick={() => void onPasskey()}
+                />
+            )}
+            {state.external && (
+                <SsoButton
+                    icon={<Icon name='globe' />}
+                    label={t('externalLogin', { name: state.external.name })}
+                    disabled={busy}
+                    onClick={onExternal}
+                />
+            )}
+            {others && <AuthDivider>{t('orEmail')}</AuthDivider>}
+            <label className='lui-field'>
+                <span className='text-sm font-semibold'>{t('email')}</span>
                 <input
                     name='email'
                     type='email'
@@ -540,8 +577,13 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                     className={INPUT}
                 />
             </label>
-            <label className='flex flex-col gap-1.5 text-sm font-medium'>
-                {t('password')}
+            <label className='lui-field'>
+                <span className='flex items-center justify-between text-sm font-semibold'>
+                    {t('password')}
+                    <Link href='/forgot-password' className={LINK + ' text-xs'}>
+                        {t('forgotPassword')}
+                    </Link>
+                </span>
                 <input
                     name='password'
                     type='password'
@@ -552,7 +594,7 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                 />
             </label>
             {error && (
-                <div role='alert' className='text-sm text-red-600 dark:text-red-400'>
+                <div role='alert' className='text-sm text-[var(--red)]'>
                     {error}
                 </div>
             )}
@@ -564,49 +606,17 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                     {resent && <div role='status'>{t('resent')}</div>}
                 </div>
             )}
-            <button type='submit' disabled={busy} className={BUTTON}>
+            <button type='submit' disabled={busy} className={BUTTON + ' w-full'}>
                 {busy ? t('busy') : t('submit')}
             </button>
-            {(state.eid || state.external || state.passkey) && (
-                <div className='flex items-center gap-3 text-xs uppercase opacity-60'>
-                    <span className='h-px flex-1 bg-current opacity-30' />
-                    {t('or')}
-                    <span className='h-px flex-1 bg-current opacity-30' />
+            {state.registration && (
+                <div className='lui-auth-footer'>
+                    {t('noAccount')}{' '}
+                    <Link href='/register' className={LINK}>
+                        {t('register')}
+                    </Link>
                 </div>
             )}
-            {state.passkey && (
-                <button type='button' disabled={busy} className={OUTLINE} onClick={() => void onPasskey()}>
-                    {t('passkeyLogin')}
-                </button>
-            )}
-            {externalButton}
-            {state.eid && (
-                <>
-                    <button
-                        type='button'
-                        className={OUTLINE}
-                        onClick={() => {
-                            setError(null)
-                            setState({ ...state, step: 'eid' })
-                        }}
-                    >
-                        {t('eidLogin')}
-                    </button>
-                </>
-            )}
-            <div className='flex flex-wrap items-center justify-between gap-2 text-sm'>
-                <Link href='/forgot-password' className={LINK}>
-                    {t('forgotPassword')}
-                </Link>
-                {state.registration && (
-                    <span>
-                        <span className='opacity-80'>{t('noAccount')}</span>{' '}
-                        <Link href='/register' className={LINK}>
-                            {t('register')}
-                        </Link>
-                    </span>
-                )}
-            </div>
         </form>
     )
 }

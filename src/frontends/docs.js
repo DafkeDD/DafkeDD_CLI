@@ -107,6 +107,7 @@ translated). A validation error (400) has a list of messages; \`ApiError.message
 The example page has a **status card** (\`src/components/api-status.tsx\`) that shows whether the API is reachable, the
 language it answered in and, with a database, whether the database works.
 `)
+        if (api.oidc) parts.push(pasportDesign(api.linked ?? null))
         if (api.oidc && api.linked) parts.push(linkedLogin(api.linked))
         else if (api.oidc) {
             parts.push(`
@@ -118,7 +119,8 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | Path | What it does |
 | --- | --- |
 | \`/api/auth/login\` | Starts a login: state, nonce and a PKCE verifier go into an encrypted cookie, then to the login server |
-| \`/login?interaction=<id>\` | The login page of the login server (email, password, passkey, eID, "Log in with <name>" for another OpenID Connect server, second factor, organisation choice, and "Allow <application>?" for applications of others), shown by this frontend. Back from the other server it goes on where the login is (\`pending\`); \`&error=EXTERNAL_...\` shows why that login failed |
+| \`/login\` | Without a login request: starts one at once (\`?error=\` stays and shows why the last login failed) |
+| \`/login?interaction=<id>\` | The login screen of the login server, for this frontend and for every app linked to it ("Log in to <app>": eID, passkey, email and password, "Log in with <name>" for another OpenID Connect server, second factor, organisation choice, and "Allow <application>?" for applications of others), shown by this frontend. Back from the other server it goes on where the login is (\`pending\`); \`&error=EXTERNAL_...\` shows why that login failed |
 | \`/api/auth/callback\` | Back from the login server: checks state and \`iss\`, exchanges the code, verifies the ID token |
 | \`/api/auth/backchannel-logout\` | POST from the login server (back-channel logout): a signed logout token when a session ended there; every browser of that session is logged out here at its next request |
 | \`/profile\` | Protected: name, email, organisation, role, and whether the API accepts the access token |
@@ -149,9 +151,8 @@ access token with the refresh token (\`src/lib/refresh.ts\`) before a page rende
 cannot set cookies themselves). When the login server refuses (logged out, session ended on \`/security\`), the cookie
 is deleted and the user logs in again.
 
-**Header**: \`src/components/header-nav.tsx\` shows "Management" (admins), "Platform" (superadmins) and "Profile" for
-everyone who is logged in, and sends the heartbeat (\`src/components/presence.tsx\`, every minute while the page is
-visible) that shows them as online to their admins.
+**Online**: the shell sends the heartbeat (\`src/components/presence.tsx\`, every minute while the page is visible)
+that shows a logged in user as online to their admins.
 
 **Roles**: \`session.tenant.role\` is \`user\` or \`admin\` (of the chosen organisation); \`session.superadmin\` is \`true\`
 for platform administrators (admin of every organisation). \`session.tenant\` is \`null\` when a superadmin logged in
@@ -230,6 +231,53 @@ the visitor to \`/login\` on a 401. Always protect the data in the API too (\`@U
     return parts.join('')
 }
 
+/** The Pasport design: the same shell and login screen on the login server and in every app linked to it. */
+function pasportDesign(link) {
+    const name = link ? link.name : 'Pasport'
+    return `
+## Design (Pasport)
+
+The login server and every app linked to it look the same: one login screen, one shell (sidebar, topbar, content).
+Only the pages of the app change. Everything is built with **DafkeDD UI** (\`src/components/ui\`, always installed
+with this login) and its tokens; the design system is "Pasport" (teal accent, Hanken Grotesk, light and dark).
+
+| File | What it is |
+| --- | --- |
+| \`src/components/shell/app-shell.tsx\` | \`<AppPage>\`: a page in the shell. The sidebar has this app's pages (\`APP_NAV\`), then "My account" (profile, security), the organisation (users, licences, activity: its admins) and the platform (superadmins) |
+| \`src/components/shell/shell-view.tsx\` | The sidebar, the topbar (language, light or dark, the user menu with profile, security and log out) and \`BrandMark\` |
+| \`src/components/shell/auth-screen.tsx\` | \`<AuthPage>\`: the login screen around a form, the teal panel with the eID card on the left (\`admin\`: the dark superadmin variant) |
+| \`src/components/shell/start-login.tsx\` | \`/login\` without a login request: starts one at once |
+| \`src/lib/nav.ts\` | \`APP_NAV\`: the pages of this app in the sidebar |
+| \`src/lib/brand.ts\` | \`BRAND\` (the platform, \`Pasport\`) and \`APP_NAME\` (${link ? `\`${link.name}\`` : '\`null\` on the login server'}) |
+
+**A page of your own** (in the shell, here "${name}"):
+
+${'```'}tsx
+// src/app/[locale]/planning/page.tsx
+import { setRequestLocale } from 'next-intl/server'
+import { AppPage } from '@/components/shell/app-shell'
+import { PageHeader } from '@/components/ui'
+
+export default async function PlanningPage({ params }: { params: Promise<{ locale: string }> }) {
+    setRequestLocale((await params).locale)
+    return (
+        <AppPage>
+            <PageHeader title='Planning' description='This week' />
+        </AppPage>
+    )
+}
+${'```'}
+
+Then add it to the sidebar: \`{ href: '/planning', label: 'planning', icon: 'calendar' }\` in \`APP_NAV\`, and the key
+\`planning\` in the \`Nav\` namespace of **every** \`messages/<language>.json\`. Icons are the names of the DafkeDD UI
+\`Icon\` (\`ICON_NAMES\`). \`<AppPage wide>\` uses the whole width. The texts of the shell are in the \`Shell\` namespace.
+
+The DafkeDD UI stylesheet is not in a CSS layer, so it wins from Tailwind classes on the same element: a \`lui-\` class
+keeps its colours and sizes. Give such an element another look with the important variant (\`bg-[var(--accent-tint)]!\`)
+or use the constants of \`src/components/account-ui.tsx\` (\`CARD\`, \`BUTTON\`, \`INPUT\`, \`DANGER\`, ...).
+`
+}
+
 /** The login of a frontend that is linked to an existing DafkeDD login server (the CLI with a link code). */
 function linkedLogin(link) {
     return `
@@ -247,12 +295,13 @@ none). Somebody who is logged in at that server is logged in here without a pass
 | \`/api/auth/callback\` | Back from the login server: checks state and \`iss\`, exchanges the code, verifies the ID token |
 | \`/api/auth/logout\` | POST: revokes the refresh token and logs out of the login server too |
 | \`/api/auth/backchannel-logout\` | POST from the login server: a session ended there (logged out in another app, ended on its security page), so this browser is logged out here too |
-| \`/login\` | A button that starts a login; \`?error=\` shows why the last one failed (for example \`access_denied\` on the consent screen) |
+| \`/login\` | Starts a login at once: the login screen of the login server (the same in every app), where users also register; \`?error=\` stays here and shows why the last one failed (for example \`access_denied\` on the consent screen) |
 | \`/profile\` | Protected: name, email, organisation, role, and whether the login server accepts the access token |
 | \`/api/backend/...\` | Calls the API of the login server with the access token of the session (only for apps marked "our own application") |
 
 The account pages (security, passkeys, members, licences, the platform) are on the frontend of the login server
-(\`OIDC_ACCOUNT_URL\`): the header and the profile link there.
+(\`OIDC_ACCOUNT_URL\`): the sidebar, the user menu and the profile link there. This app has no login or registration
+form of its own: registering always happens on the login server.
 
 \`.env.local\`:
 

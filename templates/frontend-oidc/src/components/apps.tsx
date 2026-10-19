@@ -2,7 +2,18 @@
 
 import { type FormEvent, useEffect, useState } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
-import { BUTTON, Field, Heading, Notice, OUTLINE, SECONDARY, WIDE_CARD } from '@/components/account-ui'
+import {
+    BUTTON,
+    DANGER,
+    Field,
+    Heading,
+    Notice,
+    OUTLINE,
+    SECONDARY,
+    SELECT,
+    TEXTAREA,
+    WIDE_CARD
+} from '@/components/account-ui'
 import { type Answer, useBackend } from '@/lib/account'
 
 export type App = {
@@ -24,11 +35,7 @@ export type App = {
 
 /** The scopes an app can ask for; openid always. */
 const SCOPES = ['openid', 'profile', 'email', 'tenant'] as const
-const SELECT =
-    'h-11 rounded-xl border border-black/15 bg-transparent px-3 text-sm outline-none focus:border-[var(--accent,#6366f1)] dark:border-white/20 dark:[color-scheme:dark]'
-const TEXTAREA =
-    'min-h-20 w-full rounded-xl border border-black/15 bg-transparent px-3.5 py-2.5 font-mono text-xs outline-none focus:border-[var(--accent,#6366f1)] dark:border-white/20'
-const BADGE = 'rounded-full border border-black/15 px-2 py-0.5 text-[11px] font-semibold dark:border-white/20'
+const BADGE = 'rounded-full bg-[var(--surface-3)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-2)]'
 
 /** One address per line, empty lines left out. */
 const lines = (value: FormDataEntryValue | null) =>
@@ -169,7 +176,7 @@ export function Apps() {
     function form(app: App | null, onSubmit: (event: FormEvent<HTMLFormElement>) => void) {
         return (
             <form
-                className='flex flex-col gap-3 rounded-xl border border-black/10 p-4 dark:border-white/15'
+                className='flex flex-col gap-3 rounded-[var(--r-md)] border border-[var(--border)] p-4'
                 onSubmit={onSubmit}
             >
                 <Field label={t('name')} name='name' required minLength={2} maxLength={100} defaultValue={app?.name} />
@@ -200,7 +207,7 @@ export function Apps() {
                         placeholder='https://app.example.com/callback'
                         className={TEXTAREA}
                     />
-                    <span className='text-xs font-normal opacity-70'>{t('urisHint')}</span>
+                    <span className='text-xs font-normal text-[var(--text-3)]'>{t('urisHint')}</span>
                 </label>
                 <label className='flex flex-col gap-1.5 text-sm font-medium'>
                     {t('postLogoutRedirectUris')}
@@ -247,7 +254,7 @@ export function Apps() {
                     />
                     <span>
                         {t('refreshTokens')}
-                        <span className='block text-xs opacity-70'>{t('refreshTokensHint')}</span>
+                        <span className='block text-xs text-[var(--text-3)]'>{t('refreshTokensHint')}</span>
                     </span>
                 </label>
                 <label className='flex items-start gap-2 text-sm'>
@@ -259,7 +266,7 @@ export function Apps() {
                     />
                     <span>
                         {t('firstParty')}
-                        <span className='block text-xs opacity-70'>{t('firstPartyHint')}</span>
+                        <span className='block text-xs text-[var(--text-3)]'>{t('firstPartyHint')}</span>
                     </span>
                 </label>
                 <div className='flex flex-wrap gap-2'>
@@ -284,21 +291,21 @@ export function Apps() {
             {error && <Notice tone='error'>{error}</Notice>}
             {notice && <Notice tone='success'>{notice}</Notice>}
             {link && (
-                <div className='flex flex-col gap-2 rounded-xl border border-[var(--accent,#6366f1)]/50 bg-black/[.03] p-4 text-sm dark:bg-white/[.04]'>
+                <div className='flex flex-col gap-2 rounded-[var(--r-md)] border border-[var(--accent)]/50 bg-[var(--surface-2)] p-4 text-sm'>
                     <span className='font-semibold'>{t('linkTitle', { client: link.app.name })}</span>
-                    <span className='opacity-80'>
+                    <span className='text-[var(--text-2)]'>
                         {t('linkText', {
                             time: format.dateTime(new Date(link.expiresAt), { timeStyle: 'short' })
                         })}
                     </span>
-                    <span className='text-xs opacity-70'>
+                    <span className='text-xs text-[var(--text-3)]'>
                         {t('linkServer')}: <code>{link.issuer.replace(/\/oidc$/, '')}</code>
                     </span>
-                    <code className='self-start rounded-lg bg-black/5 px-3 py-2 font-mono text-lg tracking-widest dark:bg-white/10'>
+                    <code className='self-start rounded-lg bg-[var(--surface-3)] px-3 py-2 font-mono text-lg tracking-widest'>
                         {link.code}
                     </code>
                     {link.app.type === 'confidential' && (
-                        <span className='text-xs opacity-80'>{t('linkConfidential')}</span>
+                        <span className='text-xs text-[var(--text-2)]'>{t('linkConfidential')}</span>
                     )}
                     <div className='flex gap-2'>
                         <button type='button' className={SECONDARY} onClick={() => void copy(link.code)}>
@@ -311,10 +318,10 @@ export function Apps() {
                 </div>
             )}
             {secret && (
-                <div className='flex flex-col gap-2 rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm'>
+                <div className='flex flex-col gap-2 rounded-[var(--r-md)] border border-[var(--amber)]/50 bg-[var(--amber)]/10 p-4 text-sm'>
                     <span className='font-semibold'>{t('secretTitle', { client: secret.clientId })}</span>
-                    <span className='opacity-80'>{t('secretText')}</span>
-                    <code className='rounded-lg bg-black/5 px-3 py-2 font-mono text-xs break-all dark:bg-white/10'>
+                    <span className='text-[var(--text-2)]'>{t('secretText')}</span>
+                    <code className='rounded-lg bg-[var(--surface-3)] px-3 py-2 font-mono text-xs break-all'>
                         {secret.secret}
                     </code>
                     <div className='flex gap-2'>
@@ -328,20 +335,20 @@ export function Apps() {
                 </div>
             )}
             {!apps ? (
-                <p className='text-sm opacity-70'>{t('loading')}</p>
+                <p className='text-sm text-[var(--text-3)]'>{t('loading')}</p>
             ) : (
                 <ul className='flex flex-col gap-3'>
                     {apps.map(app => (
                         <li
                             key={app.clientId}
                             className={
-                                'flex flex-col gap-2 rounded-xl border border-black/10 p-4 text-sm dark:border-white/15' +
-                                (app.disabled ? ' opacity-60' : '')
+                                'flex flex-col gap-2 rounded-[var(--r-md)] border border-[var(--border)] p-4 text-sm' +
+                                (app.disabled ? ' text-[var(--text-3)]' : '')
                             }
                         >
                             <div className='flex flex-wrap items-center gap-2'>
                                 <span className='font-semibold'>{app.name}</span>
-                                <code className='text-xs opacity-70'>{app.clientId}</code>
+                                <code className='text-xs text-[var(--text-3)]'>{app.clientId}</code>
                                 <span className={BADGE}>
                                     {app.type === 'public' ? t('typePublicShort') : t('typeConfidentialShort')}
                                 </span>
@@ -349,11 +356,11 @@ export function Apps() {
                                 {app.source === 'file' && <span className={BADGE}>{t('fromFile')}</span>}
                                 {app.disabled && <span className={BADGE}>{t('disabled')}</span>}
                             </div>
-                            <span className='text-xs opacity-70'>
+                            <span className='text-xs text-[var(--text-3)]'>
                                 {app.redirectUris.join(' · ')}
                                 {app.backchannelLogoutUri && <> · {t('backchannelShort')}</>}
                             </span>
-                            <span className='text-xs opacity-70'>
+                            <span className='text-xs text-[var(--text-3)]'>
                                 {app.scopes.join(' ')} ·{' '}
                                 {app.firstParty ? t('noConsent') : t('consents', { count: app.consents })}
                                 {app.source === 'admin' &&
@@ -363,7 +370,7 @@ export function Apps() {
                                         })}
                             </span>
                             {app.source === 'file' ? (
-                                <span className='text-xs opacity-70'>{t('fileHint')}</span>
+                                <span className='text-xs text-[var(--text-3)]'>{t('fileHint')}</span>
                             ) : editing === app.clientId ? (
                                 form(app, event => update(event, app))
                             ) : (
@@ -425,7 +432,7 @@ export function Apps() {
                                         <button
                                             type='button'
                                             disabled={busy}
-                                            className={SECONDARY + ' text-red-600 dark:text-red-400'}
+                                            className={DANGER}
                                             onClick={() =>
                                                 removing === app.clientId
                                                     ? void act(

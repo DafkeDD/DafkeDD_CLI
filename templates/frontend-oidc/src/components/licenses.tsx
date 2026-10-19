@@ -5,6 +5,7 @@ import { useFormatter, useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
 import {
     BUTTON,
+    DANGER,
     Heading,
     INPUT,
     LINK,
@@ -12,6 +13,7 @@ import {
     Notice,
     OUTLINE,
     SECONDARY,
+    SELECT,
     WIDE_CARD
 } from '@/components/account-ui'
 import { type Answer, useBackend } from '@/lib/account'
@@ -62,10 +64,7 @@ type Quote = {
     discount: Discount | null
 }
 
-const SELECT =
-    'h-11 rounded-xl border border-black/15 bg-transparent px-3 text-sm outline-none focus:border-[var(--accent,#6366f1)] dark:border-white/20 dark:[color-scheme:dark]'
 const BADGE = 'rounded-full px-2 py-0.5 text-xs font-semibold'
-const DANGER = OUTLINE + ' border-red-500 text-red-600 dark:text-red-400'
 
 /** The checkout of the payment provider (Mollie): a full page load to another site. */
 const goTo = (url: string) => window.location.assign(url)
@@ -137,13 +136,13 @@ export function Licenses({ superadmin, tenantId }: { superadmin: boolean; tenant
         )
 
     return (
-        <div className='flex w-full max-w-3xl flex-col gap-6'>
+        <div className='flex w-full flex-col gap-6'>
             <section className={WIDE_CARD}>
                 <Heading title={t('title')} text={t('intro')} />
                 {error && <Notice tone='error'>{error}</Notice>}
                 {notice && <Notice tone='success'>{notice}</Notice>}
-                {!items && <p className='text-sm opacity-70'>{t('busy')}</p>}
-                {items?.length === 0 && <p className='text-sm opacity-70'>{t('noProducts')}</p>}
+                {!items && <p className='text-sm text-[var(--text-3)]'>{t('busy')}</p>}
+                {items?.length === 0 && <p className='text-sm text-[var(--text-3)]'>{t('noProducts')}</p>}
             </section>
             {items?.map(item => (
                 <ProductCard
@@ -253,14 +252,14 @@ function ProductCard({
                     <h2 className='text-xl font-bold tracking-tight'>
                         {product.name}
                         {!product.active && (
-                            <span className={BADGE + ' ml-2 bg-black/10 dark:bg-white/10'}>{t('notSold')}</span>
+                            <span className={BADGE + ' ml-2 bg-[var(--surface-3)]'}>{t('notSold')}</span>
                         )}
                     </h2>
-                    {product.description && <p className='text-sm opacity-80'>{product.description}</p>}
-                    <p className='text-sm opacity-70'>
+                    {product.description && <p className='text-sm text-[var(--text-2)]'>{product.description}</p>}
+                    <p className='text-sm text-[var(--text-3)]'>
                         {t('prices', { month: money(product.priceMonthCents), year: money(product.priceYearCents) })}
                         {saving > 0 && (
-                            <span className={BADGE + ' ml-2 bg-green-600/10 text-green-700 dark:text-green-400'}>
+                            <span className={BADGE + ' ml-2 bg-[var(--green)]/10 text-[var(--green)]'}>
                                 {t('yearSaving', { percent: saving })}
                             </span>
                         )}
@@ -270,17 +269,19 @@ function ProductCard({
                     <div className='text-2xl font-bold'>
                         {seats.used}/{seats.total}
                     </div>
-                    <div className='text-xs opacity-70'>{t('seatsInUse', { paid: seats.paid, free: seats.free })}</div>
+                    <div className='text-xs text-[var(--text-3)]'>
+                        {t('seatsInUse', { paid: seats.paid, free: seats.free })}
+                    </div>
                 </div>
             </div>
 
             {status && (
                 <div className='flex flex-wrap items-center gap-2 text-sm'>
-                    <span className={subscription?.valid ? 'font-semibold' : 'opacity-70'}>
+                    <span className={subscription?.valid ? 'font-semibold' : 'text-[var(--text-3)]'}>
                         {subscription?.interval === 'year' ? t('yearly') : t('monthly')} · {status}
                     </span>
                     {subscription?.discount && (
-                        <span className={BADGE + ' bg-[var(--accent,#6366f1)]/10'}>
+                        <span className={BADGE + ' bg-[var(--accent)]/10'}>
                             {t('discountApplied', { code: subscription.discount.code })}
                         </span>
                     )}
@@ -293,7 +294,7 @@ function ProductCard({
                         event.preventDefault()
                         purchase(event.currentTarget, false)
                     }}
-                    className='flex flex-col gap-3 border-t border-black/10 pt-4 dark:border-white/10'
+                    className='flex flex-col gap-3 border-t border-[var(--border)] pt-4'
                 >
                     <h3 className='text-base font-semibold'>{t('buyTitle')}</h3>
                     <div className='flex flex-wrap gap-2.5'>
@@ -352,12 +353,12 @@ function ProductCard({
                             {t('buy')}
                         </button>
                     </div>
-                    <p className='text-xs opacity-70'>{t('buyHint')}</p>
+                    <p className='text-xs text-[var(--text-3)]'>{t('buyHint')}</p>
                 </form>
             )}
 
             {paid && !subscription.cancelAtPeriodEnd && (
-                <div className='flex flex-wrap items-end gap-2.5 border-t border-black/10 pt-4 dark:border-white/10'>
+                <div className='flex flex-wrap items-end gap-2.5 border-t border-[var(--border)] pt-4'>
                     <form onSubmit={changeSeats} className='flex flex-wrap items-end gap-2.5'>
                         <label className='flex flex-col gap-1.5 text-sm font-medium'>
                             {t('paidSeats')}
@@ -394,9 +395,9 @@ function ProductCard({
                 </div>
             )}
 
-            <div className='flex flex-col gap-2 border-t border-black/10 pt-4 dark:border-white/10'>
+            <div className='flex flex-col gap-2 border-t border-[var(--border)] pt-4'>
                 <h3 className='text-base font-semibold'>{t('people')}</h3>
-                <ul className='flex flex-col divide-y divide-black/10 dark:divide-white/10'>
+                <ul className='flex flex-col divide-y divide-[var(--border)]'>
                     {members.map(member => (
                         <MemberRow
                             key={member.userId}
@@ -412,14 +413,17 @@ function ProductCard({
             </div>
 
             {superadmin && (
-                <div className='flex flex-col gap-3 border-t border-black/10 pt-4 dark:border-white/10'>
+                <div className='flex flex-col gap-3 border-t border-[var(--border)] pt-4'>
                     <h3 className='text-base font-semibold'>{t('freeSeats')}</h3>
                     {item.grants.length > 0 && (
                         <ul className='flex flex-col gap-1.5 text-sm'>
                             {item.grants.map(grant => (
                                 <li
                                     key={grant.id}
-                                    className={'flex flex-wrap items-center gap-2' + (grant.valid ? '' : ' opacity-60')}
+                                    className={
+                                        'flex flex-wrap items-center gap-2' +
+                                        (grant.valid ? '' : ' text-[var(--text-3)]')
+                                    }
                                 >
                                     <span>
                                         {t('grantLine', { seats: grant.seats })} ·{' '}
@@ -456,12 +460,7 @@ function ProductCard({
                             aria-label={t('seats')}
                             className={INPUT + ' w-24'}
                         />
-                        <input
-                            name='endsAt'
-                            type='date'
-                            aria-label={t('endsAt')}
-                            className={INPUT + ' w-44 dark:[color-scheme:dark]'}
-                        />
+                        <input name='endsAt' type='date' aria-label={t('endsAt')} className={INPUT + ' w-44'} />
                         <input
                             name='note'
                             placeholder={t('note')}
@@ -519,7 +518,7 @@ function MemberRow({
                 <span className='truncate text-sm font-semibold'>{member.name || member.email}</span>
                 <span
                     className={
-                        'truncate text-xs ' + (good ? 'font-semibold text-green-700 dark:text-green-400' : 'opacity-70')
+                        'truncate text-xs ' + (good ? 'font-semibold text-[var(--green)]' : 'text-[var(--text-3)]')
                     }
                 >
                     {label}
@@ -608,7 +607,7 @@ export function LicenseReturn({ subscriptionId }: { subscriptionId: string }) {
     return (
         <section className={WIDE_CARD}>
             <Heading title={t('returnTitle')} />
-            {state === 'waiting' && <p className='text-sm opacity-70'>{t('returnWaiting')}</p>}
+            {state === 'waiting' && <p className='text-sm text-[var(--text-3)]'>{t('returnWaiting')}</p>}
             {state === 'paid' && <Notice tone='success'>{t('returnPaid')}</Notice>}
             {state === 'failed' && <Notice tone='error'>{t('returnFailed')}</Notice>}
             {state === 'error' && <Notice tone='error'>{t('returnUnknown')}</Notice>}

@@ -1,7 +1,8 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { getTranslations, setRequestLocale } from 'next-intl/server'
-import { Notice, Page, WIDE_CARD } from '@/components/account-ui'
+import { Notice, WIDE_CARD } from '@/components/account-ui'
+import { AppPage } from '@/components/shell/app-shell'
 import { Licenses } from '@/components/licenses'
 import { getSession } from '@/lib/session'
 
@@ -9,11 +10,11 @@ import { getSession } from '@/lib/session'
 export default async function LicensesPage({ params }: { params: Promise<{ locale: string }> }) {
     setRequestLocale((await params).locale)
     return (
-        <Page wide>
+        <AppPage wide>
             <Suspense fallback={null}>
                 <Content />
             </Suspense>
-        </Page>
+        </AppPage>
     )
 }
 

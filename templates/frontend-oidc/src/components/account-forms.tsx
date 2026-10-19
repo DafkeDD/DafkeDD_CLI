@@ -4,16 +4,17 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
 import {
+    AUTH,
+    AUTH_TEXT,
+    AuthHeading,
     BUTTON,
-    CARD,
     Field,
-    Heading,
     LINK,
     LoginButton,
     LoginLink,
     Notice,
     roleLabel,
-    SECONDARY
+    TOGGLE
 } from '@/components/account-ui'
 import { EidBridge, EidPin, type EidToken } from '@/components/eid'
 import { useAccountApi } from '@/lib/account'
@@ -28,16 +29,14 @@ const valuesOf = (event: FormEvent<HTMLFormElement>) =>
 function CheckEmail({ email }: { email: string }) {
     const t = useTranslations('Oidc')
     return (
-        <section className={CARD}>
-            <Heading title={t('checkEmailTitle')} text={t('checkEmailText', { email })} />
+        <section className={AUTH}>
+            <AuthHeading title={t('checkEmailTitle')} text={t('checkEmailText', { email })} />
             <LoginButton label={t('signIn')} />
         </section>
     )
 }
 
-const TAB =
-    SECONDARY +
-    ' flex-1 aria-pressed:border-[var(--accent,#6366f1)] aria-pressed:bg-black/5 dark:aria-pressed:bg-white/10'
+const TAB = TOGGLE + ' flex-1'
 
 /**
  * /register: a new account and a new organisation; the account becomes its admin. With a password, or with the
@@ -121,8 +120,8 @@ export function Register() {
         />
     )
     return (
-        <section className={CARD}>
-            <Heading title={t('registerTitle')} text={t('registerSubtitle')} />
+        <section className={AUTH}>
+            <AuthHeading title={t('registerTitle')} text={t('registerSubtitle')} />
             {options.password && options.eid && (
                 <div className='flex gap-2' role='group'>
                     <button
@@ -145,7 +144,7 @@ export function Register() {
             )}
             {method === 'eid' ? (
                 <>
-                    <p className='text-sm opacity-80'>{t('eidRegisterText')}</p>
+                    <p className={AUTH_TEXT}>{t('eidRegisterText')}</p>
                     <EidBridge>
                         <EidPin submitLabel={t('eidRegisterSubmit')} getNonce={eidNonce} onToken={eidRegister}>
                             <Field
@@ -183,14 +182,14 @@ export function Register() {
                         {...PASSWORD}
                     />
                     {error && <Notice tone='error'>{error}</Notice>}
-                    <button type='submit' disabled={busy} className={BUTTON}>
+                    <button type='submit' disabled={busy} className={BUTTON + ' w-full'}>
                         {busy ? t('busy') : t('registerSubmit')}
                     </button>
                 </form>
             )}
             {/* Outside the form above: a form may not contain another form */}
             <div className='flex flex-wrap items-center gap-1.5 text-sm'>
-                <span className='opacity-80'>{t('haveAccount')}</span>
+                <span className='text-[var(--text-2)]'>{t('haveAccount')}</span>
                 <LoginLink label={t('signIn')} />
             </div>
         </section>
@@ -218,18 +217,18 @@ export function VerifyEmail({ token }: { token: string }) {
 
     if (state.email)
         return (
-            <section className={CARD}>
-                <Heading title={t('verifiedTitle')} text={t('verifiedText', { email: state.email })} />
+            <section className={AUTH}>
+                <AuthHeading title={t('verifiedTitle')} text={t('verifiedText', { email: state.email })} />
                 <LoginButton label={t('signIn')} />
             </section>
         )
     return (
-        <section className={CARD}>
-            <Heading title={t('verifyTitle')} />
+        <section className={AUTH}>
+            <AuthHeading title={t('verifyTitle')} />
             {state.error ? (
                 <Notice tone='error'>{state.error}</Notice>
             ) : (
-                <p className='text-sm opacity-70'>{t('busy')}</p>
+                <p className='text-sm text-[var(--text-3)]'>{t('busy')}</p>
             )}
             {state.error && <LoginButton label={t('signIn')} />}
         </section>
@@ -261,11 +260,11 @@ export function ForgotPassword() {
 
     if (sentTo) return <CheckEmail email={sentTo} />
     return (
-        <form onSubmit={onSubmit} className={CARD}>
-            <Heading title={t('forgotTitle')} text={t('forgotText')} />
+        <form onSubmit={onSubmit} className={AUTH}>
+            <AuthHeading title={t('forgotTitle')} text={t('forgotText')} />
             <Field label={t('email')} name='email' type='email' required maxLength={254} autoComplete='email' />
             {error && <Notice tone='error'>{error}</Notice>}
-            <button type='submit' disabled={busy} className={BUTTON}>
+            <button type='submit' disabled={busy} className={BUTTON + ' w-full'}>
                 {busy ? t('busy') : t('forgotSubmit')}
             </button>
         </form>
@@ -298,14 +297,14 @@ export function ResetPassword({ token }: { token: string }) {
 
     if (done)
         return (
-            <section className={CARD}>
-                <Heading title={t('resetDoneTitle')} text={t('resetDoneText')} />
+            <section className={AUTH}>
+                <AuthHeading title={t('resetDoneTitle')} text={t('resetDoneText')} />
                 <LoginButton label={t('signIn')} />
             </section>
         )
     return (
-        <form onSubmit={onSubmit} className={CARD}>
-            <Heading title={t('resetTitle')} />
+        <form onSubmit={onSubmit} className={AUTH}>
+            <AuthHeading title={t('resetTitle')} />
             <Field
                 label={t('password')}
                 hint={t('passwordHint')}
@@ -331,7 +330,7 @@ export function ResetPassword({ token }: { token: string }) {
                     </Link>
                 </Notice>
             )}
-            <button type='submit' disabled={busy} className={BUTTON}>
+            <button type='submit' disabled={busy} className={BUTTON + ' w-full'}>
                 {busy ? t('busy') : t('resetSubmit')}
             </button>
         </form>
@@ -390,21 +389,28 @@ export function AcceptInvitation({ token }: { token: string }) {
 
     if (!invitation)
         return (
-            <section className={CARD}>
-                <Heading title={t('inviteTitle')} />
-                {error ? <Notice tone='error'>{error}</Notice> : <p className='text-sm opacity-70'>{t('busy')}</p>}
+            <section className={AUTH}>
+                <AuthHeading title={t('inviteTitle')} />
+                {error ? (
+                    <Notice tone='error'>{error}</Notice>
+                ) : (
+                    <p className='text-sm text-[var(--text-3)]'>{t('busy')}</p>
+                )}
             </section>
         )
     if (done)
         return (
-            <section className={CARD}>
-                <Heading title={t('inviteDoneTitle', { tenant: invitation.tenantName })} text={t('inviteDoneText')} />
+            <section className={AUTH}>
+                <AuthHeading
+                    title={t('inviteDoneTitle', { tenant: invitation.tenantName })}
+                    text={t('inviteDoneText')}
+                />
                 <LoginButton label={t('signIn')} />
             </section>
         )
     return (
-        <form onSubmit={accept} className={CARD}>
-            <Heading
+        <form onSubmit={accept} className={AUTH}>
+            <AuthHeading
                 title={t('inviteTitle')}
                 text={t('inviteText', {
                     inviter: invitation.inviterName,
@@ -413,12 +419,12 @@ export function AcceptInvitation({ token }: { token: string }) {
                 })}
             />
             {invitation.accountExists ? (
-                <p className='text-sm opacity-80'>
+                <p className={AUTH_TEXT}>
                     {t('inviteExisting', { email: invitation.email, tenant: invitation.tenantName })}
                 </p>
             ) : (
                 <>
-                    <p className='text-sm opacity-80'>{t('inviteNewAccount', { email: invitation.email })}</p>
+                    <p className={AUTH_TEXT}>{t('inviteNewAccount', { email: invitation.email })}</p>
                     <Field label={t('name')} name='name' required minLength={2} maxLength={100} autoComplete='name' />
                     <Field
                         label={t('password')}
@@ -440,7 +446,7 @@ export function AcceptInvitation({ token }: { token: string }) {
                 </>
             )}
             {error && <Notice tone='error'>{error}</Notice>}
-            <button type='submit' disabled={busy} className={BUTTON}>
+            <button type='submit' disabled={busy} className={BUTTON + ' w-full'}>
                 {busy ? t('busy') : t('inviteAccept')}
             </button>
         </form>

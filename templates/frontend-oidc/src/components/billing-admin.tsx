@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
-import { BUTTON, Heading, INPUT, Notice, SECONDARY, WIDE_CARD } from '@/components/account-ui'
+import { BUTTON, Heading, INPUT, Notice, SECONDARY, SELECT, WIDE_CARD } from '@/components/account-ui'
 import { type Answer, useBackend } from '@/lib/account'
 
 type Product = {
@@ -26,9 +26,6 @@ type Discount = {
     expiresAt: string | null
     active: boolean
 }
-
-const SELECT =
-    'h-11 rounded-xl border border-black/15 bg-transparent px-3 text-sm outline-none focus:border-[var(--accent,#6366f1)] dark:border-white/20 dark:[color-scheme:dark]'
 
 /** Euros as typed ("9,99" or "9.99") to cents. */
 const cents = (value: FormDataEntryValue | null) => Math.round(Number(String(value ?? '').replace(',', '.')) * 100)
@@ -153,17 +150,21 @@ export function BillingAdmin() {
                 <Heading title={t('productsTitle')} text={t('productsText')} />
                 {error && <Notice tone='error'>{error}</Notice>}
                 {notice && <Notice tone='success'>{notice}</Notice>}
-                <ul className='flex flex-col divide-y divide-black/10 dark:divide-white/10'>
+                <ul className='flex flex-col divide-y divide-[var(--border)]'>
                     {products?.map(product => (
                         <li
                             key={product.code}
-                            className={'flex flex-wrap items-center gap-3 py-3' + (product.active ? '' : ' opacity-60')}
+                            className={
+                                'flex flex-wrap items-center gap-3 py-3' +
+                                (product.active ? '' : ' text-[var(--text-3)]')
+                            }
                         >
                             <div className='flex min-w-0 flex-1 flex-col'>
                                 <span className='text-sm font-semibold'>
-                                    {product.name} <span className='font-normal opacity-60'>({product.code})</span>
+                                    {product.name}{' '}
+                                    <span className='font-normal text-[var(--text-3)]'>({product.code})</span>
                                 </span>
-                                <span className='text-xs opacity-70'>
+                                <span className='text-xs text-[var(--text-3)]'>
                                     {t('prices', {
                                         month: money(product.priceMonthCents, product.currency),
                                         year: money(product.priceYearCents, product.currency)
@@ -188,10 +189,7 @@ export function BillingAdmin() {
                         </li>
                     ))}
                 </ul>
-                <form
-                    onSubmit={createProduct}
-                    className='flex flex-col gap-3 border-t border-black/10 pt-4 dark:border-white/10'
-                >
+                <form onSubmit={createProduct} className='flex flex-col gap-3 border-t border-[var(--border)] pt-4'>
                     <h2 className='text-base font-semibold'>{t('newProduct')}</h2>
                     <div className='flex flex-wrap gap-2.5'>
                         <input
@@ -245,17 +243,18 @@ export function BillingAdmin() {
 
             <section className={WIDE_CARD}>
                 <Heading title={t('discountsTitle')} text={t('discountsText')} />
-                <ul className='flex flex-col divide-y divide-black/10 dark:divide-white/10'>
+                <ul className='flex flex-col divide-y divide-[var(--border)]'>
                     {discounts.map(discount => (
                         <li
                             key={discount.code}
                             className={
-                                'flex flex-wrap items-center gap-3 py-3' + (discount.active ? '' : ' opacity-60')
+                                'flex flex-wrap items-center gap-3 py-3' +
+                                (discount.active ? '' : ' text-[var(--text-3)]')
                             }
                         >
                             <div className='flex min-w-0 flex-1 flex-col'>
                                 <span className='font-mono text-sm font-semibold'>{discount.code}</span>
-                                <span className='text-xs opacity-70'>{discountText(discount)}</span>
+                                <span className='text-xs text-[var(--text-3)]'>{discountText(discount)}</span>
                             </div>
                             <button
                                 type='button'
@@ -275,10 +274,7 @@ export function BillingAdmin() {
                         </li>
                     ))}
                 </ul>
-                <form
-                    onSubmit={createDiscount}
-                    className='flex flex-col gap-3 border-t border-black/10 pt-4 dark:border-white/10'
-                >
+                <form onSubmit={createDiscount} className='flex flex-col gap-3 border-t border-[var(--border)] pt-4'>
                     <h2 className='text-base font-semibold'>{t('newCode')}</h2>
                     <div className='flex flex-wrap gap-2.5'>
                         <input
@@ -347,17 +343,12 @@ export function BillingAdmin() {
                             aria-label={t('maxRedemptions')}
                             className={INPUT + ' w-48'}
                         />
-                        <input
-                            name='expires'
-                            type='date'
-                            aria-label={t('expires')}
-                            className={INPUT + ' w-44 dark:[color-scheme:dark]'}
-                        />
+                        <input name='expires' type='date' aria-label={t('expires')} className={INPUT + ' w-44'} />
                         <button type='submit' disabled={busy} className={BUTTON}>
                             {t('createCode')}
                         </button>
                     </div>
-                    <p className='text-xs opacity-70'>{t('freeHint')}</p>
+                    <p className='text-xs text-[var(--text-3)]'>{t('freeHint')}</p>
                 </form>
             </section>
         </>

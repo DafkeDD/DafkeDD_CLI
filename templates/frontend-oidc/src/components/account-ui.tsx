@@ -1,39 +1,51 @@
 import { type InputHTMLAttributes, type ReactNode, useId } from 'react'
 
 /**
- * Small building blocks for the account pages (login, registration, password, invitation, members, platform). Plain
- * Tailwind with the colour variables of the theme, so they work with and without the DafkeDD UI components.
+ * Small building blocks for the account pages (login, registration, password, invitation, members, platform), in the
+ * Pasport design: the classes of the DafkeDD UI components (src/components/ui) and the colours of its tokens.
  */
-export const CARD =
-    'flex w-full max-w-sm flex-col gap-5 rounded-2xl border border-black/10 bg-black/[.03] p-6 text-left dark:border-white/15 dark:bg-white/[.04]'
-export const WIDE_CARD =
-    'flex w-full max-w-3xl flex-col gap-5 rounded-2xl border border-black/10 bg-black/[.03] p-6 text-left dark:border-white/15 dark:bg-white/[.04]'
-export const INPUT =
-    'h-11 w-full rounded-xl border border-black/15 bg-transparent px-3.5 text-sm outline-none focus:border-[var(--accent,#6366f1)] dark:border-white/20'
-export const BUTTON =
-    'inline-flex h-11 items-center justify-center rounded-xl bg-[var(--accent,#171717)] px-5 text-sm font-semibold text-[var(--accent-fg,#ffffff)] disabled:opacity-60 dark:bg-[var(--accent,#ededed)] dark:text-[var(--accent-fg,#0a0a0a)]'
-export const SECONDARY =
-    'inline-flex h-9 items-center justify-center rounded-lg border border-black/15 px-3 text-xs font-semibold hover:border-[var(--accent,#6366f1)] disabled:opacity-60 dark:border-white/20'
+/** A form or step on the login screen (AuthPage): the screen itself is the card. */
+export const AUTH = 'flex w-full flex-col gap-4 text-left'
+/** The title and the sentence under it on the login screen. */
+export const AUTH_TITLE = 'lui-auth-title'
+export const AUTH_TEXT = 'text-sm leading-relaxed text-[var(--text-2)]'
+/** A card on a page in the shell (AppPage). */
+export const CARD = 'lui-card flex w-full flex-col gap-5 p-6 text-left'
+export const WIDE_CARD = CARD
+/** The look of the DafkeDD UI Input, as utilities: a page can still set the width (w-40) or the height. */
+const FIELD =
+    'rounded-[var(--r-sm)] border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--text-3)] hover:border-[var(--text-3)] focus:border-[var(--accent)] focus:shadow-[var(--ring)] disabled:bg-[var(--surface-3)]'
+export const INPUT = 'h-[42px] w-full px-[13px] text-sm ' + FIELD
+export const SELECT = 'h-[42px] px-3 text-sm ' + FIELD
+export const SMALL_SELECT = 'h-[34px] px-2.5 text-[13px] ' + FIELD
+export const TEXTAREA = 'min-h-20 w-full px-[13px] py-2.5 font-mono text-xs ' + FIELD
+export const BUTTON = 'lui-btn lui-btn-primary'
+export const SECONDARY = 'lui-btn lui-btn-secondary lui-btn-sm'
 /** A second choice next to BUTTON, as big (for example "Log in with eID"). */
-export const OUTLINE =
-    'inline-flex h-11 items-center justify-center rounded-xl border border-black/15 px-5 text-sm font-semibold hover:border-[var(--accent,#6366f1)] disabled:opacity-60 dark:border-white/20'
-export const LINK = 'font-semibold underline underline-offset-2'
-
-export function Page({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
-    return (
-        <main
-            className={`flex flex-1 flex-col items-center px-6 pt-10 pb-28 ${wide ? 'justify-start' : 'justify-center'}`}
-        >
-            {children}
-        </main>
-    )
-}
+export const OUTLINE = 'lui-btn lui-btn-secondary'
+/** A destructive action next to SECONDARY (remove, revoke). */
+export const DANGER = 'lui-btn lui-btn-danger-soft lui-btn-sm'
+/** A choice in a row of SECONDARY buttons that is on (aria-pressed or the current filter). */
+export const TOGGLE =
+    SECONDARY +
+    ' aria-pressed:border-[var(--accent-border)]! aria-pressed:bg-[var(--accent-tint)]! aria-pressed:text-[var(--accent-active)]!'
+export const LINK = 'cursor-pointer font-semibold text-[var(--accent-hover)] underline-offset-2 hover:underline'
 
 export function Heading({ title, text }: { title: string; text?: ReactNode }) {
     return (
         <div className='flex flex-col gap-1.5'>
-            <h1 className='text-2xl font-bold tracking-tight'>{title}</h1>
-            {text && <p className='text-sm opacity-80'>{text}</p>}
+            <h1 className='text-xl font-semibold tracking-tight'>{title}</h1>
+            {text && <p className='text-sm text-[var(--text-2)]'>{text}</p>}
+        </div>
+    )
+}
+
+/** The title of a step on the login screen (AuthPage), with the sentence under it. */
+export function AuthHeading({ title, text }: { title: string; text?: ReactNode }) {
+    return (
+        <div className='flex flex-col gap-1.5'>
+            <h1 className={AUTH_TITLE}>{title}</h1>
+            {text && <p className={AUTH_TEXT}>{text}</p>}
         </div>
     )
 }
@@ -46,11 +58,13 @@ export function Field({
     const id = useId()
     // The hint is not part of the label, but described by it (screen readers read it after the label)
     return (
-        <div className='flex flex-col gap-1.5 text-sm font-medium'>
-            <label htmlFor={id}>{label}</label>
+        <div className='lui-field'>
+            <label htmlFor={id} className='text-sm font-semibold'>
+                {label}
+            </label>
             <input id={id} className={INPUT} aria-describedby={hint ? id + '-hint' : undefined} {...input} />
             {hint && (
-                <span id={id + '-hint'} className='text-xs font-normal opacity-70'>
+                <span id={id + '-hint'} className='lui-field-hint'>
                     {hint}
                 </span>
             )}
@@ -61,11 +75,11 @@ export function Field({
 /** An error or success message. A div, not a p: the DafkeDD UI theme gives every p its own colour. */
 export function Notice({ tone, children }: { tone: 'error' | 'success'; children: ReactNode }) {
     return tone === 'error' ? (
-        <div role='alert' className='text-sm whitespace-pre-line text-red-600 dark:text-red-400'>
+        <div role='alert' className='text-sm whitespace-pre-line text-[var(--red)]'>
             {children}
         </div>
     ) : (
-        <div role='status' className='text-sm text-green-700 dark:text-green-400'>
+        <div role='status' className='text-sm text-[var(--green)]'>
             {children}
         </div>
     )

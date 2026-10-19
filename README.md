@@ -35,6 +35,9 @@ The CLI asks whether to install [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_
   simple Tailwind version.
 - **No**: nothing.
 
+With the OpenID Connect login (the login server, or a frontend linked to one) DafkeDD UI is **always** installed with
+all components, whatever the answer: the Pasport design (shell and login screen) is built with it.
+
 The components end up in `frontend/src/components/ui` (`dafke-ui.json` and `dafke-ui.lock.json` live in `frontend`) and
 `ui.css` is loaded from `src/app/globals.css`. The UI repository (branch `developer`) is cloned temporarily with
 `git clone` and removed again; nothing is installed globally (no `npm link`). Git is therefore required.
@@ -324,6 +327,12 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   that a superadmin makes on `/admin` → Apps → "Koppelcode". It adds the addresses of the new frontend to that app and
   writes `.env.local`: the new frontend logs in there with single sign-on, is logged out with back-channel logout, and
   links to the account pages of that server. No backend of its own is installed.
+- **One design everywhere (Pasport)**: the frontend of the login server and every linked frontend get the same login
+  screen (the teal panel with the eID card, "Log in to <app>", eID and passkey first, then email and password) and the
+  same shell: a sidebar with the app's own pages (`src/lib/nav.ts`), "My account", the organisation (its admins) and the
+  platform (superadmins), and a topbar with language, light or dark and the user menu. A linked app has no login or
+  registration form: `/login` goes straight to the login screen of the server, where users register. Pages use
+  `<AppPage>` or `<AuthPage>` (`src/components/shell`); see "Design (Pasport)" in `docs/frontend.md`.
 
 The TypeScript files of this feature live as real files in `templates/backend-oidc` and `templates/frontend-oidc` (see
 Development).
@@ -469,6 +478,16 @@ git switch developer
 
 ## Changelog
 
+- **0.34.0**: one design everywhere (Pasport, built with DafkeDD UI). The frontend of the login server and every linked
+  frontend get the same login screen and shell: `src/components/shell` (`AppPage`: sidebar, topbar with language, light
+  or dark and the user menu; `AuthPage`: the login screen with the teal panel; `StartLogin`), `src/lib/nav.ts`
+  (`APP_NAV`, the app's own pages) and `src/lib/brand.ts` (`BRAND`, `APP_NAME` of a linked app). The login screen says
+  which app asks ("Log in to Planner") and shows eID, passkey and the other server first. With the OIDC login DafkeDD UI
+  is always installed (all components); ESLint skips `src/components/ui` like Prettier; Hanken Grotesk and JetBrains
+  Mono with `next/font`. A linked frontend's `/login` starts the login at once (registering only on the login server).
+  Every colour comes from the DafkeDD UI tokens (light and dark); `header-nav.tsx` and the theme dropdown are gone (the
+  shell replaces them). New texts: the `Shell` and `Nav` namespaces and `Oidc.loginTitleApp`, `orEmail`, `eidHint`,
+  `passkeyHint` (en, nl, fr, de).
 - **0.33.0**: link a new frontend to an existing DafkeDD login server with a link code. New backend choice "Bestaande
   DafkeDD OIDC-server (koppelcode)" (no backend folder): asks the address of the API, the port of the new frontend and
   the code, and calls `POST /oidc/link`, which uses the code once, adds the addresses of the new frontend to the app and

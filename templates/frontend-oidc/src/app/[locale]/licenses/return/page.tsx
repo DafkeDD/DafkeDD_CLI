@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { setRequestLocale } from 'next-intl/server'
-import { Page } from '@/components/account-ui'
+import { AppPage } from '@/components/shell/app-shell'
 import { LicenseReturn } from '@/components/licenses'
 import { getSession } from '@/lib/session'
 
@@ -19,11 +19,11 @@ export default async function LicenseReturnPage({
 }) {
     setRequestLocale((await params).locale)
     return (
-        <Page wide>
+        <AppPage wide>
             <Suspense fallback={null}>
                 <Content searchParams={searchParams} />
             </Suspense>
-        </Page>
+        </AppPage>
     )
 }
 

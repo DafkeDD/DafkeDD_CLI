@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
-import { CARD, Heading, Notice, SECONDARY, WIDE_CARD } from '@/components/account-ui'
+import { CARD, Heading, Notice, SECONDARY, SMALL_SELECT, WIDE_CARD } from '@/components/account-ui'
 import { describeBrowser } from '@/components/security'
 import { type Answer, useBackend } from '@/lib/account'
 
@@ -24,8 +24,7 @@ type Tenant = { id: string; name: string }
 /** The kinds of events (the first part of an action, as the API names them). */
 export const AUDIT_CATEGORIES = ['login', 'account', 'members', 'platform', 'licences'] as const
 
-const SELECT =
-    'h-9 rounded-lg border border-black/15 bg-transparent px-2.5 text-xs font-semibold outline-none focus:border-[var(--accent,#6366f1)] dark:border-white/20 dark:[color-scheme:dark]'
+const SELECT = SMALL_SELECT
 
 /** Where each log comes from: the organisation (admins), the whole platform (superadmins) or the own account. */
 const PATHS = { tenant: 'tenants/current/audit', platform: 'admin/audit', me: 'me/audit' } as const
@@ -130,11 +129,11 @@ export function AuditLog({ scope }: { scope: keyof typeof PATHS }) {
             )}
             {error && <Notice tone='error'>{error}</Notice>}
             {!events ? (
-                <p className='text-sm opacity-70'>{t('loading')}</p>
+                <p className='text-sm text-[var(--text-3)]'>{t('loading')}</p>
             ) : events.length === 0 ? (
-                <p className='text-sm opacity-70'>{t('empty')}</p>
+                <p className='text-sm text-[var(--text-3)]'>{t('empty')}</p>
             ) : (
-                <ol className='flex flex-col divide-y divide-black/10 dark:divide-white/10'>
+                <ol className='flex flex-col divide-y divide-[var(--border)]'>
                     {events.map(event => (
                         <AuditRow key={event.id} event={event} showTenant={scope !== 'tenant'} />
                     ))}
@@ -190,19 +189,19 @@ function AuditRow({ event, showTenant }: { event: AuditEvent; showTenant: boolea
         <li className='flex flex-col gap-0.5 py-3 text-sm'>
             <div className='flex flex-wrap items-baseline justify-between gap-x-3'>
                 <span className='font-semibold'>{what}</span>
-                <time dateTime={event.createdAt} className='text-xs opacity-70'>
+                <time dateTime={event.createdAt} className='text-xs text-[var(--text-3)]'>
                     {format.dateTime(new Date(event.createdAt), { dateStyle: 'medium', timeStyle: 'short' })}
                 </time>
             </div>
-            <span className='text-xs opacity-80'>
+            <span className='text-xs text-[var(--text-2)]'>
                 {t('by', { who })}
                 {event.target?.label && event.target.id !== event.actor?.id && (
                     <> · {t('about', { whom: event.target.label })}</>
                 )}
                 {showTenant && <> · {event.tenant ? (event.tenant.name ?? event.tenant.id) : t('noOrganisation')}</>}
             </span>
-            {details.length > 0 && <span className='text-xs opacity-70'>{details.join(' · ')}</span>}
-            {where && <span className='text-xs opacity-60'>{where}</span>}
+            {details.length > 0 && <span className='text-xs text-[var(--text-3)]'>{details.join(' · ')}</span>}
+            {where && <span className='text-xs text-[var(--text-3)]'>{where}</span>}
         </li>
     )
 }
