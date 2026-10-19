@@ -15,8 +15,22 @@ import {
  */
 export const OIDC_ISSUER = (process.env.OIDC_ISSUER ?? 'http://localhost:__API_PORT__/oidc').replace(/\/+$/, '')
 export const OIDC_CLIENT_ID = process.env.OIDC_CLIENT_ID ?? 'frontend'
+/**
+ * Only for a confidential client (an app made on /admin of the login server as "confidential"): sent with
+ * client_secret_post. Empty for a public client (PKCE only), like the frontend of the login server itself.
+ */
+const OIDC_CLIENT_SECRET = process.env.OIDC_CLIENT_SECRET ?? ''
+const clientAuth = (): Record<string, string> =>
+    OIDC_CLIENT_SECRET
+        ? { client_id: OIDC_CLIENT_ID, client_secret: OIDC_CLIENT_SECRET }
+        : { client_id: OIDC_CLIENT_ID }
 export const APP_URL = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/+$/, '')
 export const REDIRECT_URI = APP_URL + '/api/auth/callback'
+/**
+ * The frontend of the login server, for the account pages (security, management, platform): the same app here, or the
+ * frontend of the login server when this app is linked to it (OIDC_ACCOUNT_URL).
+ */
+export const ACCOUNT_URL = (process.env.OIDC_ACCOUNT_URL ?? '').replace(/\/+$/, '')
 
 export const SESSION_COOKIE = 'app_session'
 export const FLOW_COOKIE = 'app_oidc'
@@ -292,7 +306,7 @@ export async function exchangeCode(code: string, verifier: string) {
             grant_type: 'authorization_code',
             code,
             redirect_uri: REDIRECT_URI,
-            client_id: OIDC_CLIENT_ID,
+            ...clientAuth(),
             code_verifier: verifier
         }),
         cache: 'no-store'
@@ -317,7 +331,7 @@ export async function refreshTokens(refreshToken: string): Promise<TokenSet | nu
         body: new URLSearchParams({
             grant_type: 'refresh_token',
             refresh_token: refreshToken,
-            client_id: OIDC_CLIENT_ID
+            ...clientAuth()
         }),
         cache: 'no-store'
     })
@@ -331,7 +345,7 @@ export async function revokeRefreshToken(refreshToken: string): Promise<void> {
     await fetch((await discovery()).revocation_endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ token: refreshToken, token_type_hint: 'refresh_token', client_id: OIDC_CLIENT_ID }),
+        body: new URLSearchParams({ token: refreshToken, token_type_hint: 'refresh_token', ...clientAuth() }),
         cache: 'no-store'
     }).catch(() => undefined)
 }

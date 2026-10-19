@@ -672,7 +672,7 @@ export const API_MESSAGES = {
  * for the example page.
  */
 export const apiFiles = api => ({
-    'src/lib/api.ts': `export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:${api.port}';
+    'src/lib/api.ts': `export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '${api.url ?? `http://localhost:${api.port}`}';
 
 export class ApiError extends Error {
   constructor(
@@ -828,7 +828,7 @@ export function withApi(fileMap, api, { ui }) {
         ...fileMap,
         ...apiFiles(api),
         ...(api.auth ? authFiles() : {}),
-        ...(api.oidc ? oidcFrontendFiles({ apiPort: api.port }) : {})
+        ...(api.oidc ? oidcFrontendFiles({ apiPort: api.port, linked: Boolean(api.linked) }) : {})
     }
     for (const locale of LOCALES) {
         result[`messages/${locale}.json`] =
@@ -854,6 +854,22 @@ export function withApi(fileMap, api, { ui }) {
     const importAfter = ui
         ? "import { Badge, Button } from '@/components/ui';\n"
         : "import { setRequestLocale } from 'next-intl/server';\n"
+    if (api.linked) {
+        // Linked to an existing login server: no status card of an API of this project, the login links instead
+        let linked = replaceOnce(
+            result[page],
+            importAfter,
+            importAfter + "import { SessionLinks } from '@/components/session-links';\n"
+        )
+        linked = replaceOnce(linked, "import { use } from 'react';\n", "import { Suspense, use } from 'react';\n")
+        result[page] = replaceOnce(
+            linked,
+            '    </main>\n',
+            '      <Suspense fallback={null}>\n        <SessionLinks />\n      </Suspense>\n    </main>\n'
+        )
+        result['src/app/[locale]/layout.tsx'] = withHeaderNav(result['src/app/[locale]/layout.tsx'], { ui })
+        return result
+    }
     let content = replaceOnce(
         result[page],
         importAfter,
@@ -913,6 +929,17 @@ function withHeaderNav(layout, { ui }) {
               '          <header className="flex justify-end gap-2 p-4">\n',
               '          <header className="flex justify-end gap-2 p-4">\n            <Suspense fallback={null}>\n              <HeaderNav />\n            </Suspense>\n'
           )
+}
+
+/** next dev and next start on another port (package.json scripts). */
+export async function setPort(root, port) {
+    const file = path.join(root, 'package.json')
+    const pkg = JSON.parse(await fs.readFile(file, 'utf8'))
+    pkg.scripts = { ...pkg.scripts }
+    for (const name of ['dev', 'start'])
+        if (typeof pkg.scripts[name] === 'string' && !/ -p \d+/.test(pkg.scripts[name]))
+            pkg.scripts[name] = `${pkg.scripts[name]} -p ${port}`
+    await fs.writeFile(file, JSON.stringify(pkg, null, 2) + '\n')
 }
 
 // next.config.ts van create-next-app bevat o.a. de Tailwind-koppeling: nooit overschrijven, enkel next-intl toevoegen.
@@ -1046,7 +1073,7 @@ export const nextjs = {
                 run: () => exec('npm', ['install', 'react-icons@latest'], { cwd: root })
             },
             // Login with the Belgian eID: the React hooks of DafkeDD eID (from its release on GitHub)
-            ...(api?.oidc
+            ...(api?.oidc && !api.linked
                 ? [
                       {
                           title: 'DafkeDD eID installeren',
@@ -1085,7 +1112,10 @@ export const nextjs = {
                         frontendReadme({ ui: answers?.ui ?? 'none', api, locales: LOCALES, apiPort: api?.port })
                     )
                     // Login through the OIDC server: where it is, and the secret of the session cookie (never committed)
-                    if (api?.oidc) await write(root, '.env.local', envLocal({ apiPort: api.port }))
+                    if (api?.oidc)
+                        await write(root, '.env.local', envLocal({ apiPort: api.port, linked: api.linked ?? null }))
+                    // Linked next to the login server on this computer: its own port (3000 is that server's frontend)
+                    if (api?.linked) await setPort(root, api.linked.port)
                     await patchNextConfig(root)
                     if (withUi) await write(root, 'src/app/globals.css', UI_GLOBALS_CSS)
                     else await patchGlobalsCss(root)
@@ -1156,7 +1186,7 @@ export const nextjs = {
                     const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'))
                     pkg.scripts = { ...pkg.scripts, format: 'prettier --write .', 'format:check': 'prettier --check .' }
                     // A virtual card reader with a test eID (PIN 1234) that may log in on this frontend
-                    if (api?.oidc) pkg.scripts['eid:mock'] = EID_MOCK_SCRIPT
+                    if (api?.oidc && !api.linked) pkg.scripts['eid:mock'] = EID_MOCK_SCRIPT
                     await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
 
                     await exec('npx', ['--no-install', 'prettier', '--write', '.'], { cwd: root })

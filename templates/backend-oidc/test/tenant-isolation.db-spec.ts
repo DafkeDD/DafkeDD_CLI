@@ -1092,6 +1092,68 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         expect(await store.deleteClient('made.here')).toBe(false)
     })
 
+    it('link codes work once (also at the same moment), only for an enabled app made on /admin, and add addresses', async () => {
+        const store = new PgOidcStore(database)
+        const owner = (await store.createUser({
+            email: 'links@example.com',
+            name: 'Links',
+            passwordHash: 'x',
+            emailVerified: true,
+            locale: null
+        }))!
+        await store.createClient(
+            {
+                clientId: 'link.me',
+                name: 'Link me',
+                type: 'public',
+                secretHash: null,
+                redirectUris: ['https://link.example.com/cb'],
+                postLogoutRedirectUris: [],
+                grantTypes: ['authorization_code'],
+                scopes: ['openid'],
+                firstParty: true,
+                backchannelLogoutUri: null
+            },
+            owner.id
+        )
+        const soon = new Date(Date.now() + 60_000)
+        await store.createLinkCode('old-' + randomUUID(), 'link.me', owner.id, soon)
+        const hash = 'code-' + randomUUID()
+        await store.createLinkCode(hash, 'link.me', owner.id, soon)
+        const answers = await Promise.all([store.useLinkCode(hash), store.useLinkCode(hash)])
+        expect(answers.filter(Boolean)).toEqual(['link.me'])
+        // Expired, and a disabled app
+        const expired = 'expired-' + randomUUID()
+        await store.createLinkCode(expired, 'link.me', owner.id, new Date(Date.now() - 1000))
+        expect(await store.useLinkCode(expired)).toBeNull()
+        const later = 'later-' + randomUUID()
+        await store.createLinkCode(later, 'link.me', owner.id, soon)
+        await store.setClientDisabled('link.me', true)
+        expect(await store.useLinkCode(later)).toBeNull()
+        await store.setClientDisabled('link.me', false)
+
+        expect(
+            await store.addClientUris('link.me', {
+                redirectUris: ['http://localhost:3001/api/auth/callback', 'https://link.example.com/cb'],
+                postLogoutRedirectUris: ['http://localhost:3001'],
+                backchannelLogoutUri: 'http://localhost:3001/api/auth/backchannel-logout'
+            })
+        ).toBe(true)
+        const client = await store.findClient('link.me')
+        expect([...client!.redirectUris].sort()).toEqual(
+            ['http://localhost:3001/api/auth/callback', 'https://link.example.com/cb'].sort()
+        )
+        expect(client!.backchannelLogoutUri).toBe('http://localhost:3001/api/auth/backchannel-logout')
+        // A file client never gets addresses this way
+        expect(
+            await store.addClientUris('from.file', {
+                redirectUris: ['http://localhost:9/cb'],
+                postLogoutRedirectUris: [],
+                backchannelLogoutUri: null
+            })
+        ).toBe(false)
+    })
+
     it('the tenant role exists and owns nothing', async () => {
         const { rows } = await database.query<{ owned: number }>(
             `SELECT count(*)::int AS owned FROM pg_class c JOIN pg_roles r ON r.oid = c.relowner WHERE r.rolname = $1`,

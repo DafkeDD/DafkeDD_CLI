@@ -338,6 +338,7 @@ export const MESSAGES = {
             'An account with this email address exists already. Log in with it, or ask an admin to link it.',
         EXTERNAL_OTHER_LINKED: 'This account is linked to another account of the other server already.',
         PASSWORD_LOGIN_OFF: 'Logging in with a password is turned off: use the button below.',
+        LINK_CODE_INVALID: 'This link code is unknown, used already or expired: make a new one on /admin.',
         CLIENT_INVALID_URI: 'The address {uri} is not valid: use https (http only on localhost) and no #fragment.',
         CLIENT_NO_REDIRECT: 'An app needs at least one redirect URI.',
         CLIENT_EXISTS: 'An app with this client id exists already.',
@@ -441,6 +442,7 @@ export const MESSAGES = {
             'Er bestaat al een account met dit e-mailadres. Log daarmee in, of vraag een beheerder om het te koppelen.',
         EXTERNAL_OTHER_LINKED: 'Dit account is al gekoppeld aan een ander account van de andere server.',
         PASSWORD_LOGIN_OFF: 'Inloggen met een wachtwoord staat uit: gebruik de knop hieronder.',
+        LINK_CODE_INVALID: 'Deze koppelcode is onbekend, al gebruikt of verlopen: maak een nieuwe op /admin.',
         CLIENT_INVALID_URI:
             'Het adres {uri} is niet geldig: gebruik https (http alleen op localhost) en geen #fragment.',
         CLIENT_NO_REDIRECT: 'Een app heeft minstens één redirect-URI nodig.',
@@ -546,6 +548,7 @@ export const MESSAGES = {
             'Un compte avec cette adresse e-mail existe déjà. Connectez-vous avec celui-ci, ou demandez à un administrateur de le lier.',
         EXTERNAL_OTHER_LINKED: "Ce compte est déjà lié à un autre compte de l'autre serveur.",
         PASSWORD_LOGIN_OFF: 'La connexion par mot de passe est désactivée : utilisez le bouton ci-dessous.',
+        LINK_CODE_INVALID: 'Ce code de liaison est inconnu, déjà utilisé ou expiré : créez-en un nouveau sur /admin.',
         CLIENT_INVALID_URI:
             "L'adresse {uri} n'est pas valable : utilisez https (http seulement sur localhost) et pas de #fragment.",
         CLIENT_NO_REDIRECT: "Une application a besoin d'au moins une URI de redirection.",
@@ -658,6 +661,8 @@ export const MESSAGES = {
             'Es gibt bereits ein Konto mit dieser E-Mail-Adresse. Melde dich damit an oder bitte einen Admin, es zu verknüpfen.',
         EXTERNAL_OTHER_LINKED: 'Dieses Konto ist bereits mit einem anderen Konto des anderen Servers verknüpft.',
         PASSWORD_LOGIN_OFF: 'Die Anmeldung mit Passwort ist ausgeschaltet: nutze die Schaltfläche unten.',
+        LINK_CODE_INVALID:
+            'Dieser Verknüpfungscode ist unbekannt, schon benutzt oder abgelaufen: erstelle einen neuen auf /admin.',
         CLIENT_INVALID_URI:
             'Die Adresse {uri} ist ungültig: verwende https (http nur auf localhost) und kein #Fragment.',
         CLIENT_NO_REDIRECT: 'Eine App braucht mindestens eine Redirect-URI.',
@@ -1986,6 +1991,67 @@ export const endpoints = ({ port = 4000 } = {}) => [
             ...ACCESS('superadmin'),
             [404, 'oidc.CLIENT_NOT_FOUND'],
             [409, 'oidc.CLIENT_FROM_FILE']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/admin/clients/:clientId/link-code',
+        tag: 'apps (superadmin)',
+        summary:
+            'A one-time link code (15 minutes) for an app made on /admin. In the CLI, the backend "Existing DafkeDD OIDC server (link code)" links a new frontend to this app with it (POST /oidc/link). An earlier unused code of the app stops.',
+        pathExample: '/admin/clients/partner.planner/link-code',
+        bearer: true,
+        response: {
+            status: 200,
+            example: {
+                code: 'K7QM-2XPD-9HRT',
+                expiresAt: '2026-10-19T15:45:00.000Z',
+                issuer: `http://localhost:${port}/oidc`
+            }
+        },
+        errors: [...ACCESS('superadmin'), [404, 'oidc.CLIENT_NOT_FOUND'], [409, 'oidc.CLIENT_FROM_FILE']]
+    },
+    {
+        method: 'POST',
+        path: '/oidc/link',
+        tag: 'apps (superadmin)',
+        summary:
+            'Used by the CLI, without login (the code is the permission): uses a link code once and answers the settings of the app, with the addresses of the new project added (redirect URIs, after logout; the back-channel URI only when the app has none). A confidential app gets a new secret here, in this answer only (the old one stops). Rate limited per IP address.',
+        body: {
+            example: {
+                code: 'K7QM-2XPD-9HRT',
+                redirectUris: ['http://localhost:3001/api/auth/callback'],
+                postLogoutRedirectUris: ['http://localhost:3001'],
+                backchannelLogoutUri: 'http://localhost:3001/api/auth/backchannel-logout'
+            },
+            fields: [
+                ['code', 'string', 'required, the link code of /admin (case and dashes do not matter)'],
+                ['redirectUris', 'string[]', 'optional, added to the app (https; http only on localhost)'],
+                ['postLogoutRedirectUris', 'string[]', 'optional, added to the app'],
+                ['backchannelLogoutUri', 'string', 'optional, only when the app has none yet']
+            ]
+        },
+        response: {
+            status: 200,
+            example: {
+                issuer: `http://localhost:${port}/oidc`,
+                apiUrl: `http://localhost:${port}`,
+                accountUrl: APP_URL,
+                client: {
+                    clientId: 'partner.planner',
+                    name: 'Partner Planner',
+                    type: 'public',
+                    scopes: ['openid', 'profile', 'email', 'tenant'],
+                    firstParty: true,
+                    refreshTokens: true
+                },
+                clientSecret: null
+            }
+        },
+        errors: [
+            [400, 'oidc.LINK_CODE_INVALID'],
+            [400, 'oidc.CLIENT_INVALID_URI'],
+            [429, 'oidc.TOO_MANY_ATTEMPTS']
         ]
     },
     {

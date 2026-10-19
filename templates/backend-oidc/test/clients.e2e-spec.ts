@@ -294,4 +294,81 @@ describe('Apps on /admin (e2e)', () => {
             details: { client: 'partner.planner', name: 'Planner' }
         })
     })
+    it('a link code links a new project once: its addresses are added, a confidential app gets a new secret', async () => {
+        const made = await create({ clientId: 'linked.app', name: 'Linked', firstParty: true }).expect(201)
+        expect(made.body.client.redirectUris).toEqual(APP.redirectUris)
+        await http().post('/admin/clients/linked.app/link-code').set(bearer(tokens.alice)).expect(403)
+        await http().post('/admin/clients/frontend/link-code').set(bearer(tokens.root)).expect(409)
+        const first = await http().post('/admin/clients/linked.app/link-code').set(bearer(tokens.root)).expect(200)
+        expect(first.body.code).toMatch(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
+        expect(first.body.issuer).toMatch(/\/oidc$/)
+        // A new code: the earlier one stops
+        const second = await http().post('/admin/clients/linked.app/link-code').set(bearer(tokens.root)).expect(200)
+        const project = {
+            redirectUris: ['http://localhost:3001/api/auth/callback'],
+            postLogoutRedirectUris: ['http://localhost:3001'],
+            backchannelLogoutUri: 'http://localhost:3001/api/auth/backchannel-logout'
+        }
+        const stale = await http()
+            .post('/oidc/link')
+            .send({ code: first.body.code, ...project })
+            .expect(400)
+        expect(stale.body.error).toBe('oidc.LINK_CODE_INVALID')
+        // Case and dashes do not matter
+        const typed = (second.body.code as string).toLowerCase().replaceAll('-', ' ')
+        const linked = await http()
+            .post('/oidc/link')
+            .send({ code: typed, ...project })
+            .expect(200)
+        expect(linked.body).toMatchObject({
+            issuer: first.body.issuer,
+            apiUrl: (first.body.issuer as string).replace(/\/oidc$/, ''),
+            accountUrl: 'http://localhost:3000',
+            client: { clientId: 'linked.app', name: 'Linked', type: 'public', firstParty: true, refreshTokens: true },
+            clientSecret: null
+        })
+        const app = (await http().get('/admin/clients').set(bearer(tokens.root))).body.find(
+            (item: { clientId: string }) => item.clientId === 'linked.app'
+        )
+        expect(app.redirectUris).toEqual([...APP.redirectUris, 'http://localhost:3001/api/auth/callback'])
+        expect(app.postLogoutRedirectUris).toContain('http://localhost:3001')
+        // The app had a back-channel URI already: kept
+        expect(app.backchannelLogoutUri).toBe(APP.backchannelLogoutUri)
+        // Once
+        await http()
+            .post('/oidc/link')
+            .send({ code: second.body.code, ...project })
+            .expect(400)
+        // The new project logs in at once with its own redirect URI
+        await login('alice@example.com', { id: 'linked.app', redirect: 'http://localhost:3001/api/auth/callback' })
+        expect(audit.events.findLast(event => event.action === 'platform.client_linked')).toMatchObject({
+            details: { client: 'linked.app', redirectUri: 'http://localhost:3001/api/auth/callback' }
+        })
+
+        // A confidential app: a new secret in the answer, the old one stops
+        const server = await create({ clientId: 'linked.server', type: 'confidential', firstParty: true }).expect(201)
+        const code = (await http().post('/admin/clients/linked.server/link-code').set(bearer(tokens.root))).body.code
+        const answer = await http().post('/oidc/link').send({ code }).expect(200)
+        expect(answer.body.clientSecret).toMatch(/^[A-Za-z0-9_-]{43}$/)
+        expect(answer.body.clientSecret).not.toBe(server.body.secret)
+        await login(
+            'alice@example.com',
+            { id: 'linked.server', redirect: APP.redirectUris[0]! },
+            {},
+            answer.body.clientSecret
+        )
+
+        // Wrong addresses, unknown codes and a disabled app
+        const wrong = (await http().post('/admin/clients/linked.app/link-code').set(bearer(tokens.root))).body.code
+        const refused = await http()
+            .post('/oidc/link')
+            .send({ code: wrong, redirectUris: ['http://evil.example.com/cb'] })
+            .expect(400)
+        expect(refused.body.error).toBe('oidc.CLIENT_INVALID_URI')
+        await http().post('/oidc/link').send({ code: 'AAAA-BBBB-CCCC' }).expect(400)
+        await http().post('/oidc/link').send({}).expect(400)
+        const off = (await http().post('/admin/clients/linked.app/link-code').set(bearer(tokens.root))).body.code
+        await http().patch('/admin/clients/linked.app').set(bearer(tokens.root)).send({ enabled: false }).expect(200)
+        await http().post('/oidc/link').send({ code: off }).expect(400)
+    })
 })

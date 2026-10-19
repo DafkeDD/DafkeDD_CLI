@@ -7,6 +7,7 @@ import { AccountController } from './account.controller.js'
 import { AccountService } from './account.service.js'
 import { BackchannelService } from './backchannel.service.js'
 import { ClientsController } from './clients/clients.controller.js'
+import { LinkController } from './clients/link.controller.js'
 import { ClientsService } from './clients/clients.service.js'
 import { ConsentsController } from './consents.controller.js'
 import { EidController } from './eid.controller.js'
@@ -39,6 +40,7 @@ import { WellKnownController } from './well-known.controller.js'
         PasskeysController,
         ConsentsController,
         ClientsController,
+        LinkController,
         WellKnownController
     ],
     providers: [

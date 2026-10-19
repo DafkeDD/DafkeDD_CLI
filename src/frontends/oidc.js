@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url'
 import { randomBytes } from 'node:crypto'
 
 export const TEMPLATE_DIR = fileURLToPath(new URL('../../templates/frontend-oidc/', import.meta.url))
+/** The pages that differ for a frontend linked to an existing login server (links to its account pages). */
+export const LINKED_TEMPLATE_DIR = fileURLToPath(new URL('../../templates/frontend-oidc-linked/', import.meta.url))
 
 /** Texts (namespace "Oidc"). Every language needs the same keys (checked by the tests). */
 export const OIDC_MESSAGES = {
@@ -1032,6 +1034,8 @@ export const AUDIT_MESSAGES = {
             platform_client_disabled: 'App disabled',
             platform_client_enabled: 'App enabled',
             platform_client_deleted: 'App removed',
+            platform_client_link_code: 'Link code made for an app',
+            platform_client_linked: 'Project linked to an app',
             licences_product_created: 'Product created',
             licences_product_changed: 'Product changed',
             licences_discount_created: 'Discount code created',
@@ -1082,7 +1086,8 @@ export const AUDIT_MESSAGES = {
             synced: 'Synced',
             scopes: 'Data',
             type: 'Kind',
-            firstParty: 'Own app'
+            firstParty: 'Own app',
+            redirectUri: 'Address'
         },
         methods: {
             password: 'password',
@@ -1177,6 +1182,8 @@ export const AUDIT_MESSAGES = {
             platform_client_disabled: 'App uitgeschakeld',
             platform_client_enabled: 'App ingeschakeld',
             platform_client_deleted: 'App verwijderd',
+            platform_client_link_code: 'Koppelcode gemaakt voor een app',
+            platform_client_linked: 'Project gekoppeld aan een app',
             licences_product_created: 'Product aangemaakt',
             licences_product_changed: 'Product gewijzigd',
             licences_discount_created: 'Kortingscode aangemaakt',
@@ -1227,7 +1234,8 @@ export const AUDIT_MESSAGES = {
             synced: 'Gesynchroniseerd',
             scopes: 'Gegevens',
             type: 'Soort',
-            firstParty: 'Eigen app'
+            firstParty: 'Eigen app',
+            redirectUri: 'Adres'
         },
         methods: {
             password: 'wachtwoord',
@@ -1322,6 +1330,8 @@ export const AUDIT_MESSAGES = {
             platform_client_disabled: 'Application désactivée',
             platform_client_enabled: 'Application activée',
             platform_client_deleted: 'Application supprimée',
+            platform_client_link_code: 'Code de liaison créé pour une application',
+            platform_client_linked: 'Projet lié à une application',
             licences_product_created: 'Produit créé',
             licences_product_changed: 'Produit modifié',
             licences_discount_created: 'Code de réduction créé',
@@ -1372,7 +1382,8 @@ export const AUDIT_MESSAGES = {
             synced: 'Synchronisée',
             scopes: 'Données',
             type: 'Type',
-            firstParty: 'Application propre'
+            firstParty: 'Application propre',
+            redirectUri: 'Adresse'
         },
         methods: {
             password: 'mot de passe',
@@ -1467,6 +1478,8 @@ export const AUDIT_MESSAGES = {
             platform_client_disabled: 'App deaktiviert',
             platform_client_enabled: 'App aktiviert',
             platform_client_deleted: 'App entfernt',
+            platform_client_link_code: 'Verknüpfungscode für eine App erstellt',
+            platform_client_linked: 'Projekt mit einer App verknüpft',
             licences_product_created: 'Produkt erstellt',
             licences_product_changed: 'Produkt geändert',
             licences_discount_created: 'Rabattcode erstellt',
@@ -1517,7 +1530,8 @@ export const AUDIT_MESSAGES = {
             synced: 'Synchronisiert',
             scopes: 'Daten',
             type: 'Art',
-            firstParty: 'Eigene App'
+            firstParty: 'Eigene App',
+            redirectUri: 'Adresse'
         },
         methods: {
             password: 'Passwort',
@@ -1601,7 +1615,14 @@ export const APPS_MESSAGES = {
         enabledNotice: 'The app is enabled again.',
         remove: 'Remove',
         removeConfirm: 'Click again to remove',
-        removed: 'The app was removed.'
+        removed: 'The app was removed.',
+        linkCode: 'Link code',
+        linkTitle: 'Link code for {client}',
+        linkText:
+            'In the CLI choose the backend "Existing DafkeDD OIDC server (link code)" and give the address of this server and this code. It works once, until {time}.',
+        linkServer: 'Server',
+        linkConfidential: 'This app is confidential: linking makes a new secret, the current one stops.',
+        linkDone: 'Close'
     },
     nl: {
         title: 'Apps',
@@ -1662,7 +1683,14 @@ export const APPS_MESSAGES = {
         enabledNotice: 'De app is weer ingeschakeld.',
         remove: 'Verwijderen',
         removeConfirm: 'Klik nogmaals om te verwijderen',
-        removed: 'De app is verwijderd.'
+        removed: 'De app is verwijderd.',
+        linkCode: 'Koppelcode',
+        linkTitle: 'Koppelcode voor {client}',
+        linkText:
+            'Kies in de CLI als backend "Bestaande DafkeDD OIDC-server (koppelcode)" en geef het adres van deze server en deze code. Ze werkt één keer, tot {time}.',
+        linkServer: 'Server',
+        linkConfidential: 'Deze app is vertrouwelijk: koppelen maakt een nieuw secret, het huidige stopt.',
+        linkDone: 'Sluiten'
     },
     fr: {
         title: 'Applications',
@@ -1725,7 +1753,15 @@ export const APPS_MESSAGES = {
         enabledNotice: "L'application est de nouveau activée.",
         remove: 'Supprimer',
         removeConfirm: 'Cliquez encore pour supprimer',
-        removed: "L'application a été supprimée."
+        removed: "L'application a été supprimée.",
+        linkCode: 'Code de liaison',
+        linkTitle: 'Code de liaison pour {client}',
+        linkText:
+            "Dans le CLI, choisissez le backend « Serveur OIDC DafkeDD existant (code de liaison) » et indiquez l'adresse de ce serveur et ce code. Il fonctionne une fois, jusqu'à {time}.",
+        linkServer: 'Serveur',
+        linkConfidential:
+            "Cette application est confidentielle : la liaison crée un nouveau secret, l'actuel s'arrête.",
+        linkDone: 'Fermer'
     },
     de: {
         title: 'Apps',
@@ -1788,7 +1824,14 @@ export const APPS_MESSAGES = {
         enabledNotice: 'Die App ist wieder aktiviert.',
         remove: 'Entfernen',
         removeConfirm: 'Zum Entfernen erneut klicken',
-        removed: 'Die App wurde entfernt.'
+        removed: 'Die App wurde entfernt.',
+        linkCode: 'Verknüpfungscode',
+        linkTitle: 'Verknüpfungscode für {client}',
+        linkText:
+            'Wähle im CLI als Backend „Bestehender DafkeDD-OIDC-Server (Verknüpfungscode)“ und gib die Adresse dieses Servers und diesen Code ein. Er funktioniert einmal, bis {time}.',
+        linkServer: 'Server',
+        linkConfidential: 'Diese App ist vertraulich: das Verknüpfen erstellt ein neues Secret, das aktuelle hört auf.',
+        linkDone: 'Schließen'
     }
 }
 
@@ -2253,25 +2296,81 @@ export const LICENSE_MESSAGES = {
 }
 
 /** All files of templates/frontend-oidc with the placeholders filled in. */
-export function oidcFrontendFiles({ apiPort = 4000 } = {}) {
+function readTemplates(dir, apiPort) {
     const result = {}
-    for (const entry of readdirSync(TEMPLATE_DIR, { recursive: true, withFileTypes: true })) {
+    for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true })) {
         if (!entry.isFile()) continue
         const full = path.join(entry.parentPath ?? entry.path, entry.name)
-        const rel = path.relative(TEMPLATE_DIR, full).split(path.sep).join('/')
+        const rel = path.relative(dir, full).split(path.sep).join('/')
         result[rel] = readFileSync(full, 'utf8').replaceAll('__API_PORT__', String(apiPort))
     }
     return result
 }
 
+/**
+ * The files of a frontend that is only a client of an existing login server (linked with a link code): the login,
+ * the session and the profile. Account, management and platform pages stay on the frontend of that server.
+ */
+export const LINKED_FILES = [
+    'src/app/[locale]/profile/page.tsx',
+    'src/app/[locale]/login/page.tsx',
+    'src/app/api/auth/backchannel-logout/route.ts',
+    'src/app/api/auth/callback/route.ts',
+    'src/app/api/auth/login/route.ts',
+    'src/app/api/auth/logout/route.ts',
+    'src/app/api/backend/[...path]/route.ts',
+    'src/components/account-ui.tsx',
+    'src/components/header-nav.tsx',
+    'src/components/session-links.tsx',
+    'src/lib/account.ts',
+    'src/lib/ended.ts',
+    'src/lib/oidc.ts',
+    'src/lib/refresh.ts',
+    'src/lib/session.ts',
+    'src/proxy.ts'
+]
+
+/** The OIDC files of the frontend; `linked`: only those of a client of an existing login server. */
+export function oidcFrontendFiles({ apiPort = 4000, linked = false } = {}) {
+    const all = readTemplates(TEMPLATE_DIR, apiPort)
+    if (!linked) return all
+    const own = readTemplates(LINKED_TEMPLATE_DIR, apiPort)
+    return Object.fromEntries(LINKED_FILES.map(rel => [rel, own[rel] ?? all[rel]]))
+}
+
 /** .env.local of the frontend: where the OIDC server is and the secret that encrypts the session cookie. */
-export const envLocal = ({ apiPort = 4000, secret = randomBytes(32).toString('hex') } = {}) =>
-    [
-        '# Login through the OpenID Connect server of the backend (see README.md, "Login")',
-        `OIDC_ISSUER=http://localhost:${apiPort}/oidc`,
-        'OIDC_CLIENT_ID=frontend',
-        'APP_URL=http://localhost:3000',
+export const envLocal = ({ apiPort = 4000, secret = randomBytes(32).toString('hex'), linked = null } = {}) =>
+    linked
+        ? linkedEnvLocal(linked, secret)
+        : [
+              '# Login through the OpenID Connect server of the backend (see README.md, "Login")',
+              `OIDC_ISSUER=http://localhost:${apiPort}/oidc`,
+              'OIDC_CLIENT_ID=frontend',
+              'APP_URL=http://localhost:3000',
+              '# Encrypts the session cookie: 64 hex characters, keep it secret, another one in production',
+              `AUTH_SECRET=${secret}`,
+              ''
+          ].join('\n')
+
+/** .env.local of a frontend linked to an existing login server: its issuer, the app there, and where this app runs. */
+function linkedEnvLocal(linked, secret) {
+    return [
+        '# Linked with a link code to an existing DafkeDD login server (see README.md, "Login")',
+        `OIDC_ISSUER=${linked.issuer}`,
+        `OIDC_CLIENT_ID=${linked.clientId}`,
+        ...(linked.clientSecret
+            ? [
+                  '# The secret of this app at the login server (shown once there): never commit it',
+                  `OIDC_CLIENT_SECRET=${linked.clientSecret}`
+              ]
+            : []),
+        '# The frontend of the login server: account, security, management and platform pages',
+        `OIDC_ACCOUNT_URL=${linked.accountUrl}`,
+        '# The API of the login server (members, licences, ... as the logged in user)',
+        `NEXT_PUBLIC_API_URL=${linked.apiUrl}`,
+        `APP_URL=http://localhost:${linked.port}`,
         '# Encrypts the session cookie: 64 hex characters, keep it secret, another one in production',
         `AUTH_SECRET=${secret}`,
         ''
     ].join('\n')
+}

@@ -65,6 +65,7 @@ export function Apps() {
     const [notice, setNotice] = useState('')
     const [busy, setBusy] = useState(false)
     const [secret, setSecret] = useState<{ clientId: string; secret: string } | null>(null)
+    const [link, setLink] = useState<{ app: App; code: string; expiresAt: string; issuer: string } | null>(null)
     const [copied, setCopied] = useState(false)
     const [editing, setEditing] = useState<string | null>(null)
     const [creating, setCreating] = useState(false)
@@ -133,6 +134,20 @@ export function Apps() {
         void act('admin/clients/' + app.clientId, 'PUT', fields(event.currentTarget), t('saved')).then(
             ok => ok && setEditing(null)
         )
+    }
+
+    /** A one-time link code for the CLI (15 minutes). */
+    async function linkCode(app: App) {
+        setBusy(true)
+        setError('')
+        setNotice('')
+        setCopied(false)
+        const result = await backend(`admin/clients/${app.clientId}/link-code`, 'POST').catch(() => null)
+        if (result?.status === 200) {
+            const body = result.body as { code: string; expiresAt: string; issuer: string }
+            setLink({ app, ...body })
+        } else setError(result?.message || t('offline'))
+        setBusy(false)
     }
 
     async function copy(value: string) {
@@ -214,9 +229,7 @@ export function Apps() {
                                     type='checkbox'
                                     name={'scope_' + scope}
                                     disabled={scope === 'openid'}
-                                    defaultChecked={
-                                        scope === 'openid' || (app ? app.scopes.includes(scope) : scope !== 'tenant')
-                                    }
+                                    defaultChecked={scope === 'openid' || (app ? app.scopes.includes(scope) : true)}
                                 />
                                 <span>
                                     <code className='text-xs'>{scope}</code> · {scopeText[scope]}
@@ -270,6 +283,33 @@ export function Apps() {
             <Heading title={t('title')} text={t('text')} />
             {error && <Notice tone='error'>{error}</Notice>}
             {notice && <Notice tone='success'>{notice}</Notice>}
+            {link && (
+                <div className='flex flex-col gap-2 rounded-xl border border-[var(--accent,#6366f1)]/50 bg-black/[.03] p-4 text-sm dark:bg-white/[.04]'>
+                    <span className='font-semibold'>{t('linkTitle', { client: link.app.name })}</span>
+                    <span className='opacity-80'>
+                        {t('linkText', {
+                            time: format.dateTime(new Date(link.expiresAt), { timeStyle: 'short' })
+                        })}
+                    </span>
+                    <span className='text-xs opacity-70'>
+                        {t('linkServer')}: <code>{link.issuer.replace(/\/oidc$/, '')}</code>
+                    </span>
+                    <code className='self-start rounded-lg bg-black/5 px-3 py-2 font-mono text-lg tracking-widest dark:bg-white/10'>
+                        {link.code}
+                    </code>
+                    {link.app.type === 'confidential' && (
+                        <span className='text-xs opacity-80'>{t('linkConfidential')}</span>
+                    )}
+                    <div className='flex gap-2'>
+                        <button type='button' className={SECONDARY} onClick={() => void copy(link.code)}>
+                            {copied ? t('copied') : t('copy')}
+                        </button>
+                        <button type='button' className={SECONDARY} onClick={() => setLink(null)}>
+                            {t('linkDone')}
+                        </button>
+                    </div>
+                </div>
+            )}
             {secret && (
                 <div className='flex flex-col gap-2 rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm'>
                     <span className='font-semibold'>{t('secretTitle', { client: secret.clientId })}</span>
@@ -339,6 +379,16 @@ export function Apps() {
                                     >
                                         {t('edit')}
                                     </button>
+                                    {!app.disabled && (
+                                        <button
+                                            type='button'
+                                            disabled={busy}
+                                            className={SECONDARY}
+                                            onClick={() => void linkCode(app)}
+                                        >
+                                            {t('linkCode')}
+                                        </button>
+                                    )}
                                     {app.type === 'confidential' && (
                                         <button
                                             type='button'

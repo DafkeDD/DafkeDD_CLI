@@ -74,6 +74,18 @@ export class ClientsController {
         return this.clients.setEnabled(clientId, body.enabled)
     }
 
+    @Post(':clientId/link-code')
+    @HttpCode(200)
+    @ApiOperation({
+        summary:
+            'A one-time link code (15 minutes) for an app made here: the CLI links a new project to this app with it. An earlier unused code stops.'
+    })
+    @ApiOkResponse({ description: '{ code: "K7QM-2XPD-9HRT", expiresAt, issuer }' })
+    @ApiConflictResponse({ description: 'oidc.CLIENT_FROM_FILE' })
+    linkCode(@Auth() auth: AuthContext, @Param('clientId') clientId: string) {
+        return this.clients.linkCode(clientId, auth.userId)
+    }
+
     @Delete(':clientId')
     @HttpCode(204)
     @ApiOperation({ summary: 'Removes a disabled app made here, with its codes, refresh tokens and consents' })

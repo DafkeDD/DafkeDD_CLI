@@ -69,13 +69,15 @@ export async function main({
             ? await frontend.steps({
                   projectDir,
                   answers,
-                  api: backend
-                      ? {
-                            ...backend.api,
-                            auth: Boolean(backendAnswers.auth),
-                            ...(backendAnswers.oidc ? { oidc: true } : {})
-                        }
-                      : null
+                  api: backend?.apiFor
+                      ? backend.apiFor(backendAnswers)
+                      : backend
+                        ? {
+                              ...backend.api,
+                              auth: Boolean(backendAnswers.auth),
+                              ...(backendAnswers.oidc ? { oidc: true } : {})
+                          }
+                        : null
               })
             : []),
         ...(backend ? await backend.steps({ projectDir, answers: backendAnswers }) : []),
@@ -97,7 +99,8 @@ export async function main({
     ].filter(entry => entry.item)
     log('')
     for (const { item, answers: own } of installed) {
-        log(`${pc.green('✔')} ${item.label} geïnstalleerd in ${pc.bold('./' + item.dir)}`)
+        // A part without a folder of its own (linked to an existing server) only reports its result lines
+        if (item.dir) log(`${pc.green('✔')} ${item.label} geïnstalleerd in ${pc.bold('./' + item.dir)}`)
         for (const line of item.summary?.(own) ?? []) log(`${line.ok ? pc.green('✔') : pc.red('✖')} ${line.text}`)
     }
     if (repo) log(`${pc.green('✔')} Gepusht naar GitHub: ${pc.bold(repo.name)}`)

@@ -3,10 +3,10 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { AuditService } from '../../audit/audit.service.js'
 import { AppException } from '../../common/app.exception.js'
 import { sha256 } from '../crypto.js'
-import { OIDC } from '../oidc.config.js'
+import { OIDC, OidcConfig } from '../oidc.config.js'
 import { assertRedirectUri } from '../oidc.service.js'
 import { type ClientSummary, OIDC_STORE, type OidcClient, type OidcStore } from '../store/oidc.store.js'
-import type { ClientFieldsDto, CreateClientDto } from './clients.dto.js'
+import type { ClientFieldsDto, CreateClientDto, LinkDto } from './clients.dto.js'
 
 /** A client as /admin shows it: never the hash of the secret. */
 export function publicClient(client: ClientSummary) {
@@ -16,6 +16,19 @@ export function publicClient(client: ClientSummary) {
 
 const newSecret = () => randomBytes(32).toString('base64url')
 
+/** Letters and digits that cannot be mistaken for each other (no I, O, 0, 1). */
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+/** A link code: 12 characters (60 bits) as XXXX-XXXX-XXXX. */
+export function newLinkCode(): string {
+    const bytes = randomBytes(12)
+    const chars = [...bytes].map(byte => CODE_ALPHABET[byte % 32]!)
+    return [0, 4, 8].map(start => chars.slice(start, start + 4).join('')).join('-')
+}
+
+/** As typed: case and dashes or spaces do not matter. */
+export const normalizeLinkCode = (code: string) => code.toUpperCase().replace(/[^A-Z0-9]/g, '')
+
 /**
  * The apps (OpenID Connect clients) superadmins make on /admin, next to the ones of config/oidc-clients.json (those
  * stay read-only here). A confidential app gets a secret that is shown once; only its sha256 is stored.
@@ -24,7 +37,8 @@ const newSecret = () => randomBytes(32).toString('base64url')
 export class ClientsService {
     constructor(
         @Inject(OIDC_STORE) private readonly store: OidcStore,
-        private readonly audit: AuditService
+        private readonly audit: AuditService,
+        private readonly config: OidcConfig
     ) {}
 
     async list() {
@@ -149,6 +163,73 @@ export class ClientsService {
             details: { client: clientId, name: client.name }
         })
         return this.get(clientId)
+    }
+
+    /**
+     * A one-time link code for an app made on /admin (15 minutes): the CLI links a new project to this app with it
+     * (POST /oidc/link). An earlier unused code of the app stops.
+     */
+    async linkCode(clientId: string, createdBy: string) {
+        const client = await this.editable(clientId)
+        if (client.disabled) throw new AppException('oidc.CLIENT_NOT_FOUND', HttpStatus.NOT_FOUND)
+        const code = newLinkCode()
+        const expiresAt = new Date(Date.now() + OIDC.LINK_CODE_SECONDS * 1000)
+        await this.store.createLinkCode(sha256(normalizeLinkCode(code)), clientId, createdBy, expiresAt)
+        await this.audit.record('platform.client_link_code', {
+            tenantId: null,
+            target: { type: 'client', id: clientId },
+            details: { client: clientId, name: client.name }
+        })
+        return { code, expiresAt, issuer: this.config.issuer }
+    }
+
+    /**
+     * Used by the CLI (no login, the code is the permission): the settings of the app, with the addresses of the new
+     * project added to it. A confidential app gets a new secret here (the old one stops), shown only in this answer.
+     */
+    async link(body: LinkDto) {
+        const clientId = await this.store.useLinkCode(sha256(normalizeLinkCode(body.code)))
+        if (!clientId) throw new AppException('oidc.LINK_CODE_INVALID', HttpStatus.BAD_REQUEST)
+        const uri = (value: string) => {
+            try {
+                assertRedirectUri(value)
+            } catch {
+                throw new AppException('oidc.CLIENT_INVALID_URI', HttpStatus.BAD_REQUEST, { uri: value.slice(0, 200) })
+            }
+            return value
+        }
+        await this.store.addClientUris(clientId, {
+            redirectUris: (body.redirectUris ?? []).map(uri),
+            postLogoutRedirectUris: (body.postLogoutRedirectUris ?? []).map(uri),
+            backchannelLogoutUri: body.backchannelLogoutUri ? uri(body.backchannelLogoutUri) : null
+        })
+        const client = (await this.store.findClientSummary(clientId))!
+        let secret: string | null = null
+        if (client.type === 'confidential') {
+            secret = newSecret()
+            await this.store.setClientSecret(clientId, sha256(secret))
+        }
+        await this.audit.record('platform.client_linked', {
+            tenantId: null,
+            target: { type: 'client', id: clientId },
+            details: { client: clientId, name: client.name, redirectUri: body.redirectUris?.[0] ?? undefined }
+        })
+        const issuer = this.config.issuer
+        return {
+            issuer,
+            // The API of this server (the issuer is <API>/oidc) and its own frontend (account, management)
+            apiUrl: issuer.replace(/\/oidc$/, ''),
+            accountUrl: this.config.appUrl,
+            client: {
+                clientId,
+                name: client.name,
+                type: client.type,
+                scopes: client.scopes,
+                firstParty: client.firstParty,
+                refreshTokens: client.grantTypes.includes('refresh_token')
+            },
+            clientSecret: secret
+        }
     }
 
     /** Removes the app with its codes, refresh tokens and consents. Only a disabled one (two steps on purpose). */

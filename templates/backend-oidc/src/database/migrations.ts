@@ -505,5 +505,21 @@ ALTER TABLE oidc_clients ADD COLUMN source text NOT NULL DEFAULT 'file' CHECK (s
 ALTER TABLE oidc_clients ADD COLUMN disabled_at timestamptz;
 ALTER TABLE oidc_clients ADD COLUMN created_by uuid REFERENCES ${users} (id) ON DELETE SET NULL;
 `
+    },
+    {
+        id: 10,
+        name: 'link codes for apps',
+        sql: `
+-- A one-time code (15 minutes) a superadmin makes on /admin: the CLI links a new project to an app with it
+CREATE TABLE oidc_link_codes (
+  code_hash text PRIMARY KEY,
+  client_id text NOT NULL REFERENCES oidc_clients (client_id) ON DELETE CASCADE,
+  created_by uuid REFERENCES ${users} (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz
+);
+CREATE INDEX oidc_link_codes_client ON oidc_link_codes (client_id);
+`
     }
 ]

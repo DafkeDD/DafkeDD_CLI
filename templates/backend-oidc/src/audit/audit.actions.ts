@@ -50,7 +50,9 @@ export const AUDIT_ACTIONS = {
         'platform.client_secret_rotated',
         'platform.client_disabled',
         'platform.client_enabled',
-        'platform.client_deleted'
+        'platform.client_deleted',
+        'platform.client_link_code',
+        'platform.client_linked'
     ],
     licences: [
         'licences.product_created',

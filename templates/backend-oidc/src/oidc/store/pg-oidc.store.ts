@@ -239,6 +239,46 @@ export class PgOidcStore implements OidcStore {
         })
     }
 
+    async createLinkCode(codeHash: string, clientId: string, createdBy: string, expiresAt: Date) {
+        await this.database.ready()
+        await this.database.transaction(async db => {
+            // One code at a time per app
+            await db.query('DELETE FROM oidc_link_codes WHERE client_id = $1 AND used_at IS NULL', [clientId])
+            await db.query(
+                'INSERT INTO oidc_link_codes (code_hash, client_id, created_by, expires_at) VALUES ($1, $2, $3, $4)',
+                [codeHash, clientId, createdBy, expiresAt]
+            )
+        })
+    }
+
+    async useLinkCode(codeHash: string) {
+        const rows = await this.query<{ clientId: string }>(
+            `UPDATE oidc_link_codes l SET used_at = now()
+          FROM oidc_clients c
+        WHERE l.code_hash = $1 AND l.used_at IS NULL AND l.expires_at > now()
+          AND c.client_id = l.client_id AND c.disabled_at IS NULL AND c.source = 'admin'
+        RETURNING l.client_id AS "clientId"`,
+            [codeHash]
+        )
+        return rows[0]?.clientId ?? null
+    }
+
+    async addClientUris(
+        clientId: string,
+        uris: { redirectUris: string[]; postLogoutRedirectUris: string[]; backchannelLogoutUri: string | null }
+    ) {
+        const rows = await this.query(
+            `UPDATE oidc_clients SET
+           redirect_uris = ARRAY(SELECT DISTINCT unnest(redirect_uris || $2::text[])),
+           post_logout_redirect_uris = ARRAY(SELECT DISTINCT unnest(post_logout_redirect_uris || $3::text[])),
+           backchannel_logout_uri = coalesce(backchannel_logout_uri, $4),
+           updated_at = now()
+         WHERE client_id = $1 AND source = 'admin' RETURNING 1`,
+            [clientId, uris.redirectUris, uris.postLogoutRedirectUris, uris.backchannelLogoutUri]
+        )
+        return rows.length === 1
+    }
+
     async deleteClient(clientId: string) {
         const rows = await this.query(
             "DELETE FROM oidc_clients WHERE client_id = $1 AND source = 'admin' RETURNING 1",
@@ -1093,6 +1133,7 @@ export class PgOidcStore implements OidcStore {
         // Logout tokens that could not be delivered in a day: the client was down too long
         await this.query(`DELETE FROM oidc_logout_queue WHERE created_at <= $1::timestamptz - interval '1 day'`, [now])
         await this.query('DELETE FROM oidc_used_interactions WHERE expires_at <= $1', [now])
+        await this.query(`DELETE FROM oidc_link_codes WHERE expires_at <= $1::timestamptz - interval '1 day'`, [now])
         await this.query('DELETE FROM oidc_codes WHERE expires_at <= $1', [now])
         await this.query('DELETE FROM oidc_refresh_tokens WHERE expires_at <= $1', [now])
         await this.query('DELETE FROM tenant_invitations WHERE expires_at <= $1', [now])

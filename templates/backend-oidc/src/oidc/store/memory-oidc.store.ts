@@ -47,6 +47,7 @@ export class MemoryOidcStore implements OidcStore {
     identifiers: UserIdentifier[] = []
     consents: (Consent & { userId: string })[] = []
     usedInteractions = new Map<string, Date>()
+    linkCodes = new Map<string, { clientId: string; expiresAt: Date; usedAt: Date | null }>()
     sessionClients: { sessionId: string; clientId: string }[] = []
     logoutQueue: (LogoutJob & { nextAt: number; createdAt: number })[] = []
     private logoutIds = 0
@@ -201,6 +202,38 @@ export class MemoryOidcStore implements OidcStore {
                 if (token.clientId === clientId && !token.revokedAt) token.revokedAt = new Date()
             for (const [hash, code] of this.codes) if (code.clientId === clientId) this.codes.delete(hash)
         }
+        return true
+    }
+
+    async createLinkCode(codeHash: string, clientId: string, _createdBy: string, expiresAt: Date) {
+        for (const [hash, code] of this.linkCodes)
+            if (code.clientId === clientId && !code.usedAt) this.linkCodes.delete(hash)
+        this.linkCodes.set(codeHash, { clientId, expiresAt, usedAt: null })
+    }
+
+    async useLinkCode(codeHash: string) {
+        const code = this.linkCodes.get(codeHash)
+        if (!code || code.usedAt || code.expiresAt <= new Date()) return null
+        const info = this.clientInfo.get(code.clientId)
+        if (info?.source !== 'admin' || info.disabled) return null
+        code.usedAt = new Date()
+        return code.clientId
+    }
+
+    async addClientUris(
+        clientId: string,
+        uris: { redirectUris: string[]; postLogoutRedirectUris: string[]; backchannelLogoutUri: string | null }
+    ) {
+        const found = this.adminClient(clientId)
+        if (!found) return false
+        this.clients.set(clientId, {
+            ...found.client,
+            redirectUris: [...new Set([...found.client.redirectUris, ...uris.redirectUris])],
+            postLogoutRedirectUris: [
+                ...new Set([...found.client.postLogoutRedirectUris, ...uris.postLogoutRedirectUris])
+            ],
+            backchannelLogoutUri: found.client.backchannelLogoutUri ?? uris.backchannelLogoutUri
+        })
         return true
     }
 

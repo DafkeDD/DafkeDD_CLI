@@ -90,3 +90,39 @@ export class ClientStatusDto {
     @IsBoolean({ message: i18nValidationMessage('validation.IS_BOOLEAN') })
     enabled!: boolean
 }
+
+export class LinkDto {
+    @ApiProperty({ example: 'K7QM-2XPD-9HRT', description: 'The link code of /admin (one time, 15 minutes)' })
+    @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
+    @MinLength(12, { message: i18nValidationMessage('validation.MIN_LENGTH') })
+    @MaxLength(20, { message: i18nValidationMessage('validation.MAX_LENGTH') })
+    code!: string
+
+    @ApiPropertyOptional({
+        example: ['http://localhost:3001/api/auth/callback'],
+        description: 'Redirect URIs of the new project, added to the app'
+    })
+    @IsOptional()
+    @IsArray({ message: i18nValidationMessage('validation.IS_ARRAY') })
+    @ArrayMaxSize(URIS, { message: i18nValidationMessage('validation.ARRAY_MAX_SIZE') })
+    @IsString({ each: true, message: i18nValidationMessage('validation.IS_STRING') })
+    @MaxLength(500, { each: true, message: i18nValidationMessage('validation.MAX_LENGTH') })
+    redirectUris?: string[]
+
+    @ApiPropertyOptional({ example: ['http://localhost:3001'], description: 'After logging out, added to the app' })
+    @IsOptional()
+    @IsArray({ message: i18nValidationMessage('validation.IS_ARRAY') })
+    @ArrayMaxSize(URIS, { message: i18nValidationMessage('validation.ARRAY_MAX_SIZE') })
+    @IsString({ each: true, message: i18nValidationMessage('validation.IS_STRING') })
+    @MaxLength(500, { each: true, message: i18nValidationMessage('validation.MAX_LENGTH') })
+    postLogoutRedirectUris?: string[]
+
+    @ApiPropertyOptional({
+        example: 'http://localhost:3001/api/auth/backchannel-logout',
+        description: 'Back-channel logout of the new project (only when the app has none yet)'
+    })
+    @IsOptional()
+    @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
+    @MaxLength(500, { message: i18nValidationMessage('validation.MAX_LENGTH') })
+    backchannelLogoutUri?: string
+}

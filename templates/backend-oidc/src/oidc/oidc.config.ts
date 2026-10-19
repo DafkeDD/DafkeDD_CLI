@@ -31,6 +31,8 @@ export const OIDC = {
     ACCESS_TOKEN_SECONDS: 10 * 60,
     ID_TOKEN_SECONDS: 5 * 60,
     SESSION_SECONDS: 12 * 60 * 60,
+    /** A link code of /admin (linking a new project to an app with the CLI) works this long, once. */
+    LINK_CODE_SECONDS: 15 * 60,
     /** A logout token (back-channel logout) is valid this long after it was made. */
     LOGOUT_TOKEN_SECONDS: 2 * 60,
     /**

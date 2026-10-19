@@ -425,6 +425,15 @@ export interface OidcStore {
     setClientDisabled(clientId: string, disabled: boolean): Promise<boolean>
     /** Removes a client made on /admin with everything of it (codes, refresh tokens, consents). */
     deleteClient(clientId: string): Promise<boolean>
+    /** A one-time link code (sha256) for an app made on /admin; earlier unused codes of that app stop. */
+    createLinkCode(codeHash: string, clientId: string, createdBy: string, expiresAt: Date): Promise<void>
+    /** Uses a link code once: its client id, or null when unknown, used, expired or the app is disabled. */
+    useLinkCode(codeHash: string): Promise<string | null>
+    /** Adds addresses to an app made on /admin (kept unique); the back-channel URI only when it has none yet. */
+    addClientUris(
+        clientId: string,
+        uris: { redirectUris: string[]; postLogoutRedirectUris: string[]; backchannelLogoutUri: string | null }
+    ): Promise<boolean>
 
     // ---------------------------------------------------------------- consent and back-channel logout
 

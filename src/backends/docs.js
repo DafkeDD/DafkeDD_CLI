@@ -832,6 +832,16 @@ at once, its access tokens no longer reach the API) and, once disabled, removed 
 consents. The clients file never overwrites an app made on \`/admin\` with the same id (a warning in the log). Every
 change is in the audit log (\`platform.client_*\`).
 
+**Link a new project to an app with a link code**: on \`/admin\` → Apps, "Link code" makes a one-time code of 12
+characters (\`K7QM-2XPD-9HRT\`, 60 random bits, valid 15 minutes, only its sha256 is stored; a new code stops the
+previous one). In DafkeDD_CLI choose the frontend Next.js and the backend **"Existing DafkeDD OIDC server (link
+code)"**, give the address of this API and the code: the CLI calls \`POST /oidc/link\` (no login, rate limited), which
+uses the code once, adds the addresses of the new frontend to the app (redirect URI, after logout, and the back-channel
+logout URI when the app has none) and answers the issuer, the client id and the address of this frontend (for the
+account pages). A confidential app gets a new secret in that answer (the old one stops). The new frontend logs in here
+with single sign-on and is logged out with back-channel logout. Mark the app as "our own application" when that
+frontend may call this API as the user. Audit log: \`platform.client_link_code\` and \`platform.client_linked\`.
+
 The fields (in the file, and on \`/admin\`):
 
 | Field | Meaning |
@@ -1033,6 +1043,7 @@ ${fence}
 | \`user_passkeys\` | Passkeys: the credential id (unique), public key (SPKI), COSE algorithm, signature counter, name, synced or not, transports, added and last used; no secrets | no |
 | \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\`), with their back-channel logout URI | no |
 | \`oidc_consents\` | What an account allowed an application of others: the scopes (with \`tenant\`: the organisations), when, until revoked | no |
+| \`oidc_link_codes\` | One-time link codes of \`/admin\` (sha256, the app, who made it, 15 minutes, used or not) | no |
 | \`oidc_used_interactions\` | Consent screens answered already (until their login expires): a copy of the login cookie cannot answer twice | no |
 | \`oidc_session_clients\` | Which clients got a code in which session (they hear about its end) | no |
 | \`oidc_logout_queue\` | Logout tokens still to deliver (back-channel logout), with the number of tries and the next try; filled by a trigger on \`oidc_sessions\` | no |

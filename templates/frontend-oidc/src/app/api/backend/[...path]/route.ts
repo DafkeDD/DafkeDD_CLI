@@ -26,7 +26,7 @@ function forwardedFor(request: NextRequest): string {
 /** The allowed applications: a client id may contain dots (com.example.app), never an empty or ".." segment. */
 const CONSENTS = /^me\/consents(\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*)?$/
 /** The apps on /admin (superadmins), with the same rule for their client id. */
-const APPS = /^admin\/clients(\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*(\/secret)?)?$/
+const APPS = /^admin\/clients(\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*(\/secret|\/link-code)?)?$/
 
 async function forward(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
     const path = (await params).path.join('/')

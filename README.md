@@ -319,6 +319,11 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   of editing `config/oidc-clients.json`: redirect URIs, scopes, refresh tokens, own app or of others, back-channel
   logout URI, and for a confidential app a secret that is shown once (only its hash is stored). The apps of the file
   stay read-only there.
+- **Link a new frontend to an existing login server**: choose Next.js and the backend **"Bestaande DafkeDD OIDC-server
+  (koppelcode)"**. The CLI asks the address of that API, the port of the new frontend (3001) and a one-time link code
+  that a superadmin makes on `/admin` → Apps → "Koppelcode". It adds the addresses of the new frontend to that app and
+  writes `.env.local`: the new frontend logs in there with single sign-on, is logged out with back-channel logout, and
+  links to the account pages of that server. No backend of its own is installed.
 
 The TypeScript files of this feature live as real files in `templates/backend-oidc` and `templates/frontend-oidc` (see
 Development).
@@ -464,6 +469,15 @@ git switch developer
 
 ## Changelog
 
+- **0.33.0**: link a new frontend to an existing DafkeDD login server with a link code. New backend choice "Bestaande
+  DafkeDD OIDC-server (koppelcode)" (no backend folder): asks the address of the API, the port of the new frontend and
+  the code, and calls `POST /oidc/link`, which uses the code once, adds the addresses of the new frontend to the app and
+  answers its settings (a confidential app gets a new secret). The frontend gets only the login, session and profile
+  pages, links to the account pages of the server (`OIDC_ACCOUNT_URL`), runs on its own port, and supports confidential
+  apps (`OIDC_CLIENT_SECRET`). On the server: "Koppelcode" on `/admin` → Apps
+  (`POST /admin/clients/:clientId/link-code`, 15 minutes, once, only its sha256 stored), migration 10
+  (`oidc_link_codes`), audit `platform.client_link_code` and `platform.client_linked`. New apps on `/admin` have every
+  scope ticked by default (also `tenant`).
 - **0.32.1**: the test folders of the templates (`templates/backend-oidc/test`: the e2e and database tests and the
   virtual passkey device) are in the package again. `.npmignore` left out every folder called `test`, so a new backend
   missed `test/virtual-authenticator.ts` and `npm test` failed. Now only the tests of the CLI itself stay out, and a
