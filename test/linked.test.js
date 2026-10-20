@@ -30,6 +30,17 @@ const ANSWER = {
     clientSecret: null
 }
 
+const DATABASE = {
+    id: 'postgres',
+    mode: 'local',
+    host: 'localhost',
+    port: 5432,
+    user: 'postgres',
+    password: 'x',
+    database: 'planner',
+    project: 'shop'
+}
+
 /** A fake login server: answers POST /oidc/link like the real one, and remembers what it got. */
 function fakeServer(status = 200, body = ANSWER) {
     const calls = []
@@ -40,10 +51,12 @@ function fakeServer(status = 200, body = ANSWER) {
     return { calls, fetchImpl }
 }
 
-test('the backend choice "existing DafkeDD OIDC server" is registered, without a folder of its own', () => {
+test('the backend choice "app for an existing DafkeDD OIDC server" is registered, with its own API in ./backend', () => {
     assert.equal(backends.linked, linked)
-    assert.equal(linked.dir, null)
-    assert.match(linked.label, /Bestaande DafkeDD OIDC-server \(koppelcode\)/)
+    assert.equal(linked.dir, 'backend')
+    assert.equal(linked.docsFile, 'api.md')
+    assert.equal(linked.api.port, 4001)
+    assert.match(linked.label, /App voor een bestaande DafkeDD OIDC-server \(koppelcode\)/)
 })
 
 test('server addresses are typed in many ways; link codes like K7QM-2XPD-9HRT', () => {
@@ -85,7 +98,7 @@ test('the link code goes to POST /oidc/link with the addresses of the new fronte
     )
 })
 
-test('ask: server, port and the code; a wrong code is asked again with the reason', async () => {
+test('ask: server, port, the code and the own database; a wrong code is asked again with the reason', async () => {
     let tries = 0
     const fetchImpl = async () => {
         tries++
@@ -95,12 +108,28 @@ test('ask: server, port and the code; a wrong code is asked again with the reaso
     }
     const asked = []
     const prompts = {
+        select: async () => assert.fail('no Docker question: the database is on the server of the login server'),
+        password: async config => {
+            asked.push(config.message)
+            return 'geheim'
+        },
         input: async config => {
             asked.push(config.message)
             if (config.message.startsWith('Adres')) return 'http://localhost:4000/oidc'
             if (config.message.startsWith('Op welke poort')) {
                 assert.notEqual(await config.validate('4000'), true)
+                assert.notEqual(await config.validate('4001'), true, 'the API of the app')
                 return '3001'
+            }
+            if (config.message.startsWith('Host')) {
+                assert.match(config.message, /login server/)
+                return config.default
+            }
+            if (config.message.startsWith('Poort')) return config.default
+            if (config.message.startsWith('Gebruikersnaam')) return config.default
+            if (config.message.startsWith('Naam van de eigen database')) {
+                assert.equal(config.default, 'planner', 'named after the app')
+                return config.default
             }
             // The prompt keeps asking until validate says yes
             assert.match(await config.validate('nonsense'), /K7QM-2XPD-9HRT/)
@@ -109,18 +138,32 @@ test('ask: server, port and the code; a wrong code is asked again with the reaso
             return 'K7QM-2XPD-9HRT'
         }
     }
-    const answers = await linked.ask({ hasFrontend: true, prompts, fetchImpl })
-    assert.equal(asked.length, 3)
+    const answers = await linked.ask({ hasFrontend: true, prompts, fetchImpl, projectDir: '/tmp/shop' })
+    assert.equal(asked.length, 8)
     assert.deepEqual(answers.link, LINK)
-    assert.deepEqual(linked.apiFor(answers), { port: 4000, url: 'http://localhost:4000', oidc: true, linked: LINK })
-    assert.ok(linked.summary(answers)[0].text.includes('Gekoppeld aan http://localhost:4000/oidc'))
+    assert.deepEqual(answers.database, {
+        id: 'postgres',
+        mode: 'local',
+        host: 'localhost',
+        port: 5432,
+        user: 'postgres',
+        password: 'geheim',
+        database: 'planner',
+        project: 'shop'
+    })
+    assert.deepEqual(linked.apiFor(answers), { port: 4001, url: 'http://localhost:4001', oidc: true, linked: LINK })
+    const summary = linked.summary(answers).map(line => line.text)
+    assert.ok(summary[0].includes('Gekoppeld aan http://localhost:4000/oidc'))
+    assert.ok(summary.some(line => line.includes('Verbonden met PostgreSQL op localhost:5432/planner')))
+    assert.ok(summary.some(line => line.includes('Row-Level Security')))
+    assert.ok(linked.next(answers).includes('npm run start:dev'))
     // Without a frontend there is nothing to link
     const none = await linked.ask({ hasFrontend: false, prompts })
     assert.equal(none.link, null)
     assert.equal(linked.summary(none)[0].ok, false)
 })
 
-test('the linked frontend: login, session and profile only; account pages are on the frontend of the server', () => {
+test('the linked frontend: login, session, profile and the notes of its own API; account pages are on the server', () => {
     const own = oidcFrontendFiles({ linked: true, appName: 'Planner' })
     assert.deepEqual(Object.keys(own).sort(), [...LINKED_FILES].sort())
     for (const page of ['register', 'security', 'members', 'admin', 'licenses', 'audit'])
@@ -139,25 +182,49 @@ test('the linked frontend: login, session and profile only; account pages are on
 
     const all = withApi(
         { ...files },
-        { port: 4000, url: 'http://localhost:4000', oidc: true, linked: LINK },
+        { port: 4001, url: 'http://localhost:4001', oidc: true, linked: LINK },
         { ui: false }
     )
     const page = all['src/app/[locale]/page.tsx']
-    assert.ok(!page.includes('<ApiStatus />'), 'no status card of an API of its own (another origin)')
+    assert.match(page, /<ApiStatus \/>/, 'the status card of the API of this app')
+    assert.match(all['src/components/api-status.tsx'], /className="lui-card /)
+    assert.match(page, /<Notes admin=/)
     assert.match(page, /<SessionLinks \/>/)
     assert.match(page, /<AppPage>/)
     assert.match(all['src/app/[locale]/layout.tsx'], /<ThemeProvider>/)
     assert.match(all['src/lib/brand.ts'], /"Planner"/)
-    assert.match(all['src/lib/api.ts'], /'http:\/\/localhost:4000'/)
+    // Two APIs: the own one (notes) and the one of the login server (members, licences, heartbeat)
+    assert.match(all['src/lib/api.ts'], /'http:\/\/localhost:4001'/)
+    assert.match(all['src/lib/pasport.ts'], /\?\? 'http:\/\/localhost:4000'\)/)
+    assert.match(all['src/app/api/backend/[...path]/route.ts'], /\$\{PASPORT_API_URL\}\//)
+    const proxy = all['src/app/api/app/[...path]/route.ts']
+    assert.match(proxy, /\$\{API_URL\}\//)
+    assert.match(proxy, /Authorization: 'Bearer ' \+ session\.accessToken/)
+    assert.match(proxy, /request\.headers\.get\('origin'\) !== new URL\(APP_URL\)\.origin/)
+    assert.match(all['src/components/notes.tsx'], /fetch\('\/api\/app\/notes'/)
+    for (const locale of ['en', 'nl', 'fr', 'de']) {
+        const messages = JSON.parse(all[`messages/${locale}.json`])
+        assert.deepEqual(
+            Object.keys(messages.Notes).sort(),
+            Object.keys(JSON.parse(all['messages/en.json']).Notes).sort()
+        )
+        assert.ok(messages.Notes.title)
+    }
+    // The login server itself has no notes
+    const server = withApi({ ...files }, { port: 4000, oidc: true }, { ui: false })
+    assert.ok(!server['src/components/notes.tsx'])
+    assert.ok(!JSON.parse(server['messages/en.json']).Notes)
+    assert.match(server['src/lib/pasport.ts'], /\?\? API_URL\)/)
 })
 
 test('.env.local of a linked frontend: issuer, app, secret only when there is one, account pages, its own port', () => {
-    const env = envLocal({ linked: LINK, secret: 'x'.repeat(64) })
+    const env = envLocal({ apiPort: 4001, linked: LINK, secret: 'x'.repeat(64) })
     for (const line of [
         'OIDC_ISSUER=http://localhost:4000/oidc',
         'OIDC_CLIENT_ID=planner',
         'OIDC_ACCOUNT_URL=http://localhost:3000',
-        'NEXT_PUBLIC_API_URL=http://localhost:4000',
+        'NEXT_PUBLIC_API_URL=http://localhost:4001',
+        'NEXT_PUBLIC_PASPORT_API_URL=http://localhost:4000',
         'APP_URL=http://localhost:3001'
     ])
         assert.ok(env.split('\n').includes(line), line)
@@ -181,7 +248,7 @@ test('the linked frontend runs on its own port', async () => {
     }
 })
 
-test('main: a linked backend gives the frontend its API and logs no folder of its own', async () => {
+test('main: a linked app gives the frontend its own API and the login server, and installs ./backend', async () => {
     const events = []
     const logs = []
     await main({
@@ -201,12 +268,14 @@ test('main: a linked backend gives the frontend its API and logs no folder of it
                 }
             }
         },
-        backendRegistry: { linked: { ...linked, ask: async () => ({ link: LINK }) } },
+        backendRegistry: {
+            linked: { ...linked, ask: async () => ({ link: LINK, database: DATABASE }), steps: async () => [] }
+        },
         execute: async () => {},
         log: line => logs.push(String(line))
     })
-    assert.deepEqual(events[0], { port: 4000, url: 'http://localhost:4000', oidc: true, linked: LINK })
-    assert.ok(!logs.some(line => line.includes('geïnstalleerd in ./null')))
+    assert.deepEqual(events[0], { port: 4001, url: 'http://localhost:4001', oidc: true, linked: LINK })
+    assert.ok(logs.some(line => line.includes('geïnstalleerd in ./backend')))
     assert.ok(logs.some(line => line.includes('Gekoppeld aan')))
 })
 
@@ -242,7 +311,14 @@ test('the server: link codes on /admin and POST /oidc/link, documented', () => {
 test('the READMEs explain the link code and the linked frontend', async () => {
     const { frontendReadme } = await import('../src/frontends/docs.js')
     const readme = frontendReadme({ api: { port: 4000, url: LINK.apiUrl, oidc: true, linked: LINK } })
-    for (const text of ['## Login (linked to an existing login server)', 'OIDC_ACCOUNT_URL', 'http://localhost:3001'])
+    for (const text of [
+        '## Login (linked to an existing login server)',
+        'OIDC_ACCOUNT_URL',
+        'http://localhost:3001',
+        '`/api/app/...`',
+        'NEXT_PUBLIC_PASPORT_API_URL',
+        'notes of the organisation'
+    ])
         assert.ok(readme.includes(text), text)
     assert.ok(!readme.includes('eid:mock'))
     assert.ok(!readme.includes('## Login (OpenID Connect)'))

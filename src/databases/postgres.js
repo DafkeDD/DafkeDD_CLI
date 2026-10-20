@@ -266,30 +266,36 @@ export const postgres = {
 
     /**
      * Questions: Docker or local, host (local only), port, user, password and database name.
-     * `prompts` can be injected (used by the tests).
+     * `prompts` can be injected (used by the tests). `shared`: the database of an app linked to a login server, on
+     * the PostgreSQL server of that login server (no Docker question; `shared.name` is the default database name).
      */
-    async ask({ projectDir = process.cwd(), prompts = { input, password, select } } = {}) {
+    async ask({ projectDir = process.cwd(), prompts = { input, password, select }, shared = null } = {}) {
         const project = slugify(basename(projectDir))
-        const mode = await prompts.select({
-            message: 'Hoe draait PostgreSQL?',
-            choices: [
-                {
-                    name: 'In Docker',
-                    value: 'docker',
-                    description: 'De CLI maakt een docker-compose.yml; start met npm run db:up'
-                },
-                {
-                    name: 'Lokaal geïnstalleerd',
-                    value: 'local',
-                    description: 'PostgreSQL draait al op deze machine of in je netwerk; de CLI test de verbinding'
-                }
-            ]
-        })
+        const mode = shared
+            ? 'local'
+            : await prompts.select({
+                  message: 'Hoe draait PostgreSQL?',
+                  choices: [
+                      {
+                          name: 'In Docker',
+                          value: 'docker',
+                          description: 'De CLI maakt een docker-compose.yml; start met npm run db:up'
+                      },
+                      {
+                          name: 'Lokaal geïnstalleerd',
+                          value: 'local',
+                          description:
+                              'PostgreSQL draait al op deze machine of in je netwerk; de CLI test de verbinding'
+                      }
+                  ]
+              })
         const host =
             mode === 'local'
                 ? (
                       await prompts.input({
-                          message: 'Host van de database:',
+                          message: shared
+                              ? 'Host van de PostgreSQL-server van je login server (de app krijgt er een eigen database):'
+                              : 'Host van de database:',
                           default: 'localhost',
                           validate: validators.host
                       })
@@ -318,8 +324,10 @@ export const postgres = {
         })
         const database = (
             await prompts.input({
-                message: 'Databasenaam:',
-                default: project.slice(0, 50),
+                message: shared
+                    ? 'Naam van de eigen database van deze app (niet die van de login server):'
+                    : 'Databasenaam:',
+                default: (shared?.name ?? project).slice(0, 50),
                 validate: validators.databaseName
             })
         ).trim()

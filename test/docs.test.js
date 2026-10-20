@@ -23,15 +23,35 @@ const OIDC = {
     masterKey: 'ab'.repeat(32)
 }
 
+/** An app linked to a login server (the answer of its link code). */
+const LINK = {
+    issuer: 'http://localhost:4000/oidc',
+    apiUrl: 'http://localhost:4000',
+    accountUrl: 'http://localhost:3000',
+    clientId: 'planner',
+    clientSecret: null,
+    name: 'Planner',
+    firstParty: true,
+    scopes: ['openid', 'profile', 'email', 'tenant'],
+    port: 3001
+}
+
 const VARIANTS = {
     'no database': { database: null, auth: null, oidc: null },
     database: { database: DB, auth: null, oidc: null },
     'database + login': { database: DB, auth: { jwtSecret: 'x' }, oidc: null },
-    'database + OIDC server': { database: DB, auth: null, oidc: OIDC }
+    'database + OIDC server': { database: DB, auth: null, oidc: OIDC },
+    'database + linked app': { database: DB, auth: null, oidc: null, app: LINK }
 }
 
-const filesOf = ({ database, auth, oidc }) => buildFiles(database, { auth, oidc })
-const optionsOf = ({ database, auth, oidc }) => ({ database, auth: Boolean(auth), oidc: Boolean(oidc) })
+const filesOf = ({ database, auth, oidc, app = null }) => buildFiles(database, { auth, oidc, app })
+const optionsOf = ({ database, auth, oidc, app = null }) => ({
+    database,
+    auth: Boolean(auth),
+    oidc: Boolean(oidc),
+    app
+})
+const portOf = variant => (variant.app ? 4001 : PORT)
 
 /** Every route that the generated controllers define, as "METHOD /path". */
 function routesOf(files) {
@@ -84,7 +104,7 @@ for (const [name, variant] of Object.entries(VARIANTS)) {
             assert.ok(endpoint.summary.length > 10)
             assert.ok(section.includes(endpoint.summary), `${endpoint.path}: summary`)
             assert.match(section, /curl /, `${endpoint.path}: curl example`)
-            assert.ok(section.includes(`http://localhost:${PORT}`), `${endpoint.path}: full URL`)
+            assert.ok(section.includes(`http://localhost:${portOf(variant)}`), `${endpoint.path}: full URL`)
             if (endpoint.body) {
                 assert.match(section, /\*\*Body\*\*/, `${endpoint.path}: body table`)
                 for (const [field] of endpoint.body.fields)

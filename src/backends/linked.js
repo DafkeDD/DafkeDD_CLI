@@ -1,4 +1,8 @@
-import { input } from '@inquirer/prompts'
+import { input, password, select } from '@inquirer/prompts'
+import { databases } from '../databases/index.js'
+import { slugify } from '../databases/postgres.js'
+import { APP_PORT } from './app.js'
+import { DIR, nestjs } from './nestjs.js'
 
 /** A link code of /admin: XXXX-XXXX-XXXX (case, dashes and spaces do not matter). */
 export const LINK_CODE = /^[A-Z0-9]{4}-?[A-Z0-9]{4}-?[A-Z0-9]{4}$/
@@ -64,16 +68,21 @@ export async function useLinkCode({ server, code, port, fetchImpl = fetch }) {
 }
 
 /**
- * "Backend": none of its own. The frontend is linked to an existing DafkeDD OIDC server (another project made with
- * this CLI) with a one-time link code of /admin → Apps: it logs in there and calls its API.
+ * An app for an existing DafkeDD OIDC server (another project made with this CLI), linked with a one-time link code of
+ * /admin → Apps. The frontend logs in there (same design, shell and login screen); the app gets its own NestJS API
+ * (./backend, port 4001) with its own PostgreSQL database on the same server, that accepts the access tokens of the
+ * login server and keeps its data per organisation (Row-Level Security).
  */
 export const linked = {
     id: 'linked',
-    label: 'Bestaande DafkeDD OIDC-server (koppelcode)',
-    description: 'Geen eigen backend: de frontend logt in via je bestaande server (koppelcode via /admin → Apps)',
-    dir: null,
+    label: 'App voor een bestaande DafkeDD OIDC-server (koppelcode)',
+    description:
+        'Eigen NestJS-API en database (multi-tenant) voor een app die inlogt via je bestaande server (koppelcode via /admin → Apps)',
+    dir: DIR,
+    docsFile: 'api.md',
+    api: { port: APP_PORT },
 
-    async ask({ hasFrontend = false, prompts = { input }, fetchImpl = fetch } = {}) {
+    async ask({ hasFrontend = false, prompts = { input, password, select }, fetchImpl = fetch, projectDir } = {}) {
         if (!hasFrontend) return { link: null, reason: 'frontend' }
         const server = normalizeServer(
             await prompts.input({
@@ -85,12 +94,16 @@ export const linked = {
         )
         const port = Number(
             await prompts.input({
-                message: 'Op welke poort draait deze nieuwe frontend? (3000 is meestal de frontend van de server zelf)',
+                message:
+                    'Op welke poort draait de frontend van deze app? (3000 is meestal de frontend van de server zelf)',
                 default: String(DEFAULT_PORT),
                 validate: value =>
-                    /^\d+$/.test(value) && Number(value) >= 1024 && Number(value) <= 65535 && Number(value) !== 4000
+                    /^\d+$/.test(value) &&
+                    Number(value) >= 1024 &&
+                    Number(value) <= 65535 &&
+                    ![4000, APP_PORT].includes(Number(value))
                         ? true
-                        : 'Een poort tussen 1024 en 65535 (niet 4000)'
+                        : `Een poort tussen 1024 en 65535 (niet 4000 of ${APP_PORT})`
             })
         )
         let link = null
@@ -107,19 +120,26 @@ export const linked = {
                 }
             }
         })
-        return { link }
+        // Its own database on the PostgreSQL server of the login server
+        const database = await databases.postgres.ask({
+            projectDir,
+            prompts,
+            shared: { name: slugify(link.name) }
+        })
+        return { link, database }
     },
 
-    /** What the frontend gets to know: the API and the login of that server, as a linked client. */
+    /** What the frontend gets to know: the API of this app, and the login server it logs in at. */
     apiFor(answers) {
         const link = answers?.link
         if (!link) return null
-        const port = Number(new URL(link.apiUrl).port) || (link.apiUrl.startsWith('https:') ? 443 : 80)
-        return { port, url: link.apiUrl, oidc: true, linked: link }
+        return { port: APP_PORT, url: `http://localhost:${APP_PORT}`, oidc: true, linked: link }
     },
 
-    async steps() {
-        return []
+    /** The NestJS API of this app (see nestjs.buildFiles: `app`). */
+    async steps({ projectDir, answers = {}, ...rest }) {
+        if (!answers?.link) return []
+        return nestjs.steps({ projectDir, ...rest, answers: { database: answers.database, app: answers.link } })
     },
 
     summary(answers) {
@@ -135,6 +155,11 @@ export const linked = {
             {
                 ok: true,
                 text: `Gekoppeld aan ${link.issuer} als app "${link.name}" (${link.clientId}); de adressen van deze frontend zijn aan die app toegevoegd`
+            },
+            ...nestjs.summary({ database: answers.database }),
+            {
+                ok: true,
+                text: `De API van de app (http://localhost:${APP_PORT}) aanvaardt enkel tokens van die login server voor deze app; de data staat per organisatie in ${answers.database?.database ?? 'de eigen database'} (Row-Level Security)`
             },
             ...(link.firstParty
                 ? []
@@ -159,6 +184,10 @@ export const linked = {
         const link = answers?.link
         if (!link) return []
         return [
+            `cd ${DIR}`,
+            'npm run db:check    (test the database connection, creates the database)',
+            'npm run start:dev',
+            `API: http://localhost:${APP_PORT}  |  docs: http://localhost:${APP_PORT}/docs`,
             `Login: ${link.issuer}  |  account en beheer: ${link.accountUrl}`,
             `Deze frontend: http://localhost:${link.port}  (npm run dev in ./frontend)`
         ]

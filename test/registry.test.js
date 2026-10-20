@@ -34,13 +34,9 @@ test('every registered backend has the fields the CLI relies on', async () => {
         assert.equal(typeof backend.ask, 'function')
         assert.equal(typeof backend.next, 'function', 'next steps depend on the answers')
         assert.equal(typeof backend.summary, 'function')
-        if (backend.apiFor) {
-            // No folder of its own (linked to an existing server): the API comes from the answers
-            assert.equal(backend.dir, null)
-            assert.equal(typeof backend.apiFor, 'function')
-        } else {
-            assert.equal(typeof backend.dir, 'string')
-            assert.equal(typeof backend.api.port, 'number', 'the frontend needs to know where the API runs')
-        }
+        assert.equal(typeof backend.dir, 'string')
+        assert.equal(typeof backend.api.port, 'number', 'the frontend needs to know where the API runs')
+        // An app linked to an existing server: what the frontend gets depends on the answers (the login server)
+        if (backend.apiFor) assert.equal(typeof backend.apiFor, 'function')
     }
 })

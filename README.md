@@ -322,11 +322,17 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   of editing `config/oidc-clients.json`: redirect URIs, scopes, refresh tokens, own app or of others, back-channel
   logout URI, and for a confidential app a secret that is shown once (only its hash is stored). The apps of the file
   stay read-only there.
-- **Link a new frontend to an existing login server**: choose Next.js and the backend **"Bestaande DafkeDD OIDC-server
-  (koppelcode)"**. The CLI asks the address of that API, the port of the new frontend (3001) and a one-time link code
-  that a superadmin makes on `/admin` → Apps → "Koppelcode". It adds the addresses of the new frontend to that app and
-  writes `.env.local`: the new frontend logs in there with single sign-on, is logged out with back-channel logout, and
-  links to the account pages of that server. No backend of its own is installed.
+- **An app for an existing login server**: choose Next.js and the backend **"App voor een bestaande DafkeDD OIDC-server
+  (koppelcode)"**. The CLI asks the address of that API, the port of the app's frontend (3001), a one-time link code
+  that a superadmin makes on `/admin` → Apps → "Koppelcode", and the app's own database on the PostgreSQL server of the
+  login server (host, port, user, password, name; default the name of the app). It adds the addresses of the new
+  frontend to that app and writes `.env.local`: the frontend logs in there with single sign-on, is logged out with
+  back-channel logout, and links to the account pages of that server. The app gets its **own NestJS API** in `./backend`
+  (port 4001) with its own database: it has no users of its own, accepts only the access tokens of that login server for
+  this app (`PasportGuard`: signature with its keys, `iss`, `aud`, `typ`, `client_id`), takes the organisation from the
+  token, and keeps its data per organisation with Row-Level Security. The example is `notes` (`GET/POST /notes`,
+  `DELETE /notes/:id` for the beheerder), shown on the home page of the frontend through `/api/app/...` (the token is
+  added on the server). See "Login through the login server" in `docs/api.md`.
 - **One design everywhere (Pasport)**: the frontend of the login server and every linked frontend get the same login
   screen (the teal panel with the eID card, "Log in to <app>", eID and passkey first, then email and password) and the
   same shell: a sidebar with the app's own pages (`src/lib/nav.ts`), "My account", the organisation (its admins) and the
@@ -442,9 +448,13 @@ src/frontends/nextjs.js  # Next.js + Tailwind + next-intl + react-icons + Pretti
 src/backends/nestjs.js   # NestJS backend (+ database, login)
 src/backends/oidc.js     # own OpenID Connect server: questions, .env, docs, copies templates/backend-oidc
 src/backends/docs.js     # generated backend documentation (every endpoint)
+src/backends/linked.js   # an app for an existing login server: link code, own database, delegates to nestjs.js
+src/backends/app.js      # the API of such an app: errors, .env, endpoints, copies templates/backend-app
 src/eid.js               # DafkeDD eID: the release that is installed and the virtual card reader script
 templates/backend-oidc/  # TypeScript of the OIDC server, copied into ./backend (placeholders like __USERS_TABLE__)
+templates/backend-app/   # TypeScript of an app's API (Pasport tokens, notes per tenant), copied into ./backend
 templates/frontend-oidc/ # login page, login routes and profile of the frontend (OIDC), copied into ./frontend
+templates/frontend-oidc-linked/ # the files of a linked app's frontend that differ (home with notes, /api/app)
 src/frontends/oidc.js    # texts and .env.local of the frontend login, copies templates/frontend-oidc
 test/                    # test suite (node:test)
 scripts/                 # test runner and git hook setup
@@ -478,6 +488,16 @@ git switch developer
 
 ## Changelog
 
+- **0.35.0**: an app linked to a login server gets its own backend. The backend choice is now "App voor een bestaande
+  DafkeDD OIDC-server (koppelcode)" and installs `./backend` (NestJS, port 4001, `docs/api.md`) with its own PostgreSQL
+  database on the server of the login server (asked after the link code, no Docker question). The API checks the access
+  tokens of the login server on every route (`src/pasport`: a global guard, keys from its JWKS,
+  `@Access('public' | 'account' | 'member' | 'admin')`, `@CurrentCaller()`), with `GET /me` and the example `notes` per
+  organisation (`src/notes`, migrations, Row-Level Security as `<database>_tenant`, `npm run test:db`). New errors
+  `NO_ORGANISATION`, `NOTE_NOT_FOUND` and validation `MAX_LENGTH` (en, nl, fr, de). The frontend calls its own API
+  through `/api/app/...` and the API of the login server through `/api/backend/...` (`NEXT_PUBLIC_PASPORT_API_URL`,
+  `src/lib/pasport.ts`); its home page shows the notes card (`Notes` namespace) and the status card of its own API.
+  `postgres.ask` takes `shared` for a database on an existing server.
 - **0.34.0**: one design everywhere (Pasport, built with DafkeDD UI). The frontend of the login server and every linked
   frontend get the same login screen and shell: `src/components/shell` (`AppPage`: sidebar, topbar with language, light
   or dark and the user menu; `AuthPage`: the login screen with the teal panel; `StartLogin`), `src/lib/nav.ts`

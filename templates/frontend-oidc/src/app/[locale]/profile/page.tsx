@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { getFormatter, getTranslations, setRequestLocale } from 'next-intl/server'
 import { BUTTON, CARD, LINK, roleLabel } from '@/components/account-ui'
 import { AppPage } from '@/components/shell/app-shell'
-import { API_URL } from '@/lib/api'
+import { PASPORT_API_URL } from '@/lib/pasport'
 import { ACCOUNT_URL, userinfo } from '@/lib/oidc'
 import { getSession } from '@/lib/session'
 
@@ -111,7 +111,7 @@ type MyLicense = { code: string; name: string; access: boolean; via?: 'trial' | 
 
 /** The products of the user in this organisation (GET /me/licenses of the API). */
 async function myLicenses(accessToken: string): Promise<MyLicense[]> {
-    const response = await fetch(API_URL + '/me/licenses', {
+    const response = await fetch(PASPORT_API_URL + '/me/licenses', {
         headers: { Authorization: 'Bearer ' + accessToken, Accept: 'application/json' },
         cache: 'no-store'
     }).catch(() => null)

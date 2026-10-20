@@ -9,6 +9,7 @@ import { PRETTIERRC } from '../frontends/nextjs.js'
 import { databases } from '../databases/index.js'
 import * as login from './auth.js'
 import * as oidc from './oidc.js'
+import * as appBackend from './app.js'
 import { backendReadme } from './docs.js'
 
 export const DIR = 'backend'
@@ -566,9 +567,10 @@ const replaceOnce = (text, from, to) => {
  * The files of the backend. Without a database this is `files`; with a database (answers of the database question)
  * the module, health check, translations, .env files and tests are extended for it.
  */
-export function buildFiles(database = null, { auth = null, oidc: oidcAnswers = null } = {}) {
-    if ((auth || oidcAnswers) && !database) throw new Error('Login en registratie hebben een database nodig')
-    if (auth && oidcAnswers) throw new Error('Kies de eenvoudige login of de OIDC-server, niet allebei')
+export function buildFiles(database = null, { auth = null, oidc: oidcAnswers = null, app = null } = {}) {
+    if ((auth || oidcAnswers || app) && !database) throw new Error('Login en registratie hebben een database nodig')
+    if ([auth, oidcAnswers, app].filter(Boolean).length > 1)
+        throw new Error('Kies de eenvoudige login, de OIDC-server of een gekoppelde app, niet meerdere')
     if (!database) return files
     const db = databases[database.id].backend(database)
     const result = { ...files, ...db.files }
@@ -755,13 +757,19 @@ describe('API (e2e)', () => {\n`
             '      .useValue(database)\n      .overrideProvider(OIDC_STORE)\n      .useValue(new MemoryOidcStore())\n      .overrideProvider(BILLING_STORE)\n      .useValue(new MemoryBillingStore())\n      .overrideProvider(AUDIT_STORE)\n      .useValue(new MemoryAuditStore())\n'
         )
     }
+    if (app) Object.assign(result, appFiles(result, database, app))
     result['README.md'] = backendReadme({
         database,
         auth: Boolean(auth),
         oidc: Boolean(oidcAnswers),
-        tenantRole: oidcAnswers ? oidc.tenantRole(database.database) : null,
-        port: PORT,
-        origin: FRONTEND_ORIGIN,
+        app,
+        tenantRole: oidcAnswers
+            ? oidc.tenantRole(database.database)
+            : app
+              ? appBackend.tenantRole(database.database)
+              : null,
+        port: app ? appBackend.APP_PORT : PORT,
+        origin: app ? appOrigin(app) : FRONTEND_ORIGIN,
         table: auth ? login.usersTable(database.database) : null,
         translations: {
             en: {
@@ -771,6 +779,81 @@ describe('API (e2e)', () => {\n`
         }
     })
     return result
+}
+
+/** The frontend of an app linked to a login server (the port it was linked with). */
+const appOrigin = link => `http://localhost:${link.port}`
+
+/**
+ * The changes for an app linked to a login server (Pasport): its own port and CORS origin, the access tokens of the
+ * login server on every route (PasportModule, a global guard), the notes per organisation (NotesModule, RLS), and
+ * @Public() on the routes that stay open. `result` holds the files with the database so far.
+ */
+function appFiles(result, database, link) {
+    const changed = appBackend.appFiles({ database: database.database, link })
+    const env = text =>
+        replaceOnce(
+            replaceOnce(text, `PORT=${PORT}\n`, `PORT=${appBackend.APP_PORT}\n`),
+            `CORS_ORIGIN=${FRONTEND_ORIGIN}\n`,
+            `CORS_ORIGIN=${appOrigin(link)}\n`
+        ).replace(
+            '# Port of the API (the Next.js frontend uses 3000)',
+            '# Port of the API (the login server uses 4000)'
+        )
+    changed['.env'] = env(result['.env']) + appBackend.envLines(link)
+    changed['.env.example'] = env(result['.env.example']) + appBackend.envLines(link)
+    for (const locale of LOCALES) {
+        changed[`src/i18n/${locale}/errors.json`] = json({
+            ...JSON.parse(result[`src/i18n/${locale}/errors.json`]),
+            ...appBackend.ERRORS[locale]
+        })
+        changed[`src/i18n/${locale}/validation.json`] = json({
+            ...TRANSLATIONS[locale].validation,
+            ...appBackend.VALIDATION[locale]
+        })
+    }
+    changed['src/main.ts'] = replaceOnce(
+        files['src/main.ts'],
+        ".setVersion('1.0')",
+        ".setVersion('1.0')\n    .addBearerAuth()"
+    )
+    changed['src/main.ts'] = replaceOnce(
+        changed['src/main.ts'],
+        `get('PORT') ?? ${PORT})`,
+        `get('PORT') ?? ${appBackend.APP_PORT})`
+    )
+    changed['src/setup.ts'] = replaceOnce(result['src/setup.ts'], `?? '${FRONTEND_ORIGIN}'`, `?? '${appOrigin(link)}'`)
+    // The CORS test of the main e2e spec: the frontend of this app
+    changed['test/app.e2e-spec.ts'] = replaceOnce(
+        result['test/app.e2e-spec.ts'],
+        `.set('Origin', '${FRONTEND_ORIGIN}').expect(200);
+      expect(response.headers['access-control-allow-origin']).toBe('${FRONTEND_ORIGIN}');`,
+        `.set('Origin', '${appOrigin(link)}').expect(200);
+      expect(response.headers['access-control-allow-origin']).toBe('${appOrigin(link)}');`
+    )
+    changed['src/app.module.ts'] = replaceOnce(
+        replaceOnce(
+            result['src/app.module.ts'],
+            "import { HealthController } from './health/health.controller.js';\n",
+            "import { HealthController } from './health/health.controller.js';\nimport { NotesModule } from './notes/notes.module.js';\nimport { PasportModule } from './pasport/pasport.module.js';\n"
+        ),
+        '    DatabaseModule,\n',
+        '    DatabaseModule,\n    PasportModule,\n    NotesModule,\n'
+    )
+    // Every route needs a token of the login server, except these (the status card of the frontend, the examples)
+    const open = (rel, controller, from) => {
+        let content = replaceOnce(result[rel], controller, '@Public()\n' + controller)
+        content = replaceOnce(
+            content,
+            "from '@nestjs/swagger';\n",
+            `from '@nestjs/swagger';\nimport { Public } from '${from}';\n`
+        )
+        changed[rel] = content
+    }
+    open('src/app.controller.ts', '@Controller()\n', './pasport/access.js')
+    open('src/health/health.controller.ts', "@Controller('health')\n", '../pasport/access.js')
+    open('src/examples/examples.controller.ts', "@Controller('examples')\n", '../pasport/access.js')
+    return changed
 }
 
 /** Adds the i18n files to nest-cli.json so they are copied to dist/ when building. */
@@ -917,6 +1000,8 @@ export const nestjs = {
         const database = answers?.database ?? null
         const withAuth = Boolean(database && answers?.auth)
         const withOidc = database && answers?.oidc ? answers.oidc : null
+        // An app linked to a login server (see linked.js): its tokens, its own database
+        const withApp = database && answers?.app ? answers.app : null
         const root = path.join(projectDir, DIR)
         if (await exists(root)) throw new Error(`De map ./${DIR} bestaat al. Verwijder of hernoem ze eerst.`)
 
@@ -1034,7 +1119,11 @@ export const nestjs = {
                         await fs.rm(path.join(root, rel), { force: true })
                     }
                     for (const [rel, content] of Object.entries(
-                        buildFiles(database, { auth: withAuth ? { jwtSecret: secret() } : null, oidc: withOidc })
+                        buildFiles(database, {
+                            auth: withAuth ? { jwtSecret: secret() } : null,
+                            oidc: withOidc,
+                            app: withApp
+                        })
                     ))
                         await write(root, rel, content)
                     await patchNestCli(root)
@@ -1044,7 +1133,8 @@ export const nestjs = {
                         pkg.scripts = {
                             ...pkg.scripts,
                             ...databases[database.id].backend(database).scripts,
-                            ...(withOidc ? oidc.SCRIPTS : {})
+                            ...(withOidc ? oidc.SCRIPTS : {}),
+                            ...(withApp ? appBackend.SCRIPTS : {})
                         }
                         await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
                     }

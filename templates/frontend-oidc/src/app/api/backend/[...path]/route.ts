@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { API_URL } from '@/lib/api'
+import { PASPORT_API_URL } from '@/lib/pasport'
 import { APP_URL, cookieOptions, SESSION_COOKIE, SESSION_SECONDS } from '@/lib/oidc'
 import { freshSession } from '@/lib/refresh'
 
@@ -44,7 +44,7 @@ async function forward(request: NextRequest, { params }: { params: Promise<{ pat
     if (!session) return answer(NextResponse.json({ error: 'session' }, { status: 401 }))
 
     const hasBody = !['GET', 'DELETE'].includes(request.method)
-    const response = await fetch(`${API_URL}/${path}${request.nextUrl.search}`, {
+    const response = await fetch(`${PASPORT_API_URL}/${path}${request.nextUrl.search}`, {
         method: request.method,
         headers: {
             Authorization: 'Bearer ' + session.accessToken,

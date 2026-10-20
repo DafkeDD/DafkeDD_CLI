@@ -4,6 +4,7 @@
  * controllers appears here and in Swagger (/docs).
  */
 
+import { appEndpoints } from './app.js'
 import { endpoints as oidcEndpoints } from './oidc.js'
 
 const fence = '```'
@@ -20,7 +21,7 @@ const USER = {
  * Every endpoint of the generated backend. `errors` are [status, translation key].
  * The same list is used to write the README, and the tests compare it with the controllers.
  */
-export const endpoints = ({ database = null, auth = false, oidc = false, port = 4000 } = {}) => [
+export const endpoints = ({ database = null, auth = false, oidc = false, app = null, port = 4000 } = {}) => [
     {
         method: 'GET',
         path: '/',
@@ -124,7 +125,8 @@ export const endpoints = ({ database = null, auth = false, oidc = false, port = 
               }
           ]
         : []),
-    ...(oidc ? oidcEndpoints({ port }) : [])
+    ...(oidc ? oidcEndpoints({ port }) : []),
+    ...(app ? appEndpoints() : [])
 ]
 
 /** A form body as it is sent: a=1&b=2 */
@@ -174,13 +176,14 @@ export function backendReadme({
     database = null,
     auth = false,
     oidc = false,
+    app = null,
     tenantRole = null,
     port = 4000,
     origin = 'http://localhost:3000',
     table = null,
     translations
 }) {
-    const list = endpoints({ database, auth, oidc, port })
+    const list = endpoints({ database, auth, oidc, app, port })
     // Every namespace of the translations: errors.NOT_FOUND, oidc.INVALID_LINK, ...
     const errorMessages = Object.fromEntries(
         Object.entries(translations.en).flatMap(([namespace, texts]) =>
@@ -401,6 +404,21 @@ export function backendReadme({
                       'Proxies that may tell the IP address of the user (`X-Forwarded-For`): `loopback`, `false`, a number or addresses'
                   ]
               ]
+            : []),
+        ...(app
+            ? [
+                  [
+                      'OIDC_ISSUER',
+                      app.issuer,
+                      'The login server (Pasport): the `iss` of its tokens; its keys are read there'
+                  ],
+                  ['OIDC_AUDIENCE', app.apiUrl, 'The `aud` of its access tokens: the API of the login server'],
+                  [
+                      'OIDC_CLIENT_IDS',
+                      app.clientId,
+                      'The apps whose access tokens are accepted (comma separated): the frontend of this app'
+                  ]
+              ]
             : [])
     ]
 
@@ -422,6 +440,7 @@ export function backendReadme({
                   ['npm run mail:dev', 'Start Mailpit in Docker: every email at http://localhost:8025']
               ]
             : []),
+        ...(app ? [['npm run test:db', 'Tests against the real PostgreSQL: tenant isolation (RLS) of the notes']] : []),
         ...(database?.mode === 'docker'
             ? [
                   ['npm run db:up', 'Start PostgreSQL in Docker and wait until it is healthy'],
@@ -537,15 +556,57 @@ For production: HTTPS, a long random \`JWT_SECRET\`, your real \`CORS_ORIGIN\`, 
 `
             : ''
     }
-${oidc ? oidcSection({ port, tenantRole }) : ''}## Endpoints
+${oidc ? oidcSection({ port, tenantRole }) : ''}${app ? appSection({ app, tenantRole }) : ''}## Endpoints
 
 CORS allows ${'`' + origin + '`'} (change \`CORS_ORIGIN\`). Examples use \`-H 'Accept-Language: nl'\`; leave it out for English.
 
 ${sections.join('\n')}
 ## Tests
 
-Unit tests (\`npm test\`) and end-to-end tests (\`npm run test:e2e\`) never need a database${auth ? ' (the users table is replaced by an in-memory fake)' : ''}${oidc ? ' (the OpenID Connect data is kept in memory)' : ''}.${oidc ? '\n`npm run test:db` runs the Row-Level Security and storage tests against the real PostgreSQL from `.env`: it creates a\nseparate `<DATABASE_NAME>_test` database and removes it afterwards.' : ''}
+Unit tests (\`npm test\`) and end-to-end tests (\`npm run test:e2e\`) never need a database${auth ? ' (the users table is replaced by an in-memory fake)' : ''}${oidc ? ' (the OpenID Connect data is kept in memory)' : ''}${app ? ' (the notes are kept in memory, the keys of the login server are a test key)' : ''}.${oidc || app ? '\n`npm run test:db` runs the Row-Level Security and storage tests against the real PostgreSQL from `.env`: it creates a\nseparate `<DATABASE_NAME>_test` database and removes it afterwards.' : ''}
 Add a test for every endpoint you add, and for every translated error in all four languages.
+`
+}
+
+/** The README section of an app linked to a login server: its access tokens, the access levels and the tenants. */
+function appSection({ app, tenantRole }) {
+    return `
+## Login through the login server
+
+This API has **no users or organisations of its own**: they live on the login server (Pasport) at
+**${app.issuer}**, where people register, log in and are invited. The frontend of this app logs in there and sends the
+**access token** along (\`Authorization: Bearer ...\`, added on the server by \`/api/app\` of the frontend). Every
+request is checked by \`PasportGuard\` (\`src/pasport\`), a global guard:
+
+1. the signature (ES256) with the public keys of the login server (\`jwks_uri\` of its discovery, cached 10 minutes;
+   an unknown key id fetches them again, at most every 30 seconds);
+2. \`typ\` is \`at+jwt\` (an ID token is refused), \`iss\` is \`OIDC_ISSUER\`, \`aud\` is \`OIDC_AUDIENCE\`, it has not expired;
+3. \`client_id\` is one of \`OIDC_CLIENT_IDS\`: a token of another app of the same login server opens nothing here.
+
+Nothing is looked up: who calls comes from the token (\`@CurrentCaller()\`: \`sub\`, \`tenant { id, name, role }\`,
+\`superadmin\`, \`sid\`). Every route says who may call it, with \`@Access(...)\` (\`src/pasport/access.ts\`):
+
+| Level | Who |
+| --- | --- |
+| \`@Public()\` | everyone, without a token (\`/\`, \`/health\`, \`/examples\`, \`/docs\`) |
+| \`@Access('account')\` | any valid token, also without an organisation (\`/me\`) |
+| \`@Access('member')\` | the default: a valid token **with** an organisation |
+| \`@Access('admin')\` | the beheerder (admin) of that organisation, or a superadmin |
+
+A missing or wrong token gives \`401 errors.UNAUTHORIZED\`, a token without organisation \`403 errors.NO_ORGANISATION\`, a
+member on an admin route \`403 errors.FORBIDDEN\` (translated, like every error).
+
+### Data per organisation (multi-tenant)
+
+The database of this app (its own, on the same PostgreSQL server as the login server) keeps the data of every
+organisation in the same tables, with a \`tenant_id\` column (the \`tenant.id\` of the token) and **Row-Level Security**.
+\`DatabaseService.withTenant(tenantId, fn)\` runs \`fn\` in a transaction as the role **\`${tenantRole}\`** with
+\`app.tenant_id\` set: PostgreSQL itself only shows and accepts the rows of that organisation, also when a query forgets
+its \`WHERE\`. The tables are created by the migrations in \`src/database/migrations.ts\` at the first start (a new
+migration gets the next number; add a new table to \`TENANT_TABLES\` so the tests check its isolation).
+
+The example is \`notes\` (\`src/notes\`): everyone of the organisation reads and adds notes, only its beheerder removes
+them. Copy it for your own data.
 `
 }
 

@@ -283,7 +283,7 @@ function linkedLogin(link) {
     return `
 ## Login (linked to an existing login server)
 
-This frontend has no login server of its own: it is the app **${link.name}** (\`${link.clientId}\`) of the DafkeDD login
+This frontend has no login server of its own (its API in \`./backend\` has no users either): it is the app **${link.name}** (\`${link.clientId}\`) of the DafkeDD login
 server **${link.issuer}**, linked by the CLI with a one-time link code of \`/admin\` → Apps there. The CLI added the
 addresses of this frontend to that app (redirect URI \`http://localhost:${link.port}/api/auth/callback\`, after logout
 \`http://localhost:${link.port}\`, back-channel logout \`http://localhost:${link.port}/api/auth/backchannel-logout\` when the app had
@@ -298,6 +298,12 @@ none). Somebody who is logged in at that server is logged in here without a pass
 | \`/login\` | Starts a login at once: the login screen of the login server (the same in every app), where users also register; \`?error=\` stays here and shows why the last one failed (for example \`access_denied\` on the consent screen) |
 | \`/profile\` | Protected: name, email, organisation, role, and whether the login server accepts the access token |
 | \`/api/backend/...\` | Calls the API of the login server with the access token of the session (only for apps marked "our own application") |
+| \`/api/app/...\` | Calls the API of **this app** (\`./backend\`) with the same access token, added on the server (the browser never sees it); changes only from a page of this app (Origin check) |
+
+The home page shows the **notes of the organisation** (\`src/components/notes.tsx\`): the example of data of this app,
+stored by its own API in its own database, per organisation. Everyone of the organisation adds notes, only its
+beheerder (admin) removes them. Copy it for your own pages: \`fetch('/api/app/<path>')\`, and an \`@Access(...)\` route in
+the backend (see its README, "Login through the login server").
 
 The account pages (security, passkeys, members, licences, the platform) are on the frontend of the login server
 (\`OIDC_ACCOUNT_URL\`): the sidebar, the user menu and the profile link there. This app has no login or registration
@@ -311,7 +317,8 @@ form of its own: registering always happens on the login server.
 | \`OIDC_CLIENT_ID\` | This app there (\`${link.clientId}\`) |
 | \`OIDC_CLIENT_SECRET\` | Only for a confidential app: its secret (the link made a new one) |
 | \`OIDC_ACCOUNT_URL\` | The frontend of the login server (\`${link.accountUrl}\`) |
-| \`NEXT_PUBLIC_API_URL\` | The API of the login server |
+| \`NEXT_PUBLIC_API_URL\` | The API of this app (\`./backend\`, \`http://localhost:4001\`): \`API_URL\` in \`src/lib/api.ts\` |
+| \`NEXT_PUBLIC_PASPORT_API_URL\` | The API of the login server (\`${link.apiUrl}\`): \`PASPORT_API_URL\` in \`src/lib/pasport.ts\` |
 | \`APP_URL\` | Where this frontend runs (\`http://localhost:${link.port}\`) |
 | \`AUTH_SECRET\` | Encrypts the session cookie (another one in production) |
 

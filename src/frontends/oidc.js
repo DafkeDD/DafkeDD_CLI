@@ -2411,8 +2411,56 @@ export const NAV_MESSAGES = {
     de: { home: 'Start' }
 }
 
+/** The notes card of a linked app (src/components/notes.tsx): data of the API of the app itself, per organisation. */
+export const NOTES_MESSAGES = {
+    en: {
+        title: 'Notes of your organisation',
+        text: 'Stored by the API of this app, in its own database: every organisation only sees its own notes.',
+        placeholder: 'Write a note…',
+        add: 'Add',
+        empty: 'No notes yet.',
+        byYou: 'By you',
+        byColleague: 'By a colleague',
+        remove: 'Remove',
+        offline: 'The API of this app cannot be reached. Start it: cd backend && npm run start:dev'
+    },
+    nl: {
+        title: 'Notities van je organisatie',
+        text: 'Bewaard door de API van deze app, in een eigen database: elke organisatie ziet enkel haar eigen notities.',
+        placeholder: 'Schrijf een notitie…',
+        add: 'Toevoegen',
+        empty: 'Nog geen notities.',
+        byYou: 'Door jou',
+        byColleague: 'Door een collega',
+        remove: 'Verwijderen',
+        offline: 'De API van deze app is niet bereikbaar. Start ze: cd backend && npm run start:dev'
+    },
+    fr: {
+        title: 'Notes de votre organisation',
+        text: "Enregistrées par l'API de cette application, dans sa propre base de données : chaque organisation ne voit que ses notes.",
+        placeholder: 'Écrivez une note…',
+        add: 'Ajouter',
+        empty: 'Pas encore de notes.',
+        byYou: 'Par vous',
+        byColleague: 'Par un collègue',
+        remove: 'Supprimer',
+        offline: "L'API de cette application est injoignable. Démarrez-la : cd backend && npm run start:dev"
+    },
+    de: {
+        title: 'Notizen deiner Organisation',
+        text: 'Gespeichert von der API dieser App, in einer eigenen Datenbank: jede Organisation sieht nur ihre eigenen Notizen.',
+        placeholder: 'Schreibe eine Notiz…',
+        add: 'Hinzufügen',
+        empty: 'Noch keine Notizen.',
+        byYou: 'Von dir',
+        byColleague: 'Von einer Kollegin oder einem Kollegen',
+        remove: 'Entfernen',
+        offline: 'Die API dieser App ist nicht erreichbar. Starte sie: cd backend && npm run start:dev'
+    }
+}
+
 /** All files of templates/frontend-oidc with the placeholders filled in. */
-function readTemplates(dir, apiPort, appName = null) {
+function readTemplates(dir, apiPort, appName = null, pasportApiUrl = '') {
     const result = {}
     for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true })) {
         if (!entry.isFile()) continue
@@ -2421,13 +2469,15 @@ function readTemplates(dir, apiPort, appName = null) {
         result[rel] = readFileSync(full, 'utf8')
             .replaceAll('__API_PORT__', String(apiPort))
             .replaceAll('__APP_NAME__', JSON.stringify(appName))
+            .replaceAll('__PASPORT_API_URL__', pasportApiUrl)
     }
     return result
 }
 
 /**
  * The files of a frontend that is only a client of an existing login server (linked with a link code): the login,
- * the session and the profile. Account, management and platform pages stay on the frontend of that server.
+ * the session and the profile, plus the notes of the API of the app itself (/api/app). Account, management and
+ * platform pages stay on the frontend of that server.
  */
 export const LINKED_FILES = [
     'src/app/[locale]/layout.tsx',
@@ -2438,8 +2488,10 @@ export const LINKED_FILES = [
     'src/app/api/auth/callback/route.ts',
     'src/app/api/auth/login/route.ts',
     'src/app/api/auth/logout/route.ts',
+    'src/app/api/app/[...path]/route.ts',
     'src/app/api/backend/[...path]/route.ts',
     'src/components/account-ui.tsx',
+    'src/components/notes.tsx',
     'src/components/presence.tsx',
     'src/components/session-links.tsx',
     'src/components/shell/app-shell.tsx',
@@ -2451,23 +2503,24 @@ export const LINKED_FILES = [
     'src/lib/ended.ts',
     'src/lib/nav.ts',
     'src/lib/oidc.ts',
+    'src/lib/pasport.ts',
     'src/lib/refresh.ts',
     'src/lib/session.ts',
     'src/proxy.ts'
 ]
 
 /** The OIDC files of the frontend; `linked`: only those of a client of an existing login server. */
-export function oidcFrontendFiles({ apiPort = 4000, linked = false, appName = null } = {}) {
+export function oidcFrontendFiles({ apiPort = 4000, linked = false, appName = null, pasportApiUrl = '' } = {}) {
     const all = readTemplates(TEMPLATE_DIR, apiPort, linked ? appName : null)
     if (!linked) return all
-    const own = readTemplates(LINKED_TEMPLATE_DIR, apiPort, appName)
+    const own = readTemplates(LINKED_TEMPLATE_DIR, apiPort, appName, pasportApiUrl)
     return Object.fromEntries(LINKED_FILES.map(rel => [rel, own[rel] ?? all[rel]]))
 }
 
 /** .env.local of the frontend: where the OIDC server is and the secret that encrypts the session cookie. */
 export const envLocal = ({ apiPort = 4000, secret = randomBytes(32).toString('hex'), linked = null } = {}) =>
     linked
-        ? linkedEnvLocal(linked, secret)
+        ? linkedEnvLocal(linked, secret, apiPort)
         : [
               '# Login through the OpenID Connect server of the backend (see README.md, "Login")',
               `OIDC_ISSUER=http://localhost:${apiPort}/oidc`,
@@ -2479,7 +2532,7 @@ export const envLocal = ({ apiPort = 4000, secret = randomBytes(32).toString('he
           ].join('\n')
 
 /** .env.local of a frontend linked to an existing login server: its issuer, the app there, and where this app runs. */
-function linkedEnvLocal(linked, secret) {
+function linkedEnvLocal(linked, secret, apiPort) {
     return [
         '# Linked with a link code to an existing DafkeDD login server (see README.md, "Login")',
         `OIDC_ISSUER=${linked.issuer}`,
@@ -2492,8 +2545,10 @@ function linkedEnvLocal(linked, secret) {
             : []),
         '# The frontend of the login server: account, security, management and platform pages',
         `OIDC_ACCOUNT_URL=${linked.accountUrl}`,
-        '# The API of the login server (members, licences, ... as the logged in user)',
-        `NEXT_PUBLIC_API_URL=${linked.apiUrl}`,
+        '# The API of this app (./backend): the notes, its own data per organisation',
+        `NEXT_PUBLIC_API_URL=http://localhost:${apiPort}`,
+        '# The API of the login server (members, licences, the heartbeat ... as the logged in user)',
+        `NEXT_PUBLIC_PASPORT_API_URL=${linked.apiUrl}`,
         `APP_URL=http://localhost:${linked.port}`,
         '# Encrypts the session cookie: 64 hex characters, keep it secret, another one in production',
         `AUTH_SECRET=${secret}`,

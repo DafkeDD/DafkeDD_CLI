@@ -1,7 +1,7 @@
 'use client'
 
 import { useLocale } from 'next-intl'
-import { API_URL } from '@/lib/api'
+import { PASPORT_API_URL } from '@/lib/pasport'
 
 export interface Answer {
     status: number
@@ -24,7 +24,7 @@ export function useAccountApi() {
     const locale = useLocale()
     return async (path: string, body?: object): Promise<Answer> =>
         answer(
-            await fetch(`${API_URL}/oidc/account/${path}`, {
+            await fetch(`${PASPORT_API_URL}/oidc/account/${path}`, {
                 method: body ? 'POST' : 'GET',
                 headers: {
                     Accept: 'application/json',

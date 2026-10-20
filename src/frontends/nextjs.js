@@ -13,6 +13,7 @@ import {
     envLocal,
     LICENSE_MESSAGES,
     NAV_MESSAGES,
+    NOTES_MESSAGES,
     OIDC_MESSAGES,
     oidcFrontendFiles,
     SHELL_MESSAGES
@@ -849,7 +850,12 @@ export function withApi(fileMap, api, { ui }) {
         ...apiFiles(api),
         ...(api.auth ? authFiles() : {}),
         ...(api.oidc
-            ? oidcFrontendFiles({ apiPort: api.port, linked: Boolean(api.linked), appName: api.linked?.name ?? null })
+            ? oidcFrontendFiles({
+                  apiPort: api.port,
+                  linked: Boolean(api.linked),
+                  appName: api.linked?.name ?? null,
+                  pasportApiUrl: api.linked?.apiUrl ?? ''
+              })
             : {})
     }
     for (const locale of LOCALES) {
@@ -866,7 +872,8 @@ export function withApi(fileMap, api, { ui }) {
                               Audit: AUDIT_MESSAGES[locale],
                               Apps: APPS_MESSAGES[locale],
                               Shell: SHELL_MESSAGES[locale],
-                              Nav: NAV_MESSAGES[locale]
+                              Nav: NAV_MESSAGES[locale],
+                              ...(api.linked ? { Notes: NOTES_MESSAGES[locale] } : {})
                           }
                         : {})
                 },
@@ -877,6 +884,12 @@ export function withApi(fileMap, api, { ui }) {
     // The Pasport layout and home page come with the OIDC files (src/components/shell); the theme is a button there
     if (api.oidc) {
         delete result['src/components/theme-switcher.tsx']
+        // The status card as a card of the Pasport design (the page of a linked app shows it)
+        result['src/components/api-status.tsx'] = replaceOnce(
+            result['src/components/api-status.tsx'],
+            'className="relative mt-6 flex w-full max-w-3xl flex-col gap-5 rounded-2xl border border-black/10 bg-black/[.03] p-5 text-left dark:border-white/15 dark:bg-white/[.04]"',
+            'className="lui-card flex w-full flex-col gap-4 p-6 text-left"'
+        )
         return result
     }
     const page = 'src/app/[locale]/page.tsx'
