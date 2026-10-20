@@ -9,6 +9,8 @@ import { MemoryAuditStore } from '../src/audit/memory-audit.store.js'
 import { BILLING_STORE } from '../src/billing/store/billing.store.js'
 import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
+import type { Mail } from '../src/mail/mail.service.js'
+import { MailService } from '../src/mail/mail.service.js'
 import { pkceChallenge } from '../src/oidc/crypto.js'
 import { LoginLimiter } from '../src/oidc/login-limiter.js'
 import { OidcService } from '../src/oidc/oidc.service.js'
@@ -39,6 +41,7 @@ describe('Apps on /admin (e2e)', () => {
     const store = new MemoryOidcStore()
     const billing = new MemoryBillingStore()
     const audit = new MemoryAuditStore(store)
+    const outbox: Mail[] = []
     const http = () => request(app.getHttpServer())
     const tokens = { root: '', alice: '' }
 
@@ -59,6 +62,13 @@ describe('Apps on /admin (e2e)', () => {
             .useValue(billing)
             .overrideProvider(AUDIT_STORE)
             .useValue(audit)
+            .overrideProvider(MailService)
+            .useValue({
+                send: async (mail: Mail) => {
+                    outbox.push(mail)
+                    return true
+                }
+            })
             .compile()
         app = moduleRef.createNestApplication()
         configureApp(app)
@@ -543,5 +553,136 @@ describe('Apps on /admin (e2e)', () => {
         expect(claims((await login('alice@example.com', rolesApp)).access_token).roles).toEqual(['editor'])
         // An app without roles: no roles claim
         expect(claims((await login('alice@example.com')).access_token)).not.toHaveProperty('roles')
+    })
+
+    it('an invitation with apps: the email names them, accepting gives their roles and a free seat', async () => {
+        const claims = (token: string) =>
+            JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as Record<string, unknown>
+        const ROLES = [
+            { key: 'editor', names: { en: 'Editor', nl: 'Bewerker', fr: 'Éditeur', de: 'Bearbeiter' }, default: true },
+            { key: 'viewer', names: { en: 'Viewer', nl: 'Lezer', fr: 'Lecteur', de: 'Leser' } }
+        ]
+        // An app with roles that sells a product, and one free seat in the organisation
+        await http()
+            .post('/admin/products')
+            .set(bearer(tokens.root))
+            .send({ code: 'agenda', name: 'Agenda', priceMonthCents: 500, priceYearCents: 5000 })
+            .expect(201)
+        await create({ clientId: 'agenda.app', name: 'Agenda', product: 'agenda', firstParty: true }).expect(201)
+        const code = (await http().post('/admin/clients/agenda.app/link-code').set(bearer(tokens.root))).body.code
+        await http().post('/oidc/link/roles').send({ code, roles: ROLES }).expect(200)
+        await http()
+            .post(`/admin/tenants/${tenantId}/grants`)
+            .set(bearer(tokens.root))
+            .send({ productCode: 'agenda', seats: 1 })
+            .expect(201)
+        const agenda = { id: 'agenda.app', redirect: APP.redirectUris[0]! }
+
+        // The admins see every app they can give: its address (the home page) and the product it sells
+        const apps = await http().get('/tenants/current/apps').set(bearer(tokens.alice)).expect(200)
+        expect(apps.body.find((item: { clientId: string }) => item.clientId === 'agenda.app')).toMatchObject({
+            name: 'Agenda',
+            url: 'https://planner.partner.com',
+            product: 'agenda',
+            roles: [{ key: 'editor' }, { key: 'viewer' }]
+        })
+        // The apps of the clients file without roles are not given (the login server itself)
+        expect(apps.body.some((item: { clientId: string }) => item.clientId === 'frontend')).toBe(false)
+
+        const invite = (body: Record<string, unknown>) =>
+            http()
+                .post('/tenants/current/invitations')
+                .set(bearer(tokens.alice))
+                .send({ email: 'gina@example.com', role: 'user', ...body })
+        // Checked: an app that cannot be given, a role the app does not have, a list that is not one
+        const unknownApp = await invite({ apps: [{ clientId: 'nope.app' }] }).expect(400)
+        expect(unknownApp.body.error).toBe('oidc.INVITATION_APP_UNKNOWN')
+        expect(unknownApp.body.message).toContain('nope.app')
+        const unknownRole = await invite({ apps: [{ clientId: 'agenda.app', roles: ['owner'] }] }).expect(400)
+        expect(unknownRole.body.error).toBe('oidc.ROLE_UNKNOWN')
+        await invite({ apps: [{ clientId: 5 }] }).expect(400)
+        await invite({ apps: [{ clientId: 'agenda.app', extra: true }] }).expect(400)
+        await invite({ apps: 'agenda.app' }).expect(400)
+        expect(outbox.some(mail => mail.to === 'gina@example.com')).toBe(false)
+
+        // Gina: viewer in the agenda, with a seat (the same app twice counts once)
+        await invite({
+            apps: [
+                { clientId: 'agenda.app', roles: ['viewer'], seat: true },
+                { clientId: 'agenda.app', roles: [] }
+            ]
+        }).expect(202)
+        const open = await http().get('/tenants/current/invitations').set(bearer(tokens.alice)).expect(200)
+        expect(open.body.find((item: { email: string }) => item.email === 'gina@example.com').apps).toEqual([
+            { clientId: 'agenda.app', roles: ['viewer'], seat: true }
+        ])
+        expect(audit.events.findLast(event => event.action === 'members.invited')).toMatchObject({
+            details: { email: 'gina@example.com', role: 'user', apps: 'agenda.app' }
+        })
+        // The email names the app
+        const mail = outbox.filter(item => item.to === 'gina@example.com').at(-1)
+        expect(mail?.text).toContain('Agenda')
+        const token = /token=([^\s&]+)/.exec(mail?.text ?? '')?.[1] ?? ''
+        expect(token).not.toBe('')
+        // The invitation page shows the app, the roles that come with it and the seat
+        const details = await http().get('/oidc/account/invitation').query({ token }).expect(200)
+        expect(details.body.apps).toEqual([
+            {
+                clientId: 'agenda.app',
+                name: 'Agenda',
+                url: 'https://planner.partner.com',
+                roles: [{ key: 'viewer', names: ROLES[1]!.names }],
+                seat: true
+            }
+        ])
+        // Accepting gives the roles and the seat, and tells where to open the app
+        const accepted = await http()
+            .post('/oidc/account/invitation/accept')
+            .send({ token, name: 'Gina', password: PASSWORD })
+            .expect(200)
+        expect(accepted.body.apps).toEqual([
+            { clientId: 'agenda.app', name: 'Agenda', url: 'https://planner.partner.com', seat: true }
+        ])
+        const gina = (await store.findUserByEmail('gina@example.com'))!
+        const product = (await billing.findProductByCode('agenda'))!
+        expect(
+            (await billing.listAssignments(tenantId)).some(
+                item => item.productId === product.id && item.userId === gina.id
+            )
+        ).toBe(true)
+        expect(audit.events.findLast(event => event.action === 'members.app_roles_changed')).toMatchObject({
+            actorId: aliceId,
+            targetId: gina.id,
+            details: { app: 'agenda.app', roles: 'viewer', reason: 'invitation' }
+        })
+        expect(audit.events.findLast(event => event.action === 'licences.seat_assigned')).toMatchObject({
+            targetId: gina.id,
+            details: { product: 'agenda' }
+        })
+        // Her tokens of the app carry the roles; her trial runs first, the seat comes after it
+        const token1 = claims((await login('gina@example.com', agenda)).access_token)
+        expect(token1.roles).toEqual(['viewer'])
+        expect(token1.license).toMatchObject({ product: 'agenda', status: 'trial' })
+        await billing.setTrialEnd(tenantId, product.id, gina.id, new Date(Date.now() - 1000))
+        expect(claims((await login('gina@example.com', agenda)).access_token).license).toEqual({
+            product: 'agenda',
+            status: 'seat'
+        })
+
+        // No free seat left: Hank still joins (with his trial) and the default roles; the answer says so
+        await invite({ email: 'hank@example.com', apps: [{ clientId: 'agenda.app', seat: true }] }).expect(202)
+        const hankToken = /token=([^\s&]+)/.exec(
+            outbox.filter(item => item.to === 'hank@example.com').at(-1)?.text ?? ''
+        )?.[1]
+        const hank = await http()
+            .post('/oidc/account/invitation/accept')
+            .send({ token: hankToken, name: 'Hank', password: PASSWORD })
+            .expect(200)
+        expect(hank.body.apps).toEqual([
+            { clientId: 'agenda.app', name: 'Agenda', url: 'https://planner.partner.com', seat: false }
+        ])
+        const hankClaims = claims((await login('hank@example.com', agenda)).access_token)
+        expect(hankClaims.roles).toEqual(['editor'])
+        expect(hankClaims.license).toMatchObject({ status: 'trial' })
     })
 })

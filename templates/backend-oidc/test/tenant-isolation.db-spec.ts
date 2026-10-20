@@ -502,6 +502,7 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
             email: 'new@x.com',
             role: 'user',
             invitedBy: chief,
+            apps: [],
             expiresAt
         })
         const again = await store.saveInvitation({
@@ -509,12 +510,21 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
             email: 'NEW@x.com',
             role: 'admin',
             invitedBy: chief,
+            apps: [{ clientId: 'planner', roles: ['editor'], seat: true }],
             expiresAt
         })
         expect(again.id).toBe(first.id)
+        // The apps of the invitation are kept (jsonb) and replaced by the new invitation
+        expect(again.apps).toEqual([{ clientId: 'planner', roles: ['editor'], seat: true }])
         expect(await store.listInvitations(tenantId)).toEqual([
-            expect.objectContaining({ id: first.id, role: 'admin', invitedByName: 'chief@example.com' })
+            expect.objectContaining({
+                id: first.id,
+                role: 'admin',
+                invitedByName: 'chief@example.com',
+                apps: [{ clientId: 'planner', roles: ['editor'], seat: true }]
+            })
         ])
+        expect((await store.findInvitation(tenantId, first.id))?.apps).toEqual(again.apps)
         // Row-Level Security: another tenant sees nothing of it
         expect(await store.listInvitations(tenant.a)).toEqual([])
         expect(await store.findInvitation(tenant.a, first.id)).toBeNull()

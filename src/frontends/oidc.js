@@ -80,6 +80,10 @@ export const OIDC_MESSAGES = {
         inviteAccept: 'Accept invitation',
         inviteDoneTitle: 'Welcome to {tenant}',
         inviteDoneText: 'You are a member now. Log in to continue.',
+        inviteAppsText: 'You get access to:',
+        inviteWithSeat: 'with a licence',
+        inviteNoSeat: 'no free licence: your trial runs',
+        inviteOpenApp: 'Open {app}',
         manageMembers: 'Manage members',
         membersTitle: 'Members of {tenant}',
         you: 'you',
@@ -90,6 +94,10 @@ export const OIDC_MESSAGES = {
         saved: 'Saved.',
         inviteSomeone: 'Invite someone',
         inviteSend: 'Send invitation',
+        inviteAppsTitle: 'Access to apps',
+        inviteAppsHint: 'Optional. The ticked roles and the licence are given when the invitation is accepted.',
+        inviteSeat: 'Give a licence',
+        invitationApps: 'Apps: {apps}',
         invited: 'Invitation sent to {email}.',
         sessionExpired: 'Your session has expired. Log in again.',
         noAccess: 'Only admins of the organisation can open this page.',
@@ -312,6 +320,10 @@ export const OIDC_MESSAGES = {
         inviteAccept: 'Uitnodiging aanvaarden',
         inviteDoneTitle: 'Welkom bij {tenant}',
         inviteDoneText: 'Je bent nu lid. Log in om verder te gaan.',
+        inviteAppsText: 'Je krijgt toegang tot:',
+        inviteWithSeat: 'met een licentie',
+        inviteNoSeat: 'geen vrije licentie: je proefperiode loopt',
+        inviteOpenApp: '{app} openen',
         manageMembers: 'Leden beheren',
         membersTitle: 'Leden van {tenant}',
         you: 'jij',
@@ -322,6 +334,11 @@ export const OIDC_MESSAGES = {
         saved: 'Opgeslagen.',
         inviteSomeone: 'Iemand uitnodigen',
         inviteSend: 'Uitnodiging versturen',
+        inviteAppsTitle: 'Toegang tot apps',
+        inviteAppsHint:
+            'Optioneel. De aangevinkte rollen en de licentie worden gegeven zodra de uitnodiging aanvaard is.',
+        inviteSeat: 'Licentie geven',
+        invitationApps: 'Apps: {apps}',
         invited: 'Uitnodiging verstuurd naar {email}.',
         sessionExpired: 'Je sessie is verlopen. Log opnieuw in.',
         noAccess: 'Alleen beheerders van de organisatie kunnen deze pagina openen.',
@@ -546,6 +563,10 @@ export const OIDC_MESSAGES = {
         inviteAccept: "Accepter l'invitation",
         inviteDoneTitle: 'Bienvenue chez {tenant}',
         inviteDoneText: 'Vous êtes maintenant membre. Connectez-vous pour continuer.',
+        inviteAppsText: 'Vous aurez accès à :',
+        inviteWithSeat: 'avec une licence',
+        inviteNoSeat: 'aucune licence libre : votre essai est en cours',
+        inviteOpenApp: 'Ouvrir {app}',
         manageMembers: 'Gérer les membres',
         membersTitle: 'Membres de {tenant}',
         you: 'vous',
@@ -556,6 +577,10 @@ export const OIDC_MESSAGES = {
         saved: 'Enregistré.',
         inviteSomeone: "Inviter quelqu'un",
         inviteSend: "Envoyer l'invitation",
+        inviteAppsTitle: 'Accès aux applications',
+        inviteAppsHint: "Facultatif. Les rôles cochés et la licence sont donnés dès que l'invitation est acceptée.",
+        inviteSeat: 'Donner une licence',
+        invitationApps: 'Applications : {apps}',
         invited: 'Invitation envoyée à {email}.',
         sessionExpired: 'Votre session a expiré. Reconnectez-vous.',
         noAccess: "Seuls les administrateurs de l'organisation peuvent ouvrir cette page.",
@@ -785,6 +810,10 @@ export const OIDC_MESSAGES = {
         inviteAccept: 'Einladung annehmen',
         inviteDoneTitle: 'Willkommen bei {tenant}',
         inviteDoneText: 'Du bist jetzt Mitglied. Melde dich an, um weiterzumachen.',
+        inviteAppsText: 'Du bekommst Zugang zu:',
+        inviteWithSeat: 'mit Lizenz',
+        inviteNoSeat: 'keine freie Lizenz: deine Testphase läuft',
+        inviteOpenApp: '{app} öffnen',
         manageMembers: 'Mitglieder verwalten',
         membersTitle: 'Mitglieder von {tenant}',
         you: 'du',
@@ -795,6 +824,11 @@ export const OIDC_MESSAGES = {
         saved: 'Gespeichert.',
         inviteSomeone: 'Jemanden einladen',
         inviteSend: 'Einladung senden',
+        inviteAppsTitle: 'Zugang zu Apps',
+        inviteAppsHint:
+            'Optional. Die angekreuzten Rollen und die Lizenz werden vergeben, sobald die Einladung angenommen ist.',
+        inviteSeat: 'Lizenz vergeben',
+        invitationApps: 'Apps: {apps}',
         invited: 'Einladung an {email} gesendet.',
         sessionExpired: 'Deine Sitzung ist abgelaufen. Melde dich erneut an.',
         noAccess: 'Nur Administratoren der Organisation können diese Seite öffnen.',
@@ -1089,7 +1123,10 @@ export const AUDIT_MESSAGES = {
             scopes: 'Data',
             type: 'Kind',
             firstParty: 'Own app',
-            redirectUri: 'Address'
+            redirectUri: 'Address',
+            app: 'App',
+            apps: 'Apps',
+            roles: 'Roles'
         },
         methods: {
             password: 'password',
@@ -1107,7 +1144,8 @@ export const AUDIT_MESSAGES = {
             eid_not_linked: 'eID not linked to an account',
             passkey_invalid: 'passkey not valid',
             passkey_unknown: 'unknown passkey',
-            passkey_expired: 'passkey request expired'
+            passkey_expired: 'passkey request expired',
+            invitation: 'invitation'
         }
     },
     nl: {
@@ -1239,7 +1277,10 @@ export const AUDIT_MESSAGES = {
             scopes: 'Gegevens',
             type: 'Soort',
             firstParty: 'Eigen app',
-            redirectUri: 'Adres'
+            redirectUri: 'Adres',
+            app: 'App',
+            apps: 'Apps',
+            roles: 'Rollen'
         },
         methods: {
             password: 'wachtwoord',
@@ -1257,7 +1298,8 @@ export const AUDIT_MESSAGES = {
             eid_not_linked: 'eID niet aan een account gekoppeld',
             passkey_invalid: 'passkey ongeldig',
             passkey_unknown: 'onbekende passkey',
-            passkey_expired: 'passkey-aanvraag verlopen'
+            passkey_expired: 'passkey-aanvraag verlopen',
+            invitation: 'uitnodiging'
         }
     },
     fr: {
@@ -1389,7 +1431,10 @@ export const AUDIT_MESSAGES = {
             scopes: 'Données',
             type: 'Type',
             firstParty: 'Application propre',
-            redirectUri: 'Adresse'
+            redirectUri: 'Adresse',
+            app: 'Application',
+            apps: 'Applications',
+            roles: 'Rôles'
         },
         methods: {
             password: 'mot de passe',
@@ -1407,7 +1452,8 @@ export const AUDIT_MESSAGES = {
             eid_not_linked: 'eID non liée à un compte',
             passkey_invalid: "clé d'accès non valable",
             passkey_unknown: "clé d'accès inconnue",
-            passkey_expired: "demande de clé d'accès expirée"
+            passkey_expired: "demande de clé d'accès expirée",
+            invitation: 'invitation'
         }
     },
     de: {
@@ -1539,7 +1585,10 @@ export const AUDIT_MESSAGES = {
             scopes: 'Daten',
             type: 'Art',
             firstParty: 'Eigene App',
-            redirectUri: 'Adresse'
+            redirectUri: 'Adresse',
+            app: 'App',
+            apps: 'Apps',
+            roles: 'Rollen'
         },
         methods: {
             password: 'Passwort',
@@ -1557,7 +1606,8 @@ export const AUDIT_MESSAGES = {
             eid_not_linked: 'eID mit keinem Konto verknüpft',
             passkey_invalid: 'Passkey ungültig',
             passkey_unknown: 'unbekannter Passkey',
-            passkey_expired: 'Passkey-Anfrage abgelaufen'
+            passkey_expired: 'Passkey-Anfrage abgelaufen',
+            invitation: 'Einladung'
         }
     }
 }

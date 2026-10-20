@@ -38,7 +38,8 @@ export function AppRoles() {
         backend('tenants/current/apps')
             .then(result => {
                 if (result.status !== 200) return setError(result.message || t('offline'))
-                const list = result.body as unknown as App[]
+                // Only the apps that have roles (the list also holds apps without, for invitations)
+                const list = (result.body as unknown as App[]).filter(app => app.roles.length > 0)
                 setApps(list)
                 if (list[0]) setClientId(list[0].clientId)
             })

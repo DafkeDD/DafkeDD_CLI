@@ -11,6 +11,7 @@ import {
     openAccountToken,
     sealAccountToken
 } from './account-token.js'
+import { AppRolesService } from './app-roles.service.js'
 import { sha256 } from './crypto.js'
 import { EidService } from './eid.service.js'
 import { LoginLimiter } from './login-limiter.js'
@@ -44,7 +45,8 @@ export class AccountService {
         private readonly limiter: LoginLimiter,
         private readonly i18n: I18nService,
         private readonly eid: EidService,
-        private readonly audit: AuditService
+        private readonly audit: AuditService,
+        private readonly appRoles: AppRolesService
     ) {}
 
     /** Called when an account joins an organisation (the licences give it a trial of every product). */
@@ -292,15 +294,21 @@ export class AccountService {
 
     /**
      * Invites someone to a tenant (or renews the open invitation for that address). `inviter` must be admin of that
-     * tenant or superadmin (checked by the caller).
+     * tenant or superadmin (checked by the caller). `apps`: the apps the invitation gives access to, with the roles in
+     * each app and optionally a seat; the email names them and the invitation page offers to open them.
      */
     async invite(
         inviter: { userId: string; name: string },
         tenant: { id: string; name: string },
-        input: { email: string; role: TenantRole },
+        input: {
+            email: string
+            role: TenantRole
+            apps?: { clientId: string; roles?: string[] | null; seat?: boolean }[]
+        },
         lang: string
     ) {
         const email = normalize(input.email)
+        const apps = await this.appRoles.checkInvitationApps(input.apps)
         const existing = await this.store.findUserByEmail(email)
         if (existing && (await this.store.findMember(tenant.id, existing.id)))
             throw new AppException('oidc.ALREADY_MEMBER', HttpStatus.CONFLICT)
@@ -309,6 +317,7 @@ export class AccountService {
             email,
             role: input.role,
             invitedBy: inviter.userId,
+            apps,
             expiresAt: new Date(Date.now() + OIDC.INVITATION_SECONDS * 1000)
         })
         await this.sendInvitation(invitation, inviter.name, tenant.name, lang)
@@ -316,7 +325,11 @@ export class AccountService {
             tenantId: tenant.id,
             actorId: inviter.userId,
             target: { type: 'invitation', id: invitation.id },
-            details: { email, role: input.role }
+            details: {
+                email,
+                role: input.role,
+                ...(apps.length ? { apps: apps.map(app => app.clientId).join(',') } : {})
+            }
         })
         return { status: 'invited' as const, email, id: invitation.id }
     }
@@ -341,12 +354,14 @@ export class AccountService {
     private async sendInvitation(invitation: Invitation, inviterName: string, tenantName: string, lang: string) {
         const existing = await this.store.findUserByEmail(invitation.email)
         const language = existing?.locale ?? lang
+        const apps = await this.appRoles.describeInvitationApps(invitation.apps)
         await this.send('invite', invitation.email, language, {
             name: existing?.name ?? invitation.email,
             app: this.config.appName,
             tenant: tenantName,
             inviter: inviterName,
             role: String(this.i18n.t(`mail.ROLE_${invitation.role}`, { lang: language })),
+            apps: apps.map(app => app.name).join(', '),
             link: this.link(
                 'invite',
                 {
@@ -368,28 +383,30 @@ export class AccountService {
     private async openInvitation(token: unknown) {
         const data = openAccountToken('invite', token, this.key)
         if (!data) this.invalidLink()
-        const [row, tenant, inviter] = await Promise.all([
+        const [invitation, tenant, inviter] = await Promise.all([
             this.store.findInvitation(data.tenantId, data.invitationId),
             this.store.findTenant(data.tenantId),
             this.store.findUserById(data.invitedBy)
         ])
-        if (row?.email.toLowerCase() !== data.email.toLowerCase()) this.invalidLink()
+        if (!invitation || invitation.email.toLowerCase() !== data.email.toLowerCase()) this.invalidLink()
         const allowed =
             inviter?.status === 'active' &&
             (inviter.isSuperadmin || (await this.store.findMemberRole(data.tenantId, inviter.id)) === 'admin')
         if (tenant?.status !== 'active' || !inviter || !allowed) this.invalidLink()
-        return { data, tenant, inviter }
+        return { data, tenant, inviter, invitation }
     }
 
     async invitation(token: unknown) {
-        const { data, tenant, inviter } = await this.openInvitation(token)
+        const { data, tenant, inviter, invitation } = await this.openInvitation(token)
         const account = await this.store.findUserByEmail(data.email)
         return {
             email: data.email,
             tenantName: tenant.name,
             role: data.role,
             inviterName: inviter.name,
-            accountExists: Boolean(account)
+            accountExists: Boolean(account),
+            // The apps it gives access to: name, address, the roles that come with it, and whether a seat does
+            apps: await this.appRoles.describeInvitationApps(invitation.apps)
         }
     }
 
@@ -398,7 +415,7 @@ export class AccountService {
      * `name` and `password` create it, already verified.
      */
     async acceptInvitation(input: { token: string; name?: string; password?: string }, lang: string) {
-        const { data, tenant } = await this.openInvitation(input.token)
+        const { data, tenant, invitation } = await this.openInvitation(input.token)
         let user = await this.store.findUserByEmail(data.email)
         const accountExists = Boolean(user)
         if (!user) {
@@ -424,7 +441,9 @@ export class AccountService {
             details: { role: data.role, newAccount: !accountExists }
         })
         await this.memberJoined(tenant.id, user.id)
+        // The apps of the invitation: their roles and seats (after the trials of a new member started)
+        const apps = await this.appRoles.giveInvitationApps(tenant.id, user.id, invitation.invitedBy, invitation.apps)
         await this.store.deleteInvitation(tenant.id, data.invitationId)
-        return { status: 'accepted' as const, tenantName: tenant.name, accountExists }
+        return { status: 'accepted' as const, tenantName: tenant.name, accountExists, apps }
     }
 }

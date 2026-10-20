@@ -231,6 +231,7 @@ export const MAIL_MESSAGES = {
         INVITE_TEXT: '{inviter} invites you to join {tenant} on {app} as {role}.',
         INVITE_BUTTON: 'Accept the invitation',
         INVITE_NOTE: 'The invitation is valid for 7 days. Not expecting this? Then you can ignore this email.',
+        INVITE_APPS: 'You get access to {apps}.',
         ROLE_user: 'user',
         ROLE_admin: 'admin'
     },
@@ -255,6 +256,7 @@ export const MAIL_MESSAGES = {
         INVITE_TEXT: '{inviter} nodigt je uit om lid te worden van {tenant} op {app} als {role}.',
         INVITE_BUTTON: 'Uitnodiging aanvaarden',
         INVITE_NOTE: 'De uitnodiging is 7 dagen geldig. Verwachtte je dit niet? Dan mag je deze e-mail negeren.',
+        INVITE_APPS: 'Je krijgt toegang tot {apps}.',
         ROLE_user: 'gebruiker',
         ROLE_admin: 'beheerder'
     },
@@ -280,6 +282,7 @@ export const MAIL_MESSAGES = {
         INVITE_TEXT: '{inviter} vous invite à rejoindre {tenant} sur {app} en tant que {role}.',
         INVITE_BUTTON: "Accepter l'invitation",
         INVITE_NOTE: "L'invitation est valable 7 jours. Vous ne l'attendiez pas ? Ignorez simplement cet e-mail.",
+        INVITE_APPS: 'Vous aurez accès à {apps}.',
         ROLE_user: 'utilisateur',
         ROLE_admin: 'administrateur'
     },
@@ -307,6 +310,7 @@ export const MAIL_MESSAGES = {
         INVITE_BUTTON: 'Einladung annehmen',
         INVITE_NOTE:
             'Die Einladung ist 7 Tage gültig. Du hast sie nicht erwartet? Dann ignoriere diese E-Mail einfach.',
+        INVITE_APPS: 'Du bekommst Zugang zu {apps}.',
         ROLE_user: 'Benutzer',
         ROLE_admin: 'Administrator'
     }
@@ -348,6 +352,7 @@ export const MESSAGES = {
         CLIENT_DISABLE_FIRST: 'Disable the app first, then remove it.',
         CLIENT_UNKNOWN_PRODUCT: 'The product {product} does not exist: make it on /licenses first.',
         APP_NOT_FOUND: 'This app does not exist or has no roles.',
+        INVITATION_APP_UNKNOWN: 'The app {app} does not exist or cannot be given in an invitation.',
         ROLE_UNKNOWN: 'The app has no role {role}.',
         ROLES_INVALID: 'The roles of the app are not valid: {reason}.',
         CLIENT_PRODUCT_TAKEN: 'The product {product} is sold by the app {app} already: one product belongs to one app.',
@@ -458,6 +463,7 @@ export const MESSAGES = {
         CLIENT_DISABLE_FIRST: 'Schakel de app eerst uit en verwijder ze daarna.',
         CLIENT_UNKNOWN_PRODUCT: 'Het product {product} bestaat niet: maak het eerst aan op /licenses.',
         APP_NOT_FOUND: 'Deze app bestaat niet of heeft geen rollen.',
+        INVITATION_APP_UNKNOWN: 'De app {app} bestaat niet of kan niet meegegeven worden in een uitnodiging.',
         ROLE_UNKNOWN: 'De app heeft geen rol {role}.',
         ROLES_INVALID: 'De rollen van de app zijn niet geldig: {reason}.',
         CLIENT_PRODUCT_TAKEN:
@@ -570,6 +576,7 @@ export const MESSAGES = {
         CLIENT_DISABLE_FIRST: "Désactivez d'abord l'application, puis supprimez-la.",
         CLIENT_UNKNOWN_PRODUCT: "Le produit {product} n'existe pas : créez-le d'abord sur /licenses.",
         APP_NOT_FOUND: "Cette application n'existe pas ou n'a pas de rôles.",
+        INVITATION_APP_UNKNOWN: "L'application {app} n'existe pas ou ne peut pas être donnée dans une invitation.",
         ROLE_UNKNOWN: "L'application n'a pas de rôle {role}.",
         ROLES_INVALID: "Les rôles de l'application ne sont pas valides : {reason}.",
         CLIENT_PRODUCT_TAKEN:
@@ -690,6 +697,7 @@ export const MESSAGES = {
         CLIENT_DISABLE_FIRST: 'Deaktiviere die App zuerst und entferne sie dann.',
         CLIENT_UNKNOWN_PRODUCT: 'Das Produkt {product} gibt es nicht: lege es zuerst unter /licenses an.',
         APP_NOT_FOUND: 'Diese App gibt es nicht oder sie hat keine Rollen.',
+        INVITATION_APP_UNKNOWN: 'Die App {app} gibt es nicht oder sie kann nicht in einer Einladung vergeben werden.',
         ROLE_UNKNOWN: 'Die App hat keine Rolle {role}.',
         ROLES_INVALID: 'Die Rollen der App sind nicht gültig: {reason}.',
         CLIENT_PRODUCT_TAKEN:
@@ -1025,6 +1033,16 @@ const APP_EXAMPLE = {
 const APP_ROLES = [
     { key: 'editor', names: { en: 'Editor', nl: 'Bewerker', fr: 'Éditeur', de: 'Bearbeiter' }, default: true },
     { key: 'viewer', names: { en: 'Viewer', nl: 'Lezer', fr: 'Lecteur', de: 'Leser' }, default: false }
+]
+/** The apps of an invitation as the invited person sees them (GET /oidc/account/invitation). */
+const INVITATION_APPS = [
+    {
+        clientId: 'planner',
+        name: 'Planner',
+        url: 'http://localhost:3001',
+        roles: [{ key: 'viewer', names: APP_ROLES[1].names }],
+        seat: true
+    }
 ]
 const TOO_MANY = [429, 'oidc.TOO_MANY_ATTEMPTS']
 const ACCESS = level => [
@@ -1771,7 +1789,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
         method: 'GET',
         path: '/oidc/account/invitation',
         tag: 'account',
-        summary: 'The details of an invitation, for the page that accepts it.',
+        summary:
+            'The details of an invitation, for the page that accepts it: also the apps it gives access to (name, address, the roles that come with it, and whether a seat does).',
         curl: `curl 'http://localhost:${port}/oidc/account/invitation?token=TOKEN'`,
         query: [['token', 'required', 'The token from the link in the invitation email']],
         response: {
@@ -1781,7 +1800,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 tenantName: 'Acme',
                 role: 'user',
                 inviterName: 'Ada Lovelace',
-                accountExists: false
+                accountExists: false,
+                apps: INVITATION_APPS
             }
         },
         errors: [INVALID_LINK]
@@ -1791,7 +1811,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/oidc/account/invitation/accept',
         tag: 'account',
         summary:
-            'Accept an invitation. An existing account joins the organisation; otherwise name and password create a (verified) account. The inviter must still be admin and the tenant active.',
+            'Accept an invitation. An existing account joins the organisation; otherwise name and password create a (verified) account. The inviter must still be admin and the tenant active. The member gets the roles chosen for each app of the invitation and, when asked, a free seat (`seat: false` when none was free: the trial runs anyway); `url` opens the app.',
         body: {
             example: { token: TOKEN, name: 'Bob', password: 'correct-horse-battery' },
             fields: [
@@ -1800,7 +1820,15 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 ['password', 'string', 'only for a new account, 12 to 128 characters']
             ]
         },
-        response: { status: 200, example: { status: 'accepted', tenantName: 'Acme', accountExists: false } },
+        response: {
+            status: 200,
+            example: {
+                status: 'accepted',
+                tenantName: 'Acme',
+                accountExists: false,
+                apps: [{ clientId: 'planner', name: 'Planner', url: 'http://localhost:3001', seat: true }]
+            }
+        },
         errors: [BAD_REQUEST, INVALID_LINK, [400, 'oidc.ACCOUNT_DETAILS_NEEDED']]
     },
     // ---------------------------------------------------------------- members of the own tenant (admins)
@@ -1832,17 +1860,33 @@ export const endpoints = ({ port = 4000 } = {}) => [
         method: 'POST',
         path: '/tenants/current/invitations',
         tag: 'tenant members',
-        summary: 'Invite someone by email as user or admin of the tenant (the link is valid 7 days).',
+        summary:
+            'Invite someone by email as user or admin of the tenant (the link is valid 7 days), optionally with apps: the roles in each app (`null`: its default roles) and a free seat of the product it sells. The email names the apps; accepting gives them.',
         bearer: true,
         body: {
-            example: { email: 'bob@example.com', role: 'user' },
+            example: {
+                email: 'bob@example.com',
+                role: 'user',
+                apps: [{ clientId: 'planner', roles: ['viewer'], seat: true }]
+            },
             fields: [
                 ['email', 'string', 'required, a valid email address'],
-                ['role', 'string', '`user` or `admin`']
+                ['role', 'string', '`user` or `admin`'],
+                [
+                    'apps',
+                    'object[]',
+                    'optional, at most 20 apps of `GET /tenants/current/apps`: `{ clientId, roles, seat }`; `roles` the role keys of the app (`null` or left out: the default roles), `seat` true: one of the free seats (ignored for an app that sells nothing)'
+                ]
             ]
         },
         response: { status: 202, example: { status: 'invited', email: 'bob@example.com', id: INVITATION_ID } },
-        errors: [BAD_REQUEST, ...ACCESS('admin'), [409, 'oidc.ALREADY_MEMBER']]
+        errors: [
+            BAD_REQUEST,
+            [400, 'oidc.INVITATION_APP_UNKNOWN'],
+            [400, 'oidc.ROLE_UNKNOWN'],
+            ...ACCESS('admin'),
+            [409, 'oidc.ALREADY_MEMBER']
+        ]
     },
     {
         method: 'PATCH',
@@ -1870,9 +1914,20 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/tenants/current/apps',
         tag: 'tenant members',
         summary:
-            'The apps that have roles (defined by their developer), with their roles: what the admins of the tenant give to the members.',
+            'The apps the admins of the tenant can give to members and invite to: every app made on /admin and every app with roles. With the address to open it (`url`), the product it sells (`null`: free) and its roles (defined by its developer).',
         bearer: true,
-        response: { status: 200, example: [{ clientId: 'planner', name: 'Planner', roles: APP_ROLES }] },
+        response: {
+            status: 200,
+            example: [
+                {
+                    clientId: 'planner',
+                    name: 'Planner',
+                    url: 'http://localhost:3001',
+                    product: 'planner',
+                    roles: APP_ROLES
+                }
+            ]
+        },
         errors: ACCESS('admin')
     },
     {
@@ -1948,6 +2003,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
                     role: 'user',
                     invitedBy: USER_ID,
                     invitedByName: 'Ada Lovelace',
+                    apps: [{ clientId: 'planner', roles: ['viewer'], seat: true }],
                     createdAt: '2026-10-13T09:00:00.000Z',
                     expiresAt: '2026-10-20T09:00:00.000Z'
                 }

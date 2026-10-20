@@ -86,11 +86,20 @@ export function Notice({ tone, children }: { tone: 'error' | 'success'; children
 }
 
 /** "Log in" as a form: /api/auth/login is a route handler that needs a full page load. */
-export function LoginButton({ label, returnTo }: { label: string; returnTo?: string }) {
+export function LoginButton({
+    label,
+    returnTo,
+    outline = false
+}: {
+    label: string
+    returnTo?: string
+    /** A second choice (OUTLINE) next to a primary button. */
+    outline?: boolean
+}) {
     return (
         <form action='/api/auth/login' method='get' className='flex flex-col'>
             {returnTo && <input type='hidden' name='returnTo' value={returnTo} />}
-            <button type='submit' className={BUTTON}>
+            <button type='submit' className={outline ? OUTLINE : BUTTON}>
                 {label}
             </button>
         </form>

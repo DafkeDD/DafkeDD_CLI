@@ -72,6 +72,16 @@ export interface AppRole {
     default: boolean
 }
 
+/**
+ * An app in an invitation: on accepting, the new member gets these roles in the app (`null`: the default roles of the
+ * app) and, when `seat` is true and the app sells a product, one of the free seats of the organisation.
+ */
+export interface InvitationApp {
+    clientId: string
+    roles: string[] | null
+    seat: boolean
+}
+
 /** An invitation that was not accepted yet. */
 export interface Invitation {
     id: string
@@ -79,6 +89,8 @@ export interface Invitation {
     email: string
     role: TenantRole
     invitedBy: string | null
+    /** The apps the invitation gives access to (roles, a seat). */
+    apps: InvitationApp[]
     /** Name of the person who invited (only filled in by listInvitations). */
     invitedByName?: string | null
     createdAt: Date
@@ -411,7 +423,13 @@ export interface OidcStore {
     /** The roles given to one member in an app, or null when none were given (then the default roles apply). */
     findAppRoles(tenantId: string, clientId: string, userId: string): Promise<string[] | null>
     /** Gives a member these roles in an app (an empty list is "no roles"); null goes back to the default roles. */
-    setAppRoles(tenantId: string, clientId: string, userId: string, roles: string[] | null, by: string): Promise<void>
+    setAppRoles(
+        tenantId: string,
+        clientId: string,
+        userId: string,
+        roles: string[] | null,
+        by: string | null
+    ): Promise<void>
     /** The roles an app defines (its developer pushes them with a link code). Only apps made on /admin. */
     setClientRoles(clientId: string, roles: AppRole[]): Promise<boolean>
     /** Records that a member is active right now (who is online). */

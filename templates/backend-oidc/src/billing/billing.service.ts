@@ -113,7 +113,16 @@ export class BillingService implements OnModuleInit {
         // The tokens of an app that sells a product carry the licence of the user (src/oidc/app-licenses.ts)
         this.appLicenses.register({
             productExists: async code => (await this.store.findProductByCode(code)) !== null,
-            claim: (tenantId, userId, code, superadmin) => this.licenseClaim(tenantId, userId, code, superadmin)
+            claim: (tenantId, userId, code, superadmin) => this.licenseClaim(tenantId, userId, code, superadmin),
+            // An accepted invitation with a seat: one of the free seats, when there is one (the trial runs anyway)
+            assign: (actor, code, userId) =>
+                this.assign(actor, code, userId).then(
+                    () => true,
+                    (error: unknown) => {
+                        if (error instanceof AppException) return false
+                        throw error
+                    }
+                )
         })
     }
 

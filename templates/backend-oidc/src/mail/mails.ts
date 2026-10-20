@@ -19,7 +19,16 @@ export function buildMail(
     t: MailTranslate,
     kind: MailKind,
     to: string,
-    values: { name: string; app: string; link: string; tenant?: string; inviter?: string; role?: string }
+    values: {
+        name: string
+        app: string
+        link: string
+        tenant?: string
+        inviter?: string
+        role?: string
+        /** The apps an invitation gives access to, by name ("Planner, Agenda"); empty: none. */
+        apps?: string
+    }
 ): Mail {
     const key = kind.toUpperCase()
     const args = {
@@ -27,11 +36,16 @@ export function buildMail(
         app: values.app,
         tenant: values.tenant ?? '',
         inviter: values.inviter ?? '',
-        role: values.role ?? ''
+        role: values.role ?? '',
+        apps: values.apps ?? ''
     }
     const subject = t(`mail.${key}_SUBJECT`, args)
     const greeting = t('mail.GREETING', args)
-    const intro = t(`mail.${key}_TEXT`, args)
+    // An invitation with apps names them right after the introduction
+    const intro = [
+        t(`mail.${key}_TEXT`, args),
+        ...(kind === 'invite' && args.apps ? [t('mail.INVITE_APPS', args)] : [])
+    ].join(' ')
     const button = t(`mail.${key}_BUTTON`, args)
     const note = t(`mail.${key}_NOTE`, args)
     const text = [greeting, '', intro, '', values.link, '', note, '', t('mail.SIGNATURE', args)].join('\n')

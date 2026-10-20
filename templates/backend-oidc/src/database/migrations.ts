@@ -554,5 +554,14 @@ CREATE TABLE app_role_assignments (
 ${isolate('app_role_assignments', 'tenant_id')}
 GRANT SELECT, INSERT, UPDATE, DELETE ON app_role_assignments TO ${role};
 `
+    },
+    {
+        id: 13,
+        name: 'apps in invitations',
+        sql: `
+-- The apps an invitation gives access to, chosen by the admin who invites:
+-- [{ "clientId": "planner", "roles": ["editor"] or null (the default roles), "seat": true }]
+ALTER TABLE tenant_invitations ADD COLUMN apps jsonb NOT NULL DEFAULT '[]';
+`
     }
 ]

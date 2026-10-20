@@ -129,9 +129,9 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | \`/verify-email?token=\` | The link in the confirmation email: confirms the address, then you can log in |
 | \`/forgot-password\` | Ask for a link to choose a new password |
 | \`/reset-password?token=\` | The link in that email: a new password (the link works once; you are logged out everywhere) |
-| \`/invite?token=\` | The link in an invitation: join the organisation, or create your account for it |
+| \`/invite?token=\` | The link in an invitation: join the organisation, or create your account for it. Shows the apps of the invitation (their roles, "with a licence") and, once accepted, an "Open <app>" button per app |
 | \`/security\` | Two-step verification of the own account (status, recovery codes left, new recovery codes), passkeys (add, rename, remove), the eID (link, unlink), the applications of others with access (take back), where the account is logged in (end one session, or all others) and its recent activity (logins, also failed ones, and security changes) |
-| \`/members\` | Admins: the members of the organisation with who is online, invite by email, open invitations (send again, withdraw), change roles (user, admin), disable or enable, remove, and the **roles per app** (the roles the developer of each app defined; members without roles given here have its default roles) |
+| \`/members\` | Admins: the members of the organisation with who is online, invite by email (optionally with apps: per app the roles and "Give a licence", \`src/components/invite-apps.tsx\`), open invitations (send again, withdraw), change roles (user, admin), disable or enable, remove, and the **roles per app** (the roles the developer of each app defined; members without roles given here have its default roles) |
 | \`/admin\` | Superadmins: every organisation (create, suspend), who is superadmin, the products for sale (prices per month and per year, stop selling), the discount codes (percentage or amount, 100% is free) and the **apps** that may log in (make one, change it, choose the product it sells, a link code, a new secret shown once, disable, remove; the apps of the clients file are read-only) |
 | \`/licenses\` | Admins: per product the seats (bought, free, in use), buy seats per month or per year with a discount code, more or fewer seats, cancel, give or take back the seat of a member and start trials. Superadmins open an organisation on \`/admin\` and also give free seats and extend trials here |
 | \`/licenses/return\` | Back from the checkout of Mollie: asks the API how the payment went (no webhook needed on localhost) |
@@ -313,7 +313,9 @@ the organisation on the login server. The API of the app checks the same claim (
 
 **Roles.** The session also keeps the \`roles\` claim (\`session.roles\`, renewed with the tokens): the roles of the user in
 this app, given by the beheerder on \`/members\` of the login server. The notes card only shows its form with the role
-\`editor\`; the API checks the roles itself (\`@Roles(...)\`, 403 \`errors.ROLE_REQUIRED\`).
+\`editor\`; the API checks the roles itself (\`@Roles(...)\`, 403 \`errors.ROLE_REQUIRED\`). A beheerder who invites
+someone on \`/members\` can tick this app with its roles and a licence: the invitation page then offers "Open <app>"
+(the home page of this app: the address after logout that the link code registered).
 
 The account pages (security, passkeys, members, licences, the platform) are on the frontend of the login server
 (\`OIDC_ACCOUNT_URL\`): the sidebar, the user menu and the profile link there. This app has no login or registration

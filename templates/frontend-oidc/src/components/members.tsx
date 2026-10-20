@@ -14,6 +14,7 @@ import {
     SMALL_SELECT,
     WIDE_CARD
 } from '@/components/account-ui'
+import { type AppChoice, type InvitableApp, invitationApps, InviteApps } from '@/components/invite-apps'
 import { type Answer, useBackend } from '@/lib/account'
 
 type Role = 'user' | 'admin'
@@ -27,7 +28,14 @@ type Member = {
     online: boolean
     lastSeenAt: string | null
 }
-type Invitation = { id: string; email: string; role: Role; invitedByName: string | null; expiresAt: string }
+type Invitation = {
+    id: string
+    email: string
+    role: Role
+    invitedByName: string | null
+    expiresAt: string
+    apps?: { clientId: string }[]
+}
 
 const ROLES: Role[] = ['user', 'admin']
 const SELECT = SMALL_SELECT
@@ -35,8 +43,8 @@ const SELECT = SMALL_SELECT
 const REFRESH_MS = 30_000
 
 /**
- * /members: the members of the current organisation, for its admins. Invite by email, see open invitations (send
- * again, withdraw), change roles, disable or enable, remove, and see who is online. Every call goes through
+ * /members: the members of the current organisation, for its admins. Invite by email (with apps: their roles and a
+ * licence), see open invitations (send again, withdraw), change roles, disable or enable, remove, and see who is online. Every call goes through
  * /api/backend (the access token stays on the server); the API checks the role again each time.
  */
 export function Members({
@@ -59,6 +67,8 @@ export function Members({
     const [notice, setNotice] = useState('')
     const [busy, setBusy] = useState(false)
     const [confirm, setConfirm] = useState('')
+    const [apps, setApps] = useState<InvitableApp[]>([])
+    const [choice, setChoice] = useState<AppChoice>({})
 
     const fetchAll = () => Promise.all([backend('tenants/current/members'), backend('tenants/current/invitations')])
 
@@ -78,6 +88,12 @@ export function Members({
                 .then(show)
                 .catch(() => setError(t('offline')))
         refresh()
+        // The apps an invitation can give (once: they rarely change)
+        backend('tenants/current/apps')
+            .then(result => {
+                if (result.status === 200) setApps(result.body as unknown as InvitableApp[])
+            })
+            .catch(() => undefined)
         const timer = setInterval(refresh, REFRESH_MS)
         return () => clearInterval(timer)
         // once when the page opens, then every 30 seconds
@@ -107,10 +123,18 @@ export function Members({
         const form = event.currentTarget
         const values = Object.fromEntries(new FormData(form))
         const email = String(values.email)
-        void change('tenants/current/invitations', 'POST', { email, role: values.role }, t('invited', { email })).then(
-            () => form.reset()
-        )
+        const body = { email, role: values.role, apps: invitationApps(apps, choice) }
+        void change('tenants/current/invitations', 'POST', body, t('invited', { email })).then(() => {
+            form.reset()
+            setChoice({})
+        })
     }
+
+    /** The names of the apps of an open invitation ("Planner, Agenda"). */
+    const appNames = (invitation: Invitation) =>
+        (invitation.apps ?? [])
+            .map(item => apps.find(app => app.clientId === item.clientId)?.name ?? item.clientId)
+            .join(', ')
 
     /** "Online", "Last seen 5 minutes ago" or "Never logged in". */
     function presence(member: Member) {
@@ -289,6 +313,7 @@ export function Members({
                         {t('inviteSend')}
                     </button>
                 </div>
+                <InviteApps apps={apps} value={choice} onChange={setChoice} disabled={busy} />
             </form>
 
             {invitations.length > 0 && (
@@ -311,6 +336,8 @@ export function Members({
                                                 dateStyle: 'medium'
                                             })
                                         })}
+                                        {appNames(invitation) &&
+                                            ` · ${t('invitationApps', { apps: appNames(invitation) })}`}
                                     </span>
                                 </div>
                                 <button

@@ -436,7 +436,8 @@ describe('Accounts, roles and the platform (e2e)', () => {
                 tenantName: 'Acme',
                 role: 'user',
                 inviterName: 'Alice',
-                accountExists: false
+                accountExists: false,
+                apps: []
             })
             const missing = await http().post('/oidc/account/invitation/accept').send({ token }).expect(400)
             expect(missing.body.error).toBe('oidc.ACCOUNT_DETAILS_NEEDED')
@@ -444,7 +445,7 @@ describe('Accounts, roles and the platform (e2e)', () => {
                 .post('/oidc/account/invitation/accept')
                 .send({ token, name: 'Frank', password: PASSWORD })
                 .expect(200)
-            expect(accepted.body).toEqual({ status: 'accepted', tenantName: 'Acme', accountExists: false })
+            expect(accepted.body).toEqual({ status: 'accepted', tenantName: 'Acme', accountExists: false, apps: [] })
             const frank = await accessToken('frank@example.com')
             expect(decodeUnverified(frank.access_token)?.tenant).toMatchObject({ id: ids.acme, role: 'user' })
             // Accepted: no longer open, and the link works only once

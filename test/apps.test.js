@@ -176,3 +176,43 @@ test('roles per app: migration 12, the roles claim, /members for the admins, rol
     assert.ok(backend['README.md'].includes('### Roles per app'))
     assert.ok(backend['test/clients.e2e-spec.ts'].includes('roles per app: the developer sends them'))
 })
+
+test('invitations with apps: migration 13, roles and a seat on accepting, the apps on /members and /invite', async () => {
+    const { MAIL_MESSAGES } = await import('../src/backends/oidc.js')
+    const { OIDC_MESSAGES } = await import('../src/frontends/oidc.js')
+    assert.match(backend['src/database/migrations.ts'], /id: 13,\s+name: 'apps in invitations'/)
+    assert.match(backend['src/database/migrations.ts'], /ALTER TABLE tenant_invitations ADD COLUMN apps jsonb/)
+    assert.match(backend['src/oidc/store/pg-oidc.store.ts'], /JSON\.stringify\(invitation\.apps\)/)
+    // Checked when inviting, given when accepting (roles as given by the inviter, a seat through the licences)
+    const service = backend['src/oidc/account.service.ts']
+    assert.match(service, /this\.appRoles\.checkInvitationApps\(input\.apps\)/)
+    assert.match(service, /this\.appRoles\.giveInvitationApps\(/)
+    assert.match(backend['src/oidc/app-roles.service.ts'], /this\.licenses\.assign\(/)
+    assert.match(backend['src/billing/billing.service.ts'], /assign: \(actor, code, userId\) =>/)
+    assert.match(backend['src/oidc/account.dto.ts'], /@Type\(\(\) => InvitationAppDto\)/)
+    for (const locale of LANGUAGES) {
+        assert.ok(JSON.parse(backend[`src/i18n/${locale}/oidc.json`]).INVITATION_APP_UNKNOWN, locale)
+        assert.match(MAIL_MESSAGES[locale].INVITE_APPS, /\{apps\}/, locale)
+        for (const key of ['inviteAppsTitle', 'inviteSeat', 'invitationApps', 'inviteAppsText', 'inviteOpenApp'])
+            assert.ok(OIDC_MESSAGES[locale][key], `${locale} ${key}`)
+        assert.match(OIDC_MESSAGES[locale].inviteOpenApp, /\{app\}/, locale)
+        for (const key of ['app', 'apps', 'roles']) assert.ok(AUDIT_MESSAGES[locale].details[key], `${locale} ${key}`)
+        assert.ok(AUDIT_MESSAGES[locale].reasons.invitation, locale)
+    }
+    // Documented: the body of the invitation, the answers with the apps
+    const documented = endpoints({ database: DB, oidc: true })
+    const invite = documented.find(e => e.method === 'POST' && e.path === '/tenants/current/invitations')
+    assert.ok(invite.body.fields.some(([name]) => name === 'apps'))
+    assert.ok(invite.errors.some(([, key]) => key === 'oidc.INVITATION_APP_UNKNOWN'))
+    for (const path of ['/oidc/account/invitation', '/oidc/account/invitation/accept'])
+        assert.ok(documented.find(e => e.path === path).response.example.apps, path)
+    assert.ok(backend['README.md'].includes('### Invitations with apps'))
+    assert.ok(backend['test/clients.e2e-spec.ts'].includes('an invitation with apps'))
+    // The frontend: the apps in the invitation form, on the invitation page "Open <app>"
+    assert.ok(frontend['src/components/invite-apps.tsx'])
+    assert.match(frontend['src/components/members.tsx'], /<InviteApps /)
+    assert.match(frontend['src/components/members.tsx'], /apps: invitationApps\(apps, choice\)/)
+    assert.match(frontend['src/components/account-forms.tsx'], /t\('inviteOpenApp', \{ app: app\.name \}\)/)
+    assert.match(frontend['src/components/app-roles.tsx'], /filter\(app => app\.roles\.length > 0\)/)
+    assert.ok(frontendReadme({ api: { port: 4000, oidc: true } }).includes('Open <app>'))
+})

@@ -1,7 +1,7 @@
 'use client'
 
 import { type FormEvent, useEffect, useRef, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
 import {
     AUTH,
@@ -337,15 +337,52 @@ export function ResetPassword({ token }: { token: string }) {
     )
 }
 
+type Language = 'en' | 'nl' | 'fr' | 'de'
+/** An app of the invitation: the roles that come with it (named per language) and whether a licence does. */
+type InvitationApp = {
+    clientId: string
+    name: string
+    url: string | null
+    roles: { key: string; names: Record<Language, string> }[]
+    seat: boolean
+}
 type Invitation = {
     email: string
     tenantName: string
     role: 'user' | 'admin'
     inviterName: string
     accountExists: boolean
+    apps?: InvitationApp[]
+}
+/** An app after accepting: where to open it, and whether the licence was given (false: no free seat). */
+type AcceptedApp = { clientId: string; name: string; url: string | null; seat: boolean }
+
+/** The apps of an invitation: name, roles and "with a licence". */
+function InvitationApps({ apps }: { apps: InvitationApp[] }) {
+    const t = useTranslations('Oidc')
+    const locale = useLocale() as Language
+    if (apps.length === 0) return null
+    return (
+        <div className={AUTH_TEXT}>
+            <p>{t('inviteAppsText')}</p>
+            <ul className='mt-1 flex flex-col gap-1'>
+                {apps.map(app => (
+                    <li key={app.clientId}>
+                        <span className='font-semibold'>{app.name}</span>
+                        {app.roles.length > 0 &&
+                            ` (${app.roles.map(role => role.names[locale] ?? role.names.en).join(', ')})`}
+                        {app.seat && ` · ${t('inviteWithSeat')}`}
+                    </li>
+                ))}
+            </ul>
+        </div>
+    )
 }
 
-/** /invite?token=...: joins an organisation; without an account it creates one (already verified). */
+/**
+ * /invite?token=...: joins an organisation; without an account it creates one (already verified). The apps of the
+ * invitation are shown before accepting, and can be opened right after.
+ */
 export function AcceptInvitation({ token }: { token: string }) {
     const t = useTranslations('Oidc')
     const api = useAccountApi()
@@ -353,6 +390,7 @@ export function AcceptInvitation({ token }: { token: string }) {
     const [error, setError] = useState('')
     const [busy, setBusy] = useState(false)
     const [done, setDone] = useState(false)
+    const [accepted, setAccepted] = useState<AcceptedApp[]>([])
     const started = useRef(false)
 
     useEffect(() => {
@@ -379,8 +417,10 @@ export function AcceptInvitation({ token }: { token: string }) {
                 'invitation/accept',
                 invitation?.accountExists ? { token } : { token, name: values.name, password: values.password }
             )
-            if (result.status === 200) setDone(true)
-            else setError(result.message)
+            if (result.status === 200) {
+                setAccepted(((result.body as { apps?: AcceptedApp[] }).apps ?? []).filter(app => app.url))
+                setDone(true)
+            } else setError(result.message)
         } catch {
             setError(t('offline'))
         }
@@ -405,7 +445,17 @@ export function AcceptInvitation({ token }: { token: string }) {
                     title={t('inviteDoneTitle', { tenant: invitation.tenantName })}
                     text={t('inviteDoneText')}
                 />
-                <LoginButton label={t('signIn')} />
+                {accepted.map(app => (
+                    <div key={app.clientId} className='flex flex-col gap-1'>
+                        <a href={app.url!} className={BUTTON + ' w-full text-center'}>
+                            {t('inviteOpenApp', { app: app.name })}
+                        </a>
+                        {invitation.apps?.some(item => item.clientId === app.clientId && item.seat) && !app.seat && (
+                            <p className='text-xs text-[var(--text-3)]'>{t('inviteNoSeat')}</p>
+                        )}
+                    </div>
+                ))}
+                <LoginButton label={t('signIn')} outline={accepted.length > 0} />
             </section>
         )
     return (
@@ -418,6 +468,7 @@ export function AcceptInvitation({ token }: { token: string }) {
                     role: roleLabel(t, invitation.role)
                 })}
             />
+            <InvitationApps apps={invitation.apps ?? []} />
             {invitation.accountExists ? (
                 <p className={AUTH_TEXT}>
                     {t('inviteExisting', { email: invitation.email, tenant: invitation.tenantName })}

@@ -339,6 +339,8 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
 - **Roles per app**: the developer of an app defines its roles (`config/app-roles.json`, sent with the link code or
   `npm run roles:push`); the beheerders give them to their members on `/members`; the tokens of the app carry them
   (`roles`) and its API checks them with `@Roles(...)`.
+- **Invitations with apps**: a beheerder who invites someone ticks the apps, the roles in each app and "Give a licence";
+  the email names the apps, accepting gives the roles and a free seat, and the invitation page offers "Open <app>".
 - **One design everywhere (Pasport)**: the frontend of the login server and every linked frontend get the same login
   screen (the teal panel with the eID card, "Log in to <app>", eID and passkey first, then email and password) and the
   same shell: a sidebar with the app's own pages (`src/lib/nav.ts`), "My account", the organisation (its admins) and the
@@ -494,6 +496,15 @@ git switch developer
 
 ## Changelog
 
+- **0.38.0**: invitations with apps. An admin who invites someone (`POST /tenants/current/invitations`) can add `apps`:
+  per app the roles the new member gets (`null`: the default roles) and `seat` (one of the free seats of the product the
+  app sells). `GET /tenants/current/apps` now lists every app made on `/admin` (also without roles) with `url` and
+  `product`. The email names the apps (`mail.INVITE_APPS`); `GET /oidc/account/invitation` shows them with their roles;
+  accepting gives the roles (audit `members.app_roles_changed`, reason `invitation`) and the seat (`seat: false` when
+  none was free: the trial runs anyway), and answers the apps with their address. Kept in `tenant_invitations.apps`
+  (migration 13). New error `oidc.INVITATION_APP_UNKNOWN`. On `/members` the invitation form has "Access to apps"
+  (`src/components/invite-apps.tsx`) and the open invitations show their apps; `/invite` shows the apps and, once
+  accepted, "Open <app>". The audit log now also shows the app, apps and roles of an event. Texts in en, nl, fr and de.
 - **0.37.0**: roles per app. The developer of an app defines its roles (`config/app-roles.json` of an app made with the
   CLI: key, a name in en, nl, fr and de, default); the login server learns them with the link code and with
   `npm run roles:push -- --code <link code>` (`POST /oidc/link/roles`), or `"roles"` in the clients file (migration 12).

@@ -15,6 +15,8 @@ export interface LicenseClaim {
 export interface LicenseSource {
     productExists(code: string): Promise<boolean>
     claim(tenantId: string | null, userId: string, code: string, superadmin: boolean): Promise<LicenseClaim>
+    /** Gives a member one of the free seats of the product (an accepted invitation); false when none is free. */
+    assign(actor: { tenantId: string; userId: string }, code: string, userId: string): Promise<boolean>
 }
 
 /**
@@ -37,5 +39,9 @@ export class AppLicenses {
         return this.source
             ? this.source.claim(tenantId, userId, code, superadmin)
             : Promise.resolve({ product: code, status: 'none' })
+    }
+
+    assign(actor: { tenantId: string; userId: string }, code: string, userId: string): Promise<boolean> {
+        return this.source ? this.source.assign(actor, code, userId) : Promise.resolve(false)
     }
 }

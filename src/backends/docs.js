@@ -884,7 +884,7 @@ with user verification is already two factors (something you have and something 
 | Registration | \`POST /oidc/account/register\` creates the account, a new tenant (the organisation name) and makes the account its admin. A verification email follows. \`OIDC_REGISTRATION=closed\` turns registration off (then people only join by invitation). |
 | Email verification | The link (24 hours) opens \`/verify-email?token=...\` of the frontend, which calls \`POST /oidc/account/verify-email\`. Without a verified address an account cannot log in; the login page offers to send the email again. |
 | Forgotten password | \`POST /oidc/account/forgot-password\` mails a link (1 hour) to \`/reset-password?token=...\`. The link works **once** (it holds a fingerprint of the old password hash), and every session of the account ends. |
-| Invitations | An admin invites by email (\`POST /tenants/current/invitations\`, 7 days). \`/invite?token=...\` joins an existing account, or creates one with a name and password (already verified). The link stops working when the inviter is no longer admin or the tenant is suspended. |
+| Invitations | An admin invites by email (\`POST /tenants/current/invitations\`, 7 days). \`/invite?token=...\` joins an existing account, or creates one with a name and password (already verified). The link stops working when the inviter is no longer admin or the tenant is suspended. The admin can add **apps** to the invitation (see "Invitations with apps"). |
 
 - Registration, "forgot password" and "send again" always answer the same (202 \`check-email\`), so nobody can find out
   which email addresses have an account. Registering an address that has an account mails its owner instead.
@@ -1009,6 +1009,25 @@ worked out at every login and refresh, so a change reaches the app within 10 min
 are left out. These roles are separate from the role in the organisation (\`tenant.role\`: \`user\` or \`admin\`) and
 from \`superadmin\`: an app can look at all three. Changes are in the audit log (\`members.app_roles_changed\`,
 \`platform.client_roles_pushed\`); the table \`app_role_assignments\` has Row-Level Security.
+
+### Invitations with apps
+
+An admin who invites someone can choose the **apps** the invitation gives access to (\`apps\` of
+\`POST /tenants/current/invitations\`; on \`/members\` a checkbox per app). Per app: the **roles** the new member gets
+(\`null\`: the default roles of the app) and, for an app that sells a product, a **seat** (one of the free seats of
+the organisation). The apps are every app made on \`/admin\` and every app with roles (\`GET /tenants/current/apps\`);
+an app that is not one of them gives 400 \`oidc.INVITATION_APP_UNKNOWN\`, a role the app does not have 400
+\`oidc.ROLE_UNKNOWN\`.
+
+- The email names the apps ("You get access to Planner"); the invitation page shows them with their roles and whether a
+  licence comes with it.
+- Accepting gives the roles (recorded as given by the inviter, \`members.app_roles_changed\` with reason
+  \`invitation\`) and the seat (\`licences.seat_assigned\`). No free seat left: the member still joins with its trial;
+  the answer says \`seat: false\`.
+- The answer of \`POST /oidc/account/invitation/accept\` lists the apps with their address (\`url\`: the first
+  address after logout of the app, or the site of its callback), so the page offers "Open Planner".
+- The apps are kept with the invitation (\`tenant_invitations.apps\`, migration 13); sending it again keeps them, a
+  new invitation for the same address replaces them. An app removed in the meantime is left out.
 
 ### Applications of others: consent screen and back-channel logout
 

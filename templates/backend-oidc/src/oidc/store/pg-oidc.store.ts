@@ -42,7 +42,7 @@ const USER_COLUMNS =
     'is_superadmin AS "isSuperadmin", totp_enabled AS "mfaEnabled"'
 const TENANT_COLUMNS = 'id, slug, name, status, created_at AS "createdAt"'
 const INVITATION_COLUMNS =
-    'id, tenant_id AS "tenantId", email, role, invited_by AS "invitedBy", created_at AS "createdAt", expires_at AS "expiresAt"'
+    'id, tenant_id AS "tenantId", email, role, invited_by AS "invitedBy", apps, created_at AS "createdAt", expires_at AS "expiresAt"'
 
 /** A slug that is still free: the wanted one, or the wanted one with a short random suffix. */
 const slugCandidate = (slug: string, attempt: number) =>
@@ -1020,7 +1020,7 @@ export class PgOidcStore implements OidcStore {
         return rows[0]?.roles ?? null
     }
 
-    async setAppRoles(tenantId: string, clientId: string, userId: string, roles: string[] | null, by: string) {
+    async setAppRoles(tenantId: string, clientId: string, userId: string, roles: string[] | null, by: string | null) {
         await this.database.ready()
         await this.database.withTenant(tenantId, db =>
             roles === null
@@ -1123,11 +1123,20 @@ export class PgOidcStore implements OidcStore {
         await this.database.ready()
         return this.database.withTenant(invitation.tenantId, async db => {
             const { rows } = await db.query<Invitation>(
-                `INSERT INTO tenant_invitations (tenant_id, email, role, invited_by, expires_at) VALUES ($1, $2, $3, $4, $5)
+                `INSERT INTO tenant_invitations (tenant_id, email, role, invited_by, apps, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (tenant_id, lower(email)) DO UPDATE
-           SET role = EXCLUDED.role, invited_by = EXCLUDED.invited_by, expires_at = EXCLUDED.expires_at, created_at = now()
+           SET role = EXCLUDED.role, invited_by = EXCLUDED.invited_by, apps = EXCLUDED.apps,
+               expires_at = EXCLUDED.expires_at, created_at = now()
          RETURNING ${INVITATION_COLUMNS}`,
-                [invitation.tenantId, invitation.email, invitation.role, invitation.invitedBy, invitation.expiresAt]
+                [
+                    invitation.tenantId,
+                    invitation.email,
+                    invitation.role,
+                    invitation.invitedBy,
+                    JSON.stringify(invitation.apps),
+                    invitation.expiresAt
+                ]
             )
             const row = rows[0]
             if (!row) throw new Error('The invitation was not saved')
@@ -1139,7 +1148,7 @@ export class PgOidcStore implements OidcStore {
         await this.database.ready()
         return this.database.withTenant(tenantId, async db => {
             const { rows } = await db.query<Invitation>(
-                `SELECT i.id, i.tenant_id AS "tenantId", i.email, i.role, i.invited_by AS "invitedBy",
+                `SELECT i.id, i.tenant_id AS "tenantId", i.email, i.role, i.invited_by AS "invitedBy", i.apps,
                 i.created_at AS "createdAt", i.expires_at AS "expiresAt", u.name AS "invitedByName"
            FROM tenant_invitations i LEFT JOIN ${USERS} u ON u.id = i.invited_by
           WHERE i.expires_at > now() ORDER BY i.created_at DESC`

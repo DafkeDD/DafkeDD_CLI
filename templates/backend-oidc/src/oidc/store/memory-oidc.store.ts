@@ -763,10 +763,15 @@ export class MemoryOidcStore implements OidcStore {
             item => item.tenantId === invitation.tenantId && item.email.toLowerCase() === invitation.email.toLowerCase()
         )
         if (existing) {
-            Object.assign(existing, { ...invitation, createdAt: new Date() })
+            Object.assign(existing, { ...invitation, apps: structuredClone(invitation.apps), createdAt: new Date() })
             return { ...existing }
         }
-        const row: Invitation = { ...invitation, id: randomUUID(), createdAt: new Date() }
+        const row: Invitation = {
+            ...invitation,
+            apps: structuredClone(invitation.apps),
+            id: randomUUID(),
+            createdAt: new Date()
+        }
         this.invitations.push(row)
         return { ...row }
     }

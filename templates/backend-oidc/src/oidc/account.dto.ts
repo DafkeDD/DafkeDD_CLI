@@ -1,5 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsEmail, IsIn, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator'
+import { Type } from 'class-transformer'
+import {
+    ArrayMaxSize,
+    IsArray,
+    IsBoolean,
+    IsEmail,
+    IsIn,
+    IsObject,
+    IsOptional,
+    IsString,
+    Matches,
+    MaxLength,
+    MinLength,
+    ValidateNested
+} from 'class-validator'
 import { i18nValidationMessage } from 'nestjs-i18n'
 import { OIDC } from './oidc.config.js'
 import { TENANT_ROLES, type TenantRole } from './store/oidc.store.js'
@@ -10,6 +24,10 @@ const maxLength = { message: i18nValidationMessage('validation.MAX_LENGTH') }
 const isEmail = { message: i18nValidationMessage('validation.IS_EMAIL') }
 const isIn = { message: i18nValidationMessage('validation.IS_IN') }
 const isObject = { message: i18nValidationMessage('validation.IS_OBJECT') }
+const isArray = { message: i18nValidationMessage('validation.IS_ARRAY') }
+const arrayMaxSize = { message: i18nValidationMessage('validation.ARRAY_MAX_SIZE') }
+const isBoolean = { message: i18nValidationMessage('validation.IS_BOOLEAN') }
+const matches = { message: i18nValidationMessage('validation.MATCHES') }
 
 export class RegisterDto {
     @ApiProperty({ example: 'Ada Lovelace' })
@@ -74,10 +92,49 @@ export class AcceptInvitationDto extends TokenDto {
     password?: string
 }
 
+/** An app in an invitation: the roles the new member gets in it, and whether it gets a seat. */
+export class InvitationAppDto {
+    @ApiProperty({ example: 'planner', description: 'The app (GET /tenants/current/apps)' })
+    @IsString(isString)
+    @MaxLength(100, maxLength)
+    clientId!: string
+
+    @ApiPropertyOptional({
+        example: ['editor'],
+        nullable: true,
+        description: 'The roles in the app (keys of the app); [] no roles; null or left out: the default roles'
+    })
+    @IsOptional()
+    @IsArray(isArray)
+    @ArrayMaxSize(20, arrayMaxSize)
+    @IsString({ ...isString, each: true })
+    @Matches(/^[a-z][a-z0-9-]{1,39}$/, { ...matches, each: true })
+    roles?: string[] | null
+
+    @ApiPropertyOptional({
+        example: true,
+        description: 'Give one of the free seats of the product of the app (ignored for an app that sells nothing)'
+    })
+    @IsOptional()
+    @IsBoolean(isBoolean)
+    seat?: boolean
+}
+
 export class InviteDto extends EmailDto {
     @ApiProperty({ enum: TENANT_ROLES, example: 'user' })
     @IsIn(TENANT_ROLES, isIn)
     role!: TenantRole
+
+    @ApiPropertyOptional({
+        type: [InvitationAppDto],
+        description: 'The apps the invitation gives access to (at most 20); the email names them'
+    })
+    @IsOptional()
+    @IsArray(isArray)
+    @ArrayMaxSize(20, arrayMaxSize)
+    @ValidateNested({ ...isObject, each: true })
+    @Type(() => InvitationAppDto)
+    apps?: InvitationAppDto[]
 }
 
 export class RoleDto {

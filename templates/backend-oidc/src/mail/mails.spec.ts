@@ -25,6 +25,18 @@ describe('account emails', () => {
         }
     })
 
+    it('an invitation names its apps after the introduction, only when there are any', () => {
+        const values = { name: 'Ada', app: 'Pasport', link: 'http://localhost:3000/invite?token=abc', tenant: 'Acme' }
+        const withApps = buildMail(t, 'invite', 'ada@example.com', { ...values, apps: 'Planner, <Agenda>' })
+        expect(withApps.text).toContain('mail.INVITE_APPS(')
+        expect(withApps.text).toContain('Planner, <Agenda>')
+        expect(withApps.html).toContain('Planner, &lt;Agenda&gt;')
+        expect(buildMail(t, 'invite', 'ada@example.com', values).text).not.toContain('mail.INVITE_APPS')
+        expect(buildMail(t, 'verify', 'ada@example.com', { ...values, apps: 'Planner' }).text).not.toContain(
+            'mail.INVITE_APPS'
+        )
+    })
+
     it('escapes every value in the HTML', () => {
         const mail = buildMail(t, 'invite', 'x@example.com', {
             name: '<script>alert(1)</script>',
