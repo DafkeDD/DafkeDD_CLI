@@ -497,6 +497,9 @@ git switch developer
 
 ## Changelog
 
+- **0.39.2**: fix: the frontend of a linked app did not build (\`Can't resolve '@/components/ask-demo'\`): the "Ask a
+  demo" button of the profile page is now part of the linked frontend too. A new test checks that every file the
+  generated frontend imports is generated as well.
 - **0.39.1**: longer link codes. The login server now makes link codes of 24 characters
   (`K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE`, 120 random bits instead of 60); `POST /oidc/link` and `POST /oidc/link/roles` accept
   up to 48 characters, and the short codes of 12 characters of older servers keep working. The CLI accepts both when

@@ -174,6 +174,21 @@ test('ask: server, port, the code and the own database; a wrong code is asked ag
 test('the linked frontend: login, session, profile and the notes of its own API; account pages are on the server', () => {
     const own = oidcFrontendFiles({ linked: true, appName: 'Planner' })
     assert.deepEqual(Object.keys(own).sort(), [...LINKED_FILES].sort())
+    // Every file the linked frontend imports (@/...) is generated too (regression: ask-demo was missing). DafkeDD UI
+    // (src/components/ui) is installed by its own step.
+    const generated = withApi(
+        { ...files },
+        { port: 4001, url: 'http://localhost:4001', oidc: true, linked: LINK },
+        { ui: false }
+    )
+    for (const [rel, content] of Object.entries(generated))
+        for (const [, target] of content.matchAll(/from '@\/([^']+)'/g))
+            assert.ok(
+                ['.ts', '.tsx'].some(ext => generated[`src/${target}${ext}`] !== undefined) ||
+                    target === 'components/ui' ||
+                    target.startsWith('components/ui/'),
+                `${rel} imports @/${target}`
+            )
     for (const page of ['register', 'security', 'members', 'admin', 'licenses', 'audit'])
         assert.ok(!Object.keys(own).some(rel => rel.includes(`/${page}/`)), page)
     // The same shell as the login server: its account pages through OIDC_ACCOUNT_URL, this app's name in the sidebar

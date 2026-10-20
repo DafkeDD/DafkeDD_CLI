@@ -2662,6 +2662,7 @@ export const LINKED_FILES = [
     'src/app/api/backend/[...path]/route.ts',
     'src/components/account-ui.tsx',
     'src/components/app-license.tsx',
+    'src/components/ask-demo.tsx',
     'src/components/notes.tsx',
     'src/components/presence.tsx',
     'src/components/session-links.tsx',
