@@ -82,7 +82,7 @@ export const OIDC_MESSAGES = {
         inviteDoneText: 'You are a member now. Log in to continue.',
         inviteAppsText: 'You get access to:',
         inviteWithSeat: 'with a licence',
-        inviteNoSeat: 'no free licence: your trial runs',
+        inviteNoSeat: 'no free licence: ask your admin for one, or ask a demo on your profile',
         inviteOpenApp: 'Open {app}',
         manageMembers: 'Manage members',
         membersTitle: 'Members of {tenant}',
@@ -195,7 +195,8 @@ export const OIDC_MESSAGES = {
         eidBack: 'Log in with your password',
         passwordTab: 'With a password',
         eidTab: 'With eID',
-        eidRegisterText: 'Your name comes from your eID, and you log in with your eID: no password needed.',
+        eidRegisterText:
+            'Your name comes from your eID. Choose a password; when you log in, the code of your authenticator app always follows.',
         eidRegisterSubmit: 'Create account with eID',
         eidSecurityTitle: 'eID',
         eidLinked: 'Your eID is linked: you can log in with it.',
@@ -205,7 +206,6 @@ export const OIDC_MESSAGES = {
         eidLinkSubmit: 'Link',
         eidUnlink: 'Unlink eID',
         eidOnlyLogin: 'Your eID is your only way to log in. Choose a password first (forgot password) to unlink it.',
-        mfaByEid: 'You log in with your eID (card and PIN): that already counts as two-step verification.',
         sessionsTitle: 'Where you are logged in',
         sessionsText:
             'Every browser where your account is logged in. End a session you do not recognise: it stops at once.',
@@ -322,7 +322,7 @@ export const OIDC_MESSAGES = {
         inviteDoneText: 'Je bent nu lid. Log in om verder te gaan.',
         inviteAppsText: 'Je krijgt toegang tot:',
         inviteWithSeat: 'met een licentie',
-        inviteNoSeat: 'geen vrije licentie: je proefperiode loopt',
+        inviteNoSeat: 'geen vrije licentie: vraag je beheerder er een, of vraag een demo aan op je profiel',
         inviteOpenApp: '{app} openen',
         manageMembers: 'Leden beheren',
         membersTitle: 'Leden van {tenant}',
@@ -436,7 +436,8 @@ export const OIDC_MESSAGES = {
         eidBack: 'Inloggen met je wachtwoord',
         passwordTab: 'Met wachtwoord',
         eidTab: 'Met eID',
-        eidRegisterText: 'Je naam komt van je eID, en je logt in met je eID: geen wachtwoord nodig.',
+        eidRegisterText:
+            'Je naam komt van je eID. Kies een wachtwoord; bij het inloggen volgt altijd de code van je authenticator-app.',
         eidRegisterSubmit: 'Account aanmaken met eID',
         eidSecurityTitle: 'eID',
         eidLinked: 'Je eID is gekoppeld: je kunt ermee inloggen.',
@@ -447,7 +448,6 @@ export const OIDC_MESSAGES = {
         eidUnlink: 'eID ontkoppelen',
         eidOnlyLogin:
             'Je eID is je enige manier om in te loggen. Kies eerst een wachtwoord (wachtwoord vergeten) om ze te ontkoppelen.',
-        mfaByEid: 'Je logt in met je eID (kaart en pincode): dat geldt al als tweestapsverificatie.',
         sessionsTitle: 'Waar je ingelogd bent',
         sessionsText:
             'Elke browser waar je account ingelogd is. Beëindig een sessie die je niet herkent: ze stopt meteen.',
@@ -565,7 +565,8 @@ export const OIDC_MESSAGES = {
         inviteDoneText: 'Vous êtes maintenant membre. Connectez-vous pour continuer.',
         inviteAppsText: 'Vous aurez accès à :',
         inviteWithSeat: 'avec une licence',
-        inviteNoSeat: 'aucune licence libre : votre essai est en cours',
+        inviteNoSeat:
+            'aucune licence libre : demandez-en une à votre administrateur, ou demandez une démo sur votre profil',
         inviteOpenApp: 'Ouvrir {app}',
         manageMembers: 'Gérer les membres',
         membersTitle: 'Membres de {tenant}',
@@ -680,7 +681,7 @@ export const OIDC_MESSAGES = {
         passwordTab: 'Avec un mot de passe',
         eidTab: "Avec l'eID",
         eidRegisterText:
-            'Votre nom vient de votre eID, et vous vous connectez avec votre eID : pas besoin de mot de passe.',
+            "Votre nom vient de votre eID. Choisissez un mot de passe ; à la connexion, le code de votre application d'authentification suit toujours.",
         eidRegisterSubmit: "Créer un compte avec l'eID",
         eidSecurityTitle: 'eID',
         eidLinked: 'Votre eID est liée : vous pouvez vous connecter avec elle.',
@@ -692,8 +693,6 @@ export const OIDC_MESSAGES = {
         eidUnlink: "Délier l'eID",
         eidOnlyLogin:
             "Votre eID est votre seul moyen de connexion. Choisissez d'abord un mot de passe (mot de passe oublié) pour la délier.",
-        mfaByEid:
-            'Vous vous connectez avec votre eID (carte et code PIN) : cela compte déjà comme vérification en deux étapes.',
         sessionsTitle: 'Où vous êtes connecté',
         sessionsText:
             "Chaque navigateur où votre compte est connecté. Terminez une session que vous ne reconnaissez pas : elle s'arrête immédiatement.",
@@ -812,7 +811,8 @@ export const OIDC_MESSAGES = {
         inviteDoneText: 'Du bist jetzt Mitglied. Melde dich an, um weiterzumachen.',
         inviteAppsText: 'Du bekommst Zugang zu:',
         inviteWithSeat: 'mit Lizenz',
-        inviteNoSeat: 'keine freie Lizenz: deine Testphase läuft',
+        inviteNoSeat:
+            'keine freie Lizenz: bitte deinen Administrator um eine, oder fordere eine Demo in deinem Profil an',
         inviteOpenApp: '{app} öffnen',
         manageMembers: 'Mitglieder verwalten',
         membersTitle: 'Mitglieder von {tenant}',
@@ -926,7 +926,8 @@ export const OIDC_MESSAGES = {
         eidBack: 'Mit deinem Passwort anmelden',
         passwordTab: 'Mit Passwort',
         eidTab: 'Mit eID',
-        eidRegisterText: 'Dein Name kommt von deiner eID, und du meldest dich mit deiner eID an: kein Passwort nötig.',
+        eidRegisterText:
+            'Dein Name kommt von deiner eID. Wähle ein Passwort; bei der Anmeldung folgt immer der Code deiner Authenticator-App.',
         eidRegisterSubmit: 'Konto mit eID erstellen',
         eidSecurityTitle: 'eID',
         eidLinked: 'Deine eID ist verknüpft: Du kannst dich damit anmelden.',
@@ -937,7 +938,6 @@ export const OIDC_MESSAGES = {
         eidUnlink: 'eID-Verknüpfung aufheben',
         eidOnlyLogin:
             'Deine eID ist deine einzige Anmeldemöglichkeit. Wähle zuerst ein Passwort (Passwort vergessen), um die Verknüpfung aufzuheben.',
-        mfaByEid: 'Du meldest dich mit deiner eID an (Karte und PIN): Das gilt bereits als Zwei-Schritt-Verifizierung.',
         sessionsTitle: 'Wo du angemeldet bist',
         sessionsText:
             'Jeder Browser, in dem dein Konto angemeldet ist. Beende eine Sitzung, die du nicht erkennst: Sie endet sofort.',
@@ -1972,6 +1972,7 @@ export const LICENSE_MESSAGES = {
         trialUntil: 'Trial until {date}',
         trialEnded: 'Trial ended',
         noLicense: 'No licence',
+        askDemo: 'Ask a demo',
         trialStarted: 'The trial started.',
         startTrial: 'Start trial',
         extendTrial: 'Trial +14 days',
@@ -2086,6 +2087,7 @@ export const LICENSE_MESSAGES = {
         trialUntil: 'Proef tot {date}',
         trialEnded: 'Proef afgelopen',
         noLicense: 'Geen licentie',
+        askDemo: 'Demo aanvragen',
         trialStarted: 'De proefperiode is gestart.',
         startTrial: 'Proef starten',
         extendTrial: 'Proef +14 dagen',
@@ -2200,6 +2202,7 @@ export const LICENSE_MESSAGES = {
         trialUntil: "Essai jusqu'au {date}",
         trialEnded: 'Essai terminé',
         noLicense: 'Pas de licence',
+        askDemo: 'Demander une démo',
         trialStarted: "L'essai a commencé.",
         startTrial: "Démarrer l'essai",
         extendTrial: 'Essai +14 jours',
@@ -2315,6 +2318,7 @@ export const LICENSE_MESSAGES = {
         trialUntil: 'Testphase bis {date}',
         trialEnded: 'Testphase beendet',
         noLicense: 'Keine Lizenz',
+        askDemo: 'Demo anfordern',
         trialStarted: 'Die Testphase hat begonnen.',
         startTrial: 'Testphase starten',
         extendTrial: 'Testphase +14 Tage',

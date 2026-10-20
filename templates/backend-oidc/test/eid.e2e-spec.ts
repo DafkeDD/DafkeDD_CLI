@@ -193,7 +193,7 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
 
     it('announces the eID in discovery and on the login page', async () => {
         const discovery = await http().get('/oidc/.well-known/openid-configuration').expect(200)
-        expect(discovery.body.acr_values_supported).toContain('loa4')
+        expect(discovery.body.acr_values_supported).not.toContain('loa4')
         expect((await startLogin()).details).toMatchObject({ eid: true, registration: true })
         expect((await http().get('/oidc/account/registration').expect(200)).body).toEqual({ password: true, eid: true })
     })
@@ -201,18 +201,25 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
     describe('registration', () => {
         let userId = ''
 
-        it('creates an account with the name of the card, without a password, and sends a verification mail', async () => {
+        it('creates an account with the name of the card and a chosen password, and sends a verification mail', async () => {
             const { challenge, nonce } = await registerChallenge()
             expect(nonce).toHaveLength(44)
             const response = await http()
                 .post('/oidc/account/register-eid')
                 .set('Accept-Language', 'nl')
-                .send({ challenge, token: await sign(nonce), email: 'Jan@Example.com', organisation: 'Specimen BV' })
+                .send({
+                    challenge,
+                    token: await sign(nonce),
+                    email: 'Jan@Example.com',
+                    password: PASSWORD,
+                    organisation: 'Specimen BV'
+                })
                 .expect(202)
             expect(response.body).toEqual({ status: 'check-email', name: NAME })
 
             const user = await store.findUserByEmail('jan@example.com')
-            expect(user).toMatchObject({ name: NAME, passwordHash: null, emailVerified: false, locale: 'nl' })
+            expect(user).toMatchObject({ name: NAME, emailVerified: false, locale: 'nl' })
+            expect(user?.passwordHash).toBeTruthy()
             userId = user?.id ?? ''
             const memberships = await store.listMemberships(userId)
             expect(memberships).toEqual([expect.objectContaining({ name: 'Specimen BV', role: 'admin' })])
@@ -223,11 +230,26 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
             expect(outbox.at(-1)?.to).toBe('jan@example.com')
         })
 
+        it('needs a password: the eID alone does not make an account', async () => {
+            const { challenge, nonce } = await registerChallenge()
+            await http()
+                .post('/oidc/account/register-eid')
+                .send({ challenge, token: await sign(nonce), email: 'nopw@example.com', organisation: 'No Pw' })
+                .expect(400)
+            expect(await store.findUserByEmail('nopw@example.com')).toBeNull()
+        })
+
         it('refuses a second account for the same eID', async () => {
             const { challenge, nonce } = await registerChallenge()
             const response = await http()
                 .post('/oidc/account/register-eid')
-                .send({ challenge, token: await sign(nonce), email: 'other@example.com', organisation: 'Other' })
+                .send({
+                    challenge,
+                    token: await sign(nonce),
+                    email: 'other@example.com',
+                    password: PASSWORD,
+                    organisation: 'Other'
+                })
                 .expect(409)
             expect(response.body.error).toBe('oidc.EID_ALREADY_LINKED')
             expect(await store.findUserByEmail('other@example.com')).toBeNull()
@@ -236,7 +258,7 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
         it('refuses a token for another nonce, of another website, or a challenge that was changed', async () => {
             const first = await registerChallenge()
             const second = await registerChallenge()
-            const body = { email: 'x@example.com', organisation: 'Xylo' }
+            const body = { email: 'x@example.com', password: PASSWORD, organisation: 'Xylo' }
             const other = await http()
                 .post('/oidc/account/register-eid')
                 .send({ ...body, challenge: first.challenge, token: await sign(second.nonce) })
@@ -265,44 +287,40 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
             await store.setEmailVerified(userId)
         })
 
-        it('logs in with the eID: no password and no authenticator code, acr loa4', async () => {
+        it('logs in with the eID as the first factor only: sc pin, no mfa claim', async () => {
             const { login, response } = await eidLogin()
             expect(response.status).toBe(200)
             expect(response.body.status).toBe('redirect')
             const { id_token, access_token } = await tokens(login, response.body.location as string)
-            expect(decodeUnverified(id_token)).toMatchObject({ sub: userId, acr: 'loa4', amr: ['sc', 'pin', 'mfa'] })
-            expect(decodeUnverified(access_token)).toMatchObject({ acr: 'loa4' })
+            const claims = decodeUnverified(id_token)
+            expect(claims).toMatchObject({ sub: userId, amr: ['sc', 'pin'] })
+            expect(claims?.acr).not.toBe('loa4')
             const userinfo = await http().get('/oidc/userinfo').set(bearer(access_token)).expect(200)
             expect(userinfo.body).toMatchObject({ name: NAME, email: 'jan@example.com' })
             expect((await store.findIdentifier(userId, 'eid'))?.lastUsedAt).toBeInstanceOf(Date)
-
             const status = await http().get('/me/eid').set(bearer(access_token)).expect(200)
-            expect(status.body).toMatchObject({ enabled: true, linked: true, hasPassword: false })
-            // The eID is the only login of this account
-            const unlink = await http().delete('/me/eid').set(bearer(access_token)).expect(409)
-            expect(unlink.body.error).toBe('oidc.EID_ONLY_LOGIN')
+            expect(status.body).toMatchObject({ enabled: true, linked: true, hasPassword: true })
         })
 
-        it('has no password login', async () => {
+        it('also logs in with the chosen password', async () => {
             const login = await startLogin()
             const response = await http()
                 .post(login.base + '/login')
                 .set('Cookie', login.cookie)
                 .send({ csrf: login.csrf, email: 'jan@example.com', password: PASSWORD })
-            expect(response.status).toBe(401)
+                .expect(200)
+            expect(response.body.status).toBe('redirect')
         })
 
-        it('counts as two-step verification for the session when it is required', async () => {
-            const { login, response } = await eidLogin()
-            const session = ((response.headers['set-cookie'] as unknown as string[]) ?? [])
-                .find(c => c.startsWith('oidc_session='))
-                ?.split(';')[0]
-            expect(session).toBeTruthy()
-            await tokens(login, response.body.location as string)
+        it('is never the second factor: when two-step is required the authenticator follows the eID', async () => {
             process.env.OIDC_MFA = 'required'
             try {
-                const again = await startLogin({ prompt: 'none' }, session)
-                expect(again.location.searchParams.get('code')).toBeTruthy()
+                const { response } = await eidLogin()
+                expect(response.status).toBe(200)
+                expect(response.body.status).toBe('mfa-setup')
+                // No session before the authenticator code
+                const cookies = (response.headers['set-cookie'] as unknown as string[]) ?? []
+                expect(cookies.find(c => c.startsWith('oidc_session='))).toBeFalsy()
             } finally {
                 process.env.OIDC_MFA = 'optional'
             }
@@ -387,7 +405,7 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
             const { login, response } = await eidLogin()
             expect(response.body.status).toBe('redirect')
             const ids2 = await tokens(login, response.body.location as string)
-            expect(decodeUnverified(ids2.id_token)).toMatchObject({ sub: ids.alice, acr: 'loa4' })
+            expect(decodeUnverified(ids2.id_token)).toMatchObject({ sub: ids.alice, amr: ['sc', 'pin'] })
 
             await http().delete('/me/eid').set(bearer(token)).expect(200)
             const after = await eidLogin()

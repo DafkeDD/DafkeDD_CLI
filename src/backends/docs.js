@@ -383,11 +383,7 @@ export function backendReadme({
                       '(empty)',
                       'API key of Mollie (`test_...` while testing, `live_...` in production)'
                   ],
-                  [
-                      'BILLING_TRIAL_DAYS',
-                      '14',
-                      'Free days of every user for every product (a superadmin can extend one trial)'
-                  ],
+                  ['BILLING_TRIAL_DAYS', '14', 'Days of a demo a member asks (a superadmin can extend one trial)'],
                   [
                       'PUBLIC_API_URL',
                       '(origin of OIDC_ISSUER)',
@@ -615,7 +611,7 @@ at every login and every refresh (so at most 10 minutes old):
 
 | \`status\` | Meaning |
 | --- | --- |
-| \`trial\` | the trial of the user runs, until \`ends_at\` (seconds); the first login to the app starts it when the user never had one |
+| \`trial\` | the trial of the user runs, until \`ends_at\` (seconds): a demo the user asked (on the profile page of the login server) or an admin started; a login never starts one |
 | \`seat\` | the user has one of the (paid or free) seats of the organisation |
 | \`superadmin\` | a superadmin of the login server: always |
 | \`none\` | no licence: the beheerder gives a seat on \`/licenses\`, or buys more |
@@ -702,7 +698,7 @@ finds all endpoints there.
 
 | Token | Format | Lifetime | Contents |
 | --- | --- | --- | --- |
-| ID token | JWT, RS256, \`aud\` = client | 5 minutes | \`sub\`, \`auth_time\`, \`nonce\`, \`acr\` (\`loa2\` password and code, \`loa4\` eID), \`amr\`, \`sid\`, \`at_hash\`, \`tenant\`, \`superadmin\` |
+| ID token | JWT, RS256, \`aud\` = client | 5 minutes | \`sub\`, \`auth_time\`, \`nonce\`, \`acr\` (\`loa2\`: password or eID, and the code of the authenticator app, or a passkey), \`amr\`, \`sid\`, \`at_hash\`, \`tenant\`, \`superadmin\` |
 | Access token | JWT, ES256, \`typ: at+jwt\` (RFC 9068), \`aud\` = \`OIDC_AUDIENCE\` | 10 minutes, and stops when its session ends | \`sub\`, \`client_id\`, \`scope\`, \`sid\`, \`tenant\`, \`superadmin\`, \`license\` (an app that sells a product, see "Apps are products"), \`roles\` (an app with roles, see "Roles per app") |
 | Refresh token | Random (only its sha256 is stored) | As long as its session (at most 12 hours), one use | Only for clients with the \`refresh_token\` grant (see "Sessions, refresh tokens and logout") |
 
@@ -794,8 +790,9 @@ and demos.
 
 ### Belgian eID (card reader and PIN)
 
-Log in and register with the Belgian eID, like the federal login (CSAM) and Corilus Passport: the card and its PIN are
-two factors, so an eID login needs no password and no authenticator code. It uses the **DafkeDD eID** library
+Log in and register with the Belgian eID, like the federal login (CSAM) and Corilus Passport. The card and its PIN are
+only the **first factor**: two-step verification always means the code of the **authenticator app**, also after an
+eID login (\`OIDC_MFA=required\`: set up at the first login). The eID is never a second factor. It uses the **DafkeDD eID** library
 (\`@dafkedd/eid\`, installed from https://github.com/DafkeDD/DafkeDD_EID) and the DafkeDD eID program (the *bridge*) on
 the PC of the user, which talks to the card reader on http://127.0.0.1:47820.
 
@@ -805,11 +802,11 @@ the PC of the user, which talks to the card reader on http://127.0.0.1:47820.
 | 2. PIN | The user types the PIN on the page; the bridge gives it to the card, which signs the nonce and the **origin of the page** (Web eID format). The PIN never reaches the server. |
 | 3. Check | \`POST /oidc/interaction/<id>/eid\` with the token. \`src/oidc/eid.service.ts\` checks the signature, the origin (\`APP_URL\`), the nonce (once), the certificate chain up to the Belgian root CAs and the **OCSP** status (fail closed: no answer = no login). |
 | 4. Account | The national register number of the certificate is turned into an **HMAC-SHA256** (key derived from \`OIDC_MASTER_KEY\`) and looked up in \`user_identifiers\`. The number itself is never stored. |
-| 5. Login | As after password and code: organisation choice, session, tokens with \`acr: "loa4"\` and \`amr: ["sc", "pin", "mfa"]\`. |
+| 5. Login | As after the password: the **code of the authenticator app** (or its setup with a QR code at the first login), then organisation choice, session, tokens with \`acr: "loa2"\` and \`amr: ["sc", "pin", "otp", "mfa"]\`. |
 
 | Flow | How |
 | --- | --- |
-| Register with eID | \`POST /oidc/account/eid/challenge\`, then \`POST /oidc/account/register-eid\` with the token, an email address and an organisation. The **name comes from the card**; there is no password. The email address must still be verified. One eID, one account (409 \`oidc.EID_ALREADY_LINKED\`). |
+| Register with eID | \`POST /oidc/account/eid/challenge\`, then \`POST /oidc/account/register-eid\` with the token, an email address and an organisation. The **name comes from the card**, the person chooses a **password** (every account has one). The email address must still be verified. One eID, one account (409 \`oidc.EID_ALREADY_LINKED\`). |
 | Link to an existing account | On \`/security\` of the frontend (\`/me/eid/challenge\` and \`POST /me/eid\`): from then on the account logs in with password **or** eID. |
 | Unlink | \`DELETE /me/eid\`; not when the account has no password (its eID is its only login: choose a password first with "forgot password"). |
 | Password later | "Forgot password" works for an eID account too; then it can log in both ways (the password login asks the authenticator code as usual). |
@@ -977,7 +974,7 @@ ${fence}
 
 | \`status\` | Meaning |
 | --- | --- |
-| \`trial\` | the trial runs, until \`ends_at\` (seconds). A member who never had a trial of the product (it came after the member joined, or an account of \`npm run oidc:user\`) gets one at the first login to the app (\`licences.trial_started\`, reason "first login to the app") |
+| \`trial\` | the trial runs, until \`ends_at\` (seconds): only when the member asked a demo (\`POST /me/licenses/:productCode/trial\`) or an admin started one; a login never starts one |
 | \`seat\` | one of the paid or free seats of the organisation |
 | \`superadmin\` | a superadmin: always |
 | \`none\` | no licence (the trial ended, no seat): the API of the app refuses its data with 403 |
@@ -1022,8 +1019,8 @@ an app that is not one of them gives 400 \`oidc.INVITATION_APP_UNKNOWN\`, a role
 - The email names the apps ("You get access to Planner"); the invitation page shows them with their roles and whether a
   licence comes with it.
 - Accepting gives the roles (recorded as given by the inviter, \`members.app_roles_changed\` with reason
-  \`invitation\`) and the seat (\`licences.seat_assigned\`). No free seat left: the member still joins with its trial;
-  the answer says \`seat: false\`.
+  \`invitation\`) and the seat (\`licences.seat_assigned\`). No free seat left: the member still joins without a
+  licence (the admin gives one later, or the member asks a demo); the answer says \`seat: false\`.
 - The answer of \`POST /oidc/account/invitation/accept\` lists the apps with their address (\`url\`: the first
   address after logout of the app, or the site of its callback), so the page offers "Open Planner".
 - The apps are kept with the invitation (\`tenant_invitations.apps\`, migration 13); sending it again keeps them, a
@@ -1074,16 +1071,16 @@ stored keys cannot be used (new keys are then created and existing tokens stop w
 ### Licences and payments
 
 Products are sold **per organisation, per product and per user** (a seat), per month or per year (a year is always
-cheaper than twelve months). Every user first gets a **free trial of 14 days** (\`BILLING_TRIAL_DAYS\`) of every
-product: it starts when the user joins the organisation (registration, eID registration or invitation). After the trial
-the user needs a seat; an admin buys seats and gives them to members (and takes them back to give them to someone else)
+cheaper than twelve months). A user can ask a **free demo of 14 days** (\`BILLING_TRIAL_DAYS\`) of a product, once
+(\`POST /me/licenses/:productCode/trial\`, "Ask a demo" on \`/profile\`); nothing starts by itself (not at
+registration, eID registration, invitation or the first login to an app). After the demo the user needs a seat; an admin buys seats and gives them to members (and takes them back to give them to someone else)
 on \`/licenses\` of the frontend.
 
 | Who | Can |
 | --- | --- |
 | Superadmin | Products and prices (\`/admin/products\`), discount codes (\`/admin/discounts\`), **free seats** for one organisation (\`/admin/tenants/:id/grants\`), **extend a trial** (\`/admin/tenants/:id/trials\`). Always has access to every product. |
-| Admin of an organisation | Buy seats (\`POST /tenants/current/licenses/subscriptions\`), more or fewer seats, cancel, give and take back seats, start the trial of a member that joined before the product existed |
-| Every user | \`GET /me/licenses\`: which products may I use, through a trial or a seat |
+| Admin of an organisation | Buy seats (\`POST /tenants/current/licenses/subscriptions\`), more or fewer seats, cancel, give and take back seats, start the trial of a member |
+| Every user | \`GET /me/licenses\`: which products may I use, through a trial or a seat; \`POST /me/licenses/:productCode/trial\`: ask a demo, once per product (409 \`billing.DEMO_USED\`) |
 
 **Protect an endpoint** with \`@License('<product code>')\` (\`src/billing/license.guard.ts\`): it logs in like
 \`@Access('user')\` and answers 403 \`billing.LICENSE_REQUIRED\` without a running trial or a seat. The module of the
@@ -1127,9 +1124,8 @@ subscription \`past_due\` (the seats stop at the end of the period).
 Each organisation uses a code once; the code is reserved at the checkout and given back when that is not paid. **100% makes it free**: the seats are active at once, without a payment, for the
 periods of the code. Leave the code empty to get a random one (\`K7QM-2XPD\`).
 
-- Accounts made with \`npm run oidc:user\` get no trial automatically: start it on \`/licenses\` or with
-  \`POST /tenants/current/licenses/:productCode/trials/:userId\`. For the product of an app it starts by itself at
-  the first login to that app (see "Apps are products").
+- No account gets a trial automatically: the member asks a demo (\`/profile\`), or an admin starts it on
+  \`/licenses\` (\`POST /tenants/current/licenses/:productCode/trials/:userId\`).
 - Tests: the e2e tests run without a database, so override \`BILLING_STORE\` with \`MemoryBillingStore\` (like
   \`test/billing.e2e-spec.ts\`).
 

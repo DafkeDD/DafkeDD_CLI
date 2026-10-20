@@ -292,8 +292,13 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
     async function eidSubmit(token: EidToken): Promise<string | null> {
         if (state.step !== 'eid') return t('eidFailed')
         const { status, answer } = await call('/eid', { csrf: state.csrf, token })
-        // Logged in (or the login expired): the same handling as after the password
-        if (['redirect', 'choose-tenant', 'no-tenant', 'expired'].includes(answer.status ?? '')) {
+        // The card and PIN are the first factor only: the code of the authenticator app (or its setup) follows, then the
+        // same handling as after the password
+        if (
+            ['redirect', 'choose-tenant', 'no-tenant', 'expired', 'mfa', 'mfa-setup', 'consent'].includes(
+                answer.status ?? ''
+            )
+        ) {
             handle(status, answer)
             return null
         }

@@ -111,6 +111,7 @@ export const BILLING_MESSAGES = {
         RENEWAL_PENDING: 'The renewal of this subscription is on its way. Change the seats when it is paid.',
         SEAT_NOT_FOUND: 'This member has no seat for this product.',
         TRIAL_USED: 'This member had a trial of this product already.',
+        DEMO_USED: 'You have used the demo of this app already.',
         NOT_A_MEMBER: 'This person is not an active member of the organisation.',
         LICENSE_REQUIRED: 'You need a licence for {product}. Ask an admin of your organisation.',
         PAYMENTS_DISABLED: 'Buying is not available on this server (PAYMENTS=off).',
@@ -138,6 +139,7 @@ export const BILLING_MESSAGES = {
         RENEWAL_PENDING: 'De verlenging van dit abonnement is onderweg. Wijzig de plaatsen zodra ze betaald is.',
         SEAT_NOT_FOUND: 'Dit lid heeft geen plaats voor dit product.',
         TRIAL_USED: 'Dit lid had al een proefperiode voor dit product.',
+        DEMO_USED: 'Je hebt de demo van deze app al gebruikt.',
         NOT_A_MEMBER: 'Deze persoon is geen actief lid van de organisatie.',
         LICENSE_REQUIRED: 'Je hebt een licentie nodig voor {product}. Vraag het aan een beheerder van je organisatie.',
         PAYMENTS_DISABLED: 'Kopen is niet beschikbaar op deze server (PAYMENTS=off).',
@@ -167,6 +169,7 @@ export const BILLING_MESSAGES = {
             "Le renouvellement de cet abonnement est en cours. Modifiez les places une fois qu'il est payé.",
         SEAT_NOT_FOUND: "Ce membre n'a pas de place pour ce produit.",
         TRIAL_USED: "Ce membre a déjà eu une période d'essai pour ce produit.",
+        DEMO_USED: 'Vous avez déjà utilisé la démo de cette application.',
         NOT_A_MEMBER: "Cette personne n'est pas un membre actif de l'organisation.",
         LICENSE_REQUIRED:
             "Vous avez besoin d'une licence pour {product}. Demandez à un administrateur de votre organisation.",
@@ -197,6 +200,7 @@ export const BILLING_MESSAGES = {
         RENEWAL_PENDING: 'Die Verlängerung dieses Abos ist unterwegs. Ändere die Plätze, sobald sie bezahlt ist.',
         SEAT_NOT_FOUND: 'Dieses Mitglied hat keinen Platz für dieses Produkt.',
         TRIAL_USED: 'Dieses Mitglied hatte bereits eine Testphase für dieses Produkt.',
+        DEMO_USED: 'Du hast die Demo dieser App bereits genutzt.',
         NOT_A_MEMBER: 'Diese Person ist kein aktives Mitglied der Organisation.',
         LICENSE_REQUIRED: 'Du brauchst eine Lizenz für {product}. Frage einen Administrator deiner Organisation.',
         PAYMENTS_DISABLED: 'Kaufen ist auf diesem Server nicht möglich (PAYMENTS=off).',
@@ -974,7 +978,7 @@ export function envLines(oidc, { port, example = false }) {
         'SMTP_PASSWORD=',
         `MAIL_FROM=${quote(`${oidc.appName ?? 'App'} <no-reply@example.com>`)}`,
         '',
-        '# Licences: every user of an organisation needs a seat of a product, after a free trial of BILLING_TRIAL_DAYS days.',
+        '# Licences: every user of an organisation needs a seat of a product, or a demo of BILLING_TRIAL_DAYS days they ask.',
         '# PAYMENTS: mollie (MOLLIE_API_KEY, test_... or live_...), fake (a checkout page of this API, development only)',
         '# or off (nothing can be bought; trials and free seats of a superadmin still work)',
         `PAYMENTS=${example ? 'mollie' : 'fake'}`,
@@ -1281,7 +1285,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/oidc/interaction/:id/eid',
         tag: 'oidc',
         summary:
-            'Log in with the Belgian eID, step 2: the token of the bridge (the card signed the nonce after the PIN). Counts as two-step verification: acr `loa4`, amr `sc pin mfa`. Errors as JSON { status: "error", error }: EID_INVALID (401), EID_EXPIRED (400), EID_NOT_LINKED (404), EID_UNAVAILABLE (503, OCSP), EMAIL_NOT_VERIFIED (403). Rate limited.',
+            'Log in with the Belgian eID, step 2: the token of the bridge (the card signed the nonce after the PIN). Only the first factor (amr `sc pin`): the answer is `mfa` or `mfa-setup` (the code of the authenticator app follows), like after a password. Errors as JSON { status: "error", error }: EID_INVALID (401), EID_EXPIRED (400), EID_NOT_LINKED (404), EID_UNAVAILABLE (503, OCSP), EMAIL_NOT_VERIFIED (403). Rate limited.',
         body: {
             example: { csrf: 'from-the-page', token: EID_TOKEN },
             fields: [
@@ -1708,17 +1712,19 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/oidc/account/register-eid',
         tag: 'account',
         summary:
-            'Create an account with the Belgian eID and a new organisation (the account becomes its admin). The name comes from the card; there is no password. Only an HMAC of the national register number is stored. The email address must still be verified. Rate limited.',
+            'Create an account with the Belgian eID and a new organisation (the account becomes its admin). The name comes from the card; the person chooses a password (every account has one, and the authenticator app always follows at login). Only an HMAC of the national register number is stored. The email address must still be verified. Rate limited.',
         body: {
             example: {
                 challenge: EID_CHALLENGE.challenge,
                 token: EID_TOKEN,
                 email: 'jan@example.com',
+                password: 'correct-horse-battery',
                 organisation: 'Acme'
             },
             fields: [
                 ...EID_TOKEN_FIELDS,
                 ['email', 'string', 'required, a valid email address (at most 254)'],
+                ['password', 'string', PASSWORD_RULE],
                 ['organisation', 'string', 'required, 2 to 100 characters: the name of the new tenant']
             ]
         },
@@ -1811,7 +1817,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/oidc/account/invitation/accept',
         tag: 'account',
         summary:
-            'Accept an invitation. An existing account joins the organisation; otherwise name and password create a (verified) account. The inviter must still be admin and the tenant active. The member gets the roles chosen for each app of the invitation and, when asked, a free seat (`seat: false` when none was free: the trial runs anyway); `url` opens the app.',
+            'Accept an invitation. An existing account joins the organisation; otherwise name and password create a (verified) account. The inviter must still be admin and the tenant active. The member gets the roles chosen for each app of the invitation and, when asked, a free seat (`seat: false` when none was free: the member joins without a licence); `url` opens the app.',
         body: {
             example: { token: TOKEN, name: 'Bob', password: 'correct-horse-battery' },
             fields: [
@@ -2909,7 +2915,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/tenants/current/licenses/:productCode/trials/:userId',
         tag: 'licences (admin)',
         summary:
-            'Start the 14-day trial (BILLING_TRIAL_DAYS) of a member, for a member that joined before the product existed. New members get it automatically; once per member and product.',
+            'Start the 14-day trial (BILLING_TRIAL_DAYS) of a member, for a member that has none yet (a demo never starts by itself). Once per member and product.',
         bearer: true,
         pathExample: `/tenants/current/licenses/planner/trials/${USER_ID}`,
         response: { status: 201, example: { userId: USER_ID, endsAt: '2026-10-28T08:00:00.000Z' } },
@@ -2962,6 +2968,22 @@ export const endpoints = ({ port = 4000 } = {}) => [
             ]
         },
         errors: [[401, 'errors.UNAUTHORIZED']]
+    },
+    {
+        method: 'POST',
+        path: '/me/licenses/:productCode/trial',
+        tag: 'licences',
+        summary:
+            'Ask a demo: a trial of the product for yourself (BILLING_TRIAL_DAYS, 14 days), once per product, in the organisation of the token. For every member. A demo never starts by itself (not when joining, not at the first login to an app); an admin can also start one for a member.',
+        bearer: true,
+        pathExample: '/me/licenses/planner/trial',
+        response: { status: 201, example: { userId: USER_ID, endsAt: '2026-11-03T08:00:00.000Z' } },
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [404, 'billing.PRODUCT_NOT_FOUND'],
+            [404, 'billing.NOT_A_MEMBER'],
+            [409, 'billing.DEMO_USED']
+        ]
     },
     // ---------------------------------------------------------------- the payment provider
     {

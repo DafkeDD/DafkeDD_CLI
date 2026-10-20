@@ -111,7 +111,8 @@ test('an app is a product: migration 11, the licence claim in its tokens, the pr
     // The billing module answers for the OpenID Connect part (no circular module dependency)
     assert.match(backend['src/oidc/app-licenses.ts'], /export class AppLicenses/)
     assert.match(backend['src/billing/billing.service.ts'], /this\.appLicenses\.register\(/)
-    assert.match(backend['src/billing/billing.service.ts'], /reason: 'first login to the app'/)
+    // The claim never starts a trial: a member asks a demo
+    assert.doesNotMatch(backend['src/billing/billing.service.ts'], /first login to the app/)
     const tokens = backend['src/oidc/tokens.service.ts']
     assert.match(tokens, /license: await this\.licenses\.claim\(/)
     assert.match(tokens, /\.\.\.superadmin,\s+\.\.\.license,\s+\.\.\.roles\s+\}/)

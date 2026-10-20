@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { getFormatter, getTranslations, setRequestLocale } from 'next-intl/server'
 import { BUTTON, CARD, LINK, roleLabel } from '@/components/account-ui'
+import { AskDemo } from '@/components/ask-demo'
 import { AppPage } from '@/components/shell/app-shell'
 import { PASPORT_API_URL } from '@/lib/pasport'
 import { ACCOUNT_URL, userinfo } from '@/lib/oidc'
@@ -93,6 +94,13 @@ async function Profile() {
                                           ? l('licensed')
                                           : l('noLicense')}
                                 </span>
+                                {/* No licence: ask a demo (once per product; it never starts by itself) */}
+                                {!license.access && (
+                                    <>
+                                        {' '}
+                                        <AskDemo code={license.code} />
+                                    </>
+                                )}
                             </li>
                         ))}
                     </ul>

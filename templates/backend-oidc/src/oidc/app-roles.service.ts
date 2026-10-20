@@ -159,7 +159,8 @@ export class AppRolesService {
 
     /**
      * A new member accepted an invitation: it gets the roles chosen for each app (recorded as given by the inviter) and,
-     * when asked, one of the free seats. No free seat: the member still joins (with its trial); `seat` says false.
+     * when asked, one of the free seats. No free seat: the member still joins (without a
+     * licence; the admin gives one later or the member asks a demo); `seat` says false.
      */
     async giveInvitationApps(
         tenantId: string,

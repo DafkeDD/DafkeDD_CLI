@@ -79,7 +79,7 @@ export class LicensesController {
     }
 
     @Post(':productCode/trials/:userId')
-    @ApiOperation({ summary: 'Start the trial of a member (once per product; new members get it automatically)' })
+    @ApiOperation({ summary: 'Start the trial of a member (once per product)' })
     @ApiOkResponse({ description: '{ userId, endsAt }' })
     @ApiConflictResponse({ description: 'billing.TRIAL_USED' })
     trial(

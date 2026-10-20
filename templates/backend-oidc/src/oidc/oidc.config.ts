@@ -47,10 +47,8 @@ export const OIDC = {
     ACR_PASSWORD: 'loa1',
     /** Password and a second factor (authenticator app or recovery code). */
     ACR_MFA: 'loa2',
-    /** The Belgian eID with its PIN: something you have (the card) and something you know (the PIN). */
-    ACR_EID: 'loa4',
-    /** How the eID login proves who the user is (RFC 8176): smart card, PIN, and so multi-factor. */
-    EID_AMR: ['sc', 'pin', 'mfa'],
+    /** How the eID login proves who the user is (RFC 8176): smart card and PIN. Only the first factor: the authenticator follows. */
+    EID_AMR: ['sc', 'pin'],
     /** An eID challenge (nonce) is valid for 5 minutes. */
     EID_CHALLENGE_SECONDS: 5 * 60,
     /** Lifetimes of the links in emails. */

@@ -171,6 +171,12 @@ export class RegisterEidDto extends EidTokenDto {
     @MaxLength(254, maxLength)
     email!: string
 
+    @ApiProperty({ example: 'correct-horse-battery', minLength: OIDC.PASSWORD_MIN })
+    @IsString(isString)
+    @MinLength(OIDC.PASSWORD_MIN, minLength)
+    @MaxLength(OIDC.PASSWORD_MAX, maxLength)
+    password!: string
+
     @ApiProperty({ example: 'Acme', description: 'Name of the new organisation; the new account becomes its admin' })
     @IsString(isString)
     @MinLength(2, minLength)

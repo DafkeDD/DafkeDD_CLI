@@ -411,8 +411,11 @@ describe('Apps on /admin (e2e)', () => {
         const linked = await http().post('/oidc/link').send({ code }).expect(200)
         expect(linked.body.client.product).toBe('shop')
 
-        // Alice joined before the product existed: her first login to the app starts her trial
+        // A login never starts a demo by itself: Alice has none until she asks it
         const shop = { id: 'shop.app', redirect: APP.redirectUris[0]! }
+        const none = await login('alice@example.com', shop)
+        expect(claims(none.access_token).license).toEqual({ product: 'shop', status: 'none' })
+        await http().post('/me/licenses/shop/trial').set(bearer(tokens.alice)).expect(201)
         const first = await login('alice@example.com', shop)
         const license = claims(first.access_token).license as { product: string; status: string; ends_at: number }
         expect(license).toMatchObject({ product: 'shop', status: 'trial' })
@@ -420,7 +423,7 @@ describe('Apps on /admin (e2e)', () => {
         expect(audit.events.findLast(event => event.action === 'licences.trial_started')).toMatchObject({
             tenantId,
             targetId: aliceId,
-            details: { product: 'shop', reason: 'first login to the app' }
+            details: { product: 'shop' }
         })
         // The trial ends: the next token says so (no second trial)
         const product = (await billing.findProductByCode('shop'))!
@@ -659,17 +662,12 @@ describe('Apps on /admin (e2e)', () => {
             targetId: gina.id,
             details: { product: 'agenda' }
         })
-        // Her tokens of the app carry the roles; her trial runs first, the seat comes after it
+        // Her tokens of the app carry the roles and the seat (no demo was started for her)
         const token1 = claims((await login('gina@example.com', agenda)).access_token)
         expect(token1.roles).toEqual(['viewer'])
-        expect(token1.license).toMatchObject({ product: 'agenda', status: 'trial' })
-        await billing.setTrialEnd(tenantId, product.id, gina.id, new Date(Date.now() - 1000))
-        expect(claims((await login('gina@example.com', agenda)).access_token).license).toEqual({
-            product: 'agenda',
-            status: 'seat'
-        })
+        expect(token1.license).toEqual({ product: 'agenda', status: 'seat' })
 
-        // No free seat left: Hank still joins (with his trial) and the default roles; the answer says so
+        // No free seat left: Hank still joins (without a seat) and the default roles; the answer says so
         await invite({ email: 'hank@example.com', apps: [{ clientId: 'agenda.app', seat: true }] }).expect(202)
         const hankToken = /token=([^\s&]+)/.exec(
             outbox.filter(item => item.to === 'hank@example.com').at(-1)?.text ?? ''
@@ -683,6 +681,6 @@ describe('Apps on /admin (e2e)', () => {
         ])
         const hankClaims = claims((await login('hank@example.com', agenda)).access_token)
         expect(hankClaims.roles).toEqual(['editor'])
-        expect(hankClaims.license).toMatchObject({ status: 'trial' })
+        expect(hankClaims.license).toEqual({ product: 'agenda', status: 'none' })
     })
 })

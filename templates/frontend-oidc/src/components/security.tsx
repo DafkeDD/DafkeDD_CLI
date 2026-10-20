@@ -23,8 +23,6 @@ export function Security() {
     const [error, setError] = useState('')
     const [expired, setExpired] = useState(false)
     const [busy, setBusy] = useState(false)
-    // Logs in with the eID only (no password): the card and its PIN are the two steps already
-    const [eidOnly, setEidOnly] = useState(false)
 
     function show(result: Answer) {
         if (result.status === 401) setExpired(true)
@@ -36,11 +34,6 @@ export function Security() {
         backend('me/mfa')
             .then(show)
             .catch(() => setError(t('offline')))
-        backend('me/eid')
-            .then(result =>
-                setEidOnly(result.status === 200 && result.body.linked === true && result.body.hasPassword === false)
-            )
-            .catch(() => undefined)
         // once when the page opens
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
@@ -107,8 +100,6 @@ export function Security() {
                 <div role='status' className='text-sm font-semibold text-[var(--green)]'>
                     {t('mfaOn')} · {t('recoveryLeft', { count: status.recoveryCodesLeft })}
                 </div>
-            ) : eidOnly ? (
-                <Notice tone='success'>{t('mfaByEid')}</Notice>
             ) : (
                 <Notice tone='error'>{t('mfaOff')}</Notice>
             )}
@@ -133,7 +124,7 @@ export function Security() {
                 </form>
             )}
 
-            {status && !status.enabled && !eidOnly && !setup && (
+            {status && !status.enabled && !setup && (
                 <button type='button' disabled={busy} className={BUTTON} onClick={() => void startSetup()}>
                     {t('setupMfa')}
                 </button>

@@ -23,7 +23,7 @@ export class BillingConfig {
         return this.config.get<string>('MOLLIE_API_KEY') ?? ''
     }
 
-    /** Every user first gets this many days to try a product (14). A superadmin can extend a trial. */
+    /** A demo lasts this many days (14); a member has to ask it. A superadmin can extend a trial. */
     get trialDays(): number {
         const days = Number(this.config.get<string>('BILLING_TRIAL_DAYS') ?? 14)
         return Number.isInteger(days) && days > 0 ? days : 14

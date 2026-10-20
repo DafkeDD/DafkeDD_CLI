@@ -72,7 +72,7 @@ export class AccountController {
     @HttpCode(HttpStatus.ACCEPTED)
     @ApiOperation({
         summary:
-            'Create an account with the Belgian eID and a new organisation. The name comes from the card; no password. Sends a verification email.'
+            'Create an account with the Belgian eID and a new organisation. The name comes from the card; the person chooses a password. Sends a verification email.'
     })
     @ApiAcceptedResponse({ description: '{ status: "check-email", name }' })
     @ApiBadRequestResponse({ description: 'oidc.EID_EXPIRED: the challenge expired or is invalid' })

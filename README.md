@@ -270,10 +270,11 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
 - **Belgian eID**: log in and register with the eID card and its PIN (like CSAM and Corilus Passport), with
   [DafkeDD eID](https://github.com/DafkeDD/DafkeDD_EID) (`@dafkedd/eid`, installed from its GitHub release in the
   backend and the frontend). The card signs a nonce of the server; the server checks the signature, the origin, the
-  certificate chain up to the Belgian root CAs and OCSP. Counts as two-step verification (`acr: loa4`). Registration
-  takes the name from the card and needs no password; existing accounts link their eID on `/security`. Only an HMAC of
-  the national register number is stored (`user_identifiers`). Users run the DafkeDD eID program on their PC; during
-  development `npm run eid:mock` in `./frontend` starts a virtual card reader (PIN 1234, `OIDC_EID=test`).
+  certificate chain up to the Belgian root CAs and OCSP. The eID is the first factor only: the code of the authenticator
+  app always follows. Registration takes the name from the card and a chosen password; existing accounts link their eID
+  on `/security`. Only an HMAC of the national register number is stored (`user_identifiers`). Users run the DafkeDD eID
+  program on their PC; during development `npm run eid:mock` in `./frontend` starts a virtual card reader (PIN 1234,
+  `OIDC_EID=test`).
 - **Roles**: `user` and `admin` per organisation, `superadmin` for the whole platform (admin of every organisation, also
   new ones). The first account is superadmin. `@Access('admin')` / `@Access('superadmin')` protect endpoints; the role
   is checked in the database on every request. An organisation always keeps an admin, the platform a superadmin. A
@@ -295,11 +296,11 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   (RFC 7009) and introspection (RFC 7662). Every token carries its session (`sid`): ending a session stops its tokens at
   once. `/security` shows where you are logged in and ends one or all other sessions.
 - **Licences and payments (Mollie)**: products are sold per organisation, per product and per user (seat), per month or
-  per year (always cheaper). Every user first gets a 14-day trial; admins buy seats on `/licenses`, give them to members
-  and take them back. Superadmins manage products, make discount codes (a percentage or an amount, once, for some
-  periods or forever; 100% is free), give free seats and extend trials. `@License('planner')` protects an endpoint.
-  `PAYMENTS=fake` (the default `.env`) has its own checkout page for development; `PAYMENTS=mollie` with a `test_...`
-  key uses the real checkout of Mollie.
+  per year (always cheaper). A member asks a 14-day demo once ("Ask a demo" on `/profile`; nothing starts by itself);
+  admins buy seats on `/licenses`, give them to members and take them back. Superadmins manage products, make discount
+  codes (a percentage or an amount, once, for some periods or forever; 100% is free), give free seats and extend trials.
+  `@License('planner')` protects an endpoint. `PAYMENTS=fake` (the default `.env`) has its own checkout page for
+  development; `PAYMENTS=mollie` with a `test_...` key uses the real checkout of Mollie.
 - **Audit log**: who did what, when, in which organisation, from which IP address and browser: logins (also failed
   ones), accounts, members, the platform and licences. Append-only in PostgreSQL (a trigger refuses changes), kept
   `AUDIT_RETENTION_DAYS` (365) days. Admins read their organisation on `/audit`, superadmins the whole platform, every
@@ -496,6 +497,14 @@ git switch developer
 
 ## Changelog
 
+- **0.39.0**: two-step verification after the eID, a password for every account, and no automatic demos. The Belgian eID
+  (card and PIN) is the first factor only: the code of the authenticator app (or its setup at the first login) always
+  follows, like after a password (`amr: ["sc", "pin", "otp", "mfa"]`, `acr: loa2`; `loa4` is gone, also from discovery).
+  Registering with the eID needs a chosen password (`password` of `POST /oidc/account/register-eid`); the "your eID
+  counts as two-step verification" notice on `/security` is gone. A demo (trial) never starts by itself (not at
+  registration, invitation or the first login to an app): a member asks it once with
+  `POST /me/licenses/:productCode/trial` ("Ask a demo" on `/profile`, 409 `billing.DEMO_USED`), or an admin starts it.
+  New texts `billing.DEMO_USED` and `Licenses.askDemo` (en, nl, fr, de).
 - **0.38.0**: invitations with apps. An admin who invites someone (`POST /tenants/current/invitations`) can add `apps`:
   per app the roles the new member gets (`null`: the default roles) and `seat` (one of the free seats of the product the
   app sells). `GET /tenants/current/apps` now lists every app made on `/admin` (also without roles) with `url` and

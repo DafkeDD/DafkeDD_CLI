@@ -2,7 +2,6 @@ import { randomInt } from 'node:crypto'
 import { AuditService } from '../audit/audit.service.js'
 import { HttpStatus, Inject, Injectable, Logger, type OnModuleInit, Optional } from '@nestjs/common'
 import { AppException } from '../common/app.exception.js'
-import { AccountService } from '../oidc/account.service.js'
 import { AppLicenses, type LicenseClaim } from '../oidc/app-licenses.js'
 import { OIDC_STORE, type OidcStore } from '../oidc/store/oidc.store.js'
 import { BillingConfig } from './billing.config.js'
@@ -88,8 +87,8 @@ export interface Actor {
 }
 
 /**
- * Licences per organisation, per product, per user. Every member first gets a trial (BILLING_TRIAL_DAYS, 14) for every
- * active product; after it, a seat of the organisation: paid (a subscription per month or per year through Mollie) or
+ * Licences per organisation, per product, per user. A member can ask a demo (BILLING_TRIAL_DAYS, 14) of a
+ * product, once (never started automatically); after it, a seat of the organisation: paid (a subscription per month or per year through Mollie) or
  * free (a superadmin gives seats, or a 100% discount code). Admins give seats to members and take them back.
  */
 @Injectable()
@@ -101,15 +100,12 @@ export class BillingService implements OnModuleInit {
         @Inject(BILLING_STORE) private readonly store: BillingStore,
         @Inject(OIDC_STORE) private readonly oidc: OidcStore,
         private readonly config: BillingConfig,
-        private readonly accounts: AccountService,
         private readonly audit: AuditService,
         private readonly appLicenses: AppLicenses,
         @Optional() @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider | null
     ) {}
 
     onModuleInit() {
-        // Every new member (registration, accepted invitation) starts with a trial of every active product
-        this.accounts.onMemberJoined((tenantId, userId) => this.startTrials(tenantId, userId))
         // The tokens of an app that sells a product carry the licence of the user (src/oidc/app-licenses.ts)
         this.appLicenses.register({
             productExists: async code => (await this.store.findProductByCode(code)) !== null,
@@ -127,8 +123,8 @@ export class BillingService implements OnModuleInit {
     }
 
     /**
-     * The `license` claim of a user for the product of an app, in the organisation of the login. A member who never had
-     * a trial of it (the product came later than the member) gets one now: everybody first gets a trial.
+     * The `license` claim of a user for the product of an app, in the organisation of the login. A trial only exists
+     * when the member asked for it (or a superadmin gave it): it is never started here.
      */
     async licenseClaim(
         tenantId: string | null,
@@ -141,18 +137,7 @@ export class BillingService implements OnModuleInit {
         if (!product?.active) return none
         if (superadmin) return { product: code, status: 'superadmin' }
         if (tenantId === null) return none
-        let result = await this.access(tenantId, userId, code)
-        if (!result.access && !(await this.store.findTrial(tenantId, product.id, userId))) {
-            const endsAt = new Date(Date.now() + this.config.trialDays * DAY)
-            if (await this.store.startTrial(tenantId, product.id, userId, endsAt)) {
-                await this.audit.record('licences.trial_started', {
-                    tenantId,
-                    target: { type: 'user', id: userId },
-                    details: { product: code, endsAt: endsAt.toISOString(), reason: 'first login to the app' }
-                })
-                result = await this.access(tenantId, userId, code)
-            }
-        }
+        const result = await this.access(tenantId, userId, code)
         if (!result.access) return none
         return result.via === 'trial'
             ? { product: code, status: 'trial', ends_at: Math.floor(result.endsAt.getTime() / 1000) }
@@ -242,13 +227,6 @@ export class BillingService implements OnModuleInit {
 
     // ---------------------------------------------------------------- trials
 
-    /** Starts a trial of every active product for a new member (never twice for the same product). */
-    async startTrials(tenantId: string, userId: string) {
-        const endsAt = new Date(Date.now() + this.config.trialDays * DAY)
-        for (const product of await this.products(true))
-            await this.store.startTrial(tenantId, product.id, userId, endsAt)
-    }
-
     private async assertMember(tenantId: string, userId: string) {
         if (!(await this.oidc.findMemberRole(tenantId, userId)))
             throw new AppException('billing.NOT_A_MEMBER', HttpStatus.NOT_FOUND)
@@ -267,6 +245,17 @@ export class BillingService implements OnModuleInit {
             details: { product: product.code, endsAt: endsAt.toISOString() }
         })
         return { userId, endsAt }
+    }
+
+    /** A member asks a demo of a product: their own trial, once per product (409 billing.DEMO_USED after it). */
+    async requestDemo(tenantId: string, productCode: string, userId: string) {
+        try {
+            return await this.startTrial(tenantId, productCode, userId)
+        } catch (error) {
+            if (error instanceof AppException && error.key === 'billing.TRIAL_USED')
+                throw new AppException('billing.DEMO_USED', HttpStatus.CONFLICT)
+            throw error
+        }
     }
 
     /** A superadmin extends a trial by `days` (from its end, or from now when it ended); starts one when there is none. */

@@ -105,8 +105,11 @@ test('@License(code): a trial or a seat, superadmins always', () => {
     assert.match(service, /BILLING_TRIAL_DAYS|this\.config\.trialDays/)
     // A year is always cheaper than twelve months
     assert.match(service, /billing\.YEAR_NOT_CHEAPER/)
-    // New members get their trials
-    assert.match(backend['src/billing/billing.module.ts'] + service, /onMemberJoined/)
+    // A demo never starts by itself: a member asks it (POST /me/licenses/:productCode/trial), once
+    assert.doesNotMatch(service, /onMemberJoined|startTrials/)
+    assert.match(service, /async requestDemo\(/)
+    assert.match(backend['src/billing/my-licenses.controller.ts'], /@Post\(':productCode\/trial'\)/)
+    for (const locale of LOCALES) assert.ok(oidc.BILLING_MESSAGES[locale].DEMO_USED, locale)
 })
 
 test('billing texts exist in all four languages, with every key the code uses', () => {
@@ -168,7 +171,13 @@ test('the frontend has /licenses, the return page and the admin of products and 
     ])
         assert.ok(frontend[rel], rel)
     assert.match(frontend['src/app/[locale]/admin/page.tsx'], /<BillingAdmin \/>/)
-    assert.match(frontend['src/app/api/backend/[...path]/route.ts'], /me\\\/licenses\$/)
+    // The own licences, and asking a demo of one product
+    assert.match(
+        frontend['src/app/api/backend/[...path]/route.ts'],
+        /me\\\/licenses\(\?:\\\/\[a-z0-9-\]\+\\\/trial\)\?\$/
+    )
+    assert.match(frontend['src/app/[locale]/profile/page.tsx'], /<AskDemo code=\{license\.code\} \/>/)
+    for (const locale of ['en', 'nl', 'fr', 'de']) assert.ok(LICENSE_MESSAGES[locale].askDemo, locale)
     // The status after the checkout comes from the API, never from the URL
     assert.match(frontend['src/components/licenses.tsx'], /\/sync`/)
 })

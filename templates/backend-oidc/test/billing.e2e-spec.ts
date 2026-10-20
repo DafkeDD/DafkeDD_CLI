@@ -211,17 +211,13 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
     })
 
     describe('trials', () => {
-        it('a new member gets 14 days of every active product; the licence guard lets them in', async () => {
+        it('a new member gets no demo by themselves: they have to ask it', async () => {
             await http()
                 .post('/oidc/account/register')
                 .send({ name: 'Dora', email: 'dora@example.com', password: PASSWORD, organisation: 'Dora BV' })
                 .expect(202)
             const dora = await store.findUserByEmail('dora@example.com')
-            const trials = billing.trials.filter(trial => trial.userId === dora?.id)
-            expect(trials).toHaveLength(2)
-            const days = (trials[0]!.endsAt.getTime() - Date.now()) / DAY
-            expect(days).toBeGreaterThan(13.9)
-            expect(days).toBeLessThanOrEqual(14)
+            expect(billing.trials.filter(trial => trial.userId === dora?.id)).toHaveLength(0)
         })
 
         it('existing members get their trial from an admin, once', async () => {
@@ -241,6 +237,21 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
             )
             // Members only: no access to the licences of the organisation
             await http().get('/tenants/current/licenses').set(bearer(tokens.bob)).expect(403)
+        })
+
+        it('a member asks a demo for themselves, once per product', async () => {
+            const asked = await http().post('/me/licenses/reports/trial').set(bearer(tokens.bob)).expect(201)
+            expect(asked.body.userId).toBe(ids.bob)
+            const again = await http().post('/me/licenses/reports/trial').set(bearer(tokens.bob)).expect(409)
+            expect(again.body.error).toBe('billing.DEMO_USED')
+            // The demo of planner was started by an admin already: it counts as used
+            const used = await http().post('/me/licenses/planner/trial').set(bearer(tokens.bob)).expect(409)
+            expect(used.body.error).toBe('billing.DEMO_USED')
+            await http().post('/me/licenses/unknown/trial').set(bearer(tokens.bob)).expect(404)
+            expect(audit.events.findLast(event => event.action === 'licences.trial_started')).toMatchObject({
+                targetId: ids.bob,
+                details: { product: 'reports' }
+            })
         })
 
         it('after the trial: no access; a superadmin can extend it', async () => {

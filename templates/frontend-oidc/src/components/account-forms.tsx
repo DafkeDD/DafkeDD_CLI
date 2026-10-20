@@ -40,7 +40,8 @@ const TAB = TOGGLE + ' flex-1'
 
 /**
  * /register: a new account and a new organisation; the account becomes its admin. With a password, or with the
- * Belgian eID (name from the card, no password) when the login server allows it (GET /oidc/account/registration).
+ * Belgian eID (name from the card, plus a chosen password) when the login server allows it
+ * (GET /oidc/account/registration). Every account has a password; the authenticator app always follows at login.
  */
 export function Register() {
     const t = useTranslations('Oidc')
@@ -65,8 +66,9 @@ export function Register() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    /** eID, step 1: a challenge of the login server; its nonce goes to the card. */
-    async function eidNonce(): Promise<string | { error: string }> {
+    /** eID, step 1: a challenge of the login server; its nonce goes to the card (the passwords must match first). */
+    async function eidNonce(values: Record<string, string> = {}): Promise<string | { error: string }> {
+        if (values.password !== undefined && values.password !== values.repeat) return { error: t('passwordMismatch') }
         const result = await api('eid/challenge', {})
         if (result.status !== 200) return { error: result.message || t('offline') }
         challenge.current = String(result.body.challenge)
@@ -79,6 +81,7 @@ export function Register() {
             challenge: challenge.current,
             token,
             email: values.email,
+            password: values.password,
             organisation: values.organisation
         })
         if (result.status !== 202) return result.message || t('eidFailed')
@@ -119,6 +122,28 @@ export function Register() {
             autoComplete='organization'
         />
     )
+    // Every account has a password, also one made with the eID
+    const passwordFields = (
+        <>
+            <Field
+                label={t('password')}
+                hint={t('passwordHint')}
+                name='password'
+                type='password'
+                required
+                autoComplete='new-password'
+                {...PASSWORD}
+            />
+            <Field
+                label={t('passwordRepeat')}
+                name='repeat'
+                type='password'
+                required
+                autoComplete='new-password'
+                {...PASSWORD}
+            />
+        </>
+    )
     return (
         <section className={AUTH}>
             <AuthHeading title={t('registerTitle')} text={t('registerSubtitle')} />
@@ -156,6 +181,7 @@ export function Register() {
                                 autoComplete='email'
                             />
                             {organisationField}
+                            {passwordFields}
                         </EidPin>
                     </EidBridge>
                 </>
@@ -164,23 +190,7 @@ export function Register() {
                     <Field label={t('name')} name='name' required minLength={2} maxLength={100} autoComplete='name' />
                     <Field label={t('email')} name='email' type='email' required maxLength={254} autoComplete='email' />
                     {organisationField}
-                    <Field
-                        label={t('password')}
-                        hint={t('passwordHint')}
-                        name='password'
-                        type='password'
-                        required
-                        autoComplete='new-password'
-                        {...PASSWORD}
-                    />
-                    <Field
-                        label={t('passwordRepeat')}
-                        name='repeat'
-                        type='password'
-                        required
-                        autoComplete='new-password'
-                        {...PASSWORD}
-                    />
+                    {passwordFields}
                     {error && <Notice tone='error'>{error}</Notice>}
                     <button type='submit' disabled={busy} className={BUTTON + ' w-full'}>
                         {busy ? t('busy') : t('registerSubmit')}

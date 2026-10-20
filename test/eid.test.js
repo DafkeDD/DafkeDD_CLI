@@ -63,12 +63,15 @@ test('the backend checks eID tokens with @dafkedd/eid/server and stores only an 
     assert.doesNotMatch(migrations, /GRANT[^;]*user_identifiers/)
 })
 
-test('an eID login is two factors (acr loa4) and also counts when two-step verification is required', () => {
+test('an eID login is the first factor only: the authenticator app always follows (no loa4)', () => {
     const config = backend['src/oidc/oidc.config.ts']
-    assert.match(config, /ACR_EID: 'loa4'/)
-    assert.match(config, /EID_AMR: \['sc', 'pin', 'mfa'\]/)
+    assert.doesNotMatch(config, /ACR_EID|loa4/)
+    assert.match(config, /EID_AMR: \['sc', 'pin'\]/)
     const service = backend['src/oidc/oidc.service.ts']
-    assert.match(service, /acr === OIDC\.ACR_MFA \|\| acr === OIDC\.ACR_EID/)
+    assert.match(service, /return this\.secondStep\(id, interaction, client, user, \[\.\.\.OIDC\.EID_AMR\]\)/)
+    assert.match(service, /return !this\.config\.mfaRequired \|\| acr === OIDC\.ACR_MFA$/m)
+    // Every account has a password, also one made with the eID
+    assert.match(backend['src/oidc/account.service.ts'], /passwordHash: await hashPassword\(input\.password\)/)
     // The nonce of a login lives in its encrypted cookie and works once
     assert.match(service, /const interaction = \{ \.\.\.found\.interaction, eidNonce: null \}/)
     assert.match(backend['src/oidc/interaction.ts'], /eidNonce: string \| null/)

@@ -8,7 +8,7 @@ import { freshSession } from '@/lib/refresh'
  * the eID, the own sessions, passkeys and allowed applications, licences and audit log, and the heartbeat (who is online).
  */
 const ALLOWED =
-    /^(tenants\/current\/|admin\/|me\/mfa|me\/eid|me\/sessions|me\/passkeys|me\/licenses$|me\/audit$|me\/heartbeat$)[A-Za-z0-9/_-]*$/
+    /^(tenants\/current\/|admin\/|me\/mfa|me\/eid|me\/sessions|me\/passkeys|me\/licenses(?:\/[a-z0-9-]+\/trial)?$|me\/audit$|me\/heartbeat$)[A-Za-z0-9/_-]*$/
 
 /**
  * The IP address chain of the browser for the API (X-Forwarded-For): what a proxy in front of this app sent, and the

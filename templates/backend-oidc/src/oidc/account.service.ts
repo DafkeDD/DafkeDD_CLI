@@ -160,13 +160,13 @@ export class AccountService {
     }
 
     /**
-     * A new account with the eID: the name comes from the card, there is no password (the eID is the login; a password
-     * can be chosen later with "forgot password"). The email address must still be verified. An eID can belong to one
-     * account only (409 oidc.EID_ALREADY_LINKED); an email address that has an account gets the same answer as with
+     * A new account with the eID: the name comes from the card and the person chooses a password (the eID is read for
+     * who they are; the login is the password, or the eID, and always the authenticator app after it). The email
+     * address must still be verified. An eID can belong to one account only (409 oidc.EID_ALREADY_LINKED); an email address that has an account gets the same answer as with
      * a password (its owner gets an email).
      */
     async registerWithEid(
-        input: { challenge: string; token: unknown; email: string; organisation: string },
+        input: { challenge: string; token: unknown; email: string; password: string; organisation: string },
         lang: string,
         ip: string
     ) {
@@ -177,7 +177,13 @@ export class AccountService {
         const nonce = this.eid.openChallenge(input.challenge, 'register')
         const person = await this.eid.verify(input.token, nonce)
         const created = await this.store.registerWithIdentifier(
-            { email, name: person.name, passwordHash: null, emailVerified: false, locale: lang },
+            {
+                email,
+                name: person.name,
+                passwordHash: await hashPassword(input.password),
+                emailVerified: false,
+                locale: lang
+            },
             { name: input.organisation.trim(), slug: slugify(input.organisation) },
             { type: 'eid', valueHash: person.valueHash }
         )
@@ -441,7 +447,7 @@ export class AccountService {
             details: { role: data.role, newAccount: !accountExists }
         })
         await this.memberJoined(tenant.id, user.id)
-        // The apps of the invitation: their roles and seats (after the trials of a new member started)
+        // The apps of the invitation: their roles and seats (a demo never starts by itself)
         const apps = await this.appRoles.giveInvitationApps(tenant.id, user.id, invitation.invitedBy, invitation.apps)
         await this.store.deleteInvitation(tenant.id, data.invitationId)
         return { status: 'accepted' as const, tenantName: tenant.name, accountExists, apps }

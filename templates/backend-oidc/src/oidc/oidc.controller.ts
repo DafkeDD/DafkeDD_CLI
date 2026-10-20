@@ -234,7 +234,7 @@ export class OidcController {
     @Post('interaction/:id/eid')
     @ApiOperation({
         summary:
-            'Log in with the Belgian eID, step 2 (JSON { csrf, token }): the token of the bridge after the PIN. Counts as two-step verification (acr loa4). Rate limited.'
+            'Log in with the Belgian eID, step 2 (JSON { csrf, token }): the token of the bridge after the PIN. Only the first factor: the code of the authenticator app follows (or its setup). Rate limited.'
     })
     @ApiOkResponse({ description: '{ status: "redirect", location } or the organisation choice' })
     @ApiResponse({

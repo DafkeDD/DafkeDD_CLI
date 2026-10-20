@@ -29,9 +29,8 @@ import {
 
 /** How the user logged in after the second factor: password or the other server (fed), and the code. */
 function secondFactorAmr(interaction: Interaction, factor: SecondFactor): string[] {
-    return interaction.amr.includes('fed')
-        ? ['fed', ...MFA_AMR[factor].filter(value => value !== 'pwd')]
-        : MFA_AMR[factor]
+    const first = interaction.amr.includes('fed') ? ['fed'] : interaction.amr.includes('sc') ? [...OIDC.EID_AMR] : null
+    return first ? [...first, ...MFA_AMR[factor].filter(value => value !== 'pwd')] : MFA_AMR[factor]
 }
 
 /**
@@ -277,7 +276,7 @@ export class OidcService implements OnApplicationBootstrap {
             revocation_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
             introspection_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
             code_challenge_methods_supported: ['S256'],
-            acr_values_supported: [OIDC.ACR_PASSWORD, OIDC.ACR_MFA, ...(this.eid.enabled ? [OIDC.ACR_EID] : [])],
+            acr_values_supported: [OIDC.ACR_PASSWORD, OIDC.ACR_MFA],
             claims_supported: [
                 'sub',
                 'iss',
@@ -535,33 +534,32 @@ export class OidcService implements OnApplicationBootstrap {
             return { kind: 'form', interaction, client, errorKey: 'oidc.EMAIL_NOT_VERIFIED', email }
         }
 
-        // Two-step verification: the password was right, now the code of the authenticator app
+        return this.secondStep(id, interaction, client, user, ['pwd'])
+    }
+
+    /**
+     * After the first factor (the password, or the eID card with its PIN): the code of the authenticator app, or its
+     * setup (QR code) when it is required but not set up yet. The eID is never a second factor by itself.
+     */
+    private async secondStep(
+        id: string,
+        interaction: Interaction,
+        client: OidcClient,
+        user: StoredUser,
+        amr: string[]
+    ): Promise<LoginResult> {
         if (user.mfaEnabled) {
-            const waiting = {
-                ...interaction,
-                userId: user.id,
-                consent: null,
-                mfaPending: true,
-                enrolling: false,
-                amr: ['pwd']
-            }
+            const waiting = { ...interaction, userId: user.id, consent: null, mfaPending: true, enrolling: false, amr }
             return { kind: 'mfa', interaction: waiting, client, cookie: { id, value: this.seal(waiting) } }
         }
         // Required but not set up yet: set it up now (QR code), before there is a session
         if (this.config.mfaRequired) {
-            const waiting = {
-                ...interaction,
-                userId: user.id,
-                consent: null,
-                mfaPending: true,
-                enrolling: true,
-                amr: ['pwd']
-            }
+            const waiting = { ...interaction, userId: user.id, consent: null, mfaPending: true, enrolling: true, amr }
             const setup = await this.mfa.pendingSetup(user)
             return { kind: 'mfa-setup', interaction: waiting, client, setup, cookie: { id, value: this.seal(waiting) } }
         }
         return this.authenticated(
-            { ...interaction, userId: user.id, consent: null, mfaPending: false, enrolling: false, amr: ['pwd'] },
+            { ...interaction, userId: user.id, consent: null, mfaPending: false, enrolling: false, amr },
             user
         )
     }
@@ -580,8 +578,8 @@ export class OidcService implements OnApplicationBootstrap {
     }
 
     /**
-     * Logging in with the eID, step 2: the token of the bridge (the card signed the nonce after the PIN). The card and
-     * its PIN are two factors, so no code of the authenticator app follows (acr loa4, amr sc pin mfa).
+     * Logging in with the eID, step 2: the token of the bridge (the card signed the nonce after the PIN). Card and PIN
+     * are the first factor only (amr sc pin): the code of the authenticator app always follows (two-step verification).
      */
     async eidLogin(id: string, sealed: string | undefined, form: Params, allowed: boolean): Promise<LoginResult> {
         const found = await this.findInteraction(id, sealed)
@@ -611,17 +609,7 @@ export class OidcService implements OnApplicationBootstrap {
         if (user.status !== 'active') return refused('oidc.ACCOUNT_DISABLED', user.id)
         if (!user.emailVerified) return refused('oidc.EMAIL_NOT_VERIFIED', user.id)
         await this.store.touchIdentifier('eid', person.valueHash)
-        return this.authenticated(
-            {
-                ...interaction,
-                userId: user.id,
-                consent: null,
-                mfaPending: false,
-                enrolling: false,
-                amr: [...OIDC.EID_AMR]
-            },
-            user
-        )
+        return this.secondStep(id, interaction, client, user, [...OIDC.EID_AMR])
     }
 
     // ------------------------------------------------------------------ login at another OpenID Connect server
@@ -1093,11 +1081,7 @@ export class OidcService implements OnApplicationBootstrap {
             userId: user.id,
             tenantId: membership?.tenantId ?? null,
             authTime: now,
-            acr: interaction.amr.includes('sc')
-                ? OIDC.ACR_EID
-                : interaction.amr.includes('mfa')
-                  ? OIDC.ACR_MFA
-                  : OIDC.ACR_PASSWORD,
+            acr: interaction.amr.includes('mfa') ? OIDC.ACR_MFA : OIDC.ACR_PASSWORD,
             amr: interaction.amr.length ? interaction.amr : ['pwd'],
             expiresAt: new Date(now.getTime() + OIDC.SESSION_SECONDS * 1000),
             userAgent: interaction.userAgent || null
@@ -1194,9 +1178,9 @@ export class OidcService implements OnApplicationBootstrap {
 
     // ------------------------------------------------------------------ userinfo
 
-    /** Does a session with this acr still count? With OIDC_MFA=required only two-step logins (loa2) and the eID (loa4). */
+    /** Does a session with this acr still count? With OIDC_MFA=required only two-step logins (loa2). */
     strongEnough(acr: string): boolean {
-        return !this.config.mfaRequired || acr === OIDC.ACR_MFA || acr === OIDC.ACR_EID
+        return !this.config.mfaRequired || acr === OIDC.ACR_MFA
     }
 
     /**
