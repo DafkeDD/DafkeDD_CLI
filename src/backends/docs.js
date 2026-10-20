@@ -445,7 +445,12 @@ export function backendReadme({
                   ['npm run mail:dev', 'Start Mailpit in Docker: every email at http://localhost:8025']
               ]
             : []),
-        ...(app ? [['npm run test:db', 'Tests against the real PostgreSQL: tenant isolation (RLS) of the notes']] : []),
+        ...(app
+            ? [
+                  ['npm run test:db', 'Tests against the real PostgreSQL: tenant isolation (RLS) of the notes'],
+                  ['npm run roles:push', 'Send config/app-roles.json to the login server (-- --code <link code>)']
+              ]
+            : []),
         ...(database?.mode === 'docker'
             ? [
                   ['npm run db:up', 'Start PostgreSQL in Docker and wait until it is healthy'],
@@ -620,6 +625,18 @@ another product, or none, is refused); \`account\` routes such as \`GET /me\` do
 to do. \`@CurrentCaller()\` has it as \`license: { product, status, endsAt }\` (\`null\` without a claim). Leave
 \`OIDC_PRODUCT\` empty for a free app.
 
+### Roles
+
+The roles of this app are defined in **\`config/app-roles.json\`** (a key for the code, a name in en, nl, fr and de, and
+\`default\` for the roles a member has until the beheerder gives others). The login server learned them with the link
+code; after a change, make a new link code on \`/admin\` → Apps and run \`npm run roles:push -- --code <code>\`. The
+beheerders of each organisation give the roles on \`/members\` of the login server; the access token carries them
+(\`roles\`), \`@CurrentCaller()\` has them as \`roles\` (\`null\` when the token has none).
+
+Protect a route with **\`@Roles('editor')\`** (\`src/pasport/access.ts\`, one of the given roles is enough, superadmins always
+pass): otherwise 403 \`errors.ROLE_REQUIRED\`. The example: \`GET /notes\` needs \`editor\` or \`viewer\`, \`POST /notes\`
+needs \`editor\`, and \`DELETE /notes/:id\` the beheerder of the organisation (\`@Access('admin')\`).
+
 ### Data per organisation (multi-tenant)
 
 The database of this app (its own, on the same PostgreSQL server as the login server) keeps the data of every
@@ -686,7 +703,7 @@ finds all endpoints there.
 | Token | Format | Lifetime | Contents |
 | --- | --- | --- | --- |
 | ID token | JWT, RS256, \`aud\` = client | 5 minutes | \`sub\`, \`auth_time\`, \`nonce\`, \`acr\` (\`loa2\` password and code, \`loa4\` eID), \`amr\`, \`sid\`, \`at_hash\`, \`tenant\`, \`superadmin\` |
-| Access token | JWT, ES256, \`typ: at+jwt\` (RFC 9068), \`aud\` = \`OIDC_AUDIENCE\` | 10 minutes, and stops when its session ends | \`sub\`, \`client_id\`, \`scope\`, \`sid\`, \`tenant\`, \`superadmin\`, \`license\` (an app that sells a product, see "Apps are products") |
+| Access token | JWT, ES256, \`typ: at+jwt\` (RFC 9068), \`aud\` = \`OIDC_AUDIENCE\` | 10 minutes, and stops when its session ends | \`sub\`, \`client_id\`, \`scope\`, \`sid\`, \`tenant\`, \`superadmin\`, \`license\` (an app that sells a product, see "Apps are products"), \`roles\` (an app with roles, see "Roles per app") |
 | Refresh token | Random (only its sha256 is stored) | As long as its session (at most 12 hours), one use | Only for clients with the \`refresh_token\` grant (see "Sessions, refresh tokens and logout") |
 
 The \`tenant\` claim is \`{ "id": "...", "name": "Acme", "role": "admin" }\`: the tenant the user chose, with the role
@@ -942,6 +959,7 @@ The fields (in the file, and on \`/admin\`):
 | \`backchannelLogoutUri\` | Optional: where the server POSTs a logout token when a session with this client ends (https; http only on localhost) |
 | \`backchannelLogoutSessionRequired\` | Optional, \`true\` when the client needs \`sid\` in the logout token (it is always there) |
 | \`product\` | Optional: the product (licence code of \`/licenses\`) this app sells; see "Apps are products" |
+| \`roles\` | Optional: the roles of the app (\`key\`, \`names\`, \`default\`); see "Roles per app" |
 
 ### Apps are products (one licence per user per app)
 
@@ -967,6 +985,30 @@ ${fence}
 The login itself is not refused: the app shows the user what to do (the beheerder gives a seat or buys more on
 \`/licenses\`). An app made with the CLI ("App for an existing DafkeDD OIDC server") learns the product with the link
 code and checks it in its own API (\`OIDC_PRODUCT\`). The link answer has it as \`client.product\`.
+
+### Roles per app
+
+The **developer** of an app decides which roles it has (\`config/app-roles.json\` of an app made with the CLI): a key
+for the code, a name in en, nl, fr and de, and whether it is a default role:
+
+${fence}json
+[
+  { "key": "editor", "names": { "en": "Editor", "nl": "Bewerker", "fr": "Éditeur", "de": "Bearbeiter" }, "default": true },
+  { "key": "viewer", "names": { "en": "Viewer", "nl": "Lezer", "fr": "Lecteur", "de": "Leser" }, "default": false }
+]
+${fence}
+
+The login server learns them with the link code (\`POST /oidc/link\` with \`roles\`), and again with
+\`npm run roles:push -- --code <link code>\` in the backend of the app (\`POST /oidc/link/roles\`) after a change; or
+\`"roles"\` in the clients file. At most 20 roles; a wrong list gives 400 \`oidc.ROLES_INVALID\` with the reason.
+
+The **admins (beheerders)** of an organisation give the roles to their members on \`/members\` ("Roles per app",
+\`/tenants/current/apps/...\`). A member they never gave roles has the **default roles**; an empty list is no role at
+all. The tokens of the app carry the roles of the user in the organisation of the login (\`"roles": ["editor"]\`),
+worked out at every login and refresh, so a change reaches the app within 10 minutes. Roles an app no longer defines
+are left out. These roles are separate from the role in the organisation (\`tenant.role\`: \`user\` or \`admin\`) and
+from \`superadmin\`: an app can look at all three. Changes are in the audit log (\`members.app_roles_changed\`,
+\`platform.client_roles_pushed\`); the table \`app_role_assignments\` has Row-Level Security.
 
 ### Applications of others: consent screen and back-channel logout
 

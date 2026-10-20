@@ -3,9 +3,11 @@ import assert from 'node:assert/strict'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { stripVTControlCharacters } from 'node:util'
 import { main } from '../src/index.js'
 import { backends } from '../src/backends/index.js'
 import { linked, LINK_CODE, normalizeServer, projectUris, useLinkCode } from '../src/backends/linked.js'
+import { DEFAULT_ROLES } from '../src/backends/app.js'
 import { endpoints } from '../src/backends/docs.js'
 import { buildFiles } from '../src/backends/nestjs.js'
 import { files, setPort, withApi } from '../src/frontends/nextjs.js'
@@ -80,7 +82,7 @@ test('the link code goes to POST /oidc/link with the addresses of the new fronte
     const server = fakeServer()
     const link = await useLinkCode({ server: 'http://localhost:4000', code: 'K7QM-2XPD-9HRT', port: 3001, ...server })
     assert.equal(server.calls[0].url, 'http://localhost:4000/oidc/link')
-    assert.deepEqual(server.calls[0].body, { code: 'K7QM-2XPD-9HRT', ...projectUris(3001) })
+    assert.deepEqual(server.calls[0].body, { code: 'K7QM-2XPD-9HRT', ...projectUris(3001), roles: DEFAULT_ROLES })
     assert.deepEqual(server.calls[0].body.redirectUris, ['http://localhost:3001/api/auth/callback'])
     assert.deepEqual(link, LINK)
 
@@ -189,7 +191,7 @@ test('the linked frontend: login, session, profile and the notes of its own API;
     const page = all['src/app/[locale]/page.tsx']
     assert.match(page, /<ApiStatus \/>/, 'the status card of the API of this app')
     assert.match(all['src/components/api-status.tsx'], /className="lui-card /)
-    assert.match(page, /<Notes admin=/)
+    assert.match(page, /<Notes\s+admin=/)
     assert.match(page, /<SessionLinks \/>/)
     assert.match(page, /<AppPage>/)
     assert.match(all['src/app/[locale]/layout.tsx'], /<ThemeProvider>/)
@@ -205,9 +207,9 @@ test('the linked frontend: login, session, profile and the notes of its own API;
     assert.match(all['src/components/notes.tsx'], /fetch\('\/api\/app\/notes'/)
     // The licence for the product of the app: kept in the session, shown on the home page
     assert.match(all['src/lib/oidc.ts'], /license: licenseOf\(claims\.license\)/)
-    assert.match(all['src/lib/refresh.ts'], /\blicense\n/)
+    assert.match(all['src/lib/refresh.ts'], /\blicense,\n[^}]*\broles\n/)
     assert.match(page, /<AppLicense license=\{license\} admin=\{admin\} \/>/)
-    assert.match(page, /license\?\.status !== 'none' && <Notes/)
+    assert.match(page, /license\?\.status !== 'none' && \(\s+<Notes/)
     assert.match(all['src/components/app-license.tsx'], /ACCOUNT_URL \+ '\/licenses'/)
     for (const locale of ['en', 'nl', 'fr', 'de']) {
         const messages = JSON.parse(all[`messages/${locale}.json`])
@@ -284,7 +286,7 @@ test('main: a linked app gives the frontend its own API and the login server, an
             linked: { ...linked, ask: async () => ({ link: LINK, database: DATABASE }), steps: async () => [] }
         },
         execute: async () => {},
-        log: line => logs.push(String(line))
+        log: line => logs.push(stripVTControlCharacters(String(line)))
     })
     assert.deepEqual(events[0], { port: 4001, url: 'http://localhost:4001', oidc: true, linked: LINK })
     assert.ok(logs.some(line => line.includes('geïnstalleerd in ./backend')))

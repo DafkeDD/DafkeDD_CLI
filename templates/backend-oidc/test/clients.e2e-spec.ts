@@ -446,4 +446,102 @@ describe('Apps on /admin (e2e)', () => {
             .expect(response => expect(response.body.product).toBeNull())
         expect(claims((await login('alice@example.com', shop)).access_token)).not.toHaveProperty('license')
     })
+
+    it('roles per app: the developer sends them, the admins give them, the tokens carry them', async () => {
+        const claims = (token: string) =>
+            JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as Record<string, unknown>
+        const rolesApp = { id: 'roles.app', redirect: APP.redirectUris[0]! }
+        await create({ clientId: 'roles.app', name: 'Roles App', firstParty: true }).expect(201)
+        const code = async () =>
+            (await http().post('/admin/clients/roles.app/link-code').set(bearer(tokens.root))).body.code as string
+        const ROLES = [
+            { key: 'editor', names: { en: 'Editor', nl: 'Bewerker', fr: 'Éditeur', de: 'Bearbeiter' }, default: true },
+            { key: 'viewer', names: { en: 'Viewer', nl: 'Lezer', fr: 'Lecteur', de: 'Leser' } }
+        ]
+        // Checked: a key, a name in every language, no key twice
+        // (the code first: two requests at once share the test server)
+        const first = await code()
+        const wrong = await http()
+            .post('/oidc/link/roles')
+            .set('Accept-Language', 'nl')
+            .send({ code: first, roles: [{ key: 'Editor!', names: ROLES[0]!.names }] })
+            .expect(400)
+        expect(wrong.body.error).toBe('oidc.ROLES_INVALID')
+        expect(wrong.body.message).toContain('Editor!')
+        const second = await code()
+        await http()
+            .post('/oidc/link/roles')
+            .send({ code: second, roles: [{ key: 'editor', names: { en: 'Editor' } }] })
+            .expect(400)
+        const third = await code()
+        const pushed = await http().post('/oidc/link/roles').send({ code: third, roles: ROLES }).expect(200)
+        expect(pushed.body).toEqual({ clientId: 'roles.app', roles: ['editor', 'viewer'] })
+        expect(audit.events.findLast(event => event.action === 'platform.client_roles_pushed')).toMatchObject({
+            details: { client: 'roles.app', roles: 'editor,viewer' }
+        })
+        // A used code does not work twice
+        const once = await code()
+        await http().post('/oidc/link/roles').send({ code: once, roles: ROLES }).expect(200)
+        await http().post('/oidc/link/roles').send({ code: once, roles: ROLES }).expect(400)
+
+        // Nobody gave roles yet: the default roles
+        expect(claims((await login('alice@example.com', rolesApp)).access_token).roles).toEqual(['editor'])
+        // The admins of the organisation see the apps with roles and who has which
+        const apps = await http().get('/tenants/current/apps').set(bearer(tokens.alice)).expect(200)
+        expect(apps.body.find((item: { clientId: string }) => item.clientId === 'roles.app')).toMatchObject({
+            name: 'Roles App',
+            roles: [
+                { key: 'editor', default: true },
+                { key: 'viewer', default: false }
+            ]
+        })
+        const members = await http()
+            .get('/tenants/current/apps/roles.app/members')
+            .set(bearer(tokens.alice))
+            .expect(200)
+        expect(members.body.find((item: { userId: string }) => item.userId === aliceId)).toMatchObject({
+            roles: ['editor'],
+            assigned: false
+        })
+        await http().get('/tenants/current/apps/frontend/members').set(bearer(tokens.alice)).expect(404)
+        // An admin gives roles; the next token has them
+        const set = await http()
+            .put(`/tenants/current/apps/roles.app/members/${aliceId}`)
+            .set(bearer(tokens.alice))
+            .send({ roles: ['viewer'] })
+            .expect(200)
+        expect(set.body).toEqual({ userId: aliceId, roles: ['viewer'], assigned: true })
+        expect(claims((await login('alice@example.com', rolesApp)).access_token).roles).toEqual(['viewer'])
+        expect(audit.events.findLast(event => event.action === 'members.app_roles_changed')).toMatchObject({
+            tenantId,
+            targetId: aliceId,
+            details: { app: 'roles.app', roles: 'viewer' }
+        })
+        const unknown = await http()
+            .put(`/tenants/current/apps/roles.app/members/${aliceId}`)
+            .set(bearer(tokens.alice))
+            .send({ roles: ['owner'] })
+            .expect(400)
+        expect(unknown.body.error).toBe('oidc.ROLE_UNKNOWN')
+        await http()
+            .put(`/tenants/current/apps/roles.app/members/00000000-0000-4000-8000-000000000000`)
+            .set(bearer(tokens.alice))
+            .send({ roles: [] })
+            .expect(404)
+        // No roles at all, then back to the default roles
+        await http()
+            .put(`/tenants/current/apps/roles.app/members/${aliceId}`)
+            .set(bearer(tokens.alice))
+            .send({ roles: [] })
+            .expect(200)
+        expect(claims((await login('alice@example.com', rolesApp)).access_token).roles).toEqual([])
+        await http()
+            .put(`/tenants/current/apps/roles.app/members/${aliceId}`)
+            .set(bearer(tokens.alice))
+            .send({ roles: null })
+            .expect(200)
+        expect(claims((await login('alice@example.com', rolesApp)).access_token).roles).toEqual(['editor'])
+        // An app without roles: no roles claim
+        expect(claims((await login('alice@example.com')).access_token)).not.toHaveProperty('roles')
+    })
 })

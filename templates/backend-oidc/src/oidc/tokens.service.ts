@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto'
 import { AuditService } from '../audit/audit.service.js'
 import { AppLicenses } from './app-licenses.js'
+import { AppRolesService } from './app-roles.service.js'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { deriveKey, PKCE_VERIFIER, pkceChallenge, randomToken, safeEqual, sha256 } from './crypto.js'
 import { halfHash, signJwt } from './jose.js'
@@ -52,7 +53,8 @@ export class TokensService {
         private readonly oidc: OidcService,
         private readonly config: OidcConfig,
         private readonly audit: AuditService,
-        private readonly licenses: AppLicenses
+        private readonly licenses: AppLicenses,
+        private readonly appRoles: AppRolesService
     ) {}
 
     async token(authorization: string | undefined, body: Params): Promise<TokenResponse> {
@@ -218,6 +220,10 @@ export class TokensService {
                   )
               }
             : {}
+        // An app with roles: the roles of the user in this organisation (given by its admins, or the default ones)
+        const roles = client.roles?.length
+            ? { roles: await this.appRoles.claim(client, membership?.tenantId ?? null, user.id) }
+            : {}
         const accessKey = await this.keys.signingKey('ES256')
         const accessToken = signJwt(
             {
@@ -234,7 +240,8 @@ export class TokensService {
                 sid: grant.session.id,
                 ...tenantClaim,
                 ...superadmin,
-                ...license
+                ...license,
+                ...roles
             },
             { alg: 'ES256', kid: accessKey.kid, typ: 'at+jwt' },
             accessKey.privateKey
@@ -253,7 +260,9 @@ export class TokensService {
                 amr: grant.session.amr,
                 sid: grant.session.id,
                 at_hash: halfHash(accessToken),
-                ...(grant.scope.split(' ').includes('tenant') ? { ...tenantClaim, ...superadmin, ...license } : {})
+                ...(grant.scope.split(' ').includes('tenant')
+                    ? { ...tenantClaim, ...superadmin, ...license, ...roles }
+                    : {})
             },
             { alg: 'RS256', kid: idKey.kid, typ: 'JWT' },
             idKey.privateKey

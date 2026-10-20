@@ -1,7 +1,7 @@
 import { input, password, select } from '@inquirer/prompts'
 import { databases } from '../databases/index.js'
 import { slugify } from '../databases/postgres.js'
-import { APP_PORT } from './app.js'
+import { APP_PORT, DEFAULT_ROLES } from './app.js'
 import { DIR, nestjs } from './nestjs.js'
 
 /** A link code of /admin: XXXX-XXXX-XXXX (case, dashes and spaces do not matter). */
@@ -41,7 +41,8 @@ export async function useLinkCode({ server, code, port, fetchImpl = fetch }) {
         response = await fetchImpl(server + '/oidc/link', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'Accept-Language': 'nl' },
-            body: JSON.stringify({ code: code.trim(), ...projectUris(port) }),
+            // The roles of the new app (config/app-roles.json): the login server learns them with the code
+            body: JSON.stringify({ code: code.trim(), ...projectUris(port), roles: DEFAULT_ROLES }),
             signal: AbortSignal.timeout(15_000)
         })
     } catch {

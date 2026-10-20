@@ -1020,6 +1020,7 @@ export const AUDIT_MESSAGES = {
             members_invitation_withdrawn: 'Invitation withdrawn',
             members_joined: 'Joined the organisation',
             members_role_changed: 'Role changed',
+            members_app_roles_changed: 'Roles in an app changed',
             members_disabled: 'Member disabled',
             members_enabled: 'Member enabled',
             members_removed: 'Member removed',
@@ -1036,6 +1037,7 @@ export const AUDIT_MESSAGES = {
             platform_client_deleted: 'App removed',
             platform_client_link_code: 'Link code made for an app',
             platform_client_linked: 'Project linked to an app',
+            platform_client_roles_pushed: 'Roles of an app updated',
             licences_product_created: 'Product created',
             licences_product_changed: 'Product changed',
             licences_discount_created: 'Discount code created',
@@ -1168,6 +1170,7 @@ export const AUDIT_MESSAGES = {
             members_invitation_withdrawn: 'Uitnodiging ingetrokken',
             members_joined: 'Lid geworden van de organisatie',
             members_role_changed: 'Rol gewijzigd',
+            members_app_roles_changed: 'Rollen in een app gewijzigd',
             members_disabled: 'Lid uitgeschakeld',
             members_enabled: 'Lid ingeschakeld',
             members_removed: 'Lid verwijderd',
@@ -1184,6 +1187,7 @@ export const AUDIT_MESSAGES = {
             platform_client_deleted: 'App verwijderd',
             platform_client_link_code: 'Koppelcode gemaakt voor een app',
             platform_client_linked: 'Project gekoppeld aan een app',
+            platform_client_roles_pushed: 'Rollen van een app bijgewerkt',
             licences_product_created: 'Product aangemaakt',
             licences_product_changed: 'Product gewijzigd',
             licences_discount_created: 'Kortingscode aangemaakt',
@@ -1316,6 +1320,7 @@ export const AUDIT_MESSAGES = {
             members_invitation_withdrawn: 'Invitation retirée',
             members_joined: "A rejoint l'organisation",
             members_role_changed: 'Rôle modifié',
+            members_app_roles_changed: 'Rôles dans une application modifiés',
             members_disabled: 'Membre désactivé',
             members_enabled: 'Membre réactivé',
             members_removed: 'Membre retiré',
@@ -1332,6 +1337,7 @@ export const AUDIT_MESSAGES = {
             platform_client_deleted: 'Application supprimée',
             platform_client_link_code: 'Code de liaison créé pour une application',
             platform_client_linked: 'Projet lié à une application',
+            platform_client_roles_pushed: "Rôles d'une application mis à jour",
             licences_product_created: 'Produit créé',
             licences_product_changed: 'Produit modifié',
             licences_discount_created: 'Code de réduction créé',
@@ -1464,6 +1470,7 @@ export const AUDIT_MESSAGES = {
             members_invitation_withdrawn: 'Einladung zurückgezogen',
             members_joined: 'Der Organisation beigetreten',
             members_role_changed: 'Rolle geändert',
+            members_app_roles_changed: 'Rollen in einer App geändert',
             members_disabled: 'Mitglied deaktiviert',
             members_enabled: 'Mitglied aktiviert',
             members_removed: 'Mitglied entfernt',
@@ -1480,6 +1487,7 @@ export const AUDIT_MESSAGES = {
             platform_client_deleted: 'App entfernt',
             platform_client_link_code: 'Verknüpfungscode für eine App erstellt',
             platform_client_linked: 'Projekt mit einer App verknüpft',
+            platform_client_roles_pushed: 'Rollen einer App aktualisiert',
             licences_product_created: 'Produkt erstellt',
             licences_product_changed: 'Produkt geändert',
             licences_discount_created: 'Rabattcode erstellt',
@@ -2441,6 +2449,7 @@ export const NOTES_MESSAGES = {
         empty: 'No notes yet.',
         byYou: 'By you',
         byColleague: 'By a colleague',
+        readOnly: 'You can read the notes (role Viewer); the role Editor also adds them.',
         remove: 'Remove',
         offline: 'The API of this app cannot be reached. Start it: cd backend && npm run start:dev'
     },
@@ -2452,6 +2461,7 @@ export const NOTES_MESSAGES = {
         empty: 'Nog geen notities.',
         byYou: 'Door jou',
         byColleague: 'Door een collega',
+        readOnly: 'Je kan de notities lezen (rol Lezer); met de rol Bewerker voeg je er ook toe.',
         remove: 'Verwijderen',
         offline: 'De API van deze app is niet bereikbaar. Start ze: cd backend && npm run start:dev'
     },
@@ -2463,6 +2473,7 @@ export const NOTES_MESSAGES = {
         empty: 'Pas encore de notes.',
         byYou: 'Par vous',
         byColleague: 'Par un collègue',
+        readOnly: "Vous pouvez lire les notes (rôle Lecteur) ; le rôle Éditeur permet aussi d'en ajouter.",
         remove: 'Supprimer',
         offline: "L'API de cette application est injoignable. Démarrez-la : cd backend && npm run start:dev"
     },
@@ -2474,8 +2485,49 @@ export const NOTES_MESSAGES = {
         empty: 'Noch keine Notizen.',
         byYou: 'Von dir',
         byColleague: 'Von einer Kollegin oder einem Kollegen',
+        readOnly: 'Du kannst die Notizen lesen (Rolle Leser); mit der Rolle Bearbeiter fügst du auch welche hinzu.',
         remove: 'Entfernen',
         offline: 'Die API dieser App ist nicht erreichbar. Starte sie: cd backend && npm run start:dev'
+    }
+}
+
+/** The roles per app on /members (src/components/app-roles.tsx), for the admins of an organisation. */
+export const APP_ROLES_MESSAGES = {
+    en: {
+        title: 'Roles per app',
+        text: 'Each app defines its roles; give them to your members here. Without roles given here, a member has the default roles of the app. The app sees a change at the next login, at most after 10 minutes.',
+        app: 'App',
+        default: 'Default roles',
+        reset: 'Back to default',
+        disabled: 'disabled',
+        offline: 'The server cannot be reached. Try again later.'
+    },
+    nl: {
+        title: 'Rollen per app',
+        text: 'Elke app bepaalt zijn rollen; hier geef je ze aan je leden. Wie hier geen rollen kreeg, heeft de standaardrollen van de app. De app ziet een wijziging bij de volgende login, ten laatste na 10 minuten.',
+        app: 'App',
+        default: 'Standaardrollen',
+        reset: 'Terug naar standaard',
+        disabled: 'uitgeschakeld',
+        offline: 'De server is niet bereikbaar. Probeer het later opnieuw.'
+    },
+    fr: {
+        title: 'Rôles par application',
+        text: "Chaque application définit ses rôles ; attribuez-les ici à vos membres. Sans rôles attribués ici, un membre a les rôles par défaut de l'application. L'application voit un changement à la prochaine connexion, au plus tard après 10 minutes.",
+        app: 'Application',
+        default: 'Rôles par défaut',
+        reset: 'Revenir au défaut',
+        disabled: 'désactivé',
+        offline: 'Le serveur est injoignable. Réessayez plus tard.'
+    },
+    de: {
+        title: 'Rollen pro App',
+        text: 'Jede App legt ihre Rollen fest; hier gibst du sie deinen Mitgliedern. Wer hier keine Rollen bekam, hat die Standardrollen der App. Die App sieht eine Änderung bei der nächsten Anmeldung, spätestens nach 10 Minuten.',
+        app: 'App',
+        default: 'Standardrollen',
+        reset: 'Zurück zum Standard',
+        disabled: 'deaktiviert',
+        offline: 'Der Server ist nicht erreichbar. Versuche es später erneut.'
     }
 }
 

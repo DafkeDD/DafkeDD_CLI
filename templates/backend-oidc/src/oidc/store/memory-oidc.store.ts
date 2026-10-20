@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type {
+    AppRole,
     NewPasskey,
     Passkey,
     AuthorizationCode,
@@ -706,6 +707,36 @@ export class MemoryOidcStore implements OidcStore {
     async findMember(tenantId: string, userId: string) {
         const member = this.member(tenantId, userId)
         return member ? { role: member.role, status: member.status } : null
+    }
+
+    /** The roles of members in apps: tenant|client|user → roles. */
+    appRoles = new Map<string, string[]>()
+
+    async setClientRoles(clientId: string, roles: AppRole[]) {
+        const found = this.adminClient(clientId)
+        if (!found) return false
+        this.clients.set(clientId, { ...found.client, roles })
+        found.info.updatedAt = new Date()
+        return true
+    }
+
+    async listAppRoles(tenantId: string, clientId: string) {
+        return [...this.appRoles.entries()]
+            .map(([key, roles]) => ({ key: key.split('|'), roles }))
+            .filter(({ key }) => key[0] === tenantId && key[1] === clientId && this.member(tenantId, key[2]!))
+            .map(({ key, roles }) => ({ userId: key[2]!, roles: [...roles] }))
+    }
+
+    async findAppRoles(tenantId: string, clientId: string, userId: string) {
+        if (!this.member(tenantId, userId)) return null
+        const roles = this.appRoles.get([tenantId, clientId, userId].join('|'))
+        return roles ? [...roles] : null
+    }
+
+    async setAppRoles(tenantId: string, clientId: string, userId: string, roles: string[] | null) {
+        const key = [tenantId, clientId, userId].join('|')
+        if (roles === null) this.appRoles.delete(key)
+        else this.appRoles.set(key, [...roles])
     }
 
     async touchMember(tenantId: string, userId: string) {

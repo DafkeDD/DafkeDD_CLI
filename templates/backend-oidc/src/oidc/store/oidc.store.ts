@@ -64,6 +64,14 @@ export interface TenantMember {
     lastSeenAt: Date | null
 }
 
+/** A role of an app, as its developer defines it: a key for the code, a name per language for the screens. */
+export interface AppRole {
+    key: string
+    names: Record<'en' | 'nl' | 'fr' | 'de', string>
+    /** Members without roles given by an admin get the default roles. */
+    default: boolean
+}
+
 /** An invitation that was not accepted yet. */
 export interface Invitation {
     id: string
@@ -148,6 +156,8 @@ export interface OidcClient {
      * The product (licence) this app sells: its access tokens carry the `license` claim of the user. Null: a free app.
      */
     product?: string | null
+    /** The roles of this app (defined by its developer); its tokens carry the `roles` of the user. */
+    roles?: AppRole[]
 }
 
 /** A client as superadmins see it on /admin: where it comes from, whether it is on, how many accounts allowed it. */
@@ -393,6 +403,17 @@ export interface OidcStore {
     removeMember(tenantId: string, userId: string): Promise<ChangeResult>
     /** Disables or enables a member. A tenant always keeps at least one active admin. */
     setMemberStatus(tenantId: string, userId: string, status: MemberStatus): Promise<ChangeResult>
+    /**
+     * The roles given to the members of a tenant in an app (only members that got roles). PgOidcStore runs this with
+     * Row-Level Security.
+     */
+    listAppRoles(tenantId: string, clientId: string): Promise<{ userId: string; roles: string[] }[]>
+    /** The roles given to one member in an app, or null when none were given (then the default roles apply). */
+    findAppRoles(tenantId: string, clientId: string, userId: string): Promise<string[] | null>
+    /** Gives a member these roles in an app (an empty list is "no roles"); null goes back to the default roles. */
+    setAppRoles(tenantId: string, clientId: string, userId: string, roles: string[] | null, by: string): Promise<void>
+    /** The roles an app defines (its developer pushes them with a link code). Only apps made on /admin. */
+    setClientRoles(clientId: string, roles: AppRole[]): Promise<boolean>
     /** Records that a member is active right now (who is online). */
     touchMember(tenantId: string, userId: string): Promise<void>
     /** Ends the sessions of a user in one tenant (after disabling or removing the member). */

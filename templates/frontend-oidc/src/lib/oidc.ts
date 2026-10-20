@@ -93,6 +93,8 @@ export interface Session {
     sid?: string
     /** The licence for the product this app sells (renewed with the tokens); null or missing: a free app. */
     license?: License | null
+    /** The roles of the user in this app (the `roles` claim); null or missing: the app has no roles. */
+    roles?: string[] | null
 }
 
 /** A login in progress (between /api/auth/login and /api/auth/callback). */
@@ -250,6 +252,7 @@ export async function verifyIdToken(
     tenant: Tenant | null
     superadmin: boolean
     license: License | null
+    roles: string[] | null
 }> {
     const [header, payload, signature] = idToken.split('.')
     if (!header || !payload || !signature) throw new Error('Malformed ID token')
@@ -279,7 +282,8 @@ export async function verifyIdToken(
         sid: typeof claims.sid === 'string' ? claims.sid : undefined,
         tenant,
         superadmin: claims.superadmin === true,
-        license: licenseOf(claims.license)
+        license: licenseOf(claims.license),
+        roles: Array.isArray(claims.roles) ? claims.roles.filter(role => typeof role === 'string') : null
     }
 }
 

@@ -6,6 +6,7 @@ import { MailModule } from '../mail/mail.module.js'
 import { AccountController } from './account.controller.js'
 import { AccountService } from './account.service.js'
 import { AppLicenses } from './app-licenses.js'
+import { AppRolesService } from './app-roles.service.js'
 import { BackchannelService } from './backchannel.service.js'
 import { ClientsController } from './clients/clients.controller.js'
 import { LinkController } from './clients/link.controller.js'
@@ -47,6 +48,7 @@ import { WellKnownController } from './well-known.controller.js'
     providers: [
         OidcConfig,
         AppLicenses,
+        AppRolesService,
         OidcService,
         ExternalService,
         PasskeyService,
@@ -64,6 +66,7 @@ import { WellKnownController } from './well-known.controller.js'
     ],
     exports: [
         AppLicenses,
+        AppRolesService,
         OidcService,
         ExternalService,
         PasskeyService,

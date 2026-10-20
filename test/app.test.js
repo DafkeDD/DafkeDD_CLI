@@ -106,7 +106,10 @@ test('the data of every organisation is kept apart by Row-Level Security, as its
     assert.ok(files['test/tenant-isolation.db-spec.ts'])
     assert.ok(files['test/pasport.e2e-spec.ts'])
     assert.ok(files['vitest.config.db.ts'])
-    assert.deepEqual(SCRIPTS, { 'test:db': 'vitest run --config ./vitest.config.db.ts' })
+    assert.deepEqual(SCRIPTS, {
+        'test:db': 'vitest run --config ./vitest.config.db.ts',
+        'roles:push': 'node scripts/roles-push.mjs'
+    })
 })
 
 test('the errors and validation messages of the app exist in all four languages', () => {

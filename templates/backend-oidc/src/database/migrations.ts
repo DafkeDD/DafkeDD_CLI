@@ -531,5 +531,28 @@ CREATE INDEX oidc_link_codes_client ON oidc_link_codes (client_id);
 ALTER TABLE oidc_clients ADD COLUMN product text;
 CREATE UNIQUE INDEX oidc_clients_product_key ON oidc_clients (product) WHERE product IS NOT NULL;
 `
+    },
+    {
+        id: 12,
+        name: 'roles per app',
+        sql: `
+-- The roles an app has, defined by its developer (config/app-roles.json of the app, pushed with a link code, or
+-- "roles" in the clients file): [{ "key": "editor", "names": { "en": "Editor", ... }, "default": true }]
+ALTER TABLE oidc_clients ADD COLUMN roles jsonb NOT NULL DEFAULT '[]';
+
+-- The roles of a member in an app, given by the admins (beheerders) of the organisation. No row: the default roles.
+CREATE TABLE app_role_assignments (
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  client_id text NOT NULL REFERENCES oidc_clients (client_id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
+  roles text[] NOT NULL,
+  assigned_by uuid REFERENCES ${users} (id) ON DELETE SET NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, client_id, user_id),
+  FOREIGN KEY (tenant_id, user_id) REFERENCES tenant_members (tenant_id, user_id) ON DELETE CASCADE
+);
+${isolate('app_role_assignments', 'tenant_id')}
+GRANT SELECT, INSERT, UPDATE, DELETE ON app_role_assignments TO ${role};
+`
     }
 ]

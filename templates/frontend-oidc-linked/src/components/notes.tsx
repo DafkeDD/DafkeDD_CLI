@@ -15,9 +15,10 @@ async function problem(response: Response, offline: string): Promise<string> {
 
 /**
  * The notes of the organisation: the example of data of THIS app (its own API and database), per tenant. Everyone of
- * the organisation reads and adds notes; only its beheerder (admin) removes them. Through /api/app (token on the server).
+ * the organisation with the role editor or viewer reads them, an editor adds them (`canEdit`); only its beheerder
+ * (admin) removes them. Through /api/app (token on the server).
  */
-export function Notes({ admin, me }: { admin: boolean; me: string }) {
+export function Notes({ admin, me, canEdit = true }: { admin: boolean; me: string; canEdit?: boolean }) {
     const t = useTranslations('Notes')
     const format = useFormatter()
     const [notes, setNotes] = useState<Note[] | null>(null)
@@ -68,19 +69,22 @@ export function Notes({ admin, me }: { admin: boolean; me: string }) {
                 <h2 className='text-lg font-semibold tracking-tight'>{t('title')}</h2>
                 <div className='text-sm text-[var(--text-2)]'>{t('text')}</div>
             </div>
-            <form onSubmit={add} className='flex flex-wrap gap-2.5'>
-                <input
-                    name='text'
-                    required
-                    maxLength={2000}
-                    placeholder={t('placeholder')}
-                    aria-label={t('placeholder')}
-                    className={INPUT + ' min-w-56 flex-1'}
-                />
-                <button type='submit' disabled={busy} className={BUTTON}>
-                    {t('add')}
-                </button>
-            </form>
+            {!canEdit && <div className='text-sm text-[var(--text-3)]'>{t('readOnly')}</div>}
+            {canEdit && (
+                <form onSubmit={add} className='flex flex-wrap gap-2.5'>
+                    <input
+                        name='text'
+                        required
+                        maxLength={2000}
+                        placeholder={t('placeholder')}
+                        aria-label={t('placeholder')}
+                        className={INPUT + ' min-w-56 flex-1'}
+                    />
+                    <button type='submit' disabled={busy} className={BUTTON}>
+                        {t('add')}
+                    </button>
+                </form>
+            )}
             {error && <Notice tone='error'>{error}</Notice>}
             {notes && notes.length === 0 && <div className='text-sm text-[var(--text-3)]'>{t('empty')}</div>}
             {notes && notes.length > 0 && (

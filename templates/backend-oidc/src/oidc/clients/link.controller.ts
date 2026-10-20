@@ -3,7 +3,7 @@ import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiTags } from '@ne
 import type { Request } from 'express'
 import { AppException } from '../../common/app.exception.js'
 import { LoginLimiter } from '../login-limiter.js'
-import { LinkDto } from './clients.dto.js'
+import { LinkDto, LinkRolesDto } from './clients.dto.js'
 import { ClientsService } from './clients.service.js'
 
 /** The CLI links a new project to an app with a link code of /admin: no login, the code is the permission. */
@@ -23,14 +23,28 @@ export class LinkController {
     })
     @ApiOkResponse({
         description:
-            '{ issuer, apiUrl, accountUrl, client: { clientId, name, type, scopes, firstParty, refreshTokens, product }, clientSecret }'
+            '{ issuer, apiUrl, accountUrl, client: { clientId, name, type, scopes, firstParty, refreshTokens, product, roles }, clientSecret }'
     })
     @ApiBadRequestResponse({
-        description: 'oidc.LINK_CODE_INVALID (unknown, used or expired) or oidc.CLIENT_INVALID_URI'
+        description: 'oidc.LINK_CODE_INVALID (unknown, used or expired), oidc.CLIENT_INVALID_URI or oidc.ROLES_INVALID'
     })
     link(@Req() request: Request, @Body() body: LinkDto) {
         if (!this.limiter.allow(['link:' + (request.ip ?? 'unknown')]))
             throw new AppException('oidc.TOO_MANY_ATTEMPTS', HttpStatus.TOO_MANY_REQUESTS)
         return this.clients.link(body)
+    }
+
+    @Post('roles')
+    @HttpCode(200)
+    @ApiOperation({
+        summary:
+            'The developer of an app sends its roles (npm run roles:push in the backend of the app) with a link code of the app: they replace its roles. Nothing else changes. Rate limited.'
+    })
+    @ApiOkResponse({ description: '{ clientId, roles: ["editor", "viewer"] }' })
+    @ApiBadRequestResponse({ description: 'oidc.LINK_CODE_INVALID or oidc.ROLES_INVALID (with the reason)' })
+    roles(@Req() request: Request, @Body() body: LinkRolesDto) {
+        if (!this.limiter.allow(['link:' + (request.ip ?? 'unknown')]))
+            throw new AppException('oidc.TOO_MANY_ATTEMPTS', HttpStatus.TOO_MANY_REQUESTS)
+        return this.clients.pushRoles(body)
     }
 }

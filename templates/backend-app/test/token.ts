@@ -42,6 +42,8 @@ export function accessToken(
         tenant: TENANT_A,
         // A running trial of the product of the app
         license: { product: PRODUCT, status: 'trial', ends_at: now + 14 * 24 * 60 * 60 },
+        // The default role of config/app-roles.json
+        roles: ['editor'],
         ...claims
     }
     const input = part({ alg: 'ES256', kid: KID, typ: 'at+jwt', ...header }) + '.' + part(payload)

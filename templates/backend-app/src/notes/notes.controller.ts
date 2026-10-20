@@ -10,7 +10,7 @@ import {
     ApiUnauthorizedResponse
 } from '@nestjs/swagger'
 import { AppException } from '../common/app.exception.js'
-import { Access, type Caller, CurrentCaller } from '../pasport/access.js'
+import { Access, type Caller, CurrentCaller, Roles } from '../pasport/access.js'
 import { CreateNoteDto } from './notes.dto.js'
 import { NOTES_STORE, type NotesStore } from './notes.store.js'
 
@@ -22,18 +22,23 @@ const NOTE = {
 }
 
 /**
- * Notes of the organisation of the caller: the example of data that belongs to one tenant. Members read and add
- * notes; only the beheerder (admin) of the organisation removes them. The organisation comes from the access token.
+ * Notes of the organisation of the caller: the example of data that belongs to one tenant. Editors and viewers read
+ * the notes, editors add them (the roles of config/app-roles.json); only the beheerder (admin) of the organisation
+ * removes them. The organisation comes from the access token.
  */
 @ApiTags('notes')
 @ApiBearerAuth()
 @ApiUnauthorizedResponse({ description: 'errors.UNAUTHORIZED: no or no valid access token of the login server' })
-@ApiForbiddenResponse({ description: 'errors.NO_ORGANISATION: logged in without an organisation' })
+@ApiForbiddenResponse({
+    description:
+        'errors.NO_ORGANISATION (no organisation), errors.NO_LICENSE (no licence) or errors.ROLE_REQUIRED (not the role)'
+})
 @Controller('notes')
 export class NotesController {
     constructor(@Inject(NOTES_STORE) private readonly notes: NotesStore) {}
 
     @Get()
+    @Roles('editor', 'viewer')
     @ApiOperation({ summary: 'The notes of the organisation of the caller, newest first (at most 100)' })
     @ApiOkResponse({ schema: { example: [NOTE] } })
     list(@CurrentCaller() caller: Caller) {
@@ -41,7 +46,8 @@ export class NotesController {
     }
 
     @Post()
-    @ApiOperation({ summary: 'Add a note to the organisation of the caller' })
+    @Roles('editor')
+    @ApiOperation({ summary: 'Add a note to the organisation of the caller (role editor)' })
     @ApiOkResponse({ schema: { example: NOTE } })
     create(@CurrentCaller() caller: Caller, @Body() dto: CreateNoteDto) {
         return this.notes.create(caller.tenant!.id, caller.sub, dto.text.trim())

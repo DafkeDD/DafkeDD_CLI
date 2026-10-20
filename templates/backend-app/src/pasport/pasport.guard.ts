@@ -2,7 +2,7 @@ import { type CanActivate, type ExecutionContext, HttpStatus, Injectable } from 
 import { Reflector } from '@nestjs/core'
 import type { Request } from 'express'
 import { AppException } from '../common/app.exception.js'
-import { ACCESS_KEY, type AccessLevel, type Caller, LICENSE_STATUSES, type LicenseStatus } from './access.js'
+import { ACCESS_KEY, type AccessLevel, type Caller, LICENSE_STATUSES, type LicenseStatus, ROLES_KEY } from './access.js'
 import { ALGORITHMS, JoseError, type VerifyKey, verifyJwt } from './jose.js'
 import { PasportConfig } from './pasport.config.js'
 import { PasportKeys } from './pasport-keys.service.js'
@@ -52,6 +52,10 @@ export class PasportGuard implements CanActivate {
             throw new AppException('errors.NO_LICENSE', HttpStatus.FORBIDDEN, { product })
         if (level === 'admin' && caller.tenant.role !== 'admin' && !caller.superadmin)
             throw new AppException('errors.FORBIDDEN', HttpStatus.FORBIDDEN)
+        // The roles of this app (config/app-roles.json), given by the beheerder on the login server
+        const roles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [context.getHandler(), context.getClass()])
+        if (roles?.length && !caller.superadmin && !roles.some(role => caller.roles?.includes(role)))
+            throw new AppException('errors.ROLE_REQUIRED', HttpStatus.FORBIDDEN, { roles: roles.join(', ') })
         return true
     }
 
@@ -92,7 +96,10 @@ export class PasportGuard implements CanActivate {
                 superadmin: payload.superadmin === true,
                 sid: typeof payload.sid === 'string' ? payload.sid : null,
                 clientId,
-                license: license(payload.license)
+                license: license(payload.license),
+                roles: Array.isArray(payload.roles)
+                    ? payload.roles.filter((role): role is string => typeof role === 'string')
+                    : null
             }
         } catch (error) {
             if (error instanceof JoseError) throw new AppException('errors.UNAUTHORIZED', HttpStatus.UNAUTHORIZED)

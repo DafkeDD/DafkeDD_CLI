@@ -114,7 +114,7 @@ test('an app is a product: migration 11, the licence claim in its tokens, the pr
     assert.match(backend['src/billing/billing.service.ts'], /reason: 'first login to the app'/)
     const tokens = backend['src/oidc/tokens.service.ts']
     assert.match(tokens, /license: await this\.licenses\.claim\(/)
-    assert.match(tokens, /\.\.\.superadmin,\s+\.\.\.license\s+\}/)
+    assert.match(tokens, /\.\.\.superadmin,\s+\.\.\.license,\s+\.\.\.roles\s+\}/)
     const service = backend['src/oidc/clients/clients.service.ts']
     for (const key of ['oidc.CLIENT_UNKNOWN_PRODUCT', 'oidc.CLIENT_PRODUCT_TAKEN', 'product: client.product ?? null'])
         assert.ok(service.includes(key), key)
@@ -135,4 +135,44 @@ test('an app is a product: migration 11, the licence claim in its tokens, the pr
     for (const text of ['### Apps are products (one licence per user per app)', '"license": { "product": "planner"'])
         assert.ok(readme.includes(text), text)
     assert.ok(backend['test/clients.e2e-spec.ts'].includes('its tokens carry the licence of the user'))
+})
+
+test('roles per app: migration 12, the roles claim, /members for the admins, roles:push in the app', async () => {
+    const { buildFiles: build } = await import('../src/backends/nestjs.js')
+    const { DEFAULT_ROLES } = await import('../src/backends/app.js')
+    const { APP_ROLES_MESSAGES } = await import('../src/frontends/oidc.js')
+    assert.match(backend['src/database/migrations.ts'], /id: 12,\s+name: 'roles per app'/)
+    assert.match(backend['src/database/migrations.ts'], /CREATE TABLE app_role_assignments/)
+    assert.match(backend['src/database/database.constants.ts'], /'app_role_assignments'/)
+    assert.match(backend['src/oidc/tokens.service.ts'], /roles: await this\.appRoles\.claim\(/)
+    assert.match(backend['src/oidc/app-roles.ts'], /export function effectiveRoles/)
+    assert.match(
+        backend['src/tenants/app-roles.controller.ts'],
+        /@Controller\('tenants\/current\/apps'\)\s+@Access\('admin'\)/
+    )
+    assert.match(backend['src/oidc/clients/link.controller.ts'], /@Post\('roles'\)/)
+    for (const locale of LANGUAGES) {
+        const oidc = JSON.parse(backend[`src/i18n/${locale}/oidc.json`])
+        for (const key of ['APP_NOT_FOUND', 'ROLE_UNKNOWN', 'ROLES_INVALID']) assert.ok(oidc[key], `${locale} ${key}`)
+        assert.deepEqual(Object.keys(APP_ROLES_MESSAGES[locale]), Object.keys(APP_ROLES_MESSAGES.en), locale)
+    }
+    // The members page of the login server, through /api/backend (client ids may have dots)
+    assert.match(frontend['src/app/[locale]/members/page.tsx'], /<AppRoles \/>/)
+    assert.match(frontend['src/app/api/backend/[...path]/route.ts'], /!APP_ROLES\.test\(path\)/)
+    // The app: config/app-roles.json, @Roles, the push script
+    const LINK = {
+        issuer: 'http://localhost:4000/oidc',
+        apiUrl: 'http://localhost:4000',
+        clientId: 'planner',
+        port: 3001
+    }
+    const app = build({ ...DB, mode: 'local' }, { app: LINK })
+    assert.deepEqual(JSON.parse(app['config/app-roles.json']), DEFAULT_ROLES)
+    assert.ok(DEFAULT_ROLES.some(role => role.default))
+    assert.match(app['src/notes/notes.controller.ts'], /@Roles\('editor', 'viewer'\)/)
+    assert.match(app['src/notes/notes.controller.ts'], /@Roles\('editor'\)/)
+    assert.match(app['scripts/roles-push.mjs'], /\/link\/roles/)
+    assert.ok(app['README.md'].includes('### Roles'))
+    assert.ok(backend['README.md'].includes('### Roles per app'))
+    assert.ok(backend['test/clients.e2e-spec.ts'].includes('roles per app: the developer sends them'))
 })

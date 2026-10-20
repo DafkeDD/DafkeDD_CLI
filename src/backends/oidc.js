@@ -347,6 +347,9 @@ export const MESSAGES = {
         CLIENT_PUBLIC: 'A public app has no secret.',
         CLIENT_DISABLE_FIRST: 'Disable the app first, then remove it.',
         CLIENT_UNKNOWN_PRODUCT: 'The product {product} does not exist: make it on /licenses first.',
+        APP_NOT_FOUND: 'This app does not exist or has no roles.',
+        ROLE_UNKNOWN: 'The app has no role {role}.',
+        ROLES_INVALID: 'The roles of the app are not valid: {reason}.',
         CLIENT_PRODUCT_TAKEN: 'The product {product} is sold by the app {app} already: one product belongs to one app.',
         CONSENT_TITLE: 'Allow {client}?',
         CONSENT_TEXT: '{client} wants to use your account {email}. It gets:',
@@ -454,6 +457,9 @@ export const MESSAGES = {
         CLIENT_PUBLIC: 'Een publieke app heeft geen secret.',
         CLIENT_DISABLE_FIRST: 'Schakel de app eerst uit en verwijder ze daarna.',
         CLIENT_UNKNOWN_PRODUCT: 'Het product {product} bestaat niet: maak het eerst aan op /licenses.',
+        APP_NOT_FOUND: 'Deze app bestaat niet of heeft geen rollen.',
+        ROLE_UNKNOWN: 'De app heeft geen rol {role}.',
+        ROLES_INVALID: 'De rollen van de app zijn niet geldig: {reason}.',
         CLIENT_PRODUCT_TAKEN:
             'Het product {product} wordt al verkocht door de app {app}: één product hoort bij één app.',
         CONSENT_TITLE: '{client} toestaan?',
@@ -563,6 +569,9 @@ export const MESSAGES = {
         CLIENT_PUBLIC: "Une application publique n'a pas de secret.",
         CLIENT_DISABLE_FIRST: "Désactivez d'abord l'application, puis supprimez-la.",
         CLIENT_UNKNOWN_PRODUCT: "Le produit {product} n'existe pas : créez-le d'abord sur /licenses.",
+        APP_NOT_FOUND: "Cette application n'existe pas ou n'a pas de rôles.",
+        ROLE_UNKNOWN: "L'application n'a pas de rôle {role}.",
+        ROLES_INVALID: "Les rôles de l'application ne sont pas valides : {reason}.",
         CLIENT_PRODUCT_TAKEN:
             "Le produit {product} est déjà vendu par l'application {app} : un produit appartient à une seule application.",
         CONSENT_TITLE: 'Autoriser {client} ?',
@@ -680,6 +689,9 @@ export const MESSAGES = {
         CLIENT_PUBLIC: 'Eine öffentliche App hat kein Secret.',
         CLIENT_DISABLE_FIRST: 'Deaktiviere die App zuerst und entferne sie dann.',
         CLIENT_UNKNOWN_PRODUCT: 'Das Produkt {product} gibt es nicht: lege es zuerst unter /licenses an.',
+        APP_NOT_FOUND: 'Diese App gibt es nicht oder sie hat keine Rollen.',
+        ROLE_UNKNOWN: 'Die App hat keine Rolle {role}.',
+        ROLES_INVALID: 'Die Rollen der App sind nicht gültig: {reason}.',
         CLIENT_PRODUCT_TAKEN:
             'Das Produkt {product} wird bereits von der App {app} verkauft: ein Produkt gehört zu einer App.',
         CONSENT_TITLE: '{client} erlauben?',
@@ -1010,6 +1022,10 @@ const APP_EXAMPLE = {
     createdAt: '2026-10-15T09:00:00.000Z',
     updatedAt: '2026-10-15T09:00:00.000Z'
 }
+const APP_ROLES = [
+    { key: 'editor', names: { en: 'Editor', nl: 'Bewerker', fr: 'Éditeur', de: 'Bearbeiter' }, default: true },
+    { key: 'viewer', names: { en: 'Viewer', nl: 'Lezer', fr: 'Lecteur', de: 'Leser' }, default: false }
+]
 const TOO_MANY = [429, 'oidc.TOO_MANY_ATTEMPTS']
 const ACCESS = level => [
     [401, 'errors.UNAUTHORIZED'],
@@ -1850,6 +1866,61 @@ export const endpoints = ({ port = 4000 } = {}) => [
         errors: [...ACCESS('admin'), [404, 'oidc.MEMBER_NOT_FOUND'], [409, 'oidc.LAST_ADMIN']]
     },
     {
+        method: 'GET',
+        path: '/tenants/current/apps',
+        tag: 'tenant members',
+        summary:
+            'The apps that have roles (defined by their developer), with their roles: what the admins of the tenant give to the members.',
+        bearer: true,
+        response: { status: 200, example: [{ clientId: 'planner', name: 'Planner', roles: APP_ROLES }] },
+        errors: ACCESS('admin')
+    },
+    {
+        method: 'GET',
+        path: '/tenants/current/apps/:clientId/members',
+        tag: 'tenant members',
+        summary:
+            'Every member of the tenant with its roles in the app. `assigned: false`: nobody gave roles, the default roles of the app apply.',
+        bearer: true,
+        pathExample: '/tenants/current/apps/planner/members',
+        response: {
+            status: 200,
+            example: [
+                {
+                    userId: USER_ID,
+                    name: 'Ada Lovelace',
+                    email: 'ada@example.com',
+                    role: 'admin',
+                    status: 'active',
+                    roles: ['editor'],
+                    assigned: false
+                }
+            ]
+        },
+        errors: [...ACCESS('admin'), [404, 'oidc.APP_NOT_FOUND']]
+    },
+    {
+        method: 'PUT',
+        path: '/tenants/current/apps/:clientId/members/:userId',
+        tag: 'tenant members',
+        summary:
+            'Give a member roles in the app (the keys of the app); `[]` is no roles, `null` the default roles again. The app sees it at the next login or refresh.',
+        bearer: true,
+        pathExample: `/tenants/current/apps/planner/members/${USER_ID}`,
+        body: {
+            example: { roles: ['viewer'] },
+            fields: [['roles', 'string[] | null', 'the role keys of the app (at most 20); null: the default roles']]
+        },
+        response: { status: 200, example: { userId: USER_ID, roles: ['viewer'], assigned: true } },
+        errors: [
+            BAD_REQUEST,
+            [400, 'oidc.ROLE_UNKNOWN'],
+            ...ACCESS('admin'),
+            [404, 'oidc.APP_NOT_FOUND'],
+            [404, 'oidc.MEMBER_NOT_FOUND']
+        ]
+    },
+    {
         method: 'PATCH',
         path: '/tenants/current/members/:userId/status',
         tag: 'tenant members',
@@ -2046,13 +2117,15 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 code: 'K7QM-2XPD-9HRT',
                 redirectUris: ['http://localhost:3001/api/auth/callback'],
                 postLogoutRedirectUris: ['http://localhost:3001'],
-                backchannelLogoutUri: 'http://localhost:3001/api/auth/backchannel-logout'
+                backchannelLogoutUri: 'http://localhost:3001/api/auth/backchannel-logout',
+                roles: APP_ROLES
             },
             fields: [
                 ['code', 'string', 'required, the link code of /admin (case and dashes do not matter)'],
                 ['redirectUris', 'string[]', 'optional, added to the app (https; http only on localhost)'],
                 ['postLogoutRedirectUris', 'string[]', 'optional, added to the app'],
-                ['backchannelLogoutUri', 'string', 'optional, only when the app has none yet']
+                ['backchannelLogoutUri', 'string', 'optional, only when the app has none yet'],
+                ['roles', 'object[]', 'optional, the roles of the new app: they replace the roles of the app']
             ]
         },
         response: {
@@ -2068,7 +2141,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
                     scopes: ['openid', 'profile', 'email', 'tenant'],
                     firstParty: true,
                     refreshTokens: true,
-                    product: 'planner'
+                    product: 'planner',
+                    roles: ['editor', 'viewer']
                 },
                 clientSecret: null
             }
@@ -2076,8 +2150,29 @@ export const endpoints = ({ port = 4000 } = {}) => [
         errors: [
             [400, 'oidc.LINK_CODE_INVALID'],
             [400, 'oidc.CLIENT_INVALID_URI'],
+            [400, 'oidc.ROLES_INVALID'],
             [429, 'oidc.TOO_MANY_ATTEMPTS']
         ]
+    },
+    {
+        method: 'POST',
+        path: '/oidc/link/roles',
+        tag: 'apps (superadmin)',
+        summary:
+            'Used by `npm run roles:push` in the backend of an app, without login (the link code of the app is the permission): the roles of config/app-roles.json replace the roles of the app. Nothing else changes (no new secret). Rate limited per IP address.',
+        body: {
+            example: { code: 'K7QM-2XPD-9HRT', roles: APP_ROLES },
+            fields: [
+                ['code', 'string', 'required, a link code of the app (/admin → Apps)'],
+                [
+                    'roles',
+                    'object[]',
+                    'required, 0 to 20: `key` (a-z, 0-9, -, starting with a letter), `names` in en, nl, fr and de, `default`'
+                ]
+            ]
+        },
+        response: { status: 200, example: { clientId: 'planner', roles: ['editor', 'viewer'] } },
+        errors: [[400, 'oidc.LINK_CODE_INVALID'], [400, 'oidc.ROLES_INVALID'], TOO_MANY]
     },
     {
         method: 'POST',

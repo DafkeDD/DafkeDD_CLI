@@ -25,12 +25,14 @@ function forwardedFor(request: NextRequest): string {
  */
 /** The allowed applications: a client id may contain dots (com.example.app), never an empty or ".." segment. */
 const CONSENTS = /^me\/consents(\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*)?$/
+/** The roles per app of the organisation (its admins): a client id may contain dots too. */
+const APP_ROLES = /^tenants\/current\/apps(\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*\/members(\/[0-9a-f-]{36})?)?$/
 /** The apps on /admin (superadmins), with the same rule for their client id. */
 const APPS = /^admin\/clients(\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*(\/secret|\/link-code)?)?$/
 
 async function forward(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
     const path = (await params).path.join('/')
-    if (!ALLOWED.test(path) && !CONSENTS.test(path) && !APPS.test(path))
+    if (!ALLOWED.test(path) && !CONSENTS.test(path) && !APPS.test(path) && !APP_ROLES.test(path))
         return NextResponse.json({ error: 'not-found' }, { status: 404 })
     if (request.method !== 'GET' && request.headers.get('origin') !== new URL(APP_URL).origin)
         return NextResponse.json({ error: 'origin' }, { status: 403 })

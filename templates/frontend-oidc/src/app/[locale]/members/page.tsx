@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { getTranslations, setRequestLocale } from 'next-intl/server'
 import { Notice, WIDE_CARD } from '@/components/account-ui'
 import { AppPage } from '@/components/shell/app-shell'
+import { AppRoles } from '@/components/app-roles'
 import { Members } from '@/components/members'
 import { getSession } from '@/lib/session'
 
@@ -31,5 +32,11 @@ async function Content() {
             </section>
         )
     }
-    return <Members tenantName={session.tenant.name} me={session.sub} superadmin={session.superadmin} />
+    return (
+        <div className='flex flex-col gap-6'>
+            <Members tenantName={session.tenant.name} me={session.sub} superadmin={session.superadmin} />
+            {/* The roles per app: only shown when an app of this server has roles */}
+            <AppRoles />
+        </div>
+    )
 }

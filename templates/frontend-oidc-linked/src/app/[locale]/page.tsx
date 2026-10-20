@@ -40,7 +40,14 @@ async function OrganisationNotes() {
     return (
         <>
             {license && <AppLicense license={license} admin={admin} />}
-            {license?.status !== 'none' && <Notes admin={admin} me={session.sub} />}
+            {license?.status !== 'none' && (
+                <Notes
+                    admin={admin}
+                    me={session.sub}
+                    // The role editor of config/app-roles.json (an app without roles: everyone)
+                    canEdit={!session.roles || session.roles.includes('editor') || session.superadmin}
+                />
+            )}
         </>
     )
 }

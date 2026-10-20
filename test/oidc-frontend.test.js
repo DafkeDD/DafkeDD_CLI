@@ -10,6 +10,7 @@ import {
     envLocal,
     LICENSE_MESSAGES,
     NAV_MESSAGES,
+    APP_ROLES_MESSAGES,
     OIDC_MESSAGES,
     oidcFrontendFiles,
     SHELL_MESSAGES
@@ -106,7 +107,8 @@ test('every text exists in all four languages, and every text the code uses exis
         Audit: AUDIT_MESSAGES,
         Apps: APPS_MESSAGES,
         Shell: SHELL_MESSAGES,
-        Nav: NAV_MESSAGES
+        Nav: NAV_MESSAGES,
+        AppRoles: APP_ROLES_MESSAGES
     }
     // HomePage: the texts of the Next.js home page (nextjs.js); Nav: used with the label of APP_NAV as key
     const dynamic = new Set(['Nav'])

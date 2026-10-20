@@ -20,6 +20,11 @@ export interface Caller {
      * `trial` (until `endsAt`), `seat`, `superadmin` or `none`. Null: the token has none (the app sells nothing).
      */
     license: { product: string; status: LicenseStatus; endsAt: string | null } | null
+    /**
+     * The roles of the user in this app (the `roles` claim): given by the beheerder of the organisation on the login
+     * server, or the default roles of config/app-roles.json. Null: the token has none (the app has no roles there yet).
+     */
+    roles: string[] | null
 }
 
 /**
@@ -33,6 +38,13 @@ export type AccessLevel = 'public' | 'account' | 'member' | 'admin'
 export const ACCESS_KEY = 'pasport:access'
 export const Access = (level: AccessLevel) => SetMetadata(ACCESS_KEY, level)
 export const Public = () => Access('public')
+
+/**
+ * The roles of config/app-roles.json that may call a route (one of them is enough); superadmins always pass.
+ * `@Roles('editor')` on a `member` or `admin` route. Otherwise 403 errors.ROLE_REQUIRED.
+ */
+export const ROLES_KEY = 'pasport:roles'
+export const Roles = (...roles: string[]) => SetMetadata(ROLES_KEY, roles)
 
 /** The caller of this request (set by PasportGuard). */
 export const CurrentCaller = createParamDecorator(

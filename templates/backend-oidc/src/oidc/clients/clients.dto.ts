@@ -135,4 +135,30 @@ export class LinkDto {
     @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
     @MaxLength(500, { message: i18nValidationMessage('validation.MAX_LENGTH') })
     backchannelLogoutUri?: string
+
+    @ApiPropertyOptional({
+        example: [
+            { key: 'editor', names: { en: 'Editor', nl: 'Bewerker', fr: 'Éditeur', de: 'Bearbeiter' }, default: true }
+        ],
+        description:
+            'The roles of the app (config/app-roles.json of the new project): they replace the roles of the app'
+    })
+    @IsOptional()
+    @IsArray({ message: i18nValidationMessage('validation.IS_ARRAY') })
+    roles?: unknown[]
+}
+
+export class LinkRolesDto {
+    @ApiProperty({ example: 'K7QM-2XPD-9HRT', description: 'A link code of the app on /admin (one time, 15 minutes)' })
+    @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
+    @MinLength(12, { message: i18nValidationMessage('validation.MIN_LENGTH') })
+    @MaxLength(20, { message: i18nValidationMessage('validation.MAX_LENGTH') })
+    code!: string
+
+    @ApiProperty({
+        example: [{ key: 'viewer', names: { en: 'Viewer', nl: 'Lezer', fr: 'Lecteur', de: 'Leser' }, default: false }],
+        description: 'The roles of the app (1 to 20): key (a-z, 0-9, -), a name in en, nl, fr and de, default'
+    })
+    @IsArray({ message: i18nValidationMessage('validation.IS_ARRAY') })
+    roles!: unknown[]
 }

@@ -3,11 +3,12 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { AuditService } from '../../audit/audit.service.js'
 import { AppException } from '../../common/app.exception.js'
 import { AppLicenses } from '../app-licenses.js'
+import { parseRoles } from '../app-roles.js'
 import { sha256 } from '../crypto.js'
 import { OIDC, OidcConfig } from '../oidc.config.js'
 import { assertRedirectUri } from '../oidc.service.js'
 import { type ClientSummary, OIDC_STORE, type OidcClient, type OidcStore } from '../store/oidc.store.js'
-import type { ClientFieldsDto, CreateClientDto, LinkDto } from './clients.dto.js'
+import type { ClientFieldsDto, CreateClientDto, LinkDto, LinkRolesDto } from './clients.dto.js'
 
 /** A client as /admin shows it: never the hash of the secret. */
 export function publicClient(client: ClientSummary) {
@@ -217,8 +218,10 @@ export class ClientsService {
      * project added to it. A confidential app gets a new secret here (the old one stops), shown only in this answer.
      */
     async link(body: LinkDto) {
+        const roles = body.roles === undefined ? null : this.roles(body.roles)
         const clientId = await this.store.useLinkCode(sha256(normalizeLinkCode(body.code)))
         if (!clientId) throw new AppException('oidc.LINK_CODE_INVALID', HttpStatus.BAD_REQUEST)
+        if (roles) await this.setRoles(clientId, roles)
         const uri = (value: string) => {
             try {
                 assertRedirectUri(value)
@@ -257,10 +260,43 @@ export class ClientsService {
                 firstParty: client.firstParty,
                 refreshTokens: client.grantTypes.includes('refresh_token'),
                 // The product the app sells: its API refuses users without a licence (OIDC_PRODUCT)
-                product: client.product ?? null
+                product: client.product ?? null,
+                roles: (roles ?? client.roles ?? []).map(role => role.key)
             },
             clientSecret: secret
         }
+    }
+
+    /** The roles of an app as sent by its developer, checked (400 oidc.ROLES_INVALID with the reason). */
+    private roles(value: unknown[]) {
+        try {
+            return parseRoles(value)
+        } catch (error) {
+            throw new AppException('oidc.ROLES_INVALID', HttpStatus.BAD_REQUEST, {
+                reason: error instanceof Error ? error.message : String(error)
+            })
+        }
+    }
+
+    private async setRoles(clientId: string, roles: ReturnType<typeof parseRoles>) {
+        await this.store.setClientRoles(clientId, roles)
+        await this.audit.record('platform.client_roles_pushed', {
+            tenantId: null,
+            target: { type: 'client', id: clientId },
+            details: { client: clientId, roles: roles.map(role => role.key).join(',') || 'none' }
+        })
+    }
+
+    /**
+     * The developer of an app sends its roles (npm run roles:push in its backend) with a link code of the app: they
+     * replace the roles of the app. Nothing else changes (no new secret, no addresses).
+     */
+    async pushRoles(body: LinkRolesDto) {
+        const roles = this.roles(body.roles)
+        const clientId = await this.store.useLinkCode(sha256(normalizeLinkCode(body.code)))
+        if (!clientId) throw new AppException('oidc.LINK_CODE_INVALID', HttpStatus.BAD_REQUEST)
+        await this.setRoles(clientId, roles)
+        return { clientId, roles: roles.map(role => role.key) }
     }
 
     /** Removes the app with its codes, refresh tokens and consents. Only a disabled one (two steps on purpose). */

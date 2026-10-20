@@ -336,6 +336,9 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
 - **Apps are products**: on `/admin` → Apps a superadmin picks the product an app sells; every user then needs a licence
   of it in their organisation (a trial first, then a seat bought per month or per year). The tokens of the app say so
   (`license` claim) and the API of an app made with the CLI checks it (`OIDC_PRODUCT`).
+- **Roles per app**: the developer of an app defines its roles (`config/app-roles.json`, sent with the link code or
+  `npm run roles:push`); the beheerders give them to their members on `/members`; the tokens of the app carry them
+  (`roles`) and its API checks them with `@Roles(...)`.
 - **One design everywhere (Pasport)**: the frontend of the login server and every linked frontend get the same login
   screen (the teal panel with the eID card, "Log in to <app>", eID and passkey first, then email and password) and the
   same shell: a sidebar with the app's own pages (`src/lib/nav.ts`), "My account", the organisation (its admins) and the
@@ -491,6 +494,15 @@ git switch developer
 
 ## Changelog
 
+- **0.37.0**: roles per app. The developer of an app defines its roles (`config/app-roles.json` of an app made with the
+  CLI: key, a name in en, nl, fr and de, default); the login server learns them with the link code and with
+  `npm run roles:push -- --code <link code>` (`POST /oidc/link/roles`), or `"roles"` in the clients file (migration 12).
+  The admins (beheerders) of an organisation give them on `/members` ("Roles per app", `/tenants/current/apps/...`,
+  table `app_role_assignments` with Row-Level Security); members without roles given there have the default roles. The
+  tokens of the app carry `roles`; its API checks them with `@Roles('editor')` (403 `errors.ROLE_REQUIRED`, `/me` shows
+  them), and the notes card only shows its form with the role editor. New errors `oidc.APP_NOT_FOUND`,
+  `oidc.ROLE_UNKNOWN`, `oidc.ROLES_INVALID`, audit `members.app_roles_changed` and `platform.client_roles_pushed`, texts
+  `AppRoles` and `Notes.readOnly` (en, nl, fr, de).
 - **0.36.0**: an app is a product. On `/admin` → Apps a superadmin chooses the product (licence) an app sells (one
   product per app; `"product"` in the clients file; migration 11). The access tokens of that app carry
   `license: { product, status, ends_at }` (`trial`, `seat`, `superadmin` or `none`), worked out at every login and

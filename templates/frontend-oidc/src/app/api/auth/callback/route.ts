@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     try {
         const tokens = await exchangeCode(code, flow.verifier)
-        const { sub, sid, tenant, superadmin, license } = await verifyIdToken(
+        const { sub, sid, tenant, superadmin, license, roles } = await verifyIdToken(
             tokens.id_token,
             flow.nonce,
             tokens.access_token
@@ -52,7 +52,8 @@ export async function GET(request: NextRequest) {
             refreshToken: tokens.refresh_token ?? null,
             idToken: tokens.id_token,
             sid,
-            license
+            license,
+            roles
         }
         const response = NextResponse.redirect(new URL(flow.returnTo, request.url))
         // Lives as long as the session of the login server; the access token inside is renewed with the refresh token

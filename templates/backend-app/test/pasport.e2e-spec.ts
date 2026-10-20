@@ -69,9 +69,11 @@ describe('Pasport access tokens and notes per organisation (e2e)', () => {
         const sub = '33333333-3333-4333-8333-333333333333'
         const response = await http()
             .get('/me')
-            .set(bearer(accessToken({ sub, tenant: undefined, superadmin: true, license: undefined })))
+            .set(
+                bearer(accessToken({ sub, tenant: undefined, superadmin: true, license: undefined, roles: undefined }))
+            )
             .expect(200)
-        expect(response.body).toEqual({ sub, tenant: null, superadmin: true, license: null })
+        expect(response.body).toEqual({ sub, tenant: null, superadmin: true, license: null, roles: null })
         const ends = Math.floor(Date.parse('2026-11-03T08:00:00Z') / 1000)
         const trial = await http()
             .get('/me')
@@ -99,6 +101,47 @@ describe('Pasport access tokens and notes per organisation (e2e)', () => {
             .expect(403)
         expect(response.body.error).toBe('errors.NO_LICENSE')
         expect(response.body.message).toContain(PRODUCT)
+    })
+
+    it('roles of config/app-roles.json: viewers read, editors also write, without a role nothing', async () => {
+        // Another organisation: the notes of the other tests stay as they are
+        const tenant = { id: '33333333-3333-4333-8333-333333333333', name: 'Praktijk C', role: 'admin' as const }
+        const viewer = bearer(accessToken({ tenant, roles: ['viewer'] }))
+        await http().get('/notes').set(viewer).expect(200)
+        const refused = await http()
+            .post('/notes')
+            .set(viewer)
+            .set('Accept-Language', 'nl')
+            .send({ text: 'Mag niet' })
+            .expect(403)
+        expect(refused.body).toMatchObject({ error: 'errors.ROLE_REQUIRED' })
+        expect(refused.body.message).toContain('editor')
+        await http()
+            .post('/notes')
+            .set(bearer(accessToken({ tenant, roles: ['editor'] })))
+            .send({ text: 'Mag wel' })
+            .expect(201)
+        // No role at all (the beheerder took them away), or a token without roles
+        for (const roles of [[], undefined])
+            expect(
+                (
+                    await http()
+                        .get('/notes')
+                        .set(bearer(accessToken({ tenant, roles })))
+                        .expect(403)
+                ).body.error
+            ).toBe('errors.ROLE_REQUIRED')
+        // A superadmin always passes; /me shows the roles
+        await http()
+            .post('/notes')
+            .set(bearer(accessToken({ tenant, roles: [], superadmin: true })))
+            .send({ text: 'Superadmin' })
+            .expect(201)
+        const me = await http()
+            .get('/me')
+            .set(bearer(accessToken({ roles: ['viewer'] })))
+            .expect(200)
+        expect(me.body.roles).toEqual(['viewer'])
     })
 
     it.each(['trial', 'seat', 'superadmin'])('a %s licence opens the data', async status => {

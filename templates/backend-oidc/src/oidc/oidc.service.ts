@@ -13,6 +13,7 @@ import { AppException } from '../common/app.exception.js'
 import { EidService } from './eid.service.js'
 import { KeysService } from './keys.service.js'
 import { MFA_AMR, MfaService, type MfaSetup, type SecondFactor } from './mfa.service.js'
+import { parseRoles } from './app-roles.js'
 import { OAuthError } from './oauth.error.js'
 import { OIDC, OidcConfig } from './oidc.config.js'
 import { hashPassword, verifyPassword } from './password.js'
@@ -126,6 +127,15 @@ const text = (value: unknown, fallback = ''): string => (typeof value === 'strin
 /** The code of a product (license_products.code): a-z, 0-9 and -, 2 to 63 characters. */
 export const PRODUCT_CODE = /^[a-z0-9][a-z0-9-]{1,62}$/
 
+/** The optional "roles" of a client in the clients file. */
+function rolesOf(value: unknown, clientId: string, file: string) {
+    try {
+        return parseRoles(value)
+    } catch (error) {
+        throw new Error(`Client ${clientId} in ${file}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+}
+
 /** The optional "product" of a client in the clients file. */
 function productCode(value: unknown, clientId: string, file: string): string | null {
     if (value === undefined || value === null || value === '') return null
@@ -233,7 +243,9 @@ export class OidcService implements OnApplicationBootstrap {
                 backchannelLogoutUri,
                 backchannelLogoutSessionRequired: raw.backchannelLogoutSessionRequired === true,
                 // The product (licence code) this app sells, see "Apps and licences" in the README
-                product: productCode(raw.product, clientId, file)
+                product: productCode(raw.product, clientId, file),
+                // The roles of the app (see "Roles per app" in the README)
+                roles: rolesOf(raw.roles, clientId, file)
             } satisfies OidcClient
         })
     }

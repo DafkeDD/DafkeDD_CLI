@@ -35,6 +35,7 @@ export const AUDIT_ACTIONS = {
         'members.invitation_withdrawn',
         'members.joined',
         'members.role_changed',
+        'members.app_roles_changed',
         'members.disabled',
         'members.enabled',
         'members.removed'
@@ -52,7 +53,8 @@ export const AUDIT_ACTIONS = {
         'platform.client_enabled',
         'platform.client_deleted',
         'platform.client_link_code',
-        'platform.client_linked'
+        'platform.client_linked',
+        'platform.client_roles_pushed'
     ],
     licences: [
         'licences.product_created',

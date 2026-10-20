@@ -16,31 +16,52 @@ export const APP_PORT = 4001
 /** The role of DatabaseService.withTenant(): roles are shared by the databases of a server, so it is prefixed. */
 export const tenantRole = database => `${database}_tenant`
 
+/**
+ * The roles of the example app (config/app-roles.json): the developer defines them, the login server learns them with
+ * the link code (and later with npm run roles:push), and the beheerders give them to their members.
+ */
+export const DEFAULT_ROLES = [
+    {
+        key: 'editor',
+        names: { en: 'Editor', nl: 'Bewerker', fr: 'Éditeur', de: 'Bearbeiter' },
+        default: true
+    },
+    {
+        key: 'viewer',
+        names: { en: 'Viewer', nl: 'Lezer', fr: 'Lecteur', de: 'Leser' },
+        default: false
+    }
+]
+
 /** Extra errors of the app backend (namespace "errors"). Every language has the same keys (checked by the tests). */
 export const ERRORS = {
     en: {
         NO_ORGANISATION: 'Log in with an organisation to use this',
         NO_LICENSE:
             'You have no licence for {product} in this organisation: buy one on Licences or ask your administrator',
-        NOTE_NOT_FOUND: 'This note does not exist (anymore)'
+        NOTE_NOT_FOUND: 'This note does not exist (anymore)',
+        ROLE_REQUIRED: 'You need one of these roles for this: {roles}. Ask the administrator of your organisation'
     },
     nl: {
         NO_ORGANISATION: 'Log in met een organisatie om dit te gebruiken',
         NO_LICENSE:
             'Je hebt geen licentie voor {product} in deze organisatie: koop er een bij Licenties of vraag het je beheerder',
-        NOTE_NOT_FOUND: 'Deze notitie bestaat niet (meer)'
+        NOTE_NOT_FOUND: 'Deze notitie bestaat niet (meer)',
+        ROLE_REQUIRED: 'Hiervoor heb je een van deze rollen nodig: {roles}. Vraag het de beheerder van je organisatie'
     },
     fr: {
         NO_ORGANISATION: 'Connectez-vous avec une organisation pour utiliser ceci',
         NO_LICENSE:
             "Vous n'avez pas de licence pour {product} dans cette organisation : achetez-en une sous Licences ou demandez à votre administrateur",
-        NOTE_NOT_FOUND: "Cette note n'existe pas (ou plus)"
+        NOTE_NOT_FOUND: "Cette note n'existe pas (ou plus)",
+        ROLE_REQUIRED: "Il vous faut l'un de ces rôles : {roles}. Demandez-le à l'administrateur de votre organisation"
     },
     de: {
         NO_ORGANISATION: 'Melde dich mit einer Organisation an, um dies zu nutzen',
         NO_LICENSE:
             'Du hast keine Lizenz für {product} in dieser Organisation: kaufe eine unter Lizenzen oder frage deinen Administrator',
-        NOTE_NOT_FOUND: 'Diese Notiz gibt es nicht (mehr)'
+        NOTE_NOT_FOUND: 'Diese Notiz gibt es nicht (mehr)',
+        ROLE_REQUIRED: 'Dafür brauchst du eine dieser Rollen: {roles}. Frage den Administrator deiner Organisation'
     }
 }
 
@@ -52,7 +73,10 @@ export const VALIDATION = {
     de: { MAX_LENGTH: '{property} darf höchstens {constraints.0} Zeichen lang sein' }
 }
 
-export const SCRIPTS = { 'test:db': 'vitest run --config ./vitest.config.db.ts' }
+export const SCRIPTS = {
+    'test:db': 'vitest run --config ./vitest.config.db.ts',
+    'roles:push': 'node scripts/roles-push.mjs'
+}
 
 /** All files of templates/backend-app, with the placeholders filled in. */
 export function appFiles({ database, link }) {
@@ -72,6 +96,8 @@ export function appFiles({ database, link }) {
         for (const [placeholder, value] of Object.entries(values)) content = content.replaceAll(placeholder, value)
         result[rel] = content
     }
+    // The roles of the app, defined by its developer (see README, "Roles")
+    result['config/app-roles.json'] = JSON.stringify(DEFAULT_ROLES, null, 2) + '\n'
     return result
 }
 
@@ -99,7 +125,8 @@ const NOTE = {
 const TOKEN_ERRORS = [
     [401, 'errors.UNAUTHORIZED'],
     [403, 'errors.NO_ORGANISATION'],
-    [403, 'errors.NO_LICENSE']
+    [403, 'errors.NO_LICENSE'],
+    [403, 'errors.ROLE_REQUIRED']
 ]
 
 /** The endpoints of the app backend, for the README (the docs test checks them against the controllers). */
@@ -109,7 +136,7 @@ export const appEndpoints = () => [
         path: '/me',
         tag: 'me',
         summary:
-            'Who is calling, as the access token of the login server says: account id, organisation with role, superadmin, and the licence for the product of this app (`null` when it sells none). Also without an organisation or a licence.',
+            'Who is calling, as the access token of the login server says: account id, organisation with role, superadmin, the licence for the product of this app (`null` when it sells none) and the roles in this app (`null` when the login server has none for it). Also without an organisation, a licence or a role.',
         bearer: true,
         response: {
             status: 200,
@@ -117,7 +144,8 @@ export const appEndpoints = () => [
                 sub: NOTE.authorId,
                 tenant: { id: '0f9e8d7c-6b5a-4493-8271-605f4e3d2c1b', name: 'Praktijk De Linde', role: 'admin' },
                 superadmin: false,
-                license: { product: 'planner', status: 'trial', endsAt: '2026-11-03T08:00:00.000Z' }
+                license: { product: 'planner', status: 'trial', endsAt: '2026-11-03T08:00:00.000Z' },
+                roles: ['editor']
             }
         },
         errors: [[401, 'errors.UNAUTHORIZED']]
@@ -127,7 +155,7 @@ export const appEndpoints = () => [
         path: '/notes',
         tag: 'notes',
         summary:
-            'The notes of the organisation of the caller, newest first (at most 100). An example of data per tenant.',
+            'The notes of the organisation of the caller, newest first (at most 100). An example of data per tenant. Role `editor` or `viewer`.',
         bearer: true,
         response: { status: 200, example: [NOTE] },
         errors: TOKEN_ERRORS
@@ -136,7 +164,7 @@ export const appEndpoints = () => [
         method: 'POST',
         path: '/notes',
         tag: 'notes',
-        summary: 'Add a note to the organisation of the caller.',
+        summary: 'Add a note to the organisation of the caller. Role `editor`.',
         bearer: true,
         body: { example: { text: NOTE.text }, fields: [['text', 'string', 'required, at most 2000 characters']] },
         response: { status: 201, example: NOTE },
@@ -150,6 +178,6 @@ export const appEndpoints = () => [
         bearer: true,
         pathExample: '/notes/' + NOTE.id,
         response: null,
-        errors: [...TOKEN_ERRORS, [403, 'errors.FORBIDDEN'], [404, 'errors.NOTE_NOT_FOUND']]
+        errors: [...TOKEN_ERRORS.slice(0, 3), [403, 'errors.FORBIDDEN'], [404, 'errors.NOTE_NOT_FOUND']]
     }
 ]
