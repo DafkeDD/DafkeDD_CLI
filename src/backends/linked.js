@@ -4,8 +4,11 @@ import { slugify } from '../databases/postgres.js'
 import { APP_PORT, DEFAULT_ROLES } from './app.js'
 import { DIR, nestjs } from './nestjs.js'
 
-/** A link code of /admin: XXXX-XXXX-XXXX (case, dashes and spaces do not matter). */
-export const LINK_CODE = /^[A-Z0-9]{4}-?[A-Z0-9]{4}-?[A-Z0-9]{4}$/
+/**
+ * A link code of /admin: groups of 4 letters or digits, 3 groups (XXXX-XXXX-XXXX, servers before 0.39.1) to 6 groups
+ * (XXXX-XXXX-XXXX-XXXX-XXXX-XXXX, now). Case, dashes and spaces do not matter.
+ */
+export const LINK_CODE = /^[A-Z0-9]{4}(?:-?[A-Z0-9]{4}){2,5}$/
 
 const DEFAULT_SERVER = 'http://localhost:4000'
 const DEFAULT_PORT = 3001
@@ -114,7 +117,7 @@ export const linked = {
             message: 'Koppelcode (op de server: /admin → Apps → Koppelcode):',
             validate: async value => {
                 const code = value.toUpperCase().replace(/\s+/g, '')
-                if (!LINK_CODE.test(code)) return 'Een koppelcode ziet eruit als K7QM-2XPD-9HRT'
+                if (!LINK_CODE.test(code)) return 'Een koppelcode ziet eruit als K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE'
                 try {
                     link = await useLinkCode({ server, code, port, fetchImpl })
                     return true

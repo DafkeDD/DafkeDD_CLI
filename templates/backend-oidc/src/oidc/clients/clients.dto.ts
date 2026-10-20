@@ -102,10 +102,13 @@ export class ClientStatusDto {
 }
 
 export class LinkDto {
-    @ApiProperty({ example: 'K7QM-2XPD-9HRT', description: 'The link code of /admin (one time, 15 minutes)' })
+    @ApiProperty({
+        example: 'K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE',
+        description: 'The link code of /admin (one time, 15 minutes)'
+    })
     @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
     @MinLength(12, { message: i18nValidationMessage('validation.MIN_LENGTH') })
-    @MaxLength(20, { message: i18nValidationMessage('validation.MAX_LENGTH') })
+    @MaxLength(48, { message: i18nValidationMessage('validation.MAX_LENGTH') })
     code!: string
 
     @ApiPropertyOptional({
@@ -149,10 +152,13 @@ export class LinkDto {
 }
 
 export class LinkRolesDto {
-    @ApiProperty({ example: 'K7QM-2XPD-9HRT', description: 'A link code of the app on /admin (one time, 15 minutes)' })
+    @ApiProperty({
+        example: 'K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE',
+        description: 'A link code of the app on /admin (one time, 15 minutes)'
+    })
     @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
     @MinLength(12, { message: i18nValidationMessage('validation.MIN_LENGTH') })
-    @MaxLength(20, { message: i18nValidationMessage('validation.MAX_LENGTH') })
+    @MaxLength(48, { message: i18nValidationMessage('validation.MAX_LENGTH') })
     code!: string
 
     @ApiProperty({

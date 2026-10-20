@@ -21,11 +21,11 @@ const newSecret = () => randomBytes(32).toString('base64url')
 /** Letters and digits that cannot be mistaken for each other (no I, O, 0, 1). */
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
-/** A link code: 12 characters (60 bits) as XXXX-XXXX-XXXX. */
+/** A link code: 24 characters (120 bits) as XXXX-XXXX-XXXX-XXXX-XXXX-XXXX. */
 export function newLinkCode(): string {
-    const bytes = randomBytes(12)
+    const bytes = randomBytes(24)
     const chars = [...bytes].map(byte => CODE_ALPHABET[byte % 32]!)
-    return [0, 4, 8].map(start => chars.slice(start, start + 4).join('')).join('-')
+    return [0, 4, 8, 12, 16, 20].map(start => chars.slice(start, start + 4).join('')).join('-')
 }
 
 /** As typed: case and dashes or spaces do not matter. */

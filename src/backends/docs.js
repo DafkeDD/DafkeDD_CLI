@@ -931,8 +931,9 @@ at once, its access tokens no longer reach the API) and, once disabled, removed 
 consents. The clients file never overwrites an app made on \`/admin\` with the same id (a warning in the log). Every
 change is in the audit log (\`platform.client_*\`).
 
-**Link a new project to an app with a link code**: on \`/admin\` → Apps, "Link code" makes a one-time code of 12
-characters (\`K7QM-2XPD-9HRT\`, 60 random bits, valid 15 minutes, only its sha256 is stored; a new code stops the
+**Link a new project to an app with a link code**: on \`/admin\` → Apps, "Link code" makes a one-time code of 24
+characters (\`K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE\`, 120 random bits, valid 15 minutes; the short codes of 12 characters of
+older servers still work, only its sha256 is stored; a new code stops the
 previous one). In DafkeDD_CLI choose the frontend Next.js and the backend **"App for an existing DafkeDD OIDC server
 (link code)"**, give the address of this API and the code: the CLI calls \`POST /oidc/link\` (no login, rate limited), which
 uses the code once, adds the addresses of the new frontend to the app (redirect URI, after logout, and the back-channel

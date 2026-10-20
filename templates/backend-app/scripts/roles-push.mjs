@@ -1,4 +1,4 @@
-// Sends the roles of this app (config/app-roles.json) to the login server: npm run roles:push -- --code K7QM-2XPD-9HRT
+// Sends the roles of this app (config/app-roles.json) to the login server: npm run roles:push -- --code K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE
 // Make the link code on the login server: /admin -> Apps -> Koppelcode (one time, 15 minutes). The roles replace the
 // roles of the app there; the beheerders of every organisation then give them to their members (/members).
 import { readFileSync } from 'node:fs'
@@ -12,7 +12,7 @@ try {
 const { values } = parseArgs({ options: { code: { type: 'string' }, issuer: { type: 'string' } } })
 const issuer = (values.issuer ?? process.env.OIDC_ISSUER ?? '').replace(/\/+$/, '')
 if (!values.code || !issuer) {
-    console.error('Usage: npm run roles:push -- --code K7QM-2XPD-9HRT   (OIDC_ISSUER comes from .env)')
+    console.error('Usage: npm run roles:push -- --code K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE   (OIDC_ISSUER comes from .env)')
     process.exit(1)
 }
 const roles = JSON.parse(readFileSync('config/app-roles.json', 'utf8'))

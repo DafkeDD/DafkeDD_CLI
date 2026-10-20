@@ -11,7 +11,7 @@ import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js
 import { DatabaseService } from '../src/database/database.service.js'
 import type { Mail } from '../src/mail/mail.service.js'
 import { MailService } from '../src/mail/mail.service.js'
-import { pkceChallenge } from '../src/oidc/crypto.js'
+import { pkceChallenge, sha256 } from '../src/oidc/crypto.js'
 import { LoginLimiter } from '../src/oidc/login-limiter.js'
 import { OidcService } from '../src/oidc/oidc.service.js'
 import { hashPassword } from '../src/oidc/password.js'
@@ -315,7 +315,8 @@ describe('Apps on /admin (e2e)', () => {
         await http().post('/admin/clients/linked.app/link-code').set(bearer(tokens.alice)).expect(403)
         await http().post('/admin/clients/frontend/link-code').set(bearer(tokens.root)).expect(409)
         const first = await http().post('/admin/clients/linked.app/link-code').set(bearer(tokens.root)).expect(200)
-        expect(first.body.code).toMatch(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
+        // 24 characters in 6 groups (120 random bits)
+        expect(first.body.code).toMatch(/^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){5}$/)
         expect(first.body.issuer).toMatch(/\/oidc$/)
         // A new code: the earlier one stops
         const second = await http().post('/admin/clients/linked.app/link-code').set(bearer(tokens.root)).expect(200)
@@ -354,6 +355,12 @@ describe('Apps on /admin (e2e)', () => {
             .post('/oidc/link')
             .send({ code: second.body.code, ...project })
             .expect(400)
+        // A short code of 12 characters (servers before 0.39.1) still works
+        await store.createLinkCode(sha256('K7QM2XPD9HRT'), 'linked.app', aliceId, new Date(Date.now() + 60_000))
+        await http()
+            .post('/oidc/link')
+            .send({ code: 'K7QM-2XPD-9HRT', ...project })
+            .expect(200)
         // The new project logs in at once with its own redirect URI
         await login('alice@example.com', { id: 'linked.app', redirect: 'http://localhost:3001/api/auth/callback' })
         expect(audit.events.findLast(event => event.action === 'platform.client_linked')).toMatchObject({

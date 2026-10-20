@@ -88,7 +88,7 @@ export class ClientsController {
         summary:
             'A one-time link code (15 minutes) for an app made here: the CLI links a new project to this app with it. An earlier unused code stops.'
     })
-    @ApiOkResponse({ description: '{ code: "K7QM-2XPD-9HRT", expiresAt, issuer }' })
+    @ApiOkResponse({ description: '{ code: "K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE", expiresAt, issuer }' })
     @ApiConflictResponse({ description: 'oidc.CLIENT_FROM_FILE' })
     linkCode(@Auth() auth: AuthContext, @Param('clientId') clientId: string) {
         return this.clients.linkCode(clientId, auth.userId)

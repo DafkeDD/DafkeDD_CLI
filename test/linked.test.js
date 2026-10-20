@@ -62,7 +62,7 @@ test('the backend choice "app for an existing DafkeDD OIDC server" is registered
     assert.match(linked.label, /App voor een bestaande DafkeDD OIDC-server \(koppelcode\)/)
 })
 
-test('server addresses are typed in many ways; link codes like K7QM-2XPD-9HRT', () => {
+test('server addresses are typed in many ways; link codes like K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE (or 12 characters)', () => {
     for (const typed of [
         'http://localhost:4000',
         'http://localhost:4000/',
@@ -73,9 +73,14 @@ test('server addresses are typed in many ways; link codes like K7QM-2XPD-9HRT', 
     assert.equal(normalizeServer('https://auth.example.com/api/oidc'), 'https://auth.example.com/api')
     for (const wrong of ['', 'localhost:4000', 'ftp://x', 'http://x/?a=1'])
         assert.equal(normalizeServer(wrong), null, wrong)
+    // The codes of now (24 characters) and of servers before 0.39.1 (12 characters)
+    assert.ok(LINK_CODE.test('RUNK-AQYQ-9R32-XQHL-UQ42-ZEB3'))
+    assert.ok(LINK_CODE.test('RUNKAQYQ9R32XQHLUQ42ZEB3'))
     assert.ok(LINK_CODE.test('K7QM-2XPD-9HRT'))
     assert.ok(LINK_CODE.test('K7QM2XPD9HRT'))
     assert.ok(!LINK_CODE.test('K7QM-2XPD'))
+    assert.ok(!LINK_CODE.test('K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE-AAAA'))
+    assert.ok(!LINK_CODE.test('K7QM-2XPD-9HR'))
 })
 
 test('the link code goes to POST /oidc/link with the addresses of the new frontend', async () => {
@@ -135,7 +140,7 @@ test('ask: server, port, the code and the own database; a wrong code is asked ag
                 return config.default
             }
             // The prompt keeps asking until validate says yes
-            assert.match(await config.validate('nonsense'), /K7QM-2XPD-9HRT/)
+            assert.match(await config.validate('nonsense'), /K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE/)
             assert.equal(await config.validate('aaaa-bbbb-cccc'), 'Deze koppelcode is onbekend')
             assert.equal(await config.validate('K7QM-2XPD-9HRT'), true)
             return 'K7QM-2XPD-9HRT'

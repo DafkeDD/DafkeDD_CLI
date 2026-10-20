@@ -2161,7 +2161,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         response: {
             status: 200,
             example: {
-                code: 'K7QM-2XPD-9HRT',
+                code: 'K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE',
                 expiresAt: '2026-10-19T15:45:00.000Z',
                 issuer: `http://localhost:${port}/oidc`
             }
@@ -2176,7 +2176,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
             'Used by the CLI, without login (the code is the permission): uses a link code once and answers the settings of the app, with the addresses of the new project added (redirect URIs, after logout; the back-channel URI only when the app has none). A confidential app gets a new secret here, in this answer only (the old one stops). Rate limited per IP address.',
         body: {
             example: {
-                code: 'K7QM-2XPD-9HRT',
+                code: 'K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE',
                 redirectUris: ['http://localhost:3001/api/auth/callback'],
                 postLogoutRedirectUris: ['http://localhost:3001'],
                 backchannelLogoutUri: 'http://localhost:3001/api/auth/backchannel-logout',
@@ -2223,7 +2223,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         summary:
             'Used by `npm run roles:push` in the backend of an app, without login (the link code of the app is the permission): the roles of config/app-roles.json replace the roles of the app. Nothing else changes (no new secret). Rate limited per IP address.',
         body: {
-            example: { code: 'K7QM-2XPD-9HRT', roles: APP_ROLES },
+            example: { code: 'K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE', roles: APP_ROLES },
             fields: [
                 ['code', 'string', 'required, a link code of the app (/admin → Apps)'],
                 [
