@@ -144,6 +144,10 @@ export interface OidcClient {
     backchannelLogoutUri?: string | null
     /** The logout token always has `sid`; true only says the client relies on it. */
     backchannelLogoutSessionRequired?: boolean
+    /**
+     * The product (licence) this app sells: its access tokens carry the `license` claim of the user. Null: a free app.
+     */
+    product?: string | null
 }
 
 /** A client as superadmins see it on /admin: where it comes from, whether it is on, how many accounts allowed it. */
@@ -168,6 +172,7 @@ export type ClientChanges = Partial<
         | 'scopes'
         | 'grantTypes'
         | 'firstParty'
+        | 'product'
     >
 >
 

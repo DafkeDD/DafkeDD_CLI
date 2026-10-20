@@ -346,6 +346,8 @@ export const MESSAGES = {
         CLIENT_FROM_FILE: 'This app comes from config/oidc-clients.json: change it in that file.',
         CLIENT_PUBLIC: 'A public app has no secret.',
         CLIENT_DISABLE_FIRST: 'Disable the app first, then remove it.',
+        CLIENT_UNKNOWN_PRODUCT: 'The product {product} does not exist: make it on /licenses first.',
+        CLIENT_PRODUCT_TAKEN: 'The product {product} is sold by the app {app} already: one product belongs to one app.',
         CONSENT_TITLE: 'Allow {client}?',
         CONSENT_TEXT: '{client} wants to use your account {email}. It gets:',
         CONSENT_NOTE: 'You can take this back at any time on Security.',
@@ -451,6 +453,9 @@ export const MESSAGES = {
         CLIENT_FROM_FILE: 'Deze app komt uit config/oidc-clients.json: pas ze in dat bestand aan.',
         CLIENT_PUBLIC: 'Een publieke app heeft geen secret.',
         CLIENT_DISABLE_FIRST: 'Schakel de app eerst uit en verwijder ze daarna.',
+        CLIENT_UNKNOWN_PRODUCT: 'Het product {product} bestaat niet: maak het eerst aan op /licenses.',
+        CLIENT_PRODUCT_TAKEN:
+            'Het product {product} wordt al verkocht door de app {app}: één product hoort bij één app.',
         CONSENT_TITLE: '{client} toestaan?',
         CONSENT_TEXT: '{client} wil je account {email} gebruiken. Het krijgt:',
         CONSENT_NOTE: 'Je kunt dit altijd intrekken onder Beveiliging.',
@@ -557,6 +562,9 @@ export const MESSAGES = {
         CLIENT_FROM_FILE: 'Cette application vient de config/oidc-clients.json : modifiez-la dans ce fichier.',
         CLIENT_PUBLIC: "Une application publique n'a pas de secret.",
         CLIENT_DISABLE_FIRST: "Désactivez d'abord l'application, puis supprimez-la.",
+        CLIENT_UNKNOWN_PRODUCT: "Le produit {product} n'existe pas : créez-le d'abord sur /licenses.",
+        CLIENT_PRODUCT_TAKEN:
+            "Le produit {product} est déjà vendu par l'application {app} : un produit appartient à une seule application.",
         CONSENT_TITLE: 'Autoriser {client} ?',
         CONSENT_TEXT: '{client} souhaite utiliser votre compte {email}. Il reçoit :',
         CONSENT_NOTE: 'Vous pouvez retirer cette autorisation à tout moment dans Sécurité.',
@@ -671,6 +679,9 @@ export const MESSAGES = {
         CLIENT_FROM_FILE: 'Diese App stammt aus config/oidc-clients.json: ändere sie in dieser Datei.',
         CLIENT_PUBLIC: 'Eine öffentliche App hat kein Secret.',
         CLIENT_DISABLE_FIRST: 'Deaktiviere die App zuerst und entferne sie dann.',
+        CLIENT_UNKNOWN_PRODUCT: 'Das Produkt {product} gibt es nicht: lege es zuerst unter /licenses an.',
+        CLIENT_PRODUCT_TAKEN:
+            'Das Produkt {product} wird bereits von der App {app} verkauft: ein Produkt gehört zu einer App.',
         CONSENT_TITLE: '{client} erlauben?',
         CONSENT_TEXT: '{client} möchte dein Konto {email} verwenden. Es erhält:',
         CONSENT_NOTE: 'Du kannst das jederzeit unter Sicherheit widerrufen.',
@@ -993,6 +1004,7 @@ const APP_EXAMPLE = {
     scopes: ['openid', 'profile', 'email'],
     grantTypes: ['authorization_code', 'refresh_token'],
     firstParty: false,
+    product: 'planner',
     hasSecret: true,
     consents: 3,
     createdAt: '2026-10-15T09:00:00.000Z',
@@ -1933,7 +1945,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 backchannelLogoutUri: 'https://planner.partner.com/backchannel-logout',
                 scopes: ['openid', 'profile', 'email'],
                 refreshTokens: true,
-                firstParty: false
+                firstParty: false,
+                product: 'planner'
             },
             fields: [
                 ['name', 'string', 'required, 2 to 100 characters'],
@@ -1944,7 +1957,12 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 ['backchannelLogoutUri', 'string', 'optional, back-channel logout; empty: none'],
                 ['scopes', 'string[]', '`openid`, `profile`, `email`, `tenant`'],
                 ['refreshTokens', 'boolean', 'required, also refresh tokens'],
-                ['firstParty', 'boolean', 'required, `true`: your own app (no consent screen, may call this API)']
+                ['firstParty', 'boolean', 'required, `true`: your own app (no consent screen, may call this API)'],
+                [
+                    'product',
+                    'string',
+                    'optional, the product code of /licenses this app sells (one licence per user, one app per product); empty or `null`: a free app'
+                ]
             ]
         },
         response: {
@@ -1954,8 +1972,10 @@ export const endpoints = ({ port = 4000 } = {}) => [
         errors: [
             [400, 'oidc.CLIENT_INVALID_URI'],
             [400, 'oidc.CLIENT_NO_REDIRECT'],
+            [400, 'oidc.CLIENT_UNKNOWN_PRODUCT'],
             ...ACCESS('superadmin'),
-            [409, 'oidc.CLIENT_EXISTS']
+            [409, 'oidc.CLIENT_EXISTS'],
+            [409, 'oidc.CLIENT_PRODUCT_TAKEN']
         ]
     },
     {
@@ -1973,7 +1993,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 backchannelLogoutUri: '',
                 scopes: ['openid', 'email'],
                 refreshTokens: false,
-                firstParty: false
+                firstParty: false,
+                product: 'planner'
             },
             fields: [
                 ['name', 'string', 'required'],
@@ -1982,15 +2003,18 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 ['backchannelLogoutUri', 'string', 'optional'],
                 ['scopes', 'string[]', 'required'],
                 ['refreshTokens', 'boolean', 'required'],
-                ['firstParty', 'boolean', 'required']
+                ['firstParty', 'boolean', 'required'],
+                ['product', 'string', 'optional, the product this app sells; empty or `null`: none']
             ]
         },
         response: { status: 200, example: APP_EXAMPLE },
         errors: [
             [400, 'oidc.CLIENT_INVALID_URI'],
+            [400, 'oidc.CLIENT_UNKNOWN_PRODUCT'],
             ...ACCESS('superadmin'),
             [404, 'oidc.CLIENT_NOT_FOUND'],
-            [409, 'oidc.CLIENT_FROM_FILE']
+            [409, 'oidc.CLIENT_FROM_FILE'],
+            [409, 'oidc.CLIENT_PRODUCT_TAKEN']
         ]
     },
     {
@@ -1998,7 +2022,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/admin/clients/:clientId/link-code',
         tag: 'apps (superadmin)',
         summary:
-            'A one-time link code (15 minutes) for an app made on /admin. In the CLI, the backend "Existing DafkeDD OIDC server (link code)" links a new frontend to this app with it (POST /oidc/link). An earlier unused code of the app stops.',
+            'A one-time link code (15 minutes) for an app made on /admin. In the CLI, the backend "App for an existing DafkeDD OIDC server (link code)" links a new app to this app with it (POST /oidc/link). An earlier unused code of the app stops.',
         pathExample: '/admin/clients/partner.planner/link-code',
         bearer: true,
         response: {
@@ -2043,7 +2067,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
                     type: 'public',
                     scopes: ['openid', 'profile', 'email', 'tenant'],
                     firstParty: true,
-                    refreshTokens: true
+                    refreshTokens: true,
+                    product: 'planner'
                 },
                 clientSecret: null
             }

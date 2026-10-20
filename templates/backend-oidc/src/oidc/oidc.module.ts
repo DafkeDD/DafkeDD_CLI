@@ -5,6 +5,7 @@ import { AuditModule } from '../audit/audit.module.js'
 import { MailModule } from '../mail/mail.module.js'
 import { AccountController } from './account.controller.js'
 import { AccountService } from './account.service.js'
+import { AppLicenses } from './app-licenses.js'
 import { BackchannelService } from './backchannel.service.js'
 import { ClientsController } from './clients/clients.controller.js'
 import { LinkController } from './clients/link.controller.js'
@@ -45,6 +46,7 @@ import { WellKnownController } from './well-known.controller.js'
     ],
     providers: [
         OidcConfig,
+        AppLicenses,
         OidcService,
         ExternalService,
         PasskeyService,
@@ -61,6 +63,7 @@ import { WellKnownController } from './well-known.controller.js'
         { provide: OIDC_STORE, useClass: PgOidcStore }
     ],
     exports: [
+        AppLicenses,
         OidcService,
         ExternalService,
         PasskeyService,

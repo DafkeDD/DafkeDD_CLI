@@ -89,7 +89,7 @@ const REFRESH_COLUMNS =
 const CLIENT_COLUMNS =
     'client_id AS "clientId", name, type, secret_hash AS "secretHash", redirect_uris AS "redirectUris", ' +
     'post_logout_redirect_uris AS "postLogoutRedirectUris", grant_types AS "grantTypes", scopes, first_party AS "firstParty", ' +
-    'backchannel_logout_uri AS "backchannelLogoutUri", backchannel_logout_session_required AS "backchannelLogoutSessionRequired"'
+    'backchannel_logout_uri AS "backchannelLogoutUri", backchannel_logout_session_required AS "backchannelLogoutSessionRequired", product'
 const CODE_COLUMNS =
     'code_hash AS "codeHash", client_id AS "clientId", user_id AS "userId", tenant_id AS "tenantId", ' +
     'session_hash AS "sessionHash", redirect_uri AS "redirectUri", scope, nonce, code_challenge AS "codeChallenge", ' +
@@ -163,8 +163,8 @@ export class PgOidcStore implements OidcStore {
     async createClient(client: OidcClient, createdBy: string) {
         const rows = await this.query(
             `INSERT INTO oidc_clients (client_id, name, type, secret_hash, redirect_uris, post_logout_redirect_uris, grant_types, scopes,
-                           first_party, backchannel_logout_uri, backchannel_logout_session_required, source, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'admin', $12)
+                           first_party, backchannel_logout_uri, backchannel_logout_session_required, product, source, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $13, 'admin', $12)
        ON CONFLICT (client_id) DO NOTHING RETURNING 1`,
             [
                 client.clientId,
@@ -178,7 +178,8 @@ export class PgOidcStore implements OidcStore {
                 client.firstParty,
                 client.backchannelLogoutUri ?? null,
                 client.backchannelLogoutSessionRequired ?? false,
-                createdBy
+                createdBy,
+                client.product ?? null
             ]
         )
         return rows.length === 1
@@ -192,7 +193,8 @@ export class PgOidcStore implements OidcStore {
             backchannelLogoutUri: 'backchannel_logout_uri',
             scopes: 'scopes',
             grantTypes: 'grant_types',
-            firstParty: 'first_party'
+            firstParty: 'first_party',
+            product: 'product'
         }
         const sets: string[] = []
         const params: unknown[] = [clientId]
@@ -290,14 +292,15 @@ export class PgOidcStore implements OidcStore {
     async upsertClient(client: OidcClient) {
         const rows = await this.query(
             `INSERT INTO oidc_clients (client_id, name, type, secret_hash, redirect_uris, post_logout_redirect_uris, grant_types, scopes,
-                           first_party, backchannel_logout_uri, backchannel_logout_session_required)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                           first_party, backchannel_logout_uri, backchannel_logout_session_required, product)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        ON CONFLICT (client_id) DO UPDATE SET
          name = EXCLUDED.name, type = EXCLUDED.type, secret_hash = EXCLUDED.secret_hash,
          redirect_uris = EXCLUDED.redirect_uris, post_logout_redirect_uris = EXCLUDED.post_logout_redirect_uris,
          grant_types = EXCLUDED.grant_types, scopes = EXCLUDED.scopes, first_party = EXCLUDED.first_party,
          backchannel_logout_uri = EXCLUDED.backchannel_logout_uri,
-         backchannel_logout_session_required = EXCLUDED.backchannel_logout_session_required, updated_at = now()
+         backchannel_logout_session_required = EXCLUDED.backchannel_logout_session_required,
+         product = EXCLUDED.product, updated_at = now()
        -- Never a client made on /admin
        WHERE oidc_clients.source = 'file'
        RETURNING 1`,
@@ -312,7 +315,8 @@ export class PgOidcStore implements OidcStore {
                 client.scopes,
                 client.firstParty,
                 client.backchannelLogoutUri ?? null,
-                client.backchannelLogoutSessionRequired ?? false
+                client.backchannelLogoutSessionRequired ?? false,
+                client.product ?? null
             ]
         )
         return rows.length === 1

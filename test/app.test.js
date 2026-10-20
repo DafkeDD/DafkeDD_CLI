@@ -23,6 +23,7 @@ const LINK = {
     name: 'Planner',
     firstParty: true,
     scopes: ['openid', 'profile', 'email', 'tenant'],
+    product: 'planner',
     port: 3001
 }
 const files = buildFiles(DB, { app: LINK })
@@ -42,6 +43,7 @@ test('the app API runs on 4001 and allows its own frontend only', () => {
             'OIDC_ISSUER=http://localhost:4000/oidc',
             'OIDC_AUDIENCE=http://localhost:4000',
             'OIDC_CLIENT_IDS=planner',
+            'OIDC_PRODUCT=planner',
             'DATABASE_NAME=planner'
         ])
             assert.ok(env.includes(line), `${name}: ${line}`)
@@ -71,14 +73,24 @@ test('every route needs a token of the login server, except the public ones', ()
     assert.match(files['src/notes/notes.controller.ts'], /@Access\('admin'\)/)
     // The guard checks issuer, audience, the kind of token and the app it was issued to
     const guard = files['src/pasport/pasport.guard.ts']
-    for (const check of ['at+jwt', 'client_id', 'errors.NO_ORGANISATION', 'errors.FORBIDDEN', 'errors.UNAUTHORIZED'])
+    for (const check of [
+        'at+jwt',
+        'client_id',
+        'errors.NO_ORGANISATION',
+        'errors.NO_LICENSE',
+        'errors.FORBIDDEN',
+        'errors.UNAUTHORIZED'
+    ])
         assert.ok(guard.includes(check), check)
     // The defaults are those of the link code (.env wins)
     const config = files['src/pasport/pasport.config.ts']
     for (const value of ["'http://localhost:4000/oidc'", "'http://localhost:4000'", "'planner'"])
         assert.ok(config.includes(value), value)
+    assert.match(config, /OIDC_PRODUCT'\) \?\? 'planner'\)/)
+    // A free app: no product, no licence check
+    assert.match(buildFiles(DB, { app: { ...LINK, product: null } })['src/pasport/pasport.config.ts'], /\?\? ''\)/)
     assert.ok(
-        !Object.values(files).some(content => content.includes('__ISSUER__') || content.includes('__CLIENT_ID__'))
+        !Object.values(files).some(content => /__(ISSUER|AUDIENCE|CLIENT_ID|PRODUCT|TENANT_ROLE)__/.test(content))
     )
 })
 
@@ -105,6 +117,7 @@ test('the errors and validation messages of the app exist in all four languages'
     for (const locale of LOCALES) {
         const errors = JSON.parse(files[`src/i18n/${locale}/errors.json`])
         assert.ok(errors.NO_ORGANISATION && errors.NOTE_NOT_FOUND && errors.DATABASE_UNAVAILABLE, locale)
+        assert.match(errors.NO_LICENSE, /\{product\}/, locale)
         assert.ok(JSON.parse(files[`src/i18n/${locale}/validation.json`]).MAX_LENGTH, locale)
     }
 })
@@ -117,6 +130,9 @@ test('the README explains the login through the login server and documents the a
         '`planner_tenant`',
         '| `OIDC_CLIENT_IDS` | `planner` |',
         'npm run test:db',
+        '### Licences (the product of this app)',
+        '| `OIDC_PRODUCT` | `planner` |',
+        '`403 errors.NO_LICENSE`',
         'http://localhost:4001/docs',
         'CORS allows `http://localhost:3001`'
     ])

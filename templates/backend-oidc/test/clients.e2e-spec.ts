@@ -37,6 +37,7 @@ const APP = {
 describe('Apps on /admin (e2e)', () => {
     let app: INestApplication<App>
     const store = new MemoryOidcStore()
+    const billing = new MemoryBillingStore()
     const audit = new MemoryAuditStore(store)
     const http = () => request(app.getHttpServer())
     const tokens = { root: '', alice: '' }
@@ -55,7 +56,7 @@ describe('Apps on /admin (e2e)', () => {
             .overrideProvider(OIDC_STORE)
             .useValue(store)
             .overrideProvider(BILLING_STORE)
-            .useValue(new MemoryBillingStore())
+            .useValue(billing)
             .overrideProvider(AUDIT_STORE)
             .useValue(audit)
             .compile()
@@ -64,7 +65,11 @@ describe('Apps on /admin (e2e)', () => {
         await app.init()
         tokens.root = (await login('root@example.com', FRONTEND, { tenant_hint: acme.id })).access_token
         tokens.alice = (await login('alice@example.com')).access_token
+        tenantId = acme.id
+        aliceId = alice.id
     })
+    let tenantId = ''
+    let aliceId = ''
 
     afterAll(async () => {
         await app.close()
@@ -370,5 +375,75 @@ describe('Apps on /admin (e2e)', () => {
         const off = (await http().post('/admin/clients/linked.app/link-code').set(bearer(tokens.root))).body.code
         await http().patch('/admin/clients/linked.app').set(bearer(tokens.root)).send({ enabled: false }).expect(200)
         await http().post('/oidc/link').send({ code: off }).expect(400)
+    })
+
+    it('an app sells a product: its tokens carry the licence of the user, checked again at every refresh', async () => {
+        const claims = (token: string) =>
+            JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as Record<string, unknown>
+        // The product must exist on /licenses
+        const unknown = await create({ clientId: 'shop.app', product: 'shop' }).expect(400)
+        expect(unknown.body.error).toBe('oidc.CLIENT_UNKNOWN_PRODUCT')
+        expect(unknown.body.message).toContain('shop')
+        await http()
+            .post('/admin/products')
+            .set(bearer(tokens.root))
+            .send({ code: 'shop', name: 'Shop', priceMonthCents: 1000, priceYearCents: 10000 })
+            .expect(201)
+        const made = await create({ clientId: 'shop.app', product: 'shop', firstParty: true }).expect(201)
+        expect(made.body.client.product).toBe('shop')
+        // One product, one app
+        const taken = await create({ clientId: 'shop.copy', product: 'shop' }).expect(409)
+        expect(taken.body.error).toBe('oidc.CLIENT_PRODUCT_TAKEN')
+        expect(taken.body.message).toContain('Partner Planner')
+        await create({ clientId: 'shop.copy', product: 'Not A Code' }).expect(400)
+        // The CLI learns the product with the link code
+        const code = (await http().post('/admin/clients/shop.app/link-code').set(bearer(tokens.root))).body.code
+        const linked = await http().post('/oidc/link').send({ code }).expect(200)
+        expect(linked.body.client.product).toBe('shop')
+
+        // Alice joined before the product existed: her first login to the app starts her trial
+        const shop = { id: 'shop.app', redirect: APP.redirectUris[0]! }
+        const first = await login('alice@example.com', shop)
+        const license = claims(first.access_token).license as { product: string; status: string; ends_at: number }
+        expect(license).toMatchObject({ product: 'shop', status: 'trial' })
+        expect(license.ends_at * 1000).toBeGreaterThan(Date.now() + 13 * 24 * 60 * 60 * 1000)
+        expect(audit.events.findLast(event => event.action === 'licences.trial_started')).toMatchObject({
+            tenantId,
+            targetId: aliceId,
+            details: { product: 'shop', reason: 'first login to the app' }
+        })
+        // The trial ends: the next token says so (no second trial)
+        const product = (await billing.findProductByCode('shop'))!
+        await billing.setTrialEnd(tenantId, product.id, aliceId, new Date(Date.now() - 1000))
+        const refreshed = await http()
+            .post('/oidc/token')
+            .type('form')
+            .send({ grant_type: 'refresh_token', refresh_token: first.refresh_token, client_id: 'shop.app' })
+            .expect(200)
+        expect(claims(refreshed.body.access_token).license).toEqual({ product: 'shop', status: 'none' })
+        // A seat: the admin gives Alice one of the free seats a superadmin granted
+        await http()
+            .post(`/admin/tenants/${tenantId}/grants`)
+            .set(bearer(tokens.root))
+            .send({ productCode: 'shop', seats: 1 })
+            .expect(201)
+        await http()
+            .post(`/tenants/current/licenses/shop/seats/${aliceId}`)
+            .set(bearer(tokens.alice))
+            .expect(response => expect([200, 201]).toContain(response.status))
+        const seat = await login('alice@example.com', shop)
+        expect(claims(seat.access_token).license).toEqual({ product: 'shop', status: 'seat' })
+        // Superadmins always
+        const root = await login('root@example.com', shop, { tenant_hint: tenantId })
+        expect(claims(root.access_token).license).toEqual({ product: 'shop', status: 'superadmin' })
+
+        // Without a product: no licence claim at all
+        await http()
+            .put('/admin/clients/shop.app')
+            .set(bearer(tokens.root))
+            .send({ ...APP, firstParty: true, product: '' })
+            .expect(200)
+            .expect(response => expect(response.body.product).toBeNull())
+        expect(claims((await login('alice@example.com', shop)).access_token)).not.toHaveProperty('license')
     })
 })

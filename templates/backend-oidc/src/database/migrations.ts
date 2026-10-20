@@ -521,5 +521,15 @@ CREATE TABLE oidc_link_codes (
 );
 CREATE INDEX oidc_link_codes_client ON oidc_link_codes (client_id);
 `
+    },
+    {
+        id: 11,
+        name: 'an app is a product',
+        sql: `
+-- The product (license_products.code) an app sells: one licence per user per app. NULL: the app is free (the login
+-- server itself, or an application of others). One product belongs to one app.
+ALTER TABLE oidc_clients ADD COLUMN product text;
+CREATE UNIQUE INDEX oidc_clients_product_key ON oidc_clients (product) WHERE product IS NOT NULL;
+`
     }
 ]

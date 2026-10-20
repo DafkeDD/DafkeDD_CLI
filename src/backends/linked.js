@@ -62,6 +62,8 @@ export async function useLinkCode({ server, code, port, fetchImpl = fetch }) {
         clientSecret: body.clientSecret ?? null,
         name: body.client.name,
         firstParty: body.client.firstParty === true,
+        // The product (licence) the app sells on the login server: its API checks it (OIDC_PRODUCT); null: free
+        product: typeof body.client.product === 'string' && body.client.product ? body.client.product : null,
         scopes: body.client.scopes ?? [],
         port
     }
@@ -161,6 +163,15 @@ export const linked = {
                 ok: true,
                 text: `De API van de app (http://localhost:${APP_PORT}) aanvaardt enkel tokens van die login server voor deze app; de data staat per organisatie in ${answers.database?.database ?? 'de eigen database'} (Row-Level Security)`
             },
+            link.product
+                ? {
+                      ok: true,
+                      text: `De app verkoopt het product "${link.product}": enkel wie er een licentie van heeft (proefperiode of plaats) ziet de data; licenties beheer je op ${link.accountUrl}/licenses`
+                  }
+                : {
+                      ok: true,
+                      text: 'De app verkoopt (nog) geen product: kies er een op /admin → Apps en zet de code in OIDC_PRODUCT van ./backend/.env'
+                  },
             ...(link.firstParty
                 ? []
                 : [

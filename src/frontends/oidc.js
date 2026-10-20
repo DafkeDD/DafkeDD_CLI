@@ -1587,6 +1587,11 @@ export const APPS_MESSAGES = {
         refreshTokensHint: 'The app stays logged in while the session runs (rotated at every use).',
         firstParty: 'Our own application',
         firstPartyHint: 'No consent screen, and it may call this API as the user. Only for apps you trust completely.',
+        product: 'Product (licence)',
+        productNone: 'None: a free app',
+        productHint:
+            'What this app sells: every user needs a licence of it (trial or seat). Make products on /licenses; one product per app.',
+        sells: 'Sells {product}',
         create: 'Make the app',
         save: 'Save',
         cancel: 'Cancel',
@@ -1655,6 +1660,11 @@ export const APPS_MESSAGES = {
         firstParty: 'Onze eigen toepassing',
         firstPartyHint:
             'Geen toestemmingsscherm, en ze mag deze API als de gebruiker aanroepen. Alleen voor apps die je volledig vertrouwt.',
+        product: 'Product (licentie)',
+        productNone: 'Geen: een gratis app',
+        productHint:
+            'Wat deze app verkoopt: elke gebruiker heeft er een licentie van nodig (proefperiode of plaats). Producten maak je op /licenses; één product per app.',
+        sells: 'Verkoopt {product}',
         create: 'App maken',
         save: 'Opslaan',
         cancel: 'Annuleren',
@@ -1723,6 +1733,11 @@ export const APPS_MESSAGES = {
         firstParty: 'Notre propre application',
         firstPartyHint:
             "Pas d'écran d'autorisation, et elle peut appeler cette API au nom de l'utilisateur. Seulement pour des applications de toute confiance.",
+        product: 'Produit (licence)',
+        productNone: 'Aucun : une application gratuite',
+        productHint:
+            "Ce que vend cette application : chaque utilisateur en a besoin d'une licence (essai ou place). Créez les produits sur /licenses ; un produit par application.",
+        sells: 'Vend {product}',
         create: "Créer l'application",
         save: 'Enregistrer',
         cancel: 'Annuler',
@@ -1794,6 +1809,11 @@ export const APPS_MESSAGES = {
         firstParty: 'Unsere eigene Anwendung',
         firstPartyHint:
             'Kein Zustimmungsbildschirm, und sie darf diese API als Benutzer aufrufen. Nur für Apps, denen du voll vertraust.',
+        product: 'Produkt (Lizenz)',
+        productNone: 'Keins: eine kostenlose App',
+        productHint:
+            'Was diese App verkauft: jeder Benutzer braucht eine Lizenz davon (Testphase oder Platz). Produkte legst du unter /licenses an; ein Produkt pro App.',
+        sells: 'Verkauft {product}',
         create: 'App anlegen',
         save: 'Speichern',
         cancel: 'Abbrechen',
@@ -2459,6 +2479,50 @@ export const NOTES_MESSAGES = {
     }
 }
 
+/** The licence card of a linked app (src/components/app-license.tsx): the licence for the product the app sells. */
+export const APP_LICENSE_MESSAGES = {
+    en: {
+        title: 'Licence · {product}',
+        trial: 'Trial until {date}',
+        seat: 'You have a licence for this app.',
+        superadmin: 'Superadmin: always access.',
+        manage: 'Licences of the organisation',
+        noneTitle: 'No licence for {product}',
+        noneAdmin: 'Give yourself a seat or buy more on the licences page of the organisation.',
+        noneMember: 'Ask the administrator of your organisation for a licence.'
+    },
+    nl: {
+        title: 'Licentie · {product}',
+        trial: 'Proefperiode tot {date}',
+        seat: 'Je hebt een licentie voor deze app.',
+        superadmin: 'Superadmin: altijd toegang.',
+        manage: 'Licenties van de organisatie',
+        noneTitle: 'Geen licentie voor {product}',
+        noneAdmin: 'Geef jezelf een plaats of koop er meer op de licentiepagina van de organisatie.',
+        noneMember: 'Vraag de beheerder van je organisatie om een licentie.'
+    },
+    fr: {
+        title: 'Licence · {product}',
+        trial: "Période d'essai jusqu'au {date}",
+        seat: 'Vous avez une licence pour cette application.',
+        superadmin: 'Superadmin : toujours accès.',
+        manage: "Licences de l'organisation",
+        noneTitle: 'Pas de licence pour {product}',
+        noneAdmin: "Attribuez-vous une place ou achetez-en davantage sur la page des licences de l'organisation.",
+        noneMember: "Demandez une licence à l'administrateur de votre organisation."
+    },
+    de: {
+        title: 'Lizenz · {product}',
+        trial: 'Testphase bis {date}',
+        seat: 'Du hast eine Lizenz für diese App.',
+        superadmin: 'Superadmin: immer Zugriff.',
+        manage: 'Lizenzen der Organisation',
+        noneTitle: 'Keine Lizenz für {product}',
+        noneAdmin: 'Gib dir einen Platz oder kaufe weitere auf der Lizenzseite der Organisation.',
+        noneMember: 'Bitte den Administrator deiner Organisation um eine Lizenz.'
+    }
+}
+
 /** All files of templates/frontend-oidc with the placeholders filled in. */
 function readTemplates(dir, apiPort, appName = null, pasportApiUrl = '') {
     const result = {}
@@ -2491,6 +2555,7 @@ export const LINKED_FILES = [
     'src/app/api/app/[...path]/route.ts',
     'src/app/api/backend/[...path]/route.ts',
     'src/components/account-ui.tsx',
+    'src/components/app-license.tsx',
     'src/components/notes.tsx',
     'src/components/presence.tsx',
     'src/components/session-links.tsx',

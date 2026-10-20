@@ -103,3 +103,36 @@ test('the frontend: the card "Apps" on /admin, PUT through /api/backend, the tex
     const all = withApi({ ...nextFiles }, { port: 4000, oidc: true }, { ui: false })
     assert.deepEqual(JSON.parse(all['messages/fr.json']).Apps, APPS_MESSAGES.fr)
 })
+
+test('an app is a product: migration 11, the licence claim in its tokens, the product on /admin', () => {
+    assert.match(backend['src/database/migrations.ts'], /id: 11,\s+name: 'an app is a product'/)
+    assert.match(backend['src/database/migrations.ts'], /ADD COLUMN product text/)
+    assert.match(backend['src/oidc/store/pg-oidc.store.ts'], /product = EXCLUDED\.product/)
+    // The billing module answers for the OpenID Connect part (no circular module dependency)
+    assert.match(backend['src/oidc/app-licenses.ts'], /export class AppLicenses/)
+    assert.match(backend['src/billing/billing.service.ts'], /this\.appLicenses\.register\(/)
+    assert.match(backend['src/billing/billing.service.ts'], /reason: 'first login to the app'/)
+    const tokens = backend['src/oidc/tokens.service.ts']
+    assert.match(tokens, /license: await this\.licenses\.claim\(/)
+    assert.match(tokens, /\.\.\.superadmin,\s+\.\.\.license\s+\}/)
+    const service = backend['src/oidc/clients/clients.service.ts']
+    for (const key of ['oidc.CLIENT_UNKNOWN_PRODUCT', 'oidc.CLIENT_PRODUCT_TAKEN', 'product: client.product ?? null'])
+        assert.ok(service.includes(key), key)
+    for (const locale of LANGUAGES) {
+        const oidc = JSON.parse(backend[`src/i18n/${locale}/oidc.json`])
+        assert.match(oidc.CLIENT_UNKNOWN_PRODUCT, /\{product\}/, locale)
+        assert.match(oidc.CLIENT_PRODUCT_TAKEN, /\{app\}/, locale)
+        for (const key of ['product', 'productNone', 'productHint', 'sells'])
+            assert.ok(APPS_MESSAGES[locale][key], `${locale} ${key}`)
+    }
+    assert.match(frontend['src/components/apps.tsx'], /backend\('admin\/products'\)/)
+    assert.match(frontend['src/components/apps.tsx'], /<select name='product'/)
+    // Documented: the field, the errors, the claim
+    const create = endpoints({ database: DB, oidc: true }).find(e => e.method === 'POST' && e.path === '/admin/clients')
+    assert.ok(create.body.fields.some(([name]) => name === 'product'))
+    assert.ok(create.errors.some(([, key]) => key === 'oidc.CLIENT_PRODUCT_TAKEN'))
+    const readme = backend['README.md']
+    for (const text of ['### Apps are products (one licence per user per app)', '"license": { "product": "planner"'])
+        assert.ok(readme.includes(text), text)
+    assert.ok(backend['test/clients.e2e-spec.ts'].includes('its tokens carry the licence of the user'))
+})

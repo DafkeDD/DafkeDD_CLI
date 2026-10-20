@@ -16,6 +16,14 @@ export class PasportConfig {
         return (this.config.get<string>('OIDC_AUDIENCE') ?? '__AUDIENCE__').replace(/\/+$/, '')
     }
 
+    /**
+     * The product (licence code on the login server) this app sells: members need a licence of it (OIDC_PRODUCT).
+     * Empty: the app is free, no licence is checked.
+     */
+    get product(): string | null {
+        return (this.config.get<string>('OIDC_PRODUCT') ?? '__PRODUCT__').trim() || null
+    }
+
     /** The apps (client_id) whose tokens this API accepts: this app's frontend, and others you trust. */
     get clientIds(): string[] {
         return (this.config.get<string>('OIDC_CLIENT_IDS') ?? '__CLIENT_ID__')

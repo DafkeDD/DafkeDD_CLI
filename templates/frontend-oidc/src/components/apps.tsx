@@ -28,10 +28,15 @@ export type App = {
     scopes: string[]
     grantTypes: string[]
     firstParty: boolean
+    /** The product (licence code) the app sells; null: a free app. */
+    product: string | null
     hasSecret: boolean
     consents: number
     createdAt: string
 }
+
+/** A product of /licenses, to sell with an app. */
+type Product = { code: string; name: string; active: boolean }
 
 /** The scopes an app can ask for; openid always. */
 const SCOPES = ['openid', 'profile', 'email', 'tenant'] as const
@@ -54,7 +59,9 @@ function fields(form: HTMLFormElement) {
         backchannelLogoutUri: String(values.get('backchannelLogoutUri') ?? '').trim(),
         scopes: ['openid', ...SCOPES.filter(scope => scope !== 'openid' && values.get('scope_' + scope) === 'on')],
         refreshTokens: values.get('refreshTokens') === 'on',
-        firstParty: values.get('firstParty') === 'on'
+        firstParty: values.get('firstParty') === 'on',
+        // Empty: a free app
+        product: String(values.get('product') ?? '') || null
     }
 }
 
@@ -68,6 +75,7 @@ export function Apps() {
     const format = useFormatter()
     const backend = useBackend()
     const [apps, setApps] = useState<App[] | null>(null)
+    const [products, setProducts] = useState<Product[]>([])
     const [error, setError] = useState('')
     const [notice, setNotice] = useState('')
     const [busy, setBusy] = useState(false)
@@ -87,6 +95,12 @@ export function Apps() {
         backend('admin/clients')
             .then(show)
             .catch(() => show(null))
+        // The products of /licenses: an app can sell one of them
+        backend('admin/products')
+            .then(result => {
+                if (result.status === 200) setProducts(result.body as unknown as Product[])
+            })
+            .catch(() => undefined)
         // once when the page opens
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
@@ -227,6 +241,20 @@ export function Apps() {
                     defaultValue={app?.backchannelLogoutUri ?? ''}
                     placeholder='https://app.example.com/backchannel-logout'
                 />
+                <label className='flex flex-col gap-1.5 text-sm font-medium'>
+                    {t('product')}
+                    <select name='product' defaultValue={app?.product ?? ''} className={SELECT}>
+                        <option value=''>{t('productNone')}</option>
+                        {products
+                            .filter(product => product.active || product.code === app?.product)
+                            .map(product => (
+                                <option key={product.code} value={product.code}>
+                                    {product.name} ({product.code})
+                                </option>
+                            ))}
+                    </select>
+                    <span className='text-xs font-normal text-[var(--text-3)]'>{t('productHint')}</span>
+                </label>
                 <fieldset className='flex flex-col gap-1.5 text-sm'>
                     <legend className='mb-1.5 font-medium'>{t('scopes')}</legend>
                     <div className='flex flex-wrap gap-x-5 gap-y-2'>
@@ -353,6 +381,15 @@ export function Apps() {
                                     {app.type === 'public' ? t('typePublicShort') : t('typeConfidentialShort')}
                                 </span>
                                 <span className={BADGE}>{app.firstParty ? t('own') : t('others')}</span>
+                                {app.product && (
+                                    <span className={BADGE}>
+                                        {t('sells', {
+                                            product:
+                                                products.find(product => product.code === app.product)?.name ??
+                                                app.product
+                                        })}
+                                    </span>
+                                )}
                                 {app.source === 'file' && <span className={BADGE}>{t('fromFile')}</span>}
                                 {app.disabled && <span className={BADGE}>{t('disabled')}</span>}
                             </div>

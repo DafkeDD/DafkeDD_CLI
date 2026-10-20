@@ -5,6 +5,8 @@ import type { VerifyKey } from '../src/pasport/jose.js'
 export const ISSUER = 'http://login.test/oidc'
 export const AUDIENCE = 'http://login.test'
 export const CLIENT_ID = 'planner'
+/** The product the app sells (OIDC_PRODUCT in the tests). */
+export const PRODUCT = 'planner'
 export const KID = 'test-key'
 
 const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
@@ -38,6 +40,8 @@ export function accessToken(
         jti: randomUUID(),
         sid: randomUUID(),
         tenant: TENANT_A,
+        // A running trial of the product of the app
+        license: { product: PRODUCT, status: 'trial', ends_at: now + 14 * 24 * 60 * 60 },
         ...claims
     }
     const input = part({ alg: 'ES256', kid: KID, typ: 'at+jwt', ...header }) + '.' + part(payload)

@@ -1,5 +1,6 @@
 import { createHmac, randomUUID } from 'node:crypto'
 import { AuditService } from '../audit/audit.service.js'
+import { AppLicenses } from './app-licenses.js'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { deriveKey, PKCE_VERIFIER, pkceChallenge, randomToken, safeEqual, sha256 } from './crypto.js'
 import { halfHash, signJwt } from './jose.js'
@@ -50,7 +51,8 @@ export class TokensService {
         private readonly keys: KeysService,
         private readonly oidc: OidcService,
         private readonly config: OidcConfig,
-        private readonly audit: AuditService
+        private readonly audit: AuditService,
+        private readonly licenses: AppLicenses
     ) {}
 
     async token(authorization: string | undefined, body: Params): Promise<TokenResponse> {
@@ -205,6 +207,17 @@ export class TokensService {
                 ? { tenant: { id: membership.tenantId, name: membership.name, role: membership.role } }
                 : {}
         const superadmin = user.isSuperadmin && tenantVisible ? { superadmin: true } : {}
+        // An app that sells a product: may this user use it in this organisation? Checked again at every refresh.
+        const license = client.product
+            ? {
+                  license: await this.licenses.claim(
+                      membership?.tenantId ?? null,
+                      user.id,
+                      client.product,
+                      user.isSuperadmin
+                  )
+              }
+            : {}
         const accessKey = await this.keys.signingKey('ES256')
         const accessToken = signJwt(
             {
@@ -220,7 +233,8 @@ export class TokensService {
                 acr: grant.session.acr,
                 sid: grant.session.id,
                 ...tenantClaim,
-                ...superadmin
+                ...superadmin,
+                ...license
             },
             { alg: 'ES256', kid: accessKey.kid, typ: 'at+jwt' },
             accessKey.privateKey
@@ -239,7 +253,7 @@ export class TokensService {
                 amr: grant.session.amr,
                 sid: grant.session.id,
                 at_hash: halfHash(accessToken),
-                ...(grant.scope.split(' ').includes('tenant') ? { ...tenantClaim, ...superadmin } : {})
+                ...(grant.scope.split(' ').includes('tenant') ? { ...tenantClaim, ...superadmin, ...license } : {})
             },
             { alg: 'RS256', kid: idKey.kid, typ: 'JWT' },
             idKey.privateKey

@@ -20,18 +20,26 @@ export const tenantRole = database => `${database}_tenant`
 export const ERRORS = {
     en: {
         NO_ORGANISATION: 'Log in with an organisation to use this',
+        NO_LICENSE:
+            'You have no licence for {product} in this organisation: buy one on Licences or ask your administrator',
         NOTE_NOT_FOUND: 'This note does not exist (anymore)'
     },
     nl: {
         NO_ORGANISATION: 'Log in met een organisatie om dit te gebruiken',
+        NO_LICENSE:
+            'Je hebt geen licentie voor {product} in deze organisatie: koop er een bij Licenties of vraag het je beheerder',
         NOTE_NOT_FOUND: 'Deze notitie bestaat niet (meer)'
     },
     fr: {
         NO_ORGANISATION: 'Connectez-vous avec une organisation pour utiliser ceci',
+        NO_LICENSE:
+            "Vous n'avez pas de licence pour {product} dans cette organisation : achetez-en une sous Licences ou demandez à votre administrateur",
         NOTE_NOT_FOUND: "Cette note n'existe pas (ou plus)"
     },
     de: {
         NO_ORGANISATION: 'Melde dich mit einer Organisation an, um dies zu nutzen',
+        NO_LICENSE:
+            'Du hast keine Lizenz für {product} in dieser Organisation: kaufe eine unter Lizenzen oder frage deinen Administrator',
         NOTE_NOT_FOUND: 'Diese Notiz gibt es nicht (mehr)'
     }
 }
@@ -52,7 +60,8 @@ export function appFiles({ database, link }) {
         __TENANT_ROLE__: tenantRole(database),
         __ISSUER__: link.issuer,
         __AUDIENCE__: link.apiUrl,
-        __CLIENT_ID__: link.clientId
+        __CLIENT_ID__: link.clientId,
+        __PRODUCT__: link.product ?? ''
     }
     const result = {}
     for (const entry of readdirSync(TEMPLATE_DIR, { recursive: true, withFileTypes: true })) {
@@ -76,6 +85,8 @@ export const envLines = link =>
         `OIDC_AUDIENCE=${link.apiUrl}`,
         '# The apps whose tokens are accepted (comma separated): the frontend of this app',
         `OIDC_CLIENT_IDS=${link.clientId}`,
+        '# The product (licence) this app sells: members need a trial or a seat of it. Empty: a free app',
+        `OIDC_PRODUCT=${link.product ?? ''}`,
         ''
     ].join('\n')
 
@@ -87,7 +98,8 @@ const NOTE = {
 }
 const TOKEN_ERRORS = [
     [401, 'errors.UNAUTHORIZED'],
-    [403, 'errors.NO_ORGANISATION']
+    [403, 'errors.NO_ORGANISATION'],
+    [403, 'errors.NO_LICENSE']
 ]
 
 /** The endpoints of the app backend, for the README (the docs test checks them against the controllers). */
@@ -97,14 +109,15 @@ export const appEndpoints = () => [
         path: '/me',
         tag: 'me',
         summary:
-            'Who is calling, as the access token of the login server says: account id, organisation with role, superadmin. Also without an organisation.',
+            'Who is calling, as the access token of the login server says: account id, organisation with role, superadmin, and the licence for the product of this app (`null` when it sells none). Also without an organisation or a licence.',
         bearer: true,
         response: {
             status: 200,
             example: {
                 sub: NOTE.authorId,
                 tenant: { id: '0f9e8d7c-6b5a-4493-8271-605f4e3d2c1b', name: 'Praktijk De Linde', role: 'admin' },
-                superadmin: false
+                superadmin: false,
+                license: { product: 'planner', status: 'trial', endsAt: '2026-11-03T08:00:00.000Z' }
             }
         },
         errors: [[401, 'errors.UNAUTHORIZED']]

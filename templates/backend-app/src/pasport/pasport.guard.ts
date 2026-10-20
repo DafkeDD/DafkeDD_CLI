@@ -2,18 +2,32 @@ import { type CanActivate, type ExecutionContext, HttpStatus, Injectable } from 
 import { Reflector } from '@nestjs/core'
 import type { Request } from 'express'
 import { AppException } from '../common/app.exception.js'
-import { ACCESS_KEY, type AccessLevel, type Caller } from './access.js'
+import { ACCESS_KEY, type AccessLevel, type Caller, LICENSE_STATUSES, type LicenseStatus } from './access.js'
 import { ALGORITHMS, JoseError, type VerifyKey, verifyJwt } from './jose.js'
 import { PasportConfig } from './pasport.config.js'
 import { PasportKeys } from './pasport-keys.service.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/** The `license` claim of the login server, checked; null when there is none (or it has an unexpected shape). */
+function license(value: unknown): Caller['license'] {
+    const claim = value as { product?: unknown; status?: unknown; ends_at?: unknown } | undefined
+    if (!claim || typeof claim.product !== 'string' || !LICENSE_STATUSES.includes(claim.status as LicenseStatus))
+        return null
+    return {
+        product: claim.product,
+        status: claim.status as LicenseStatus,
+        endsAt: typeof claim.ends_at === 'number' ? new Date(claim.ends_at * 1000).toISOString() : null
+    }
+}
+
 /**
  * Every route needs an access token of the login server (Authorization: Bearer ...), unless it is @Public().
  * The token is checked here, without a call to the login server: its signature (the keys of the login server),
  * the issuer, the audience, that it is an access token (typ at+jwt), that it is not expired, and that it was issued
  * to an app this API trusts (OIDC_CLIENT_IDS). Access tokens live 10 minutes; the frontend renews them.
+ * When the app sells a product (OIDC_PRODUCT), members and admins also need a licence of it: the `license` claim
+ * the login server puts in the token (a running trial, a seat, or a superadmin). Otherwise 403 errors.NO_LICENSE.
  */
 @Injectable()
 export class PasportGuard implements CanActivate {
@@ -33,6 +47,9 @@ export class PasportGuard implements CanActivate {
         request.caller = caller
         if (level === 'account') return true
         if (!caller.tenant) throw new AppException('errors.NO_ORGANISATION', HttpStatus.FORBIDDEN)
+        const product = this.config.product
+        if (product && (caller.license?.product !== product || caller.license.status === 'none'))
+            throw new AppException('errors.NO_LICENSE', HttpStatus.FORBIDDEN, { product })
         if (level === 'admin' && caller.tenant.role !== 'admin' && !caller.superadmin)
             throw new AppException('errors.FORBIDDEN', HttpStatus.FORBIDDEN)
         return true
@@ -74,7 +91,8 @@ export class PasportGuard implements CanActivate {
                     : null,
                 superadmin: payload.superadmin === true,
                 sid: typeof payload.sid === 'string' ? payload.sid : null,
-                clientId
+                clientId,
+                license: license(payload.license)
             }
         } catch (error) {
             if (error instanceof JoseError) throw new AppException('errors.UNAUTHORIZED', HttpStatus.UNAUTHORIZED)

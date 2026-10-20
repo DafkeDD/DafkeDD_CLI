@@ -50,6 +50,29 @@ export interface Tenant {
     role: 'user' | 'admin'
 }
 
+/**
+ * The licence of the user for the product of this app (the `license` claim of an app that sells one), in the
+ * organisation of the session: a running trial (until endsAt), a seat, a superadmin, or none.
+ */
+export interface License {
+    product: string
+    status: 'trial' | 'seat' | 'superadmin' | 'none'
+    /** Only for a trial: when it ends (milliseconds). */
+    endsAt: number | null
+}
+
+/** The `license` claim, checked; null when there is none. */
+function licenseOf(value: unknown): License | null {
+    const claim = value as { product?: unknown; status?: unknown; ends_at?: unknown } | undefined
+    if (!claim || typeof claim.product !== 'string') return null
+    if (!['trial', 'seat', 'superadmin', 'none'].includes(String(claim.status))) return null
+    return {
+        product: claim.product,
+        status: claim.status as License['status'],
+        endsAt: typeof claim.ends_at === 'number' ? claim.ends_at * 1000 : null
+    }
+}
+
 /** What the session cookie holds. */
 export interface Session {
     sub: string
@@ -68,6 +91,8 @@ export interface Session {
     idToken: string
     /** The session at the login server (sid): a back-channel logout of it ends this session too. */
     sid?: string
+    /** The licence for the product this app sells (renewed with the tokens); null or missing: a free app. */
+    license?: License | null
 }
 
 /** A login in progress (between /api/auth/login and /api/auth/callback). */
@@ -219,7 +244,13 @@ export async function verifyIdToken(
     idToken: string,
     nonce: string | null,
     accessToken: string
-): Promise<{ sub: string; sid: string | undefined; tenant: Tenant | null; superadmin: boolean }> {
+): Promise<{
+    sub: string
+    sid: string | undefined
+    tenant: Tenant | null
+    superadmin: boolean
+    license: License | null
+}> {
     const [header, payload, signature] = idToken.split('.')
     if (!header || !payload || !signature) throw new Error('Malformed ID token')
     const head = JSON.parse(Buffer.from(header, 'base64url').toString('utf8')) as { alg?: string; kid?: string }
@@ -247,7 +278,8 @@ export async function verifyIdToken(
         sub: claims.sub,
         sid: typeof claims.sid === 'string' ? claims.sid : undefined,
         tenant,
-        superadmin: claims.superadmin === true
+        superadmin: claims.superadmin === true,
+        license: licenseOf(claims.license)
     }
 }
 

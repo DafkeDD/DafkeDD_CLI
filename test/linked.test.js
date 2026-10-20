@@ -20,6 +20,7 @@ const LINK = {
     name: 'Planner',
     firstParty: true,
     scopes: ['openid', 'profile', 'email', 'tenant'],
+    product: null,
     port: 3001
 }
 const ANSWER = {
@@ -202,6 +203,12 @@ test('the linked frontend: login, session, profile and the notes of its own API;
     assert.match(proxy, /Authorization: 'Bearer ' \+ session\.accessToken/)
     assert.match(proxy, /request\.headers\.get\('origin'\) !== new URL\(APP_URL\)\.origin/)
     assert.match(all['src/components/notes.tsx'], /fetch\('\/api\/app\/notes'/)
+    // The licence for the product of the app: kept in the session, shown on the home page
+    assert.match(all['src/lib/oidc.ts'], /license: licenseOf\(claims\.license\)/)
+    assert.match(all['src/lib/refresh.ts'], /\blicense\n/)
+    assert.match(page, /<AppLicense license=\{license\} admin=\{admin\} \/>/)
+    assert.match(page, /license\?\.status !== 'none' && <Notes/)
+    assert.match(all['src/components/app-license.tsx'], /ACCOUNT_URL \+ '\/licenses'/)
     for (const locale of ['en', 'nl', 'fr', 'de']) {
         const messages = JSON.parse(all[`messages/${locale}.json`])
         assert.deepEqual(
@@ -209,11 +216,16 @@ test('the linked frontend: login, session, profile and the notes of its own API;
             Object.keys(JSON.parse(all['messages/en.json']).Notes).sort()
         )
         assert.ok(messages.Notes.title)
+        assert.deepEqual(
+            Object.keys(messages.AppLicense).sort(),
+            Object.keys(JSON.parse(all['messages/en.json']).AppLicense).sort()
+        )
     }
     // The login server itself has no notes
     const server = withApi({ ...files }, { port: 4000, oidc: true }, { ui: false })
     assert.ok(!server['src/components/notes.tsx'])
     assert.ok(!JSON.parse(server['messages/en.json']).Notes)
+    assert.ok(!server['src/components/app-license.tsx'])
     assert.match(server['src/lib/pasport.ts'], /\?\? API_URL\)/)
 })
 
@@ -317,7 +329,9 @@ test('the READMEs explain the link code and the linked frontend', async () => {
         'http://localhost:3001',
         '`/api/app/...`',
         'NEXT_PUBLIC_PASPORT_API_URL',
-        'notes of the organisation'
+        'notes of the organisation',
+        '**Licence.**',
+        'errors.NO_LICENSE'
     ])
         assert.ok(readme.includes(text), text)
     assert.ok(!readme.includes('eid:mock'))

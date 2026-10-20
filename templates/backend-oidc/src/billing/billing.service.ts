@@ -3,6 +3,7 @@ import { AuditService } from '../audit/audit.service.js'
 import { HttpStatus, Inject, Injectable, Logger, type OnModuleInit, Optional } from '@nestjs/common'
 import { AppException } from '../common/app.exception.js'
 import { AccountService } from '../oidc/account.service.js'
+import { AppLicenses, type LicenseClaim } from '../oidc/app-licenses.js'
 import { OIDC_STORE, type OidcStore } from '../oidc/store/oidc.store.js'
 import { BillingConfig } from './billing.config.js'
 import { PAYMENT_PROVIDER, type PaymentProvider, type ProviderPayment } from './payments/payment-provider.js'
@@ -102,12 +103,51 @@ export class BillingService implements OnModuleInit {
         private readonly config: BillingConfig,
         private readonly accounts: AccountService,
         private readonly audit: AuditService,
+        private readonly appLicenses: AppLicenses,
         @Optional() @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider | null
     ) {}
 
     onModuleInit() {
         // Every new member (registration, accepted invitation) starts with a trial of every active product
         this.accounts.onMemberJoined((tenantId, userId) => this.startTrials(tenantId, userId))
+        // The tokens of an app that sells a product carry the licence of the user (src/oidc/app-licenses.ts)
+        this.appLicenses.register({
+            productExists: async code => (await this.store.findProductByCode(code)) !== null,
+            claim: (tenantId, userId, code, superadmin) => this.licenseClaim(tenantId, userId, code, superadmin)
+        })
+    }
+
+    /**
+     * The `license` claim of a user for the product of an app, in the organisation of the login. A member who never had
+     * a trial of it (the product came later than the member) gets one now: everybody first gets a trial.
+     */
+    async licenseClaim(
+        tenantId: string | null,
+        userId: string,
+        code: string,
+        superadmin: boolean
+    ): Promise<LicenseClaim> {
+        const none: LicenseClaim = { product: code, status: 'none' }
+        const product = await this.store.findProductByCode(code)
+        if (!product?.active) return none
+        if (superadmin) return { product: code, status: 'superadmin' }
+        if (tenantId === null) return none
+        let result = await this.access(tenantId, userId, code)
+        if (!result.access && !(await this.store.findTrial(tenantId, product.id, userId))) {
+            const endsAt = new Date(Date.now() + this.config.trialDays * DAY)
+            if (await this.store.startTrial(tenantId, product.id, userId, endsAt)) {
+                await this.audit.record('licences.trial_started', {
+                    tenantId,
+                    target: { type: 'user', id: userId },
+                    details: { product: code, endsAt: endsAt.toISOString(), reason: 'first login to the app' }
+                })
+                result = await this.access(tenantId, userId, code)
+            }
+        }
+        if (!result.access) return none
+        return result.via === 'trial'
+            ? { product: code, status: 'trial', ends_at: Math.floor(result.endsAt.getTime() / 1000) }
+            : { product: code, status: result.via }
     }
 
     // ---------------------------------------------------------------- products

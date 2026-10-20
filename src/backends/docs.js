@@ -417,6 +417,11 @@ export function backendReadme({
                       'OIDC_CLIENT_IDS',
                       app.clientId,
                       'The apps whose access tokens are accepted (comma separated): the frontend of this app'
+                  ],
+                  [
+                      'OIDC_PRODUCT',
+                      app.product ?? '(empty)',
+                      'The product (licence code on the login server) this app sells: members need a trial or a seat of it; empty: a free app'
                   ]
               ]
             : [])
@@ -590,11 +595,30 @@ Nothing is looked up: who calls comes from the token (\`@CurrentCaller()\`: \`su
 | --- | --- |
 | \`@Public()\` | everyone, without a token (\`/\`, \`/health\`, \`/examples\`, \`/docs\`) |
 | \`@Access('account')\` | any valid token, also without an organisation (\`/me\`) |
-| \`@Access('member')\` | the default: a valid token **with** an organisation |
-| \`@Access('admin')\` | the beheerder (admin) of that organisation, or a superadmin |
+| \`@Access('member')\` | the default: a valid token **with** an organisation (and a licence, see below) |
+| \`@Access('admin')\` | the beheerder (admin) of that organisation, or a superadmin (and a licence) |
 
-A missing or wrong token gives \`401 errors.UNAUTHORIZED\`, a token without organisation \`403 errors.NO_ORGANISATION\`, a
-member on an admin route \`403 errors.FORBIDDEN\` (translated, like every error).
+A missing or wrong token gives \`401 errors.UNAUTHORIZED\`, a token without organisation \`403 errors.NO_ORGANISATION\`, no
+licence \`403 errors.NO_LICENSE\`, a member on an admin route \`403 errors.FORBIDDEN\` (translated, like every error).
+
+### Licences (the product of this app)
+
+One app is one product on the login server: a superadmin chooses it on \`/admin\` → Apps ("Product"), and every user
+needs a licence of it in their organisation, bought per month or per year (\`/licenses\` on the login server). The
+access tokens of this app then carry the claim \`license: { product, status, ends_at }\`, worked out by the login server
+at every login and every refresh (so at most 10 minutes old):
+
+| \`status\` | Meaning |
+| --- | --- |
+| \`trial\` | the trial of the user runs, until \`ends_at\` (seconds); the first login to the app starts it when the user never had one |
+| \`seat\` | the user has one of the (paid or free) seats of the organisation |
+| \`superadmin\` | a superadmin of the login server: always |
+| \`none\` | no licence: the beheerder gives a seat on \`/licenses\`, or buys more |
+
+With \`OIDC_PRODUCT\` set${app.product ? ` (here \`${app.product}\`)` : ''}, \`member\` and \`admin\` routes need a licence of that product (a claim of
+another product, or none, is refused); \`account\` routes such as \`GET /me\` do not, so the frontend can tell the user what
+to do. \`@CurrentCaller()\` has it as \`license: { product, status, endsAt }\` (\`null\` without a claim). Leave
+\`OIDC_PRODUCT\` empty for a free app.
 
 ### Data per organisation (multi-tenant)
 
@@ -662,7 +686,7 @@ finds all endpoints there.
 | Token | Format | Lifetime | Contents |
 | --- | --- | --- | --- |
 | ID token | JWT, RS256, \`aud\` = client | 5 minutes | \`sub\`, \`auth_time\`, \`nonce\`, \`acr\` (\`loa2\` password and code, \`loa4\` eID), \`amr\`, \`sid\`, \`at_hash\`, \`tenant\`, \`superadmin\` |
-| Access token | JWT, ES256, \`typ: at+jwt\` (RFC 9068), \`aud\` = \`OIDC_AUDIENCE\` | 10 minutes, and stops when its session ends | \`sub\`, \`client_id\`, \`scope\`, \`sid\`, \`tenant\`, \`superadmin\` |
+| Access token | JWT, ES256, \`typ: at+jwt\` (RFC 9068), \`aud\` = \`OIDC_AUDIENCE\` | 10 minutes, and stops when its session ends | \`sub\`, \`client_id\`, \`scope\`, \`sid\`, \`tenant\`, \`superadmin\`, \`license\` (an app that sells a product, see "Apps are products") |
 | Refresh token | Random (only its sha256 is stored) | As long as its session (at most 12 hours), one use | Only for clients with the \`refresh_token\` grant (see "Sessions, refresh tokens and logout") |
 
 The \`tenant\` claim is \`{ "id": "...", "name": "Acme", "role": "admin" }\`: the tenant the user chose, with the role
@@ -895,8 +919,8 @@ change is in the audit log (\`platform.client_*\`).
 
 **Link a new project to an app with a link code**: on \`/admin\` → Apps, "Link code" makes a one-time code of 12
 characters (\`K7QM-2XPD-9HRT\`, 60 random bits, valid 15 minutes, only its sha256 is stored; a new code stops the
-previous one). In DafkeDD_CLI choose the frontend Next.js and the backend **"Existing DafkeDD OIDC server (link
-code)"**, give the address of this API and the code: the CLI calls \`POST /oidc/link\` (no login, rate limited), which
+previous one). In DafkeDD_CLI choose the frontend Next.js and the backend **"App for an existing DafkeDD OIDC server
+(link code)"**, give the address of this API and the code: the CLI calls \`POST /oidc/link\` (no login, rate limited), which
 uses the code once, adds the addresses of the new frontend to the app (redirect URI, after logout, and the back-channel
 logout URI when the app has none) and answers the issuer, the client id and the address of this frontend (for the
 account pages). A confidential app gets a new secret in that answer (the old one stops). The new frontend logs in here
@@ -917,6 +941,32 @@ The fields (in the file, and on \`/admin\`):
 | \`firstParty\` | \`true\`: your own application (no consent screen). \`false\` (default): an application of others, which asks the user once which data it may have |
 | \`backchannelLogoutUri\` | Optional: where the server POSTs a logout token when a session with this client ends (https; http only on localhost) |
 | \`backchannelLogoutSessionRequired\` | Optional, \`true\` when the client needs \`sid\` in the logout token (it is always there) |
+| \`product\` | Optional: the product (licence code of \`/licenses\`) this app sells; see "Apps are products" |
+
+### Apps are products (one licence per user per app)
+
+An app can **sell a product**: on \`/admin\` → Apps a superadmin picks one of the products of \`/licenses\` ("Product
+(licence)"; \`"product": "planner"\` in the clients file). One product belongs to one app (409
+\`oidc.CLIENT_PRODUCT_TAKEN\`), and it must exist (400 \`oidc.CLIENT_UNKNOWN_PRODUCT\`). Organisations buy it per month
+or per year, per user, like every product (see "Licences").
+
+The access tokens of that app (and its ID token, with the \`tenant\` scope) then carry the licence of the user in the
+organisation of the login, worked out at every login and every refresh:
+
+${fence}json
+"license": { "product": "planner", "status": "trial", "ends_at": 1793692800 }
+${fence}
+
+| \`status\` | Meaning |
+| --- | --- |
+| \`trial\` | the trial runs, until \`ends_at\` (seconds). A member who never had a trial of the product (it came after the member joined, or an account of \`npm run oidc:user\`) gets one at the first login to the app (\`licences.trial_started\`, reason "first login to the app") |
+| \`seat\` | one of the paid or free seats of the organisation |
+| \`superadmin\` | a superadmin: always |
+| \`none\` | no licence (the trial ended, no seat): the API of the app refuses its data with 403 |
+
+The login itself is not refused: the app shows the user what to do (the beheerder gives a seat or buys more on
+\`/licenses\`). An app made with the CLI ("App for an existing DafkeDD OIDC server") learns the product with the link
+code and checks it in its own API (\`OIDC_PRODUCT\`). The link answer has it as \`client.product\`.
 
 ### Applications of others: consent screen and back-channel logout
 
@@ -1017,7 +1067,8 @@ Each organisation uses a code once; the code is reserved at the checkout and giv
 periods of the code. Leave the code empty to get a random one (\`K7QM-2XPD\`).
 
 - Accounts made with \`npm run oidc:user\` get no trial automatically: start it on \`/licenses\` or with
-  \`POST /tenants/current/licenses/:productCode/trials/:userId\`.
+  \`POST /tenants/current/licenses/:productCode/trials/:userId\`. For the product of an app it starts by itself at
+  the first login to that app (see "Apps are products").
 - Tests: the e2e tests run without a database, so override \`BILLING_STORE\` with \`MemoryBillingStore\` (like
   \`test/billing.e2e-spec.ts\`).
 
@@ -1102,7 +1153,7 @@ ${fence}
 | \`tenant_invitations\` | Open invitations (email, role, who invited, expiry) | yes |
 | \`user_identifiers\` | Linked eIDs: an HMAC of the national register number per account (one eID per account, one account per eID), linked and last used | no |
 | \`user_passkeys\` | Passkeys: the credential id (unique), public key (SPKI), COSE algorithm, signature counter, name, synced or not, transports, added and last used; no secrets | no |
-| \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\`), with their back-channel logout URI | no |
+| \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\` and /admin), with their back-channel logout URI and the product they sell | no |
 | \`oidc_consents\` | What an account allowed an application of others: the scopes (with \`tenant\`: the organisations), when, until revoked | no |
 | \`oidc_link_codes\` | One-time link codes of \`/admin\` (sha256, the app, who made it, 15 minutes, used or not) | no |
 | \`oidc_used_interactions\` | Consent screens answered already (until their login expires): a copy of the login cookie cannot answer twice | no |

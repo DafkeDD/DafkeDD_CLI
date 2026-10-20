@@ -36,7 +36,7 @@ async function renew(session: Session): Promise<Session | null> {
         if (tokens.refresh_token) await revokeRefreshToken(tokens.refresh_token)
         return null
     }
-    const { tenant, superadmin, sid } = claims
+    const { tenant, superadmin, sid, license } = claims
     return {
         ...session,
         // The role (and organisation name) as the login server knows it now
@@ -46,7 +46,9 @@ async function renew(session: Session): Promise<Session | null> {
         expiresAt: Date.now() + tokens.expires_in * 1000,
         refreshToken: tokens.refresh_token ?? session.refreshToken,
         idToken: tokens.id_token,
-        sid: sid ?? session.sid
+        sid: sid ?? session.sid,
+        // Bought or given meanwhile, or the trial ended: as the login server says now
+        license
     }
 }
 

@@ -123,6 +123,17 @@ export type Params = Record<string, unknown>
 
 const text = (value: unknown, fallback = ''): string => (typeof value === 'string' ? value : fallback)
 
+/** The code of a product (license_products.code): a-z, 0-9 and -, 2 to 63 characters. */
+export const PRODUCT_CODE = /^[a-z0-9][a-z0-9-]{1,62}$/
+
+/** The optional "product" of a client in the clients file. */
+function productCode(value: unknown, clientId: string, file: string): string | null {
+    if (value === undefined || value === null || value === '') return null
+    if (typeof value !== 'string' || !PRODUCT_CODE.test(value))
+        throw new Error(`Client ${clientId}: "product" must be a product code like "planner" in ${file}`)
+    return value
+}
+
 /** The value of a request parameter. Undefined when absent; an OAuthError when it was sent more than once. */
 export function single(params: Params, name: string): string | undefined {
     const value = params[name]
@@ -220,7 +231,9 @@ export class OidcService implements OnApplicationBootstrap {
                 scopes: Array.isArray(raw.scopes) ? raw.scopes.map(String) : ['openid'],
                 firstParty: raw.firstParty === true,
                 backchannelLogoutUri,
-                backchannelLogoutSessionRequired: raw.backchannelLogoutSessionRequired === true
+                backchannelLogoutSessionRequired: raw.backchannelLogoutSessionRequired === true,
+                // The product (licence code) this app sells, see "Apps and licences" in the README
+                product: productCode(raw.product, clientId, file)
             } satisfies OidcClient
         })
     }

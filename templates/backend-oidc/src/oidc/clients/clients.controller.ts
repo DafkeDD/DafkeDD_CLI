@@ -14,7 +14,7 @@ import { ClientFieldsDto, ClientStatusDto, CreateClientDto } from './clients.dto
 import { ClientsService } from './clients.service.js'
 
 const CLIENT =
-    '{ clientId, name, type, source, disabled, redirectUris, postLogoutRedirectUris, backchannelLogoutUri, scopes, grantTypes, firstParty, hasSecret, consents, createdAt, updatedAt }'
+    '{ clientId, name, type, source, disabled, redirectUris, postLogoutRedirectUris, backchannelLogoutUri, scopes, grantTypes, firstParty, product, hasSecret, consents, createdAt, updatedAt }'
 
 /**
  * The apps that may log in with this server (OpenID Connect clients), for superadmins on /admin. Apps of
@@ -39,8 +39,12 @@ export class ClientsController {
         summary: 'Makes an app. A confidential one gets a secret: it is in this answer only, store it in that app.'
     })
     @ApiCreatedResponse({ description: `{ client: ${CLIENT}, secret: "…" | null }` })
-    @ApiBadRequestResponse({ description: 'oidc.CLIENT_INVALID_URI, oidc.CLIENT_NO_REDIRECT or validation' })
-    @ApiConflictResponse({ description: 'oidc.CLIENT_EXISTS: that client id is taken' })
+    @ApiBadRequestResponse({
+        description: 'oidc.CLIENT_INVALID_URI, oidc.CLIENT_NO_REDIRECT, oidc.CLIENT_UNKNOWN_PRODUCT or validation'
+    })
+    @ApiConflictResponse({
+        description: 'oidc.CLIENT_EXISTS: that client id is taken; oidc.CLIENT_PRODUCT_TAKEN: another app sells it'
+    })
     create(@Auth() auth: AuthContext, @Body() body: CreateClientDto) {
         return this.clients.create(auth.userId, body)
     }
@@ -49,7 +53,11 @@ export class ClientsController {
     @ApiOperation({ summary: 'Changes an app made here (not its id or type)' })
     @ApiOkResponse({ description: CLIENT })
     @ApiNotFoundResponse({ description: 'oidc.CLIENT_NOT_FOUND' })
-    @ApiConflictResponse({ description: 'oidc.CLIENT_FROM_FILE: change it in config/oidc-clients.json' })
+    @ApiBadRequestResponse({ description: 'oidc.CLIENT_INVALID_URI, oidc.CLIENT_UNKNOWN_PRODUCT or validation' })
+    @ApiConflictResponse({
+        description:
+            'oidc.CLIENT_FROM_FILE: change it in config/oidc-clients.json; oidc.CLIENT_PRODUCT_TAKEN: another app sells it'
+    })
     update(@Param('clientId') clientId: string, @Body() body: ClientFieldsDto) {
         return this.clients.update(clientId, body)
     }

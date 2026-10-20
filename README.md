@@ -333,6 +333,9 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   token, and keeps its data per organisation with Row-Level Security. The example is `notes` (`GET/POST /notes`,
   `DELETE /notes/:id` for the beheerder), shown on the home page of the frontend through `/api/app/...` (the token is
   added on the server). See "Login through the login server" in `docs/api.md`.
+- **Apps are products**: on `/admin` → Apps a superadmin picks the product an app sells; every user then needs a licence
+  of it in their organisation (a trial first, then a seat bought per month or per year). The tokens of the app say so
+  (`license` claim) and the API of an app made with the CLI checks it (`OIDC_PRODUCT`).
 - **One design everywhere (Pasport)**: the frontend of the login server and every linked frontend get the same login
   screen (the teal panel with the eID card, "Log in to <app>", eID and passkey first, then email and password) and the
   same shell: a sidebar with the app's own pages (`src/lib/nav.ts`), "My account", the organisation (its admins) and the
@@ -488,6 +491,14 @@ git switch developer
 
 ## Changelog
 
+- **0.36.0**: an app is a product. On `/admin` → Apps a superadmin chooses the product (licence) an app sells (one
+  product per app; `"product"` in the clients file; migration 11). The access tokens of that app carry
+  `license: { product, status, ends_at }` (`trial`, `seat`, `superadmin` or `none`), worked out at every login and
+  refresh; a member who never had a trial of the product gets one at the first login to the app. New errors
+  `oidc.CLIENT_UNKNOWN_PRODUCT` and `oidc.CLIENT_PRODUCT_TAKEN`; `POST /oidc/link` answers `client.product`. An app made
+  with the CLI gets `OIDC_PRODUCT`: its API refuses member and admin routes without a licence (403 `errors.NO_LICENSE`,
+  `/me` shows the licence), and its home page shows the licence (`AppLicense` namespace, en, nl, fr, de) with a link to
+  the licences of the organisation for the beheerder.
 - **0.35.0**: an app linked to a login server gets its own backend. The backend choice is now "App voor een bestaande
   DafkeDD OIDC-server (koppelcode)" and installs `./backend` (NestJS, port 4001, `docs/api.md`) with its own PostgreSQL
   database on the server of the login server (asked after the link code, no Docker question). The API checks the access

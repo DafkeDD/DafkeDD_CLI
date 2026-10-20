@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { getTranslations, setRequestLocale } from 'next-intl/server'
 import { ApiStatus } from '@/components/api-status'
+import { AppLicense } from '@/components/app-license'
 import { Notes } from '@/components/notes'
 import { SessionLinks } from '@/components/session-links'
 import { AppPage } from '@/components/shell/app-shell'
@@ -8,8 +9,8 @@ import { PageHeader } from '@/components/ui'
 import { getSession } from '@/lib/session'
 
 /**
- * The home page of this app, in the shell of the login server it is linked to: who is logged in, the notes of the
- * organisation (the API and database of this app) and the status of that API.
+ * The home page of this app, in the shell of the login server it is linked to: who is logged in, the licence for the
+ * product of this app, the notes of the organisation (the API and database of this app) and the status of that API.
  */
 export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
     const { locale } = await params
@@ -30,9 +31,16 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     )
 }
 
-/** The notes, for whoever is logged in with an organisation. */
+/** The licence and the notes, for whoever is logged in with an organisation (the notes only with a licence). */
 async function OrganisationNotes() {
     const session = await getSession()
     if (!session?.tenant) return null
-    return <Notes admin={session.tenant.role === 'admin' || session.superadmin} me={session.sub} />
+    const admin = session.tenant.role === 'admin' || session.superadmin
+    const license = session.license ?? null
+    return (
+        <>
+            {license && <AppLicense license={license} admin={admin} />}
+            {license?.status !== 'none' && <Notes admin={admin} me={session.sub} />}
+        </>
+    )
 }

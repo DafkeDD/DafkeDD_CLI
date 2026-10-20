@@ -14,6 +14,7 @@ import {
     LICENSE_MESSAGES,
     NAV_MESSAGES,
     NOTES_MESSAGES,
+    APP_LICENSE_MESSAGES,
     OIDC_MESSAGES,
     oidcFrontendFiles,
     SHELL_MESSAGES
@@ -873,7 +874,9 @@ export function withApi(fileMap, api, { ui }) {
                               Apps: APPS_MESSAGES[locale],
                               Shell: SHELL_MESSAGES[locale],
                               Nav: NAV_MESSAGES[locale],
-                              ...(api.linked ? { Notes: NOTES_MESSAGES[locale] } : {})
+                              ...(api.linked
+                                  ? { Notes: NOTES_MESSAGES[locale], AppLicense: APP_LICENSE_MESSAGES[locale] }
+                                  : {})
                           }
                         : {})
                 },

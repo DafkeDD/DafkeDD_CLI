@@ -7,11 +7,12 @@ import { MemoryNotesStore } from '../src/notes/memory-notes.store.js'
 import { NOTES_STORE } from '../src/notes/notes.store.js'
 import { PasportKeys } from '../src/pasport/pasport-keys.service.js'
 import { configureApp } from '../src/setup.js'
-import { accessToken, AUDIENCE, CLIENT_ID, ISSUER, OTHER_KEY, TENANT_A, TENANT_B, testKeys } from './token.js'
+import { accessToken, AUDIENCE, CLIENT_ID, ISSUER, OTHER_KEY, PRODUCT, TENANT_A, TENANT_B, testKeys } from './token.js'
 
 process.env.OIDC_ISSUER = ISSUER
 process.env.OIDC_AUDIENCE = AUDIENCE
 process.env.OIDC_CLIENT_IDS = CLIENT_ID
+process.env.OIDC_PRODUCT = PRODUCT
 
 /**
  * The login through the login server (Pasport): only its access tokens open the API, and every organisation only
@@ -68,9 +69,43 @@ describe('Pasport access tokens and notes per organisation (e2e)', () => {
         const sub = '33333333-3333-4333-8333-333333333333'
         const response = await http()
             .get('/me')
-            .set(bearer(accessToken({ sub, tenant: undefined, superadmin: true })))
+            .set(bearer(accessToken({ sub, tenant: undefined, superadmin: true, license: undefined })))
             .expect(200)
-        expect(response.body).toEqual({ sub, tenant: null, superadmin: true })
+        expect(response.body).toEqual({ sub, tenant: null, superadmin: true, license: null })
+        const ends = Math.floor(Date.parse('2026-11-03T08:00:00Z') / 1000)
+        const trial = await http()
+            .get('/me')
+            .set(bearer(accessToken({ license: { product: PRODUCT, status: 'trial', ends_at: ends } })))
+            .expect(200)
+        expect(trial.body.license).toEqual({ product: PRODUCT, status: 'trial', endsAt: '2026-11-03T08:00:00.000Z' })
+        // Without a licence /me still answers: the frontend shows what to do
+        const none = await http()
+            .get('/me')
+            .set(bearer(accessToken({ license: { product: PRODUCT, status: 'none' } })))
+            .expect(200)
+        expect(none.body.license).toEqual({ product: PRODUCT, status: 'none', endsAt: null })
+    })
+
+    it.each([
+        ['no licence', { product: PRODUCT, status: 'none' }],
+        ['no licence claim', undefined],
+        ['a licence of another product', { product: 'reports', status: 'seat' }],
+        ['a claim of an unexpected shape', { product: PRODUCT, status: 'gold' }]
+    ])('refuses the data with %s, translated', async (_name, license) => {
+        const response = await http()
+            .get('/notes')
+            .set(bearer(accessToken({ license })))
+            .set('Accept-Language', 'nl')
+            .expect(403)
+        expect(response.body.error).toBe('errors.NO_LICENSE')
+        expect(response.body.message).toContain(PRODUCT)
+    })
+
+    it.each(['trial', 'seat', 'superadmin'])('a %s licence opens the data', async status => {
+        await http()
+            .get('/notes')
+            .set(bearer(accessToken({ license: { product: PRODUCT, status } })))
+            .expect(200)
     })
 
     it('notes need an organisation', async () => {

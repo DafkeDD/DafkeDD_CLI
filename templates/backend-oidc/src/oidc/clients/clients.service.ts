@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { AuditService } from '../../audit/audit.service.js'
 import { AppException } from '../../common/app.exception.js'
+import { AppLicenses } from '../app-licenses.js'
 import { sha256 } from '../crypto.js'
 import { OIDC, OidcConfig } from '../oidc.config.js'
 import { assertRedirectUri } from '../oidc.service.js'
@@ -38,8 +39,26 @@ export class ClientsService {
     constructor(
         @Inject(OIDC_STORE) private readonly store: OidcStore,
         private readonly audit: AuditService,
-        private readonly config: OidcConfig
+        private readonly config: OidcConfig,
+        private readonly licenses: AppLicenses
     ) {}
+
+    /**
+     * The product an app sells (empty: none). It must exist on /licenses (oidc.CLIENT_UNKNOWN_PRODUCT) and can belong to
+     * only one app (oidc.CLIENT_PRODUCT_TAKEN): one licence per user per app.
+     */
+    private async product(code: string | null | undefined, clientId: string | null): Promise<string | null> {
+        const product = code?.trim() || null
+        if (!product) return null
+        if (!(await this.licenses.productExists(product)))
+            throw new AppException('oidc.CLIENT_UNKNOWN_PRODUCT', HttpStatus.BAD_REQUEST, { product })
+        const owner = (await this.store.listClients()).find(
+            client => client.product === product && client.clientId !== clientId
+        )
+        if (owner)
+            throw new AppException('oidc.CLIENT_PRODUCT_TAKEN', HttpStatus.CONFLICT, { product, app: owner.name })
+        return product
+    }
 
     async list() {
         return (await this.store.listClients()).map(publicClient)
@@ -88,20 +107,28 @@ export class ClientsService {
     async create(createdBy: string, body: CreateClientDto) {
         const fields = this.fields(body)
         const clientId = await this.clientId(body)
+        const product = await this.product(body.product, null)
         const secret = body.type === 'confidential' ? newSecret() : null
         const client: OidcClient = {
             clientId,
             type: body.type,
             secretHash: secret ? sha256(secret) : null,
             backchannelLogoutSessionRequired: false,
-            ...fields
+            ...fields,
+            product
         }
         if (!(await this.store.createClient(client, createdBy)))
             throw new AppException('oidc.CLIENT_EXISTS', HttpStatus.CONFLICT)
         await this.audit.record('platform.client_created', {
             tenantId: null,
             target: { type: 'client', id: clientId },
-            details: { client: clientId, name: fields.name, type: body.type, firstParty: fields.firstParty }
+            details: {
+                client: clientId,
+                name: fields.name,
+                type: body.type,
+                firstParty: fields.firstParty,
+                product: product ?? undefined
+            }
         })
         return { client: await this.get(clientId), secret }
     }
@@ -123,7 +150,8 @@ export class ClientsService {
     async update(clientId: string, body: ClientFieldsDto) {
         const before = await this.editable(clientId)
         const fields = this.fields(body)
-        await this.store.updateClient(clientId, fields)
+        const product = await this.product(body.product, clientId)
+        await this.store.updateClient(clientId, { ...fields, product })
         await this.audit.record('platform.client_updated', {
             tenantId: null,
             target: { type: 'client', id: clientId },
@@ -131,6 +159,7 @@ export class ClientsService {
                 client: clientId,
                 name: fields.name,
                 firstParty: fields.firstParty,
+                product: product ?? undefined,
                 ...(before.firstParty !== fields.firstParty
                     ? { from: String(before.firstParty), to: String(fields.firstParty) }
                     : {})
@@ -226,7 +255,9 @@ export class ClientsService {
                 type: client.type,
                 scopes: client.scopes,
                 firstParty: client.firstParty,
-                refreshTokens: client.grantTypes.includes('refresh_token')
+                refreshTokens: client.grantTypes.includes('refresh_token'),
+                // The product the app sells: its API refuses users without a licence (OIDC_PRODUCT)
+                product: client.product ?? null
             },
             clientSecret: secret
         }

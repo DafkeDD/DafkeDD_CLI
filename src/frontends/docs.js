@@ -132,7 +132,7 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | \`/invite?token=\` | The link in an invitation: join the organisation, or create your account for it |
 | \`/security\` | Two-step verification of the own account (status, recovery codes left, new recovery codes), passkeys (add, rename, remove), the eID (link, unlink), the applications of others with access (take back), where the account is logged in (end one session, or all others) and its recent activity (logins, also failed ones, and security changes) |
 | \`/members\` | Admins: the members of the organisation with who is online, invite by email, open invitations (send again, withdraw), change roles (user, admin), disable or enable, remove |
-| \`/admin\` | Superadmins: every organisation (create, suspend), who is superadmin, the products for sale (prices per month and per year, stop selling), the discount codes (percentage or amount, 100% is free) and the **apps** that may log in (make one, change it, a new secret shown once, disable, remove; the apps of the clients file are read-only) |
+| \`/admin\` | Superadmins: every organisation (create, suspend), who is superadmin, the products for sale (prices per month and per year, stop selling), the discount codes (percentage or amount, 100% is free) and the **apps** that may log in (make one, change it, choose the product it sells, a link code, a new secret shown once, disable, remove; the apps of the clients file are read-only) |
 | \`/licenses\` | Admins: per product the seats (bought, free, in use), buy seats per month or per year with a discount code, more or fewer seats, cancel, give or take back the seat of a member and start trials. Superadmins open an organisation on \`/admin\` and also give free seats and extend trials here |
 | \`/licenses/return\` | Back from the checkout of Mollie: asks the API how the payment went (no webhook needed on localhost) |
 | \`/audit\` | Admins: the audit log of the organisation (who did what and when, from which IP address and browser), with a filter per kind of event and "Show more". Superadmins: also \`/audit?scope=platform\`, every organisation and the events without one (failed logins, accounts) |
@@ -304,6 +304,12 @@ The home page shows the **notes of the organisation** (\`src/components/notes.ts
 stored by its own API in its own database, per organisation. Everyone of the organisation adds notes, only its
 beheerder (admin) removes them. Copy it for your own pages: \`fetch('/api/app/<path>')\`, and an \`@Access(...)\` route in
 the backend (see its README, "Login through the login server").
+
+**Licence.** When the app sells a product (chosen on \`/admin\` → Apps of the login server), the session keeps the
+\`license\` claim of the ID token (\`session.license\`: \`trial\` until a date, \`seat\`, \`superadmin\` or \`none\`,
+renewed with the tokens). The home page shows it (\`src/components/app-license.tsx\`, namespace \`AppLicense\`); without
+a licence it hides the notes and tells a member to ask the beheerder, and gives the beheerder a link to the licences of
+the organisation on the login server. The API of the app checks the same claim (403 \`errors.NO_LICENSE\`).
 
 The account pages (security, passkeys, members, licences, the platform) are on the frontend of the login server
 (\`OIDC_ACCOUNT_URL\`): the sidebar, the user menu and the profile link there. This app has no login or registration

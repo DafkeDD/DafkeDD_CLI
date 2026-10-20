@@ -65,6 +65,16 @@ export class ClientFieldsDto {
     })
     @IsBoolean({ message: i18nValidationMessage('validation.IS_BOOLEAN') })
     firstParty!: boolean
+
+    @ApiPropertyOptional({
+        example: 'planner',
+        description:
+            'The product (licence code of /licenses) this app sells: one licence per user; empty or null: a free app'
+    })
+    @IsOptional()
+    @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
+    @Matches(/^([a-z0-9][a-z0-9-]{1,62})?$/, { message: i18nValidationMessage('validation.MATCHES') })
+    product?: string | null
 }
 
 export class CreateClientDto extends ClientFieldsDto {

@@ -23,7 +23,7 @@ export class LinkController {
     })
     @ApiOkResponse({
         description:
-            '{ issuer, apiUrl, accountUrl, client: { clientId, name, type, scopes, firstParty, refreshTokens }, clientSecret }'
+            '{ issuer, apiUrl, accountUrl, client: { clientId, name, type, scopes, firstParty, refreshTokens, product }, clientSecret }'
     })
     @ApiBadRequestResponse({
         description: 'oidc.LINK_CODE_INVALID (unknown, used or expired) or oidc.CLIENT_INVALID_URI'
