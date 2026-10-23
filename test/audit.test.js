@@ -58,6 +58,8 @@ test('the audit module is generated, global, and the e2e tests use the store in 
         assert.ok(backend[rel], rel)
     assert.match(backend['src/audit/audit.module.ts'], /@Global\(\)/)
     assert.match(backend['src/oidc/oidc.module.ts'], /imports: \[MailModule, AuditModule\]/)
+    // The rate limit of the logins is for other modules too (an endpoint that checks a secret of an app)
+    assert.match(backend['src/oidc/oidc.module.ts'], /exports: \[[^\]]*\bLoginLimiter,/)
     assert.match(backend['src/access/access.ts'], /setActor\(user\.id, found\.id\)/)
     assert.match(
         backend['test/app.e2e-spec.ts'],

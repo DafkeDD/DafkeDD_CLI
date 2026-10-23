@@ -21,7 +21,14 @@ const USER = {
  * Every endpoint of the generated backend. `errors` are [status, translation key].
  * The same list is used to write the README, and the tests compare it with the controllers.
  */
-export const endpoints = ({ database = null, auth = false, oidc = false, app = null, port = 4000 } = {}) => [
+export const endpoints = ({
+    database = null,
+    auth = false,
+    oidc = false,
+    app = null,
+    appOptions,
+    port = 4000
+} = {}) => [
     {
         method: 'GET',
         path: '/',
@@ -126,7 +133,7 @@ export const endpoints = ({ database = null, auth = false, oidc = false, app = n
           ]
         : []),
     ...(oidc ? oidcEndpoints({ port }) : []),
-    ...(app ? appEndpoints() : [])
+    ...(app ? appEndpoints(appOptions) : [])
 ]
 
 /** A form body as it is sent: a=1&b=2 */
@@ -177,13 +184,14 @@ export function backendReadme({
     auth = false,
     oidc = false,
     app = null,
+    appOptions,
     tenantRole = null,
     port = 4000,
     origin = 'http://localhost:3000',
     table = null,
     translations
 }) {
-    const list = endpoints({ database, auth, oidc, app, port })
+    const list = endpoints({ database, auth, oidc, app, appOptions, port })
     // Every namespace of the translations: errors.NOT_FOUND, oidc.INVALID_LINK, ...
     const errorMessages = Object.fromEntries(
         Object.entries(translations.en).flatMap(([namespace, texts]) =>
@@ -562,7 +570,7 @@ For production: HTTPS, a long random \`JWT_SECRET\`, your real \`CORS_ORIGIN\`, 
 `
             : ''
     }
-${oidc ? oidcSection({ port, tenantRole }) : ''}${app ? appSection({ app, tenantRole }) : ''}## Endpoints
+${oidc ? oidcSection({ port, tenantRole }) : ''}${app ? appSection({ app, tenantRole, choice: appOptions }) : ''}## Endpoints
 
 CORS allows ${'`' + origin + '`'} (change \`CORS_ORIGIN\`). Examples use \`-H 'Accept-Language: nl'\`; leave it out for English.
 
@@ -575,7 +583,8 @@ Add a test for every endpoint you add, and for every translated error in all fou
 }
 
 /** The README section of an app linked to a login server: its access tokens, the access levels and the tenants. */
-function appSection({ app, tenantRole }) {
+function appSection({ app, tenantRole, choice = {} }) {
+    const isolation = choice.isolation ?? 'rls'
     return `
 ## Login through the login server
 
@@ -635,17 +644,57 @@ needs \`editor\`, and \`DELETE /notes/:id\` the beheerder of the organisation (\
 
 ### Data per organisation (multi-tenant)
 
-The database of this app (its own, on the same PostgreSQL server as the login server) keeps the data of every
-organisation in the same tables, with a \`tenant_id\` column (the \`tenant.id\` of the token) and **Row-Level Security**.
 \`DatabaseService.withTenant(tenantId, fn)\` runs \`fn\` in a transaction as the role **\`${tenantRole}\`** with
-\`app.tenant_id\` set: PostgreSQL itself only shows and accepts the rows of that organisation, also when a query forgets
-its \`WHERE\`. The tables are created by the migrations in \`src/database/migrations.ts\` at the first start (a new
-migration gets the next number; add a new table to \`TENANT_TABLES\` so the tests check its isolation).
+\`app.tenant_id\` set: PostgreSQL **Row-Level Security** only shows and accepts the rows of that organisation, also when
+a query forgets its \`WHERE\`. Every table with data of an organisation has a \`tenant_id\` column (the \`tenant.id\`
+of the token). The tables are made by the migrations in \`src/database/migrations.ts\` (a new migration gets the next
+number; add a new table to \`TENANT_TABLES\` so the tests check its isolation).
+
+Where that data lives is \`TENANT_ISOLATION\` in \`.env\` (here **\`${isolation}\`**); the code is the same either way:
+
+| \`TENANT_ISOLATION\` | Where |
+| --- | --- |
+| \`rls\` | one database (\`DATABASE_NAME\`, on the same PostgreSQL server as the login server): \`MIGRATIONS\` run in it at the first start |
+| \`database\` | a database **per organisation**, \`<DATABASE_NAME>_t_<organisation id>\`, made the first time it is used (under an advisory lock, so two instances never make it twice) and migrated with \`MIGRATIONS\`; after an update the new migrations run the first time the organisation is used again. Row-Level Security stays on inside it. The database of the app itself only keeps the register \`tenant_databases\` (\`MAIN_MIGRATIONS\`). The user of \`DATABASE_USER\` needs \`CREATEDB\`; \`DATABASE_NAME\` has at most 28 characters; a database is never removed automatically |
+
+\`DatabaseService.withLock(key, fn)\` runs \`fn\` while holding a PostgreSQL advisory lock: one instance of the API (or one
+request) at a time, for example for a monthly job. \`runMigrations(db, migrations, { lock, table })\` takes its own lock key
+and migrations table.
 
 The example is \`notes\` (\`src/notes\`): everyone of the organisation reads and adds notes, only its beheerder removes
 them. Copy it for your own data.
-`
+${choice.files ? filesSection() : ''}${choice.mail ? mailSection() : ''}`
 }
+
+/** The README section of the files module of an app (src/files). */
+const filesSection = () => `
+### Files
+
+\`src/files\` keeps images and PDFs per organisation (\`/files\`, see the endpoints). The description of a file is in the
+table \`files\` (Row-Level Security), the bytes are in a **FileStore** chosen with \`FILES_DRIVER\`:
+
+| \`FILES_DRIVER\` | Where |
+| --- | --- |
+| \`local\` (default) | the folder \`FILES_DIR\` (\`./storage\`, not in git): \`<organisation id>/<file id>\` |
+| \`gcs\` | a private Google Cloud Storage bucket \`GCS_BUCKET\` (in an EU region), objects \`<GCS_PREFIX><organisation id>/<file id>\`. The login is the one of the environment (the service account of the server, or \`gcloud auth application-default login\`), so no key is kept in \`.env\` |
+
+An upload is the **raw file as the body** of \`PUT /files/:id\` (the id a uuid chosen by the app, so a retry is harmless),
+at most 8 MB (\`MAX_FILE_BYTES\`). The type is read from the first bytes (JPEG, PNG, WebP, PDF; never SVG or HTML, which
+can carry scripts), and a download is sent with \`X-Content-Type-Options: nosniff\`, a sandboxing
+\`Content-Security-Policy\` and an \`ETag\`. Use \`FilesService\` (exported by \`FilesModule\`) to attach files to your
+own data. Another store: implement \`FileStore\` (\`src/files/file-store.ts\`) and add it to \`createFileStore\`.
+`
+
+/** The README section of the mail module of an app (src/mail). */
+const mailSection = () => `
+### Email (SMTP)
+
+\`MailService\` (\`src/mail\`, a global module: inject it anywhere) sends with \`nodemailer\` over SMTP (\`SMTP_*\` and
+\`MAIL_FROM\` in \`.env\`): \`await mail.send({ to, subject, text, html, attachments })\` answers \`false\` instead of
+throwing when the mail could not be sent. During development **Mailpit** catches every mail: \`npm run mail:dev\`
+(Docker), then **http://localhost:8025**. Without \`SMTP_HOST\` the mail is printed in the console during development;
+in production it is not sent and its contents are never logged.
+`
 
 /** The README section about the OpenID Connect server and multi-tenancy. */
 function oidcSection({ port, tenantRole }) {
@@ -887,7 +936,9 @@ with user verification is already two factors (something you have and something 
   which email addresses have an account. Registering an address that has an account mails its owner instead.
 - The links hold an **encrypted token** (AES-256-GCM, key derived from \`OIDC_MASTER_KEY\`, bound to its kind, with an
   expiry): there is no table for them.
-- Rate limited per IP and per email address (\`OIDC_LOGIN_RATE_LIMIT\` per minute).
+- Rate limited per IP and per email address (\`OIDC_LOGIN_RATE_LIMIT\` per minute). \`OidcModule\` exports this
+  \`LoginLimiter\`: an endpoint of your own that checks a secret (of an app, a code) uses it the same way
+  (\`limiter.allow(['ip:' + ip, 'client:' + clientId])\`, false → 429 \`errors.TOO_MANY_REQUESTS\`).
 - Passwords: 12 to 128 characters, stored as a scrypt hash.
 
 ### Email (SMTP)

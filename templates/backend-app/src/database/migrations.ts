@@ -6,6 +6,10 @@ import { TENANT_ROLE } from './database.constants.js'
  * Rules:
  * - never change a migration that already ran somewhere: add a new one with the next id (the checksum is checked)
  * - every table with data of an organisation gets a tenant_id, Row-Level Security and a policy (TENANT_TABLES)
+ *
+ * With TENANT_ISOLATION=rls (one database) MIGRATIONS run in the database of the app. With TENANT_ISOLATION=database
+ * every organisation has a database of its own: MIGRATIONS run in each of them (Row-Level Security stays on there as
+ * a second wall) and the database of the app only gets MAIN_MIGRATIONS (which organisation has which database).
  */
 export interface Migration {
     id: number
@@ -55,6 +59,27 @@ CREATE TABLE notes (
 );
 CREATE INDEX notes_tenant ON notes (tenant_id, created_at DESC);
 ${isolate('notes')}
+`
+    }
+]
+
+/**
+ * Only with TENANT_ISOLATION=database: the migrations of the database of the app itself (table registry_migrations).
+ * It belongs to no organisation and only knows which organisation has which database.
+ */
+export const MAIN_MIGRATIONS: Migration[] = [
+    {
+        id: 1,
+        name: 'register of the databases of the organisations',
+        sql: `
+-- organisation_id is the id of the organisation at the login server (the tenant claim of the access token)
+CREATE TABLE tenant_databases (
+  organisation_id uuid PRIMARY KEY,
+  database_name text NOT NULL UNIQUE,
+  status text NOT NULL DEFAULT 'provisioning' CHECK (status IN ('provisioning', 'ready')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  ready_at timestamptz
+);
 `
     }
 ]

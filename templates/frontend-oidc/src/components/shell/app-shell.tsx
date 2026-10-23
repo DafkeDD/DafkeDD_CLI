@@ -4,6 +4,7 @@ import { Content } from '@/components/ui'
 import { ACCOUNT_URL } from '@/lib/oidc'
 import { APP_NAV } from '@/lib/nav'
 import { getSession } from '@/lib/session'
+import { LoginRedirect } from './login-redirect'
 import { type ShellSection, ShellView } from './shell-view'
 
 /**
@@ -27,6 +28,8 @@ async function Shell({ children, wide }: { children: ReactNode; wide: boolean })
     // On the login server ACCOUNT_URL is empty (its own pages); in a linked app it is the login server's frontend
     const account = (path: string) => ACCOUNT_URL + path
     const external = Boolean(ACCOUNT_URL)
+    // A linked app has no public pages: without a login the browser goes to the login server and comes back here
+    if (!session && external) return <LoginRedirect />
     const admin = session?.tenant?.role === 'admin'
     const sections: ShellSection[] = [
         { items: APP_NAV.map(item => ({ href: item.href, label: nav(item.label), icon: item.icon, external: false })) }

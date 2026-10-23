@@ -333,7 +333,13 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   this app (`PasportGuard`: signature with its keys, `iss`, `aud`, `typ`, `client_id`), takes the organisation from the
   token, and keeps its data per organisation with Row-Level Security. The example is `notes` (`GET/POST /notes`,
   `DELETE /notes/:id` for the beheerder), shown on the home page of the frontend through `/api/app/...` (the token is
-  added on the server). See "Login through the login server" in `docs/api.md`.
+  added on the server). See "Login through the login server" in `docs/api.md`. The CLI also asks:
+    - **modules**: **Mail** (`MailService` with SMTP, Mailpit during development, `npm run mail:dev`) and **Files**
+      (`/files`: images and PDFs per organisation, raw uploads, in `./storage` or a Google Cloud Storage bucket);
+    - **how the data of the organisations is kept apart**: one database with Row-Level Security (the default), or a
+      **database per organisation** (`<name>_t_<organisation id>`, made and migrated the first time it is used;
+      `TENANT_ISOLATION` in `.env`). Every page of the linked frontend is protected: without a login it goes to the
+      login server and comes back.
 - **Apps are products**: on `/admin` → Apps a superadmin picks the product an app sells; every user then needs a licence
   of it in their organisation (a trial first, then a seat bought per month or per year). The tokens of the app say so
   (`license` claim) and the API of an app made with the CLI checks it (`OIDC_PRODUCT`).
@@ -497,6 +503,19 @@ git switch developer
 
 ## Changelog
 
+- **0.41.0**: more for the app of an existing login server.
+    - The CLI asks which modules the API of the app gets: **Mail** (`src/mail`, the `MailService` of the login server,
+      now also with attachments) and **Files** (`src/files`: `GET/PUT/DELETE /files/:id`, `GET /files`; the type read
+      from the bytes, at most 8 MB, `ETag`, a folder or Google Cloud Storage via `FILES_DRIVER`), with their texts in
+      en, nl, fr and de, tests (unit, e2e, real PostgreSQL) and docs.
+    - The CLI asks how the data of the organisations is kept apart: one database with Row-Level Security, or a
+      **database per organisation** (`TENANT_ISOLATION=database`). `DatabaseService.withTenant()` is the same either
+      way; the database of an organisation is made, registered (`tenant_databases`) and migrated the first time it is
+      used.
+    - `DatabaseService.withLock(key, fn)` (an advisory lock), and `runMigrations()` takes its own lock key and table.
+    - Every page of a linked frontend is protected: without a session it starts a login that comes back to the same page
+      (no endless loop when cookies are blocked).
+    - The login server exports `LoginLimiter` (the rate limit of the logins) for endpoints of your own.
 - **0.40.0**: fixes found in a real linked app.
     - The session cookies of the frontend are named after its client id (`<client id>_session`, `<client id>_oidc`
       instead of `app_session`): browsers share cookies between all ports of localhost, so the portal of the login

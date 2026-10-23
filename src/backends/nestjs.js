@@ -652,7 +652,10 @@ const replaceOnce = (text, from, to) => {
  * The files of the backend. Without a database this is `files`; with a database (answers of the database question)
  * the module, health check, translations, .env files and tests are extended for it.
  */
-export function buildFiles(database = null, { auth = null, oidc: oidcAnswers = null, app = null } = {}) {
+export function buildFiles(
+    database = null,
+    { auth = null, oidc: oidcAnswers = null, app = null, appOptions = appBackend.DEFAULT_OPTIONS } = {}
+) {
     if ((auth || oidcAnswers || app) && !database) throw new Error('Login en registratie hebben een database nodig')
     if ([auth, oidcAnswers, app].filter(Boolean).length > 1)
         throw new Error('Kies de eenvoudige login, de OIDC-server of een gekoppelde app, niet meerdere')
@@ -841,12 +844,13 @@ describe('API (e2e)', () => {\n`
             '      .useValue(database)\n      .overrideProvider(OIDC_STORE)\n      .useValue(new MemoryOidcStore())\n      .overrideProvider(BILLING_STORE)\n      .useValue(new MemoryBillingStore())\n      .overrideProvider(AUDIT_STORE)\n      .useValue(new MemoryAuditStore())\n'
         )
     }
-    if (app) Object.assign(result, appFiles(result, database, app))
+    if (app) Object.assign(result, appFiles(result, database, app, appBackend.options(appOptions)))
     result['README.md'] = backendReadme({
         database,
         auth: Boolean(auth),
         oidc: Boolean(oidcAnswers),
         app,
+        appOptions: app ? appBackend.options(appOptions) : undefined,
         tenantRole: oidcAnswers
             ? oidc.tenantRole(database.database)
             : app
@@ -873,8 +877,8 @@ const appOrigin = link => `http://localhost:${link.port}`
  * login server on every route (PasportModule, a global guard), the notes per organisation (NotesModule, RLS), and
  * @Public() on the routes that stay open. `result` holds the files with the database so far.
  */
-function appFiles(result, database, link) {
-    const changed = appBackend.appFiles({ database: database.database, link })
+function appFiles(result, database, link, choice) {
+    const changed = appBackend.appFiles({ database: database.database, link, choice })
     const env = text =>
         replaceOnce(
             replaceOnce(text, `PORT=${PORT}\n`, `PORT=${appBackend.APP_PORT}\n`),
@@ -884,12 +888,15 @@ function appFiles(result, database, link) {
             '# Port of the API (the Next.js frontend uses 3000)',
             '# Port of the API (the login server uses 4000)'
         )
-    changed['.env'] = env(result['.env']) + appBackend.envLines(link)
-    changed['.env.example'] = env(result['.env.example']) + appBackend.envLines(link)
+    const extra = appBackend.envLines(link) + appBackend.optionLines(choice, { appName: link.name })
+    changed['.env'] = env(result['.env']) + extra
+    changed['.env.example'] = env(result['.env.example']) + extra
+    if (choice.files) changed['.gitignore'] = result['.gitignore'] + 'storage\n'
     for (const locale of LOCALES) {
         changed[`src/i18n/${locale}/errors.json`] = json({
             ...JSON.parse(result[`src/i18n/${locale}/errors.json`]),
-            ...appBackend.ERRORS[locale]
+            ...appBackend.ERRORS[locale],
+            ...(choice.files ? appBackend.FILES_ERRORS[locale] : {})
         })
         changed[`src/i18n/${locale}/validation.json`] = json({
             ...TRANSLATIONS[locale].validation,
@@ -922,8 +929,29 @@ function appFiles(result, database, link) {
             "import { HealthController } from './health/health.controller.js';\nimport { NotesModule } from './notes/notes.module.js';\nimport { PasportModule } from './pasport/pasport.module.js';\n"
         ),
         '    DatabaseModule,\n',
-        '    DatabaseModule,\n    PasportModule,\n    NotesModule,\n'
+        '    DatabaseModule,\n    PasportModule,\n    NotesModule,\n' +
+            (choice.files ? '    FilesModule,\n' : '') +
+            (choice.mail ? '    MailModule,\n' : '')
     )
+    changed['src/app.module.ts'] = replaceOnce(
+        changed['src/app.module.ts'],
+        "import { NotesModule } from './notes/notes.module.js';\n",
+        "import { NotesModule } from './notes/notes.module.js';\n" +
+            (choice.files ? "import { FilesModule } from './files/files.module.js';\n" : '') +
+            (choice.mail ? "import { MailModule } from './mail/mail.module.js';\n" : '')
+    )
+    if (choice.files) {
+        // An upload is the raw file as the body (src/files); the limit is a little above the largest file
+        changed['src/setup.ts'] = replaceOnce(
+            replaceOnce(
+                changed['src/setup.ts'],
+                "import { ConfigService } from '@nestjs/config';\n",
+                "import { ConfigService } from '@nestjs/config';\nimport type { NestExpressApplication } from '@nestjs/platform-express';\nimport { UPLOAD_TYPES } from './files/files.controller.js';\nimport { MAX_FILE_BYTES } from './files/files.service.js';\n"
+            ),
+            '  app.useGlobalPipes(',
+            "  (app as NestExpressApplication).useBodyParser('raw', { type: UPLOAD_TYPES, limit: MAX_FILE_BYTES + 1024 * 1024 });\n  app.useGlobalPipes("
+        )
+    }
     // Every route needs a token of the login server, except these (the status card of the frontend, the examples)
     const open = (rel, controller, from) => {
         let content = replaceOnce(result[rel], controller, '@Public()\n' + controller)
@@ -1086,6 +1114,8 @@ export const nestjs = {
         const withOidc = database && answers?.oidc ? answers.oidc : null
         // An app linked to a login server (see linked.js): its tokens, its own database
         const withApp = database && answers?.app ? answers.app : null
+        const appChoice = appBackend.options(answers?.appOptions)
+        const appPackages = appBackend.packages(appChoice)
         const root = path.join(projectDir, DIR)
         if (await exists(root)) throw new Error(`De map ./${DIR} bestaat al. Verwijder of hernoem ze eerst.`)
 
@@ -1181,6 +1211,21 @@ export const nestjs = {
                       }
                   ]
                 : []),
+            ...(withApp && appPackages.dependencies.length
+                ? [
+                      {
+                          title: `Pakketten van de app installeren (${[appChoice.mail && 'mail', appChoice.files && 'bestanden'].filter(Boolean).join(', ')})`,
+                          weight: 1,
+                          run: async () => {
+                              await exec('npm', ['install', ...appPackages.dependencies], { cwd: root })
+                              if (appPackages.devDependencies.length)
+                                  await exec('npm', ['install', '--save-dev', ...appPackages.devDependencies], {
+                                      cwd: root
+                                  })
+                          }
+                      }
+                  ]
+                : []),
             {
                 title: 'Prettier installeren (backend)',
                 weight: 2,
@@ -1206,7 +1251,8 @@ export const nestjs = {
                         buildFiles(database, {
                             auth: withAuth ? { jwtSecret: secret() } : null,
                             oidc: withOidc,
-                            app: withApp
+                            app: withApp,
+                            appOptions: appChoice
                         })
                     ))
                         await write(root, rel, content)
@@ -1218,7 +1264,7 @@ export const nestjs = {
                             ...pkg.scripts,
                             ...databases[database.id].backend(database).scripts,
                             ...(withOidc ? oidc.SCRIPTS : {}),
-                            ...(withApp ? appBackend.SCRIPTS : {})
+                            ...(withApp ? appBackend.scripts(appChoice) : {})
                         }
                         await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
                     }

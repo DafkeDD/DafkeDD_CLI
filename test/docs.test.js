@@ -41,15 +41,24 @@ const VARIANTS = {
     database: { database: DB, auth: null, oidc: null },
     'database + login': { database: DB, auth: { jwtSecret: 'x' }, oidc: null },
     'database + OIDC server': { database: DB, auth: null, oidc: OIDC },
-    'database + linked app': { database: DB, auth: null, oidc: null, app: LINK }
+    'database + linked app': { database: DB, auth: null, oidc: null, app: LINK },
+    'database + linked app with mail, files and a database per organisation': {
+        database: DB,
+        auth: null,
+        oidc: null,
+        app: LINK,
+        appOptions: { mail: true, files: true, isolation: 'database' }
+    }
 }
 
-const filesOf = ({ database, auth, oidc, app = null }) => buildFiles(database, { auth, oidc, app })
-const optionsOf = ({ database, auth, oidc, app = null }) => ({
+const filesOf = ({ database, auth, oidc, app = null, appOptions }) =>
+    buildFiles(database, { auth, oidc, app, appOptions })
+const optionsOf = ({ database, auth, oidc, app = null, appOptions }) => ({
     database,
     auth: Boolean(auth),
     oidc: Boolean(oidc),
-    app
+    app,
+    appOptions
 })
 const portOf = variant => (variant.app ? 4001 : PORT)
 

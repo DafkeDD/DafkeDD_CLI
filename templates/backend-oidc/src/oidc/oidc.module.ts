@@ -77,6 +77,8 @@ import { WellKnownController } from './well-known.controller.js'
         MfaService,
         EidService,
         KeysService,
+        // The rate limit of the logins, for other modules with endpoints that check a secret (an app, a code)
+        LoginLimiter,
         OidcConfig,
         AccessGuard,
         OIDC_STORE

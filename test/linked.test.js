@@ -116,7 +116,25 @@ test('ask: server, port, the code and the own database; a wrong code is asked ag
     }
     const asked = []
     const prompts = {
-        select: async () => assert.fail('no Docker question: the database is on the server of the login server'),
+        // No Docker question (the database is on the server of the login server): only how the data is kept apart
+        select: async config => {
+            asked.push(config.message)
+            assert.match(config.message, /gescheiden/)
+            assert.equal(config.default, 'rls')
+            assert.deepEqual(
+                config.choices.map(choice => choice.value),
+                ['rls', 'database']
+            )
+            return 'database'
+        },
+        checkbox: async config => {
+            asked.push(config.message)
+            assert.deepEqual(
+                config.choices.map(choice => choice.value),
+                ['mail', 'files']
+            )
+            return ['mail']
+        },
         password: async config => {
             asked.push(config.message)
             return 'geheim'
@@ -147,8 +165,9 @@ test('ask: server, port, the code and the own database; a wrong code is asked ag
         }
     }
     const answers = await linked.ask({ hasFrontend: true, prompts, fetchImpl, projectDir: '/tmp/shop' })
-    assert.equal(asked.length, 8)
+    assert.equal(asked.length, 10)
     assert.deepEqual(answers.link, LINK)
+    assert.deepEqual(answers.appOptions, { mail: true, files: false, isolation: 'database' })
     assert.deepEqual(answers.database, {
         id: 'postgres',
         mode: 'local',
@@ -163,8 +182,13 @@ test('ask: server, port, the code and the own database; a wrong code is asked ag
     const summary = linked.summary(answers).map(line => line.text)
     assert.ok(summary[0].includes('Gekoppeld aan http://localhost:4000/oidc'))
     assert.ok(summary.some(line => line.includes('Verbonden met PostgreSQL op localhost:5432/planner')))
-    assert.ok(summary.some(line => line.includes('Row-Level Security')))
+    assert.ok(summary.some(line => line.includes('een eigen database (planner_t_<id>)')))
+    assert.ok(summary.some(line => line.startsWith('Mail: MailService')))
+    assert.ok(!summary.some(line => line.startsWith('Bestanden')))
     assert.ok(linked.next(answers).includes('npm run start:dev'))
+    assert.ok(linked.next(answers).some(line => line.startsWith('npm run mail:dev')))
+    const rls = linked.summary({ ...answers, appOptions: { mail: false, files: false, isolation: 'rls' } })
+    assert.ok(rls.some(line => line.text.includes('Row-Level Security')))
     // Without a frontend there is nothing to link
     const none = await linked.ask({ hasFrontend: false, prompts })
     assert.equal(none.link, null)
@@ -237,6 +261,15 @@ test('the linked frontend: login, session, profile and the notes of its own API;
     assert.match(all['src/lib/oidc.ts'], /export const SESSION_COOKIE = `\$\{COOKIE_PREFIX\}_session`/)
     assert.match(all['src/lib/oidc.ts'], /export const FLOW_COOKIE = `\$\{COOKIE_PREFIX\}_oidc`/)
     assert.doesNotMatch(all['src/lib/oidc.ts'], /'app_session'/)
+    // Every page of the linked app is protected: without a session the shell starts a login that comes back here
+    const shell = all['src/components/shell/app-shell.tsx']
+    assert.match(shell, /if \(!session && external\) return <LoginRedirect \/>/)
+    const redirect = all['src/components/shell/login-redirect.tsx']
+    assert.match(redirect, /<form ref=\{form\} action='\/api\/auth\/login' method='get'/)
+    assert.match(redirect, /returnTo\.current\.value = window\.location\.pathname \+ window\.location\.search/)
+    assert.match(redirect, /Date\.now\(\) - last < RETRY_MS/)
+    for (const locale of ['en', 'nl', 'fr', 'de'])
+        assert.ok(JSON.parse(all[`messages/${locale}.json`]).Oidc.loginStuck, locale)
     // The licence for the product of the app: kept in the session, shown on the home page
     assert.match(all['src/lib/oidc.ts'], /license: licenseOf\(claims\.license\)/)
     assert.match(all['src/lib/refresh.ts'], /\blicense,\n[^}]*\broles\n/)

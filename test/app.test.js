@@ -1,6 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { APP_PORT, appEndpoints, ERRORS, SCRIPTS, tenantRole, VALIDATION } from '../src/backends/app.js'
+import {
+    APP_PORT,
+    appEndpoints,
+    ERRORS,
+    FILES_ERRORS,
+    options,
+    packages,
+    scripts,
+    SCRIPTS,
+    tenantRole,
+    VALIDATION
+} from '../src/backends/app.js'
 import { buildFiles, LOCALES } from '../src/backends/nestjs.js'
 import { linked } from '../src/backends/linked.js'
 
@@ -157,4 +168,96 @@ test('the steps of a linked app are the NestJS steps with the app, and add test:
     assert.ok(steps.some(step => step.title === 'NestJS aanmaken'))
     assert.ok(steps.some(step => step.title === 'Databaseverbinding testen'))
     assert.deepEqual(await linked.steps({ projectDir: '/tmp', answers: {} }), [])
+})
+
+// ---------------------------------------------------------------- modules and the isolation of the organisations
+
+const full = buildFiles(DB, { app: LINK, appOptions: { mail: true, files: true, isolation: 'database' } })
+
+test('without modules the app gets no mail, no files and one database with Row-Level Security', () => {
+    assert.ok(!Object.keys(files).some(rel => rel.startsWith('src/files/') || rel.startsWith('src/mail/')))
+    assert.ok(!files['src/app.module.ts'].includes('FilesModule'))
+    assert.ok(!files['src/app.module.ts'].includes('MailModule'))
+    assert.ok(!files['src/setup.ts'].includes('useBodyParser'))
+    assert.ok(files['.env'].includes('\nTENANT_ISOLATION=rls\n'))
+    assert.ok(!files['.env'].includes('SMTP_HOST') && !files['.env'].includes('FILES_DRIVER'))
+    assert.ok(!files['.gitignore'].includes('storage'))
+    assert.deepEqual(packages(), { dependencies: [], devDependencies: [] })
+    assert.deepEqual(scripts(), SCRIPTS)
+    assert.deepEqual(options(), { mail: false, files: false, isolation: 'rls' })
+    assert.throws(() => options({ isolation: 'schema' }), /isolation/)
+    assert.ok(!appEndpoints().some(endpoint => endpoint.path.startsWith('/files')))
+})
+
+test('the mail module: the MailService of the login server, global, with Mailpit and the SMTP settings', () => {
+    for (const rel of ['src/mail/mail.service.ts', 'src/mail/mail.service.spec.ts', 'src/mail/mail.module.ts'])
+        assert.ok(full[rel], rel)
+    assert.match(full['src/mail/mail.module.ts'], /@Global\(\)/)
+    assert.match(full['src/mail/mail.service.ts'], /attachments\?: MailAttachment\[\]/)
+    assert.match(full['src/app.module.ts'], /import \{ MailModule \} from '\.\/mail\/mail\.module\.js'/)
+    assert.match(full['src/app.module.ts'], /\n\s+MailModule,\n/)
+    for (const line of ['SMTP_HOST=localhost', 'SMTP_PORT=1025', "MAIL_FROM='Planner <no-reply@example.com>'"])
+        assert.ok(full['.env.example'].includes(line), line)
+    assert.match(scripts({ mail: true })['mail:dev'], /mailpit/)
+    assert.deepEqual(packages({ mail: true }).devDependencies, ['@types/nodemailer@latest'])
+})
+
+test('the files module: a FileStore, the table files with Row-Level Security, raw uploads and its errors', () => {
+    for (const rel of [
+        'src/files/files.controller.ts',
+        'src/files/files.service.ts',
+        'src/files/files.module.ts',
+        'src/files/file-store.ts',
+        'src/files/local-file-store.ts',
+        'src/files/gcs-file-store.ts',
+        'src/files/pg-file-index.ts',
+        'src/files/memory-file-index.ts',
+        'src/files/files.spec.ts',
+        'test/files.e2e-spec.ts',
+        'test/files.db-spec.ts'
+    ])
+        assert.ok(full[rel], rel)
+    const migrations = full['src/database/migrations.ts']
+    assert.match(migrations, /id: 2,\n\s+name: 'files'/)
+    assert.match(migrations, /\$\{isolate\('files'\)\}/)
+    assert.match(full['src/database/database.constants.ts'], /TENANT_TABLES = \['notes', 'files'\]/)
+    assert.match(
+        full['src/setup.ts'],
+        /useBodyParser\('raw', \{ type: UPLOAD_TYPES, limit: MAX_FILE_BYTES \+ 1024 \* 1024 \}\)/
+    )
+    assert.match(full['src/app.module.ts'], /\n\s+FilesModule,\n/)
+    assert.ok(full['.gitignore'].split('\n').includes('storage'))
+    for (const line of ['FILES_DRIVER=local', 'FILES_DIR=./storage', 'GCS_BUCKET='])
+        assert.ok(full['.env'].includes(line), line)
+    assert.deepEqual(packages({ files: true }).dependencies, ['@google-cloud/storage@latest'])
+    for (const locale of LOCALES) {
+        assert.deepEqual(Object.keys(FILES_ERRORS[locale]), Object.keys(FILES_ERRORS.en), locale)
+        const errors = JSON.parse(full[`src/i18n/${locale}/errors.json`])
+        for (const key of Object.keys(FILES_ERRORS.en)) assert.ok(errors[key], `${locale} ${key}`)
+        assert.match(errors.FILE_TOO_LARGE, /\{mb\}/)
+    }
+    const readme = full['README.md']
+    for (const text of [
+        '### Files',
+        '### Email (SMTP)',
+        '### PUT /files/:id',
+        '--data-binary @contract.pdf',
+        'here **`database`**'
+    ])
+        assert.ok(readme.includes(text), text)
+})
+
+test('a database per organisation: TENANT_ISOLATION, the register in MAIN_MIGRATIONS and its own db test', () => {
+    assert.ok(full['.env'].includes('\nTENANT_ISOLATION=database\n'))
+    const service = full['src/database/database.service.ts']
+    assert.match(service, /config\.get<string>\('TENANT_ISOLATION'\) \|\| 'rls'/)
+    assert.match(service, /this\.withLock\('tenant-database:' \+ name/)
+    assert.match(service, /CREATE DATABASE "\$\{name\}"/)
+    assert.match(full['src/database/migrations.ts'], /export const MAIN_MIGRATIONS[\s\S]+CREATE TABLE tenant_databases/)
+    assert.match(
+        full['src/database/migrator.ts'],
+        /\{ lock = MIGRATION_LOCK, table = 'schema_migrations' \}: MigrateOptions = \{\}/
+    )
+    // The test of the isolation per database is there either way (the setting can be changed later)
+    assert.ok(files['test/tenant-databases.db-spec.ts'])
 })

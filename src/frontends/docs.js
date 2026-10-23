@@ -290,6 +290,10 @@ addresses of this frontend to that app (redirect URI \`http://localhost:${link.p
 \`http://localhost:${link.port}\`, back-channel logout \`http://localhost:${link.port}/api/auth/backchannel-logout\` when the app had
 none). Somebody who is logged in at that server is logged in here without a password (single sign-on).
 
+**Every page is protected.** A page in the shell (\`AppPage\`) without a session sends the browser to the login
+server (\`src/components/shell/login-redirect.tsx\`) and back to the same page afterwards. When a login comes back
+without a session within 15 seconds (cookies blocked, for example), it shows a "Log in" button instead of trying again.
+
 | Path | What it does |
 | --- | --- |
 | \`/api/auth/login\` | Starts a login at the login server: state, nonce and a PKCE verifier go into an encrypted cookie |

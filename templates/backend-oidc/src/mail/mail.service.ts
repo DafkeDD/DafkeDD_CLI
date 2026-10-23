@@ -2,11 +2,20 @@ import { Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import nodemailer, { type Transporter } from 'nodemailer'
 
+/** A file in the mail; with a `cid` it is an image that the html shows with `<img src="cid:…">` */
+export interface MailAttachment {
+    filename: string
+    content: Buffer
+    contentType: string
+    cid?: string
+}
+
 export interface Mail {
     to: string
     subject: string
     text: string
     html: string
+    attachments?: MailAttachment[]
 }
 
 /**
@@ -58,7 +67,8 @@ export class MailService {
                 to: mail.to,
                 subject: mail.subject,
                 text: mail.text,
-                html: mail.html
+                html: mail.html,
+                attachments: mail.attachments
             })
             return true
         } catch (error) {

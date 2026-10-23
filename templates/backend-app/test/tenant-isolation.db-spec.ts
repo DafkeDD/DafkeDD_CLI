@@ -21,7 +21,9 @@ const settings = {
     DATABASE_PORT: process.env.DATABASE_PORT ?? '5432',
     DATABASE_USER: process.env.DATABASE_USER ?? 'postgres',
     DATABASE_PASSWORD: process.env.DATABASE_PASSWORD ?? '',
-    DATABASE_NAME: (process.env.DATABASE_NAME ?? 'app') + '_test'
+    DATABASE_NAME: (process.env.DATABASE_NAME ?? 'app') + '_test',
+    // One database (TENANT_ISOLATION=database is tested in tenant-databases.db-spec.ts)
+    TENANT_ISOLATION: 'rls'
 }
 const connection = (database: string) => ({
     host: settings.DATABASE_HOST,

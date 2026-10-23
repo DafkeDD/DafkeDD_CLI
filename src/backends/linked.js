@@ -1,4 +1,4 @@
-import { input, password, select } from '@inquirer/prompts'
+import { checkbox, input, password, select } from '@inquirer/prompts'
 import { databases } from '../databases/index.js'
 import { slugify } from '../databases/postgres.js'
 import { APP_PORT, DEFAULT_ROLES } from './app.js'
@@ -88,7 +88,12 @@ export const linked = {
     docsFile: 'api.md',
     api: { port: APP_PORT },
 
-    async ask({ hasFrontend = false, prompts = { input, password, select }, fetchImpl = fetch, projectDir } = {}) {
+    async ask({
+        hasFrontend = false,
+        prompts = { input, password, select, checkbox },
+        fetchImpl = fetch,
+        projectDir
+    } = {}) {
         if (!hasFrontend) return { link: null, reason: 'frontend' }
         const server = normalizeServer(
             await prompts.input({
@@ -132,7 +137,42 @@ export const linked = {
             prompts,
             shared: { name: slugify(link.name) }
         })
-        return { link, database }
+        const modules = await prompts.checkbox({
+            message: 'Welke modules krijgt de API van de app? (spatie om aan te vinken)',
+            choices: [
+                {
+                    name: 'Mail (SMTP)',
+                    value: 'mail',
+                    description: 'MailService met SMTP; Mailpit tijdens de ontwikkeling, anders de console'
+                },
+                {
+                    name: 'Bestanden (uploads)',
+                    value: 'files',
+                    description: 'Afbeeldingen en pdf’s per organisatie, in een map of in Google Cloud Storage'
+                }
+            ]
+        })
+        const isolation = await prompts.select({
+            message: 'Hoe wordt de data van de organisaties gescheiden?',
+            default: 'rls',
+            choices: [
+                {
+                    name: 'Eén database met Row-Level Security (aanbevolen)',
+                    value: 'rls',
+                    description: 'Elke rij heeft een tenant_id; PostgreSQL toont enkel de rijen van de organisatie'
+                },
+                {
+                    name: 'Een eigen database per organisatie',
+                    value: 'database',
+                    description: 'Gemaakt bij het eerste gebruik; de databasegebruiker heeft CREATEDB nodig'
+                }
+            ]
+        })
+        return {
+            link,
+            database,
+            appOptions: { mail: modules.includes('mail'), files: modules.includes('files'), isolation }
+        }
     },
 
     /** What the frontend gets to know: the API of this app, and the login server it logs in at. */
@@ -145,7 +185,11 @@ export const linked = {
     /** The NestJS API of this app (see nestjs.buildFiles: `app`). */
     async steps({ projectDir, answers = {}, ...rest }) {
         if (!answers?.link) return []
-        return nestjs.steps({ projectDir, ...rest, answers: { database: answers.database, app: answers.link } })
+        return nestjs.steps({
+            projectDir,
+            ...rest,
+            answers: { database: answers.database, app: answers.link, appOptions: answers.appOptions }
+        })
     },
 
     summary(answers) {
@@ -165,8 +209,27 @@ export const linked = {
             ...nestjs.summary({ database: answers.database }),
             {
                 ok: true,
-                text: `De API van de app (http://localhost:${APP_PORT}) aanvaardt enkel tokens van die login server voor deze app; de data staat per organisatie in ${answers.database?.database ?? 'de eigen database'} (Row-Level Security)`
+                text:
+                    answers.appOptions?.isolation === 'database'
+                        ? `De API van de app (http://localhost:${APP_PORT}) aanvaardt enkel tokens van die login server voor deze app; elke organisatie krijgt een eigen database (${answers.database?.database ?? 'app'}_t_<id>) bij het eerste gebruik`
+                        : `De API van de app (http://localhost:${APP_PORT}) aanvaardt enkel tokens van die login server voor deze app; de data staat per organisatie in ${answers.database?.database ?? 'de eigen database'} (Row-Level Security)`
             },
+            ...(answers.appOptions?.mail
+                ? [
+                      {
+                          ok: true,
+                          text: 'Mail: MailService in src/mail; npm run mail:dev start Mailpit (http://localhost:8025)'
+                      }
+                  ]
+                : []),
+            ...(answers.appOptions?.files
+                ? [
+                      {
+                          ok: true,
+                          text: 'Bestanden: /files in de API, de bytes in ./backend/storage (FILES_DRIVER=gcs voor Google Cloud Storage)'
+                      }
+                  ]
+                : []),
             link.product
                 ? {
                       ok: true,
@@ -201,6 +264,9 @@ export const linked = {
         return [
             `cd ${DIR}`,
             'npm run db:check    (test the database connection, creates the database)',
+            ...(answers.appOptions?.mail
+                ? ['npm run mail:dev    (Mailpit in Docker: every mail at http://localhost:8025)']
+                : []),
             'npm run start:dev',
             `API: http://localhost:${APP_PORT}  |  docs: http://localhost:${APP_PORT}/docs`,
             `Login: ${link.issuer}  |  account en beheer: ${link.accountUrl}`,
