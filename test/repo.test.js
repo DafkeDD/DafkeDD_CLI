@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { askRepo, ghOwner, repoExists, repoSteps, platforms, NAME_PATTERN } from '../src/repo.js'
+import { askRepo, ghOwner, githubLines, repoExists, repoSteps, platforms, NAME_PATTERN } from '../src/repo.js'
 
 /** Fake `exec` that records calls and lets a handler decide what happens. */
 function fakeExec(handler = async () => '') {
@@ -227,4 +227,32 @@ test('repoSteps with Claude Code makes the labels of the issues, and a failure t
         `${process.execPath} .claude/scripts/protect-branches.mjs`
     ])
     assert.equal(repoSteps({ projectDir: '/tmp/x', repo: { name: 'r', visibility: 'private' }, exec }).length, 2)
+})
+
+test('repoSteps tells the summary how the labels and the protection went', async () => {
+    const results = {}
+    const exec = async (cmd, args) => {
+        if (args[0].endsWith('protect-branches.mjs'))
+            throw new Error(
+                'developer: not protected: GitHub protects branches of a private repository only with GitHub Pro'
+            )
+        return ''
+    }
+    const steps = repoSteps({
+        projectDir: '/tmp/x',
+        repo: { name: 'r', visibility: 'private' },
+        developer: 'developer',
+        labels: true,
+        results,
+        exec
+    })
+    await steps.at(-1).run()
+    assert.deepEqual(results, { labels: true, protection: 'plan' })
+    const lines = githubLines(results)
+    assert.equal(lines[0].ok, true)
+    assert.equal(lines[1].ok, false)
+    assert.match(lines[1].text, /GitHub Pro of Team/)
+    assert.match(githubLines({ labels: true, protection: true })[1].text, /beschermd/)
+    assert.match(githubLines({ labels: 'failed', protection: 'failed' })[1].text, /protect-branches\.mjs/)
+    assert.deepEqual(githubLines({}), [])
 })

@@ -652,9 +652,14 @@ export function claudeSteps({ projectDir, project, owner = ghOwner }) {
 }
 
 /** The lines at the end of the run of the CLI. */
-export const claudeNext = () => [
+export const claudeNext = ({ repo = false } = {}) => [
     'claude    (in this folder: CLAUDE.md, the agents and the skills are loaded)',
-    'node .claude/scripts/setup-labels.mjs && node .claude/scripts/protect-branches.mjs    (once, when the CLI did not make the GitHub repository)',
+    // When the CLI made the repository it did this itself (the summary says how it went)
+    ...(repo
+        ? []
+        : [
+              'node .claude/scripts/setup-labels.mjs && node .claude/scripts/protect-branches.mjs    (once, after pushing to GitHub)'
+          ]),
     'npx --allow-git=all github:DafkeDD/DafkeDD_CLI doctor    (is everything there?)  ·  ... update    (a newer CLI)',
     `Work: "plan <wish>", then "implement #<issue>": a branch per issue, merged into ${DEVELOP_BRANCH} when the CI is green`
 ]

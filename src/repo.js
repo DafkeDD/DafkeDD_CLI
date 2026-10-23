@@ -68,7 +68,7 @@ export async function askRepo({ projectDir, prompts = { confirm, input, select }
  * branch developer is pushed too and made the default branch: the issue branches are merged into it, and only a
  * person merges it into main (which makes a release).
  */
-export function repoSteps({ projectDir, repo, developer = null, labels = false, exec = run }) {
+export function repoSteps({ projectDir, repo, developer = null, labels = false, results = {}, exec = run }) {
     return [
         {
             title: 'Git initialiseren',
@@ -119,16 +119,47 @@ export function repoSteps({ projectDir, repo, developer = null, labels = false, 
                       // The labels of the issue forms and the agents, then developer and main protected (the CI checks
                       // required, only through a pull request). A failure is no reason to stop: "doctor" reports it
                       // (a private repository on GitHub Free cannot be protected)
+                      // What happened is in `results` (labels, protection: true or the reason), for the summary
                       run: async () => {
-                          for (const script of ['setup-labels.mjs', 'protect-branches.mjs'])
+                          for (const [key, script] of [
+                              ['labels', 'setup-labels.mjs'],
+                              ['protection', 'protect-branches.mjs']
+                          ])
                               try {
                                   await exec(process.execPath, [`.claude/scripts/${script}`], { cwd: projectDir })
-                              } catch {
-                                  // Later by hand: node .claude/scripts/<script>
+                                  results[key] = true
+                              } catch (error) {
+                                  results[key] = /GitHub Pro|upgrade|403/i.test(String(error?.message))
+                                      ? 'plan'
+                                      : 'failed'
                               }
                       }
                   }
               ]
             : [])
     ]
+}
+
+/** The lines of the summary about the labels and the protection of the branches (`results` of repoSteps). */
+export function githubLines(results) {
+    const lines = []
+    if (results.labels === true) lines.push({ ok: true, text: 'Labels van de issues aangemaakt op GitHub' })
+    else if (results.labels)
+        lines.push({ ok: false, text: 'Labels niet gelukt: node .claude/scripts/setup-labels.mjs' })
+    if (results.protection === true)
+        lines.push({
+            ok: true,
+            text: 'developer en main beschermd (CI verplicht, enkel via pull requests); meldingen van kwetsbaarheden staan aan'
+        })
+    else if (results.protection === 'plan')
+        lines.push({
+            ok: false,
+            text: 'Branches niet beschermd: een private repo kan dat enkel met GitHub Pro of Team (of maak de repo publiek, dan: node .claude/scripts/protect-branches.mjs)'
+        })
+    else if (results.protection)
+        lines.push({
+            ok: false,
+            text: 'Branchbescherming niet gelukt: node .claude/scripts/protect-branches.mjs (zie de fout)'
+        })
+    return lines
 }

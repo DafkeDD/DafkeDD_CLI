@@ -688,6 +688,9 @@ git switch developer
 
 ## Changelog
 
+- **0.46.1**: the summary of the CLI says whether the labels and the protection of the branches worked on GitHub (a
+  private repository on GitHub Free cannot protect its branches), and no longer asks to run them by hand when the CLI
+  made the repository.
 - **0.46.0**: keeping projects up to date, and more checks on GitHub.
     - `update`: an existing project gets the agents, hooks, pipelines and Terraform of this version, without overwriting
       what you changed (`.dafkedd.json`, `<file>.dafkedd-new`); older projects without a manifest too.

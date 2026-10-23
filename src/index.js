@@ -4,7 +4,7 @@ import pc from 'picocolors'
 import { runSteps } from './progress.js'
 import { frontends } from './frontends/index.js'
 import { backends } from './backends/index.js'
-import { askRepo, repoSteps } from './repo.js'
+import { askRepo, githubLines, repoSteps } from './repo.js'
 import { docsStep, docsProject } from './docs.js'
 import { askClaude as askClaudeCode, claudeNext, claudeSteps, DEVELOP_BRANCH, describeProject } from './claude.js'
 import path from 'node:path'
@@ -79,6 +79,8 @@ export async function main({
 
     const repo = await ask({ projectDir })
 
+    // What the GitHub steps did (labels, protection of the branches), for the summary
+    const github = {}
     const steps = [
         // The frontend gets to know the API (url, language link, status card) when a backend is installed.
         ...(frontend
@@ -105,7 +107,13 @@ export async function main({
         // What the CLI wrote, for a later "update" (only when it manages files: Claude Code or Google Cloud)
         ...(project || cloud ? manifestSteps({ projectDir, project: described, version }) : []),
         ...(repo
-            ? repoSteps({ projectDir, repo, developer: project ? DEVELOP_BRANCH : null, labels: Boolean(project) })
+            ? repoSteps({
+                  projectDir,
+                  repo,
+                  developer: project ? DEVELOP_BRANCH : null,
+                  labels: Boolean(project),
+                  results: github
+              })
             : [])
     ]
     if (steps.length === 0) {
@@ -135,6 +143,7 @@ export async function main({
         log(
             `${pc.green('✔')} Gepusht naar GitHub: ${pc.bold(repo.name)}${project ? ` (standaardbranch ${DEVELOP_BRANCH}; een merge naar main maakt een release)` : ''}`
         )
+    for (const line of githubLines(github)) log(`${line.ok ? pc.green('✔') : pc.yellow('!')} ${line.text}`)
     for (const { item, answers: own } of installed) {
         log(pc.dim(`\n${item.label}:`))
         const lines = typeof item.next === 'function' ? item.next(own) : (item.next ?? [])
@@ -142,7 +151,7 @@ export async function main({
     }
     if (project) {
         log(pc.dim('\nClaude Code:'))
-        for (const line of claudeNext()) log(pc.dim('  ' + line))
+        for (const line of claudeNext({ repo: Boolean(repo) })) log(pc.dim('  ' + line))
     }
     if (cloud) {
         log(pc.dim('\nGoogle Cloud (infra/README.md):'))

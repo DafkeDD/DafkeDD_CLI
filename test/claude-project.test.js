@@ -216,6 +216,8 @@ test('claudeSteps writes the files and adds the handoff to the root .gitignore o
     assert.ok(await fs.stat(path.join(dir, '.claude', 'agents', 'frontend.md')))
     assert.ok(await fs.stat(path.join(dir, '.github', 'workflows', 'release.yml')))
     assert.ok(claudeNext().some(line => line.includes('setup-labels')))
+    // The CLI made the repository: it did that itself
+    assert.ok(!claudeNext({ repo: true }).some(line => line.includes('setup-labels')))
     assert.equal(await fs.readFile(path.join(dir, '.github', 'CODEOWNERS'), 'utf8'), codeowners('dafkedd'))
     assert.match(codeowners('dafkedd'), /^\* @dafkedd$/m)
     // Without gh (or not logged in): no CODEOWNERS
