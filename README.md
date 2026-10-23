@@ -688,6 +688,8 @@ git switch developer
 
 ## Changelog
 
+- **0.46.3**: `protect-branches.mjs` no longer reports private vulnerability reporting as failed for a private
+  repository (GitHub only has it for public ones).
 - **0.46.2**: `doctor` says "niet beschermd" for a branch without protection, and for a private repository that GitHub
   Free cannot protect it (make it public or use GitHub Pro or Team).
 - **0.46.1**: the summary of the CLI says whether the labels and the protection of the branches worked on GitHub (a

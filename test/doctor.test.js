@@ -5,7 +5,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { checks, chromePaths, doctor, FAIL, OK, reachable, WARN } from '../src/doctor.js'
-import { checkNames, protection } from '../templates/project-claude/.claude/scripts/protect-branches.mjs'
+import { checkNames, isPrivate, protection } from '../templates/project-claude/.claude/scripts/protect-branches.mjs'
 import { LABELS } from '../templates/project-claude/.claude/scripts/setup-labels.mjs'
 import { ciWorkflow, describeProject, projectClaudeFiles } from '../src/claude.js'
 import { buildManifest, writeManifest } from '../src/manifest.js'
@@ -169,4 +169,11 @@ test('protect-branches: the checks of the CI are required, a pull request withou
     assert.equal(body.enforce_admins, false)
     assert.equal(body.allow_force_pushes, false)
     assert.equal(body.allow_deletions, false)
+})
+
+test('protect-branches knows a private repository (no private vulnerability reporting there)', () => {
+    const answer = stdout => () => ({ stdout })
+    assert.equal(isPrivate('o/r', answer('{"isPrivate":true}')), true)
+    assert.equal(isPrivate('o/r', answer('{"isPrivate":false}')), false)
+    assert.equal(isPrivate('o/r', answer('')), false)
 })

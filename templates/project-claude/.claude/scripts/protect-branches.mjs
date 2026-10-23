@@ -25,6 +25,16 @@ export function checkNames(ci) {
     return names
 }
 
+/** True when the repository is private (unknown counts as public: then GitHub answers for itself). */
+export function isPrivate(repo, spawn = spawnSync) {
+    const result = spawn('gh', ['repo', 'view', repo, '--json', 'isPrivate'], { encoding: 'utf8' })
+    try {
+        return JSON.parse(result.stdout).isPrivate === true
+    } catch {
+        return false
+    }
+}
+
 /** The body of PUT /repos/{repo}/branches/{branch}/protection. */
 export const protection = checks => ({
     required_status_checks: { strict: false, contexts: checks },
@@ -64,18 +74,20 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
             )
         }
     }
-    // Private vulnerability reporting (SECURITY.md): Security -> Report a vulnerability
-    const reporting = spawnSync(
-        'gh',
-        ['api', '--method', 'PUT', `repos/${repo}/private-vulnerability-reporting`, '--silent'],
-        {
-            encoding: 'utf8'
-        }
-    )
-    if (reporting.status === 0) console.log('private vulnerability reporting: on')
+    // Private vulnerability reporting (SECURITY.md): Security -> Report a vulnerability. GitHub only has it for a
+    // public repository: a private one has no outside reporters, so that is no failure
+    if (isPrivate(repo)) console.log('private vulnerability reporting: only for a public repository (not needed now)')
     else {
-        failed++
-        console.error(`private vulnerability reporting: not on: ${`${reporting.stderr ?? ''}`.trim()}`)
+        const reporting = spawnSync(
+            'gh',
+            ['api', '--method', 'PUT', `repos/${repo}/private-vulnerability-reporting`, '--silent'],
+            { encoding: 'utf8' }
+        )
+        if (reporting.status === 0) console.log('private vulnerability reporting: on')
+        else {
+            failed++
+            console.error(`private vulnerability reporting: not on: ${`${reporting.stderr ?? ''}`.trim()}`)
+        }
     }
     if (failed) process.exitCode = 1
 }
