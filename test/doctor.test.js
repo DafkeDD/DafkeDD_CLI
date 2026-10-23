@@ -42,10 +42,15 @@ async function projectDir(t, { manifestVersion = '0.46.0' } = {}) {
 
 /** A fake exec: every tool is there, gh is logged in, the repository has every label and protected branches. */
 const fakeExec =
-    ({ missing = [], labels = LABELS.map(([name]) => name), protectedBranches = ['developer', 'main'] } = {}) =>
+    ({
+        missing = [],
+        labels = LABELS.map(([name]) => name),
+        protectedBranches = ['developer', 'main'],
+        isPrivate = false
+    } = {}) =>
     async (cmd, args) => {
         if (missing.includes(cmd)) throw new Error(`${cmd}: not found`)
-        if (cmd === 'gh' && args[0] === 'repo') return 'dafkedd/planner\n'
+        if (cmd === 'gh' && args[0] === 'repo') return JSON.stringify({ nameWithOwner: 'dafkedd/planner', isPrivate })
         if (cmd === 'gh' && args[0] === 'label') return labels.join('\n')
         if (cmd === 'gh' && args[0] === 'api') {
             const branch = args[1].split('/')[4]
@@ -97,7 +102,7 @@ test('doctor: what is missing, with how to fix it', async t => {
     assert.equal(byText(result, /^PostgreSQL MCP/).status, WARN)
     assert.equal(byText(result, /^PostgreSQL op localhost:5999$/).status, WARN)
     assert.match(byText(result, /^Labels ontbreken/).text, /type:feature/)
-    assert.equal(byText(result, /^Branch developer/).status, WARN)
+    assert.equal(byText(result, /^Branch developer niet beschermd$/).status, WARN)
     assert.equal(byText(result, /^Branch developer/).fix, 'node .claude/scripts/protect-branches.mjs')
     assert.equal(byText(result, /^Branch main/).status, OK)
 
@@ -113,6 +118,24 @@ test('doctor: what is missing, with how to fix it', async t => {
     })
     assert.equal(ok, false)
     assert.match(lines.join('\n'), /probleem/)
+})
+
+test('doctor: a private repository on GitHub Free cannot protect its branches, and says so', async t => {
+    const dir = await projectDir(t)
+    const result = await checks({
+        projectDir: dir,
+        version: '0.46.0',
+        exec: fakeExec({ protectedBranches: [], isPrivate: true }),
+        exists: existsSync,
+        connect: async () => true
+    })
+    const developer = byText(result, /^Branch developer/)
+    assert.equal(
+        developer.text,
+        'Branch developer niet beschermd (een private repo kan dat enkel met GitHub Pro of Team)'
+    )
+    assert.match(developer.fix, /maak de repo publiek of neem GitHub Pro\/Team/)
+    assert.equal(byText(result, /^GitHub: /).text, 'GitHub: dafkedd/planner')
 })
 
 test('doctor: not a project, and without gh no GitHub checks', async t => {

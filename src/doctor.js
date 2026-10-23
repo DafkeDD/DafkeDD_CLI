@@ -173,10 +173,16 @@ export async function checks({
     }
 
     // GitHub: the repository, the labels of the issues and the protection of the branches
-    const repo =
-        ghAuth &&
-        (await works(exec, 'gh', ['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'], projectDir))
-    if (repo && typeof repo === 'string') {
+    // Plain JSON, parsed here (no jq expression through the shell of Windows)
+    const view = ghAuth && (await works(exec, 'gh', ['repo', 'view', '--json', 'nameWithOwner,isPrivate'], projectDir))
+    let repo = null
+    let isPrivate = false
+    try {
+        ;({ nameWithOwner: repo, isPrivate } = JSON.parse(view))
+    } catch {
+        // No repository (no git remote origin)
+    }
+    if (repo) {
         add(OK, `GitHub: ${repo}`)
         if (project.claude) {
             const labels = await works(
@@ -200,7 +206,15 @@ export async function checks({
                 ['api', `repos/${repo}/branches/${branch}/protection`, '--jq', '.url'],
                 projectDir
             )
-            add(protectedBranch ? OK : WARN, `Branch ${branch} beschermd`, 'node .claude/scripts/protect-branches.mjs')
+            if (protectedBranch) add(OK, `Branch ${branch} beschermd`)
+            else
+                add(
+                    WARN,
+                    `Branch ${branch} niet beschermd${isPrivate ? ' (een private repo kan dat enkel met GitHub Pro of Team)' : ''}`,
+                    isPrivate
+                        ? 'maak de repo publiek of neem GitHub Pro/Team, dan: node .claude/scripts/protect-branches.mjs'
+                        : 'node .claude/scripts/protect-branches.mjs'
+                )
         }
     } else if (ghAuth) add(WARN, 'Geen GitHub-repository gevonden (git remote origin)', 'gh repo create')
     return result

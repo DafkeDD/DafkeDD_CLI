@@ -688,6 +688,8 @@ git switch developer
 
 ## Changelog
 
+- **0.46.2**: `doctor` says "niet beschermd" for a branch without protection, and for a private repository that GitHub
+  Free cannot protect it (make it public or use GitHub Pro or Team).
 - **0.46.1**: the summary of the CLI says whether the labels and the protection of the branches worked on GitHub (a
   private repository on GitHub Free cannot protect its branches), and no longer asks to run them by hand when the CLI
   made the repository.
