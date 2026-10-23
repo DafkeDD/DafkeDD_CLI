@@ -331,6 +331,8 @@ test('main: a linked app gives the frontend its own API and the login server, an
     const events = []
     const logs = []
     await main({
+        askClaude: async () => false,
+        askCloud: async () => false,
         projectDir: '/tmp/project',
         prompts: { select: async config => (config.message.includes('frontend') ? 'fe' : 'linked') },
         ask: async () => null,

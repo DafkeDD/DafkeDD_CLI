@@ -90,7 +90,7 @@ The documentation lives in one place: [../${DOCS_DIR}/${file}](../${DOCS_DIR}/${
 `
 
 /** The index of ./docs. `parts` is a list of `{ file }` that exist. */
-export function docsIndex(parts, { swagger = null } = {}) {
+export function docsIndex(parts, { swagger = null, kb = false } = {}) {
     const rows = parts.map(({ file }) => `| [${ENTRIES[file].title}](${file}) | ${ENTRIES[file].text} |`)
     return `# Documentation
 
@@ -103,14 +103,14 @@ Or open \`index.html\` in this folder directly.
 | Document | Contents |
 | --- | --- |
 ${rows.join('\n')}
-${swagger ? `\nTry the API from the browser (Swagger): **${swagger}**\n` : ''}`
+${swagger ? `\nTry the API from the browser (Swagger): **${swagger}**\n` : ''}${kb ? '\n**Knowledge base** (for the users of the app, in four languages, every page and button with screenshots):\n[kb/README.md](kb/README.md)\n' : ''}`
 }
 
 /**
  * Step that collects the READMEs of the installed parts into ./docs.
  * `parts` is `[{ dir, file, title }]`; parts without a README are skipped.
  */
-export function docsStep({ projectDir, parts, swagger = null }) {
+export function docsStep({ projectDir, parts, swagger = null, kb = false }) {
     return {
         title: 'Documentatie samenstellen (./docs)',
         run: async () => {
@@ -130,9 +130,9 @@ export function docsStep({ projectDir, parts, swagger = null }) {
                 done.push({ file, id: file.replace(/\.md$/, ''), title, markdown: content })
             }
             if (done.length > 0) {
-                await fs.writeFile(path.join(projectDir, DOCS_DIR, 'README.md'), docsIndex(done, { swagger }))
+                await fs.writeFile(path.join(projectDir, DOCS_DIR, 'README.md'), docsIndex(done, { swagger, kb }))
                 // The same documentation as a web page: open docs/index.html in a browser
-                const pages = [{ id: 'index', title: 'Overview', markdown: docsIndex(done, { swagger }) }, ...done]
+                const pages = [{ id: 'index', title: 'Overview', markdown: docsIndex(done, { swagger, kb }) }, ...done]
                 await fs.writeFile(
                     path.join(projectDir, DOCS_DIR, 'index.html'),
                     docsSite(pages, { title: 'Project documentation', swagger })

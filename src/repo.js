@@ -63,8 +63,12 @@ export async function askRepo({ projectDir, prompts = { confirm, input, select }
     return { name: name.trim(), platform, visibility }
 }
 
-/** Steps: git init, first commit, create the repo and push. */
-export function repoSteps({ projectDir, repo, exec = run }) {
+/**
+ * Steps: git init, first commit, create the repo and push. With `developer` (Claude Code, a branch per issue) the
+ * branch developer is pushed too and made the default branch: the issue branches are merged into it, and only a
+ * person merges it into main (which makes a release).
+ */
+export function repoSteps({ projectDir, repo, developer = null, labels = false, exec = run }) {
     return [
         {
             title: 'Git initialiseren',
@@ -92,6 +96,39 @@ export function repoSteps({ projectDir, repo, exec = run }) {
                     { cwd: projectDir }
                 )
             }
-        }
+        },
+        ...(developer
+            ? [
+                  {
+                      title: `Branch ${developer} aanmaken en als standaardbranch instellen`,
+                      weight: 1,
+                      run: async () => {
+                          await exec('git', ['branch', developer], { cwd: projectDir })
+                          await exec('git', ['push', '-u', 'origin', developer], { cwd: projectDir })
+                          await exec('gh', ['repo', 'edit', '--default-branch', developer], { cwd: projectDir })
+                          await exec('git', ['switch', developer], { cwd: projectDir })
+                      }
+                  }
+              ]
+            : []),
+        ...(labels
+            ? [
+                  {
+                      title: 'Labels en branchbescherming instellen op GitHub',
+                      weight: 1,
+                      // The labels of the issue forms and the agents, then developer and main protected (the CI checks
+                      // required, only through a pull request). A failure is no reason to stop: "doctor" reports it
+                      // (a private repository on GitHub Free cannot be protected)
+                      run: async () => {
+                          for (const script of ['setup-labels.mjs', 'protect-branches.mjs'])
+                              try {
+                                  await exec(process.execPath, [`.claude/scripts/${script}`], { cwd: projectDir })
+                              } catch {
+                                  // Later by hand: node .claude/scripts/<script>
+                              }
+                      }
+                  }
+              ]
+            : [])
     ]
 }

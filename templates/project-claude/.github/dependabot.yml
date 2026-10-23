@@ -1,0 +1,36 @@
+# Weekly updates of the npm packages and the GitHub Actions, as pull requests into developer. The dependencies agent
+# of Claude Code (.claude/agents/dependencies.md) handles them: it reads the release notes, fixes what breaks, lets
+# the checking agents approve, and merges into developer when the CI is green.
+version: 2
+updates:
+    - package-ecosystem: npm
+      directory: /backend
+      target-branch: developer
+      schedule:
+          interval: weekly
+          day: monday
+      groups:
+          nestjs:
+              patterns: ['@nestjs/*']
+          minor-and-patch:
+              update-types: [minor, patch]
+      cooldown:
+          default-days: 14
+    - package-ecosystem: npm
+      directory: /frontend
+      target-branch: developer
+      schedule:
+          interval: weekly
+          day: monday
+      groups:
+          next:
+              patterns: ['next', 'eslint-config-next', 'react', 'react-dom']
+          minor-and-patch:
+              update-types: [minor, patch]
+      cooldown:
+          default-days: 14
+    - package-ecosystem: github-actions
+      directory: /
+      target-branch: developer
+      schedule:
+          interval: weekly

@@ -210,6 +210,8 @@ test('steps with the OIDC server install DafkeDD eID and add npm run eid:mock', 
 test('npm 12+ refuses packages from a URL: .npmrc allows the ones in package.json (root), older npm gets none', async () => {
     for (const [answer, expected] of [
         ['none\n', true],
+        // A warning of npm before the answer (for example: this npm does not support this Node.js version)
+        ['npm warn cli npm v12.2.1 does not support Node.js v22.22.0.\r\nnone\r\n', true],
         ['all\n', false],
         ['undefined\n', false],
         ['', false]

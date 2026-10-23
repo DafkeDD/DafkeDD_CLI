@@ -1,0 +1,10 @@
+# gitleaks (the Security job of .github/workflows/ci.yml): the default rules, without the false alarms of this project
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Not secrets"
+paths = [
+    # The manifest of DafkeDD_CLI: sha256 hashes of the files it manages
+    '''^\.dafkedd\.json$''',
+]

@@ -926,8 +926,8 @@ export function envLines(oidc, { port, example = false }) {
         '# PAYMENTS: mollie (MOLLIE_API_KEY, test_... or live_...), fake (a checkout page of this API, development only)',
         '# or off (nothing can be bought; trials and free seats of a superadmin still work)',
         `PAYMENTS=${example ? 'mollie' : 'fake'}`,
-        'MOLLIE_API_KEY=',
         'BILLING_TRIAL_DAYS=14',
+        'MOLLIE_API_KEY=',
         '# The public address of this API, where Mollie calls /billing/webhook (default: the origin of OIDC_ISSUER).',
         '# Mollie cannot call localhost: use a tunnel (ngrok) here to test renewals; the return page works without it.',
         '# PUBLIC_API_URL=https://api.example.com',
@@ -2044,7 +2044,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         },
         response: {
             status: 201,
-            example: { client: APP_EXAMPLE, secret: 'Jq3v1yHq0jYv1Jx3Cxk0E4b3cMq6l0D9YvC2y4ZLm2r' }
+            example: { client: APP_EXAMPLE, secret: '<the secret of the app, shown only once>' }
         },
         errors: [
             [400, 'oidc.CLIENT_INVALID_URI'],
@@ -2189,7 +2189,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         response: {
             status: 200,
-            example: { client: APP_EXAMPLE, secret: 'q6l0D9YvC2y4ZLm2rHd3o1yHq0jYv1Jx3Cxk0E4b3cM' }
+            example: { client: APP_EXAMPLE, secret: '<the new secret of the app, shown only once>' }
         },
         errors: [...ACCESS('superadmin'), [404, 'oidc.CLIENT_NOT_FOUND'], [409, 'oidc.CLIENT_PUBLIC']]
     },

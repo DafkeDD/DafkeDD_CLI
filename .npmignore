@@ -1,5 +1,9 @@
 node_modules/
-.github/
+/.github/
 .gitignore
 /test/
-.githooks/
+/.githooks/
+/.claude/
+/CLAUDE.md
+/scripts/verify-apps.mjs
+/scripts/setup-labels.mjs

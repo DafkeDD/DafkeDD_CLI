@@ -76,6 +76,8 @@ test('main adds the docs step last before the repo steps, only when parts docume
         steps: async () => [{ title: `${id} step`, run: async () => {} }]
     })
     await main({
+        askClaude: async () => false,
+        askCloud: async () => false,
         projectDir: '/tmp/none',
         prompts: { select: async c => (c.message.includes('frontend') ? 'fe' : 'be') },
         ask: async () => null,
@@ -84,7 +86,12 @@ test('main adds the docs step last before the repo steps, only when parts docume
         execute: async steps => titles.push(...steps.map(s => s.title)),
         log: () => {}
     })
-    assert.deepEqual(titles, ['fe step', 'be step', 'Documentatie samenstellen (./docs)'])
+    assert.deepEqual(titles, [
+        'fe step',
+        'be step',
+        'Documentatie samenstellen (./docs)',
+        'Kennisbank aanmaken (docs/kb, 4 talen)'
+    ])
 })
 
 test('docs step also writes docs/index.html, a self-contained web page', async () => {
@@ -159,6 +166,8 @@ test('docs is a project of its own: npm run dev in ./docs, and the CLI summary s
         steps: async () => []
     })
     await main({
+        askClaude: async () => false,
+        askCloud: async () => false,
         projectDir: '/tmp/none',
         prompts: { select: async c => (c.message.includes('frontend') ? 'fe' : 'be') },
         ask: async () => null,

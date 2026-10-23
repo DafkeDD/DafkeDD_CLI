@@ -18,7 +18,9 @@ export const ALLOW_REMOTE_NPMRC =
  * Older npm versions (that allow it, or do not know the setting) get no .npmrc, so they never warn about it.
  */
 export async function allowEidDownload(root, exec, write) {
-    const value = String((await exec('npm', ['config', 'get', 'allow-remote'], { cwd: root })) ?? '').trim()
+    // The answer is the last line: npm can print a warning before it (for example about the Node.js version)
+    const output = String((await exec('npm', ['config', 'get', 'allow-remote'], { cwd: root })) ?? '')
+    const value = output.trim().split(/\r?\n/).pop()?.trim() ?? ''
     if (value === 'none') await write(root, '.npmrc', ALLOW_REMOTE_NPMRC)
     return value === 'none'
 }

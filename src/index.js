@@ -6,6 +6,11 @@ import { frontends } from './frontends/index.js'
 import { backends } from './backends/index.js'
 import { askRepo, repoSteps } from './repo.js'
 import { docsStep, docsProject } from './docs.js'
+import { askClaude as askClaudeCode, claudeNext, claudeSteps, DEVELOP_BRANCH, describeProject } from './claude.js'
+import path from 'node:path'
+import { kbSteps } from './kb.js'
+import { askCloud as askCloudSetup, cloudNext, cloudSteps } from './cloud.js'
+import { manifestSteps } from './manifest.js'
 
 export const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
@@ -18,7 +23,7 @@ function docsSteps({ projectDir, frontend, backend }) {
         .map(item => ({ dir: item.dir, file: item.docsFile, title: item.label }))
     if (parts.length === 0) return []
     const swagger = backend?.api ? `http://localhost:${backend.api.port}/docs` : null
-    return [docsStep({ projectDir, parts, swagger })]
+    return [docsStep({ projectDir, parts, swagger, kb: Boolean(frontend) })]
 }
 
 const choicesOf = (registry, noneLabel) => [
@@ -35,6 +40,8 @@ export async function main({
     projectDir = process.cwd(),
     prompts = { select },
     ask = askRepo,
+    askClaude = askClaudeCode,
+    askCloud = askCloudSetup,
     registry = frontends,
     backendRegistry = backends,
     execute = runSteps,
@@ -61,6 +68,15 @@ export async function main({
     const backend = backendChoice === NONE ? null : backendRegistry[backendChoice]
     const backendAnswers = (await backend?.ask?.({ projectDir, hasFrontend: Boolean(frontend) })) ?? {}
 
+    // Claude Code: agents, skills, hooks and the pipelines (only for a project with something in it)
+    const claude = frontend || backend ? await askClaude({ projectDir }) : false
+    const described = describeProject({ name: path.basename(projectDir), frontend, backend, answers: backendAnswers })
+    const project = claude ? described : null
+    // Google Cloud: Terraform, Dockerfiles and the GitHub button to start and stop it (only with a frontend or a backend)
+    const cloud = frontend || backend ? await askCloud({ projectDir }) : false
+    described.cloud = Boolean(cloud)
+    described.claude = Boolean(claude)
+
     const repo = await ask({ projectDir })
 
     const steps = [
@@ -82,7 +98,15 @@ export async function main({
             : []),
         ...(backend ? await backend.steps({ projectDir, answers: backendAnswers }) : []),
         ...docsSteps({ projectDir, frontend, backend }),
-        ...(repo ? repoSteps({ projectDir, repo }) : [])
+        // The knowledge base for the users: every page of the frontend, in four languages, from the first commit on
+        ...(frontend ? kbSteps({ projectDir, project: described }) : []),
+        ...(project ? claudeSteps({ projectDir, project }) : []),
+        ...(cloud ? cloudSteps({ projectDir, project: described }) : []),
+        // What the CLI wrote, for a later "update" (only when it manages files: Claude Code or Google Cloud)
+        ...(project || cloud ? manifestSteps({ projectDir, project: described, version }) : []),
+        ...(repo
+            ? repoSteps({ projectDir, repo, developer: project ? DEVELOP_BRANCH : null, labels: Boolean(project) })
+            : [])
     ]
     if (steps.length === 0) {
         log(pc.dim('\nNiets te installeren.\n'))
@@ -103,11 +127,26 @@ export async function main({
         if (item.dir) log(`${pc.green('✔')} ${item.label} geïnstalleerd in ${pc.bold('./' + item.dir)}`)
         for (const line of item.summary?.(own) ?? []) log(`${line.ok ? pc.green('✔') : pc.red('✖')} ${line.text}`)
     }
-    if (repo) log(`${pc.green('✔')} Gepusht naar GitHub: ${pc.bold(repo.name)}`)
+    if (project)
+        log(
+            `${pc.green('✔')} Claude Code toegevoegd: CLAUDE.md, .claude/ (agents, skills, hooks) en .github/ (CI, release, issues)`
+        )
+    if (repo)
+        log(
+            `${pc.green('✔')} Gepusht naar GitHub: ${pc.bold(repo.name)}${project ? ` (standaardbranch ${DEVELOP_BRANCH}; een merge naar main maakt een release)` : ''}`
+        )
     for (const { item, answers: own } of installed) {
         log(pc.dim(`\n${item.label}:`))
         const lines = typeof item.next === 'function' ? item.next(own) : (item.next ?? [])
         for (const line of lines) log(pc.dim('  ' + line))
+    }
+    if (project) {
+        log(pc.dim('\nClaude Code:'))
+        for (const line of claudeNext()) log(pc.dim('  ' + line))
+    }
+    if (cloud) {
+        log(pc.dim('\nGoogle Cloud (infra/README.md):'))
+        for (const line of cloudNext()) log(pc.dim('  ' + line))
     }
     log('')
 }

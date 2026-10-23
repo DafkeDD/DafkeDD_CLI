@@ -1,2 +1,7 @@
 node_modules
 package-lock.json
+# Agent and skill files: their frontmatter keeps one line per key (Prettier would fold long descriptions)
+.claude/agents/
+.claude/skills/
+templates/project-claude/.claude/agents/
+templates/project-claude/.claude/skills/

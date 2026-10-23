@@ -232,6 +232,8 @@ test('index: the frontend learns that the backend is an OIDC server', async () =
         }
     })
     await main({
+        askClaude: async () => false,
+        askCloud: async () => false,
         projectDir: '/tmp/none',
         prompts: { select: async c => (c.message.includes('frontend') ? 'fe' : 'be') },
         ask: async () => null,

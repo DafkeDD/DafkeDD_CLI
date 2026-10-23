@@ -154,10 +154,13 @@ also use `git+ssh://git@github.com/DafkeDD/DafkeDD_CLI.git`.
 2. Start the CLI (see above).
 3. Choose the frontend (only Next.js for now, or none) and answer its questions (such as DafkeDD UI).
 4. Choose the backend (only NestJS for now, or none) and answer its questions (database, port, user, password, ...).
-5. Last: choose whether to push to a repository right away (platform, name, private/public).
-6. Wait until the progress bar is done. If you chose to push, your project (including `./frontend` and `./backend`) is
+5. Choose whether the project gets **Claude Code** (agents, skills, hooks and GitHub pipelines; see below).
+6. Choose whether the project is made ready for **Google Cloud** (Terraform, Dockerfiles and a button on GitHub to start
+   and stop it; see below).
+7. Last: choose whether to push to a repository right away (platform, name, private/public).
+8. Wait until the progress bar is done. If you chose to push, your project (including `./frontend` and `./backend`) is
    now the first commit on GitHub.
-7. Start the database (Docker only), the backend and the frontend:
+9. Start the database (Docker only), the backend and the frontend:
 
 ```
 cd backend
@@ -169,6 +172,33 @@ npm run dev
 ```
 
 If `./frontend` or `./backend` already exists, the CLI stops without deleting anything.
+
+### An existing project: `update` and `doctor`
+
+In the folder of a project made with the CLI:
+
+```
+npx --allow-git=all github:DafkeDD/DafkeDD_CLI update
+npx --allow-git=all github:DafkeDD/DafkeDD_CLI doctor
+```
+
+- **`update`** brings the files the CLI manages up to this version: the agents, skills, hooks, `CLAUDE.md`, the
+  pipelines, `.mcp.json` and, with Google Cloud, Terraform, the workflows and the Dockerfiles. The manifest
+  `.dafkedd.json` (committed) remembers the version, what the project is made of and a hash of every such file:
+    - a file that is still as the CLI wrote it is replaced;
+    - a file you changed is never overwritten: the new version lands next to it as `<file>.dafkedd-new` (ignored by
+      git), to compare with `git diff --no-index <file> <file>.dafkedd-new`;
+    - a missing file, and missing pages of the knowledge base, are added; a file the CLI no longer makes is reported,
+      not deleted.
+
+    A project of a CLI before 0.46.0 has no manifest: `update` reads what it is made of from its folders and `.env`
+    files, shows that and asks to confirm; then every file that differs gets a `.dafkedd-new` version. Commit the result
+    on an issue branch.
+
+- **`doctor`** checks what the project needs: Node.js, git, the GitHub CLI (logged in), the dependencies, `backend/.env`
+  and the database, the hooks and `.mcp.json` with what its servers need (Chrome for Playwright, `uv` or Docker for
+  PostgreSQL), `gcloud` with Google Cloud, the labels of the issues and the protection of `developer` and `main` on
+  GitHub, and whether the project is behind this version of the CLI. Every problem comes with the command that fixes it.
 
 ## Backend (NestJS)
 
@@ -414,6 +444,73 @@ Note: opening `http://localhost:4000` directly in a browser uses the language of
 
 The generated NestJS 12 starter needs **npm 11 or newer** (npm 10 fails to install it).
 
+### Claude Code in the project
+
+When you answer yes to "Claude Code toevoegen?", the project gets everything Claude Code needs to work on it the same
+way this CLI is built: nothing has to be installed.
+
+| In the project                                                       | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLAUDE.md`                                                          | The rules (tests, docs, four languages, the Pasport design, multi-tenant for the login server and the linked apps) and what the project is made of: its parts, the login server, the modules, `TENANT_ISOLATION`, the MCP servers                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `.claude/agents/`                                                    | Building: `frontend` (always the Pasport design), `nestjs`, `postgresql`, `translator` (the four languages), `e2e` (Playwright browser tests that run in the CI), `kb` (the knowledge base). Checking (read-only): `reviewer`, `tester`, `docs`, `i18n`, `security`, `qa` (clicks through every control in a real browser and checks the rows in the database), `a11y` (WCAG 2.2 AA), `privacy` (GDPR), `performance`. Around it: `seed` (test data, test accounts with two-step verification), `support` (a user's message to an answer and an issue), `architect` (ADRs in `docs/adr`), and with Google Cloud `infra`, `observability` (logs, alerts, budget) and `backup` (the monthly restore test). Upkeep: `dependencies` (Dependabot pull requests), `release` (prepares the pull request into `main`) |
+| `docs/kb/`                                                           | The **knowledge base** for the users of the app (also without Claude Code): a page per page of the app in en, nl, fr and de, with what it is for, where it is and who sees it, the tables of every control and message, and the screenshots in light and dark (`docs/kb/screenshots/`). The `kb` agent fills it and keeps it up to date                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `docs/adr/`                                                          | The architecture decisions (ADRs): a README, a template and the first decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `.github/dependabot.yml`, `CHANGELOG.md`                             | Weekly update pull requests into `developer` (handled by the `dependencies` agent), and the changelog the `release` agent writes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `.mcp.json`                                                          | The MCP servers the project can use: **Playwright** with a frontend (`@playwright/mcp`, a real browser; it uses Chrome, or `npx playwright install chromium`) and **PostgreSQL** with a database (Postgres MCP Pro through `.claude/scripts/postgres-mcp.mjs`: the database of `backend/.env`, read-only unless `POSTGRES_MCP_ACCESS=unrestricted`; needs `uv` or Docker), enabled in `.claude/settings.json`. The password stays in `backend/.env`                                                                                                                                                                                                                                                                                                                                                           |
+| `.claude/skills/`                                                    | `plan` (questions, then a spec and ticket issues on GitHub), `implement` (an issue on its own branch up to the merge), `diagnose`, `handoff`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `.claude/hooks/`, `.claude/settings.json`, `.claude/git-policy.json` | The rules of git, enforced (below), and Prettier after every edit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `.claude/design/`                                                    | The Pasport design: brand book and tokens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `.claude/scripts/setup-labels.mjs`                                   | The labels of the issues (`spec`, `type:*`, `area:*`, `status:*`). Next to it `protect-branches.mjs`: `developer` and `main` protected on GitHub (the CI checks required, only through a pull request, no force-push or delete; an admin can still push) and private vulnerability reporting on. The CLI runs both after creating the GitHub repository (a private repository needs GitHub Pro or Team for branch protection), else run them once                                                                                                                                                                                                                                                                                                                                                             |
+| `.github/ISSUE_TEMPLATE/`                                            | Forms for a feature and a bug; `pull_request_template.md` with the checklist (tests, docs, four languages, Pasport design, knowledge base, approvals); `CODEOWNERS` with your GitHub account (asked for every pull request); `SECURITY.md` (how to report a vulnerability)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `.github/workflows/ci.yml`                                           | On every pull request to `developer` and `main` and every push to `developer` (`release.yml` runs it for `main`): the backend (format, lint, build, unit, e2e, and the database tests against PostgreSQL 17), the frontend (format, lint, build, **Lighthouse** on the pages without login: accessibility at least 0.95, best practices 0.9, performance 0.8, `frontend/lighthouserc.json`; and the Playwright tests with axe and the **visual tests** once installed) and **security** (gitleaks over the code and the history with `.gitleaks.toml`, `npm audit` for high and critical)                                                                                                                                                                                                                     |
+| `.github/workflows/release.yml`                                      | On every push to `main` except the first one of the repository: the CI once more, then a GitHub release `v<version>` (the version of `backend/package.json`, or the frontend; the next patch when that tag exists)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `.github/workflows/codeql.yml`                                       | CodeQL code scanning (security queries) on pull requests and weekly: public repositories, or private ones with GitHub Advanced Security (variable `CODEQL=on`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `.github/workflows/screenshots.yml`                                  | Actions → Screenshots on an issue branch: the screenshots of `docs/kb` made again on Linux by `frontend/e2e/screens.spec.ts` and committed; the CI compares them on every pull request (the visual tests)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `.dafkedd.json`                                                      | The manifest for `update` (also without Claude Code, with Google Cloud)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+
+**How work flows** (a branch per issue):
+
+1. `plan` makes the issues.
+2. `implement` makes the branch `issue/<number>-<words>` from `developer`, and builds it with the agents.
+3. The checking agents approve exactly what is staged; then it is committed (`closes #<number>`) and pushed.
+4. A pull request goes into `developer`.
+5. When the CI is green, an agent merges it (`gh pr merge <number> --squash --delete-branch`).
+6. **Only a person merges `developer` into `main`**, which makes the release.
+
+The hook `guard-git.mjs` enforces this:
+
+- a commit only on an issue branch (or `release/<version>`), with every approval for the staged tree (`qa` too for a
+  change to `frontend/src`, `frontend/messages`, a controller or the database; `a11y` for the frontend; `privacy` for
+  the database);
+- a push only of issue branches, never forced or deleting;
+- `gh pr merge` only into `developer`, from an issue branch, a release branch or Dependabot, with every check green and
+  every approval for its last commit;
+- `gh release` and `gh repo delete` never.
+
+When the project is pushed, the CLI also pushes `developer` and makes it the default branch, so `closes #n` closes the
+issue at the merge. Protect `developer` and `main` on GitHub (Settings → Branches) with the CI checks as required
+checks.
+
+### Google Cloud (Terraform)
+
+When you answer yes to "Klaar zetten voor Google Cloud?", the project gets:
+
+| In the project                              | What                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `infra/terraform/`                          | Cloud Run for the frontend and the backend (scale to zero), Cloud SQL PostgreSQL 17 (stopped with `down`), Secret Manager (the database password, the session secret, `OIDC_MASTER_KEY` of a login server, and your own secrets), Artifact Registry, a private bucket for the files module, own domains (optional). Everything in `europe-west1`                                                                        |
+| `backend/Dockerfile`, `frontend/Dockerfile` | Small images (`npm ci`, build, `npm prune --omit=dev`, `USER node`, port 8080)                                                                                                                                                                                                                                                                                                                                          |
+| `.github/workflows/cloud.yml`               | **The button** (Actions → Cloud → Run workflow): `plan`, `deploy` (a backup of a running database, build and start, a smoke test, and back to the previous images when the new ones do not answer), `up` (start with the last images), `down` (remove Cloud Run and stop Cloud SQL; the data, images and secrets stay). **Every night at 01:00 UTC** it runs `down` by itself (the variable `AUTO_DOWN=off` stops that) |
+| `infra/bootstrap.sh`                        | Run once: the bucket of the Terraform state, a service account for the workflow, Workload Identity Federation (no keys), the GitHub variables                                                                                                                                                                                                                                                                           |
+| `infra/terraform/monitoring.tf`             | Uptime checks and alerts (down, errors in the logs) by e-mail (`ALERT_EMAIL`), only while the app runs, and a budget alert at 50%, 90% and 100% (`BILLING_ACCOUNT`, `monthly_budget`)                                                                                                                                                                                                                                   |
+| `.github/workflows/backup-check.yml`        | Monthly: are there recent backups of Cloud SQL, then an issue for the restore test (the `backup` agent)                                                                                                                                                                                                                                                                                                                 |
+| `.github/workflows/preview.yml`             | **A preview per pull request**: the label `preview` on a pull request into `developer` starts a copy of the app of that branch (its own services, database and Terraform state), posts its address on the pull request and removes it all when the pull request is closed or the label removed                                                                                                                          |
+| `infra/README.md`                           | How to set it up, the costs, own domains                                                                                                                                                                                                                                                                                                                                                                                |
+
+Only a person starts it (the button, or the label `preview`); the only thing that runs on its own is the nightly `down`,
+and Cloud Run costs nothing while nobody uses the app. A login across `*.run.app` addresses needs own domains
+(`FRONTEND_DOMAIN`, `BACKEND_DOMAIN`), because the browser treats every `run.app` service as a site of its own. The
+`infra` agent of Claude Code owns this setup.
+
 ### Pushing to GitHub
 
 The CLI runs `git init` in the project folder, makes a first commit, and uses the [GitHub CLI](https://cli.github.com)
@@ -431,11 +528,13 @@ node bin/cli.js
 `npm install` also activates the git hooks (see below). Optionally use `npm link` to run the `DafkeDD_CLI` command from
 your checkout.
 
-| Command                | What it does                                 |
-| ---------------------- | -------------------------------------------- |
-| `npm test`             | Runs the whole test suite                    |
-| `npm run format`       | Formats the repository with Prettier         |
-| `npm run format:check` | Checks the formatting without changing files |
+| Command                | What it does                                                      |
+| ---------------------- | ----------------------------------------------------------------- |
+| `npm test`             | Runs the whole test suite                                         |
+| `npm run format`       | Formats the repository with Prettier                              |
+| `npm run format:check` | Checks the formatting without changing files                      |
+| `npm run verify`       | Generates real projects with the CLI and checks them (see below)  |
+| `npm run labels`       | Creates the GitHub labels the Claude Code skills use (needs `gh`) |
 
 ### Tests are mandatory
 
@@ -449,6 +548,83 @@ Every piece of code must have tests, and **code cannot be pushed while the tests
   GitHub settings with the CI checks as _required status checks_.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how the tests are written.
+
+### Checking generated projects (`npm run verify`)
+
+`npm test` checks the generated files; `npm run verify` checks that they really work. It generates three projects with
+the real steps of the CLI (no questions) in a temporary folder:
+
+- `pasport`: the login server;
+- `app`: an app without modules;
+- `app-full`: an app with mail, files and a database per organisation.
+
+Each one gets the build, lint, unit and e2e tests the CLI runs itself, plus TypeScript, Prettier and, with a database,
+`npm run test:db`. The database comes from `VERIFY_DB_HOST`, `VERIFY_DB_PORT`, `VERIFY_DB_USER` and `VERIFY_DB_PASSWORD`
+(default `localhost:5432`, `postgres`/`postgres`; the user needs `CREATEDB`). Options:
+
+- `-- --only app-full` runs one variant;
+- `-- --keep` keeps the projects;
+- `-- --require-db` fails instead of skipping the database tests.
+
+It needs the network and takes several minutes.
+
+### Working with Claude Code
+
+Everything Claude Code needs is in this repository; nothing has to be installed.
+
+- **`CLAUDE.md`**: the rules of this repository (tests, docs, four languages, the Pasport design, multi-tenant) and the
+  workflow.
+- **`templates/project-claude/.claude/design/`**: the Pasport design every frontend follows. `pasport.md` is the brand
+  book and `pasport-tokens.json` the tokens, copied from the Claude Design System "Pasport", which is synced from
+  DafkeDD_UI.
+
+**Skills (`.claude/skills/`)**
+
+| Skill            | What it does                                                                                                                                                                                       |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plan`           | Asks every open question, then makes a spec issue and ticket issues on GitHub (areas, acceptance criteria, blocking order)                                                                         |
+| `implement`      | Builds one ticket on its own branch: tests first, the building agents, then the checking agents, a commit `<version>: … (closes #n)`, a pull request into `developer`, merged when the CI is green |
+| `diagnose`       | From an error to a tested fix: reproduce, failing test, cause, fix, a `type:bug` issue                                                                                                             |
+| `handoff`        | Writes `.claude/handoff.md` (not committed) so a new session can continue                                                                                                                          |
+| `port-from-test` | Compares a project that was changed by hand (`D:\test`, `D:\KidieFile`) with what the CLI generates now, and brings the generic improvements into the CLI                                          |
+
+**Agents (`.claude/agents/`)**
+
+| Agent        | Role                                                                                                  |
+| ------------ | ----------------------------------------------------------------------------------------------------- |
+| `frontend`   | Builds the UI of the generated frontends, always in the Pasport design with the Dafke UI components   |
+| `nestjs`     | Builds the generated NestJS backends: endpoints, modules, DTOs, errors, Swagger, their tests and docs |
+| `postgresql` | Builds migrations, tables, Row-Level Security, a database per organisation, queries and db tests      |
+| `reviewer`   | Checks the staged change against the ticket and the rules (read-only)                                 |
+| `tester`     | Runs `npm run format:check`, `npm test` and, for generated code, `npm run verify` (read-only)         |
+| `docs`       | Checks README, changelog, version, API docs and frontend docs (read-only)                             |
+| `i18n`       | Checks en, nl, fr and de: the same keys, real translations, no hardcoded text (read-only)             |
+| `security`   | Security review of login, tokens, tenants, billing, uploads, the database and the hooks (read-only)   |
+
+The checking agents record their approval for exactly the staged tree with `.claude/hooks/approve.mjs`. The approvals
+are kept in `.git/claude-approvals` and are never committed.
+
+**Hooks (`.claude/settings.json`)**
+
+- `guard-git.mjs` runs before every shell command:
+    - a `git commit` needs the approvals of review, tests, docs and i18n, plus security when a staged path touches
+      login, tokens, tenants, billing, uploads, the database or the hooks;
+    - a commit only on the branch of an issue (`issue/<n>-<words>`), made from `developer`;
+    - `git push` only of an issue branch (or `release/<version>`), never forced and never deleting;
+    - `gh pr merge` only into `developer`, from an issue branch, when every check of the CI is green and every approval
+      is there for the last commit;
+    - `gh release` and a merge into `main` are refused: a release is done by a person.
+- `format.mjs` runs Prettier on a file after every edit.
+
+So Claude works on a branch per issue, opens a pull request into `developer` and merges it itself when the CI is green,
+but only after checks by agents that did not build the change. The pre-push hook and the CI check everything once more.
+Protect `developer` and `main` on GitHub with the CI as a required check.
+
+**GitHub.** The skills work with the issues of `DafkeDD/DafkeDD_CLI` through the GitHub CLI (`gh auth login` once).
+
+- `npm run labels` creates their labels: `spec`, `type:*`, `area:*`, `status:*`.
+- `.github/ISSUE_TEMPLATE/` has a form for a feature and one for a bug.
+- `developer` is the default branch, so a commit with `closes #n` closes its ticket when it is pushed.
 
 ### Structure
 
@@ -470,10 +646,19 @@ templates/backend-oidc/  # TypeScript of the OIDC server, copied into ./backend 
 templates/backend-app/   # TypeScript of an app's API (Pasport tokens, notes per tenant), copied into ./backend
 templates/frontend-oidc/ # login page, login routes and profile of the frontend (OIDC), copied into ./frontend
 templates/frontend-oidc-linked/ # the files of a linked app's frontend that differ (home with notes, /api/app)
+templates/project-claude/ # Claude Code for a generated project: agents, skills, hooks, design, issue forms
+src/claude.js            # the question, CLAUDE.md and the CI/release/CodeQL/Screenshots workflows of a generated project
+src/manifest.js          # .dafkedd.json of a generated project (what it is, a hash per managed file)
+src/update.js            # DafkeDD_CLI update: an existing project to this version, never over your changes
+src/doctor.js            # DafkeDD_CLI doctor: are the tools, MCP servers, database and GitHub settings there?
+src/kb.js                # the knowledge base of a generated project (docs/kb, four languages)
+src/cloud.js             # Google Cloud of a generated project: Terraform, Dockerfiles, the Cloud and Preview workflows
 src/frontends/oidc.js    # texts and .env.local of the frontend login, copies templates/frontend-oidc
 test/                    # test suite (node:test)
-scripts/                 # test runner and git hook setup
+scripts/                 # test runner, git hook setup and npm run verify
 .githooks/               # pre-push hook
+.claude/                 # agents and hooks for Claude Code (see "Working with Claude Code")
+CLAUDE.md                # the rules of this repository for Claude Code
 ```
 
 To add a new frontend: create a file in `src/frontends/` (follow `nextjs.js`), register it in `src/frontends/index.js`
@@ -503,6 +688,106 @@ git switch developer
 
 ## Changelog
 
+- **0.46.0**: keeping projects up to date, and more checks on GitHub.
+    - `update`: an existing project gets the agents, hooks, pipelines and Terraform of this version, without overwriting
+      what you changed (`.dafkedd.json`, `<file>.dafkedd-new`); older projects without a manifest too.
+    - `doctor`: is everything there (tools, MCP servers, database, labels, branch protection, version)?
+    - GitHub: `developer` and `main` protected (required checks, pull requests only), private vulnerability reporting,
+      `CODEOWNERS`, a pull request template and `SECURITY.md`.
+    - CI: gitleaks and `npm audit`, CodeQL, Lighthouse on the pages without login, visual tests that are the screenshots
+      of the knowledge base (made on Linux by the Screenshots workflow).
+    - Google Cloud: the nightly `down`, a preview per pull request (label `preview`), and a deploy with a backup first,
+      a smoke test after and the previous images back when it fails.
+    - Two examples in the API docs of the login server no longer look like real secrets (gitleaks).
+- **0.45.0**: the last pieces around the agents, and the CLI itself works on a branch per issue.
+    - New agents in a generated project:
+        - `seed`: test data and test accounts, also with two-step verification, for qa, kb, e2e and performance;
+        - `support`: a message of a user becomes an answer and a reproducible issue;
+        - `architect`: decisions that are hard to undo, as ADRs in `docs/adr`;
+        - `observability`: logs, errors, alerts and the budget;
+        - `backup`: the monthly restore test.
+    - Google Cloud:
+        - `infra/terraform/monitoring.tf`: uptime checks, alerts on downtime and errors by e-mail, a budget alert;
+        - `.github/workflows/backup-check.yml`: monthly, the backups, then an issue for the restore test.
+    - This repository works like the projects it makes:
+        - a branch per issue (`issue/<n>-<words>`) and a pull request into `developer`;
+        - Claude merges it when the CI is green and every agent approved;
+        - `main` stays Davey's.
+    - Checked by an independent review, then fixed:
+        - the git hook reads a command like a shell does (quotes, `$( )`), refuses `git commit -a`/`-i`/`-o`/paths, a
+          push that deletes a branch (`:branch`, `--delete`) or pushes tags, and asks the approvals for every file of
+          the branch;
+        - `.mcp.json` only has the servers the project can use (Playwright with a frontend, PostgreSQL with a database);
+        - the CI runs on a push to `developer` (the release runs it for `main`), `test:db` only when it exists, and the
+          first push of a repository is no release;
+        - Terraform: the `JWT_SECRET` of a project with the simple login, the APIs before the service accounts and the
+          budget, `plan` shows the running app, no backend address without a backend;
+        - the CLI makes the labels of the issues after creating the GitHub repository;
+        - the Prettier hook runs Prettier with node itself (folders with spaces on Windows);
+        - the knowledge base README without Claude Code says how to keep it up to date by hand.
+- **0.44.0**: Google Cloud for every project (the CLI asks).
+    - Terraform in `infra/terraform`:
+        - Cloud Run for the frontend and the backend, scaling to zero;
+        - Cloud SQL PostgreSQL 17, which can be stopped;
+        - Secret Manager, Artifact Registry, a bucket for the files module, and own domains.
+    - Dockerfiles for both parts.
+    - The workflow `Cloud`, a button on GitHub with `plan`, `deploy`, `up` and `down`. `down` removes Cloud Run and
+      stops the database to save costs, and keeps the data.
+    - `infra/bootstrap.sh` for the one-time setup with Workload Identity Federation.
+    - The agent `infra`.
+- **0.43.0**: more agents and a knowledge base for every project.
+    - **Knowledge base** (`docs/kb`), from the first commit, for every project with a frontend:
+        - a page per page of the app in en, nl, fr and de, with its purpose, where it is and who sees it;
+        - the tables for every control and message;
+        - the screenshots in light and dark.
+
+        The `kb` agent fills it with the Playwright MCP and keeps it up to date; the `docs` agent refuses a change to a
+        screen without it.
+
+    - New agents in a generated project:
+        - `kb`;
+        - `e2e`: Playwright browser tests in `frontend/e2e`, run by the CI;
+        - `a11y`: WCAG 2.2 AA, required for the frontend;
+        - `privacy`: GDPR, required for the database;
+        - `performance`;
+        - `dependencies`: with `.github/dependabot.yml`, weekly into `developer`;
+        - `release`: prepares the pull request into `main` with `CHANGELOG.md`;
+        - `translator`.
+    - The hook allows `release/<version>` branches and merges Dependabot pull requests into `developer` when the CI is
+      green.
+- **0.42.0**: development with Claude Code, without anything to install.
+    - `CLAUDE.md` with the rules and the workflow of this repository, and the Pasport design in
+      `templates/project-claude/.claude/design/`.
+    - Skills in `.claude/skills/`: `plan` (spec and tickets as GitHub issues), `implement` (a ticket from the issue to
+      `developer`), `diagnose`, `handoff` and `port-from-test`.
+    - Agents in `.claude/agents/`.
+        - They build: `frontend` (always the Pasport design), `nestjs` and `postgresql`.
+        - They check: `reviewer`, `tester`, `docs`, `i18n` and `security`.
+    - Hooks:
+        - a commit needs the approvals of the checking agents for exactly the staged tree (security only for the
+          sensitive parts);
+        - a push only goes to `developer`;
+        - `gh pr merge` and `gh release` are refused;
+        - Prettier runs after every edit.
+    - GitHub: issue forms for a feature and a bug, and `npm run labels` for the labels.
+    - **Claude Code in a generated project** (the CLI asks):
+        - `CLAUDE.md` for that project;
+        - the agents, skills and hooks;
+        - the Pasport design;
+        - issue forms;
+        - a CI workflow (backend with PostgreSQL, frontend) and a release workflow (a merge into `main`).
+        - the Playwright and PostgreSQL (read-only) MCP servers, and the agent `qa`, which tests every button, form and
+          table in a real browser and checks the database.
+
+        Work happens on a branch per issue. An agent may merge it into `developer` when the CI is green and every
+        checking agent approved; `main` and releases stay with a person. When pushed, `developer` becomes the default
+        branch.
+
+    - `npm run verify` generates the login server, an app and an app with every module with the real steps of the CLI,
+      and checks them (build, lint, unit, e2e and database tests, TypeScript, Prettier).
+    - Fix: DafkeDD eID could not be installed when npm printed a warning before its answer to
+      `npm config get allow-remote` (for example about the Node.js version): `.npmrc` was not written and npm 12 refused
+      the package.
 - **0.41.0**: more for the app of an existing login server.
     - The CLI asks which modules the API of the app gets: **Mail** (`src/mail`, the `MailService` of the login server,
       now also with attachments) and **Files** (`src/files`: `GET/PUT/DELETE /files/:id`, `GET /files`; the type read

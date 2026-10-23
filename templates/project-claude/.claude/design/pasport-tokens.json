@@ -1,0 +1,582 @@
+{
+    "name": "Pasport",
+    "version": 1,
+    "meta": {
+        "source": "github",
+        "repo": "DafkeDD/DafkeDD_UI",
+        "ref": "developer@74959b8",
+        "package": "packages/ui",
+        "paths": {
+            "tokens": ["packages/ui/src/styles/tokens.css"],
+            "docs": ["apps/docs/content/catalog.ts"]
+        },
+        "synced": "2026-10-19"
+    },
+    "color": {
+        "themes": [
+            {
+                "id": "light",
+                "name": "Light"
+            },
+            {
+                "id": "dark",
+                "name": "Dark"
+            }
+        ],
+        "tokens": [
+            {
+                "name": "accent",
+                "value": {
+                    "light": "#0d9488",
+                    "dark": "#2dd4bf"
+                },
+                "usage": "Brand teal: primary buttons, links, active navigation, focus ring. Text on it uses `accent-fg`. As link text on `surface` it is 3.74:1 in light: use it for links set in 14px semibold or larger, `accent-hover` (5.5:1) for smaller ones."
+            },
+            {
+                "name": "accent-hover",
+                "value": {
+                    "light": "#0f766e",
+                    "dark": "#5eead4"
+                },
+                "usage": "Hover state of `accent` fills; start of the login aside gradient."
+            },
+            {
+                "name": "accent-active",
+                "value": {
+                    "light": "#115e59",
+                    "dark": "#99f6e4"
+                },
+                "usage": "Pressed state; text colour of the active sidebar item on `accent-tint`; end of the login aside gradient."
+            },
+            {
+                "name": "accent-fg",
+                "value": {
+                    "light": "#ffffff",
+                    "dark": "#04201d"
+                },
+                "usage": "Text and icons on `accent` fills. Light theme: white on `accent` is 3.74:1, enough only for bold 14px+ button labels (kept as the source has it); dark theme 9.2:1."
+            },
+            {
+                "name": "accent-tint",
+                "value": {
+                    "light": "#f0fdfa",
+                    "dark": "#0c2925"
+                },
+                "usage": "Soft accent ground: active sidebar item, selected rows, info panels."
+            },
+            {
+                "name": "accent-tint-2",
+                "value": {
+                    "light": "#ccfbf1",
+                    "dark": "#123e38"
+                },
+                "usage": "Stronger accent ground: text selection, hover on `accent-tint`."
+            },
+            {
+                "name": "accent-border",
+                "value": {
+                    "light": "#99f6e4",
+                    "dark": "#1c4f48"
+                },
+                "usage": "Border of accent-tinted panels; badge ground of the active sidebar item."
+            },
+            {
+                "name": "bg",
+                "value": {
+                    "light": "#f7f8fa",
+                    "dark": "#0a0c10"
+                },
+                "usage": "Page background behind the shell and the login form."
+            },
+            {
+                "name": "surface",
+                "value": {
+                    "light": "#ffffff",
+                    "dark": "#14171d"
+                },
+                "usage": "Cards, sidebar, topbar, dialogs: the main raised surface."
+            },
+            {
+                "name": "surface-2",
+                "value": {
+                    "light": "#f9fafb",
+                    "dark": "#181c23"
+                },
+                "usage": "Nested panels, table headers and notes inside a `surface` card."
+            },
+            {
+                "name": "surface-3",
+                "value": {
+                    "light": "#f1f3f5",
+                    "dark": "#1e232b"
+                },
+                "usage": "Hover ground of list items and sidebar items; neutral badge ground."
+            },
+            {
+                "name": "surface-hover",
+                "value": {
+                    "light": "#f4f6f8",
+                    "dark": "#1b2027"
+                },
+                "usage": "Hover ground of rows and menu items."
+            },
+            {
+                "name": "border",
+                "value": {
+                    "light": "#e7e9ee",
+                    "dark": "#262b34"
+                },
+                "usage": "Hairline borders of cards, inputs, the sidebar edge and the topbar."
+            },
+            {
+                "name": "border-strong",
+                "value": {
+                    "light": "#d6dae1",
+                    "dark": "#333a45"
+                },
+                "usage": "Input borders on hover, scrollbar thumb, dividers that must read."
+            },
+            {
+                "name": "text",
+                "value": {
+                    "light": "#0f1729",
+                    "dark": "#eef1f6"
+                },
+                "usage": "Headings and body copy on `bg`, `surface`, `surface-2` and `surface-3`."
+            },
+            {
+                "name": "text-2",
+                "value": {
+                    "light": "#475063",
+                    "dark": "#a7b0c0"
+                },
+                "usage": "Secondary copy, descriptions and inactive sidebar items on `surface` and `bg`."
+            },
+            {
+                "name": "text-3",
+                "value": {
+                    "light": "#8a93a6",
+                    "dark": "#6b7484"
+                },
+                "usage": "Captions, placeholders, section labels and icons. Below 4.5:1 on `surface` in both themes: only for 12px+ labels that repeat information, never for the only copy of something."
+            },
+            {
+                "name": "text-inv",
+                "value": {
+                    "light": "#ffffff",
+                    "dark": "#0a0c10"
+                },
+                "usage": "Text on the login aside and on dark ink: white in light (5.5:1 on `accent-hover`), near-black in dark (on the light teal gradient)."
+            },
+            {
+                "name": "overlay",
+                "value": {
+                    "light": "rgba(10, 13, 18, .45)",
+                    "dark": "rgba(2, 4, 8, .62)"
+                },
+                "usage": "Backdrop behind dialogs and drawers."
+            },
+            {
+                "name": "green",
+                "value": {
+                    "light": "#16a34a",
+                    "dark": "#4ade80"
+                },
+                "usage": "Success: active status, paid invoices, positive deltas. Always with a word or icon."
+            },
+            {
+                "name": "green-tint",
+                "value": {
+                    "light": "#f0fdf4",
+                    "dark": "#0e2417"
+                },
+                "usage": "Ground of success badges and alerts."
+            },
+            {
+                "name": "green-border",
+                "value": {
+                    "light": "#bbf7d0",
+                    "dark": "#1c4029"
+                },
+                "usage": "Border of success alerts."
+            },
+            {
+                "name": "amber",
+                "value": {
+                    "light": "#d97706",
+                    "dark": "#fbbf24"
+                },
+                "usage": "Warning: trials ending, pending payments, open tickets."
+            },
+            {
+                "name": "amber-tint",
+                "value": {
+                    "light": "#fffbeb",
+                    "dark": "#2a2008"
+                },
+                "usage": "Ground of warning badges and alerts."
+            },
+            {
+                "name": "amber-border",
+                "value": {
+                    "light": "#fde68a",
+                    "dark": "#4a3a12"
+                },
+                "usage": "Border of warning alerts."
+            },
+            {
+                "name": "red",
+                "value": {
+                    "light": "#dc2626",
+                    "dark": "#f87171"
+                },
+                "usage": "Danger: errors, destructive buttons, failed payments."
+            },
+            {
+                "name": "red-tint",
+                "value": {
+                    "light": "#fef2f2",
+                    "dark": "#2a1313"
+                },
+                "usage": "Ground of error badges, alerts and the danger-soft button."
+            },
+            {
+                "name": "red-border",
+                "value": {
+                    "light": "#fecaca",
+                    "dark": "#4a2222"
+                },
+                "usage": "Border of error alerts and invalid inputs."
+            },
+            {
+                "name": "blue",
+                "value": {
+                    "light": "#2563eb",
+                    "dark": "#60a5fa"
+                },
+                "usage": "Information and a second chart series."
+            },
+            {
+                "name": "blue-tint",
+                "value": {
+                    "light": "#eff6ff",
+                    "dark": "#0f1d33"
+                },
+                "usage": "Ground of info badges and alerts."
+            },
+            {
+                "name": "blue-border",
+                "value": {
+                    "light": "#bfdbfe",
+                    "dark": "#1e3a5f"
+                },
+                "usage": "Border of info alerts."
+            },
+            {
+                "name": "violet",
+                "value": {
+                    "light": "#7c3aed",
+                    "dark": "#a78bfa"
+                },
+                "usage": "Highlights (new features, AI) and a third chart series."
+            },
+            {
+                "name": "violet-tint",
+                "value": {
+                    "light": "#f5f3ff",
+                    "dark": "#1c1633"
+                },
+                "usage": "Ground of violet badges."
+            },
+            {
+                "name": "violet-border",
+                "value": {
+                    "light": "#ddd6fe",
+                    "dark": "#322a52"
+                },
+                "usage": "Border of violet badges."
+            },
+            {
+                "name": "chart-1",
+                "value": {
+                    "light": "{accent}",
+                    "dark": "{accent}"
+                },
+                "usage": "First chart series (accent)."
+            },
+            {
+                "name": "chart-2",
+                "value": {
+                    "light": "{blue}",
+                    "dark": "{blue}"
+                },
+                "usage": "Second chart series."
+            },
+            {
+                "name": "chart-3",
+                "value": {
+                    "light": "{violet}",
+                    "dark": "{violet}"
+                },
+                "usage": "Third chart series."
+            },
+            {
+                "name": "chart-4",
+                "value": {
+                    "light": "{amber}",
+                    "dark": "{amber}"
+                },
+                "usage": "Fourth chart series."
+            },
+            {
+                "name": "chart-5",
+                "value": {
+                    "light": "{green}",
+                    "dark": "{green}"
+                },
+                "usage": "Fifth chart series."
+            },
+            {
+                "name": "chart-6",
+                "value": {
+                    "light": "{red}",
+                    "dark": "{red}"
+                },
+                "usage": "Sixth chart series."
+            }
+        ]
+    },
+    "type": {
+        "fonts": [],
+        "families": {
+            "sans": "\"Hanken Grotesk\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", system-ui, sans-serif",
+            "mono": "\"JetBrains Mono\", ui-monospace, \"SF Mono\", Menlo, monospace"
+        },
+        "groups": [
+            {
+                "name": "Text",
+                "family": "sans",
+                "styles": [
+                    {
+                        "name": "display",
+                        "fontSize": "34px",
+                        "lineHeight": 1.1,
+                        "fontWeight": 700,
+                        "letterSpacing": "-0.03em",
+                        "usage": "Page heroes and the big number on a dashboard (`--fs-3xl`)."
+                    },
+                    {
+                        "name": "h1",
+                        "fontSize": "26px",
+                        "lineHeight": 1.12,
+                        "fontWeight": 650,
+                        "letterSpacing": "-0.02em",
+                        "usage": "Page title in `PageHeader` (`--fs-2xl`)."
+                    },
+                    {
+                        "name": "h2",
+                        "fontSize": "20px",
+                        "lineHeight": 1.12,
+                        "fontWeight": 650,
+                        "letterSpacing": "-0.02em",
+                        "usage": "Card and section titles (`--fs-xl`)."
+                    },
+                    {
+                        "name": "h3",
+                        "fontSize": "16px",
+                        "lineHeight": 1.12,
+                        "fontWeight": 650,
+                        "letterSpacing": "-0.02em",
+                        "usage": "Small headings, dialog titles (`--fs-lg`)."
+                    },
+                    {
+                        "name": "lead",
+                        "fontSize": "15px",
+                        "lineHeight": 1.6,
+                        "fontWeight": 400,
+                        "letterSpacing": "0",
+                        "usage": "Intro paragraph under a page title (`--fs-md`)."
+                    },
+                    {
+                        "name": "body",
+                        "fontSize": "14px",
+                        "lineHeight": 1.6,
+                        "fontWeight": 400,
+                        "letterSpacing": "0",
+                        "usage": "Default copy, table cells, inputs (`--fs-base`)."
+                    },
+                    {
+                        "name": "small",
+                        "fontSize": "12.5px",
+                        "lineHeight": 1.5,
+                        "fontWeight": 400,
+                        "letterSpacing": "0",
+                        "usage": "Help text, meta lines, badges (`--fs-sm`)."
+                    },
+                    {
+                        "name": "caption",
+                        "fontSize": "11.5px",
+                        "lineHeight": 1.4,
+                        "fontWeight": 500,
+                        "letterSpacing": "0",
+                        "usage": "Captions, timestamps, chart labels (`--fs-xs`)."
+                    },
+                    {
+                        "name": "eyebrow",
+                        "fontSize": "12px",
+                        "lineHeight": 1.4,
+                        "fontWeight": 650,
+                        "letterSpacing": "0.09em",
+                        "usage": "Uppercase section labels above a group (`lui-eyebrow`).",
+                        "sample": "PRAKTIJK"
+                    }
+                ]
+            },
+            {
+                "name": "Data",
+                "family": "mono",
+                "styles": [
+                    {
+                        "name": "mono",
+                        "fontSize": "13px",
+                        "lineHeight": 1.5,
+                        "fontWeight": 400,
+                        "usage": "National numbers, link codes, client ids, amounts in tables (`lui-mono`).",
+                        "sample": "K7QM-2XPD-9HRT"
+                    }
+                ]
+            }
+        ]
+    },
+    "radius": {
+        "tokens": [
+            {
+                "name": "r-xs",
+                "value": "6px",
+                "usage": "Kbd, tiny chips."
+            },
+            {
+                "name": "r-sm",
+                "value": "8px",
+                "usage": "Menu items, small buttons, tags."
+            },
+            {
+                "name": "r-md",
+                "value": "11px",
+                "usage": "Buttons, inputs, sidebar items, the brand mark."
+            },
+            {
+                "name": "r-lg",
+                "value": "14px",
+                "usage": "Cards, the eID card visual, panels."
+            },
+            {
+                "name": "r-xl",
+                "value": "20px",
+                "usage": "Dialogs, large feature cards."
+            },
+            {
+                "name": "r-2xl",
+                "value": "26px",
+                "usage": "Hero panels and mockups."
+            },
+            {
+                "name": "r-full",
+                "value": "999px",
+                "usage": "Pills, avatars, badges, the presence dot."
+            }
+        ]
+    },
+    "shadow": {
+        "tokens": [
+            {
+                "name": "sh-xs",
+                "value": {
+                    "light": "0 1px 2px rgba(16, 23, 41, .05)",
+                    "dark": "0 1px 2px rgba(0, 0, 0, .4)"
+                },
+                "usage": "Inputs and small controls."
+            },
+            {
+                "name": "sh-sm",
+                "value": {
+                    "light": "0 1px 2px rgba(16, 23, 41, .06), 0 1px 1px rgba(16, 23, 41, .04)",
+                    "dark": "0 1px 2px rgba(0, 0, 0, .45)"
+                },
+                "usage": "Cards at rest, the brand mark."
+            },
+            {
+                "name": "sh-md",
+                "value": {
+                    "light": "0 4px 12px rgba(16, 23, 41, .07), 0 1px 3px rgba(16, 23, 41, .05)",
+                    "dark": "0 4px 14px rgba(0, 0, 0, .5)"
+                },
+                "usage": "Hovered cards, popovers."
+            },
+            {
+                "name": "sh-lg",
+                "value": {
+                    "light": "0 12px 32px rgba(16, 23, 41, .10), 0 4px 10px rgba(16, 23, 41, .05)",
+                    "dark": "0 14px 36px rgba(0, 0, 0, .55)"
+                },
+                "usage": "Menus, the user popover, toasts."
+            },
+            {
+                "name": "sh-xl",
+                "value": {
+                    "light": "0 24px 60px rgba(16, 23, 41, .16), 0 8px 18px rgba(16, 23, 41, .07)",
+                    "dark": "0 26px 64px rgba(0, 0, 0, .6)"
+                },
+                "usage": "Dialogs and drawers."
+            }
+        ]
+    },
+    "layout": {
+        "tokens": [
+            {
+                "name": "sidebar-w",
+                "value": "256px",
+                "usage": "Width of the expanded sidebar."
+            },
+            {
+                "name": "topbar-h",
+                "value": "64px",
+                "usage": "Height of the topbar."
+            },
+            {
+                "name": "maxw",
+                "value": "1160px",
+                "usage": "Maximum width of page content."
+            }
+        ]
+    },
+    "zIndex": {
+        "tokens": [
+            {
+                "name": "z-sticky",
+                "value": "20",
+                "usage": "Stacking order: sticky."
+            },
+            {
+                "name": "z-drawer",
+                "value": "70",
+                "usage": "Stacking order: drawer."
+            },
+            {
+                "name": "z-overlay",
+                "value": "100",
+                "usage": "Stacking order: overlay."
+            },
+            {
+                "name": "z-popover",
+                "value": "2000",
+                "usage": "Stacking order: popover."
+            },
+            {
+                "name": "z-toast",
+                "value": "2200",
+                "usage": "Stacking order: toast."
+            }
+        ]
+    }
+}

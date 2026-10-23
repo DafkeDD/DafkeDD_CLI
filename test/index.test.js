@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { main, version } from '../src/index.js'
 
 /** Builds a fake frontend/backend plus injectable prompts that answer from `choices`. */
-function setup({ frontend = 'demo-fe', backend = 'demo-be', repo = null } = {}) {
+function setup({ frontend = 'demo-fe', backend = 'demo-be', repo = null, claude = false } = {}) {
     const events = []
     const make = (id, label, dir) => ({
         id,
@@ -30,6 +30,14 @@ function setup({ frontend = 'demo-fe', backend = 'demo-be', repo = null } = {}) 
                 events.push(config.message.includes('frontend') ? 'select.frontend' : 'select.backend')
                 return config.message.includes('frontend') ? frontend : backend
             }
+        },
+        askClaude: async () => {
+            events.push('askClaude')
+            return claude
+        },
+        askCloud: async () => {
+            events.push('askCloud')
+            return false
         },
         ask: async () => {
             events.push('askRepo')
@@ -65,8 +73,16 @@ test('main prints the version and the project folder', async () => {
 test('main asks frontend, frontend options, backend and the GitHub question last', async () => {
     const { events, options } = setup()
     await main(options)
-    const order = events.slice(0, 5).map(e => e.replace(/\(.*\)$/, ''))
-    assert.deepEqual(order, ['select.frontend', 'demo-fe.ask', 'select.backend', 'demo-be.ask', 'askRepo'])
+    const order = events.slice(0, 7).map(e => e.replace(/\(.*\)$/, ''))
+    assert.deepEqual(order, [
+        'select.frontend',
+        'demo-fe.ask',
+        'select.backend',
+        'demo-be.ask',
+        'askClaude',
+        'askCloud',
+        'askRepo'
+    ])
 })
 
 test('main offers "no frontend" and "no backend" next to the real choices', async () => {
@@ -86,7 +102,10 @@ test('main runs frontend steps, then backend steps, then the git steps', async (
     const { events, options } = setup({ repo: { name: 'demo-repo', platform: 'github', visibility: 'private' } })
     await main(options)
     const executed = events.find(e => e.startsWith('execute('))
-    assert.match(executed, /^execute\(demo-fe step,demo-be step,Git initialiseren,Repo "demo-repo"/)
+    assert.match(
+        executed,
+        /^execute\(demo-fe step,demo-be step,Kennisbank aanmaken \(docs\/kb, 4 talen\),Git initialiseren,Repo "demo-repo"/
+    )
 })
 
 test('main tells the backend whether a frontend was chosen (the login pages need one)', async () => {
@@ -135,7 +154,7 @@ test('main shows the result lines of the backend (✔ and ✖) and its answer-de
 test('main works with only a frontend', async () => {
     const { events, logs, options } = setup({ backend: 'none' })
     await main(options)
-    assert.ok(events.includes('execute(demo-fe step)'))
+    assert.ok(events.includes('execute(demo-fe step,Kennisbank aanmaken (docs/kb, 4 talen))'))
     assert.ok(!events.some(e => e.startsWith('demo-be.ask')))
     assert.ok(!logs.some(l => l.includes('DemoBE')))
 })

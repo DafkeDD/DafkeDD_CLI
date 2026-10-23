@@ -1,0 +1,29 @@
+name: Bug
+description: Something in DafkeDD_CLI or in a generated project that does not work
+labels: ['type:bug', 'status:ready']
+body:
+    - type: textarea
+      id: what
+      attributes:
+          label: What happens
+          description: The exact error message or behaviour (paste the output).
+      validations:
+          required: true
+    - type: textarea
+      id: expected
+      attributes:
+          label: What should happen
+      validations:
+          required: true
+    - type: textarea
+      id: steps
+      attributes:
+          label: How to reproduce
+          description: The CLI version, the answers given to the CLI, the command that failed.
+      validations:
+          required: true
+    - type: input
+      id: platform
+      attributes:
+          label: Platform
+          description: Windows / macOS / Linux, Node.js and npm version

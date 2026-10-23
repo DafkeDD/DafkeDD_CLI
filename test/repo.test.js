@@ -186,3 +186,45 @@ test('repoSteps explains how to log in when gh is missing and does not try to cr
     )
     assert.ok(!exec.calls.some(c => c.startsWith('gh repo create')))
 })
+
+test('repoSteps with Claude Code pushes developer too and makes it the default branch', async t => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-repo-'))
+    t.after(() => fs.rm(dir, { recursive: true, force: true }))
+    const exec = fakeExec()
+    const steps = repoSteps({
+        projectDir: dir,
+        repo: { name: 'demo', visibility: 'private' },
+        developer: 'developer',
+        exec
+    })
+    assert.equal(steps.length, 3)
+    for (const step of steps) await step.run()
+    assert.deepEqual(exec.calls.slice(-4), [
+        'git branch developer',
+        'git push -u origin developer',
+        'gh repo edit --default-branch developer',
+        'git switch developer'
+    ])
+})
+
+test('repoSteps with Claude Code makes the labels of the issues, and a failure there does not stop the CLI', async () => {
+    const exec = fakeExec(async cmd => {
+        if (cmd === process.execPath) throw new Error('gh: not logged in')
+        return ''
+    })
+    const steps = repoSteps({
+        projectDir: '/tmp/x',
+        repo: { name: 'r', visibility: 'private' },
+        developer: 'developer',
+        labels: true,
+        exec
+    })
+    const last = steps.at(-1)
+    assert.match(last.title, /Labels en branchbescherming/)
+    await last.run()
+    assert.deepEqual(exec.calls, [
+        `${process.execPath} .claude/scripts/setup-labels.mjs`,
+        `${process.execPath} .claude/scripts/protect-branches.mjs`
+    ])
+    assert.equal(repoSteps({ projectDir: '/tmp/x', repo: { name: 'r', visibility: 'private' }, exec }).length, 2)
+})

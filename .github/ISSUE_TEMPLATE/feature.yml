@@ -1,0 +1,34 @@
+name: Feature or change
+description: Something new or different in DafkeDD_CLI or in the projects it generates
+labels: ['type:feature', 'status:ready']
+body:
+    - type: textarea
+      id: why
+      attributes:
+          label: Why
+          description: The problem or the wish, in your own words.
+      validations:
+          required: true
+    - type: textarea
+      id: what
+      attributes:
+          label: What
+          description: What the CLI or the generated project should do (questions, screens, endpoints, data).
+      validations:
+          required: true
+    - type: dropdown
+      id: area
+      attributes:
+          label: Area
+          multiple: true
+          options:
+              - frontend
+              - backend
+              - database
+              - cli
+              - docs
+    - type: textarea
+      id: acceptance
+      attributes:
+          label: Acceptance
+          description: How we know it is done (for example "npm run verify passes", "every text in en/nl/fr/de").
