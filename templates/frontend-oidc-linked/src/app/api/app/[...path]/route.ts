@@ -5,6 +5,15 @@ import { freshSession } from '@/lib/refresh'
 
 /** A path of the API of this app: letters, digits, -, _ and / (never .. or an empty segment). */
 const PATH = /^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*$/
+/** The headers of the answer of the API that reach the browser: the type, caching (ETag → 304) and downloads. */
+const PASSED_HEADERS = [
+    'content-type',
+    'etag',
+    'cache-control',
+    'content-disposition',
+    'content-security-policy',
+    'x-content-type-options'
+]
 
 /**
  * Calls the API of THIS app (./backend, NEXT_PUBLIC_API_URL) for the browser: adds the access token of the session
@@ -27,25 +36,32 @@ async function forward(request: NextRequest, { params }: { params: Promise<{ pat
     if (!session) return answer(NextResponse.json({ error: 'session' }, { status: 401 }))
 
     const hasBody = !['GET', 'DELETE'].includes(request.method)
+    // The body and the answer are passed on as bytes, so uploads and downloads (images, PDFs …) work like JSON does
+    const etag = request.headers.get('if-none-match')
     const response = await fetch(`${API_URL}/${path}${request.nextUrl.search}`, {
         method: request.method,
         headers: {
             Authorization: 'Bearer ' + session.accessToken,
-            Accept: 'application/json',
+            Accept: request.headers.get('accept') ?? 'application/json',
             'Accept-Language': request.headers.get('accept-language') ?? 'en',
-            ...(hasBody ? { 'Content-Type': 'application/json' } : {})
+            ...(etag ? { 'If-None-Match': etag } : {}),
+            ...(hasBody ? { 'Content-Type': request.headers.get('content-type') ?? 'application/json' } : {})
         },
-        body: hasBody ? await request.text() : undefined,
+        body: hasBody ? await request.arrayBuffer() : undefined,
         cache: 'no-store'
     }).catch(() => null)
     if (!response) return answer(NextResponse.json({ error: 'offline' }, { status: 502 }))
-    if (response.status === 204) return answer(new NextResponse(null, { status: 204 }))
-    return answer(
-        new NextResponse(await response.text(), {
-            status: response.status,
-            headers: { 'Content-Type': response.headers.get('content-type') ?? 'application/json' }
-        })
-    )
+    const headers: Record<string, string> = {}
+    for (const name of PASSED_HEADERS) {
+        const value = response.headers.get(name)
+        if (value) headers[name] = value
+    }
+    if (response.status === 204 || response.status === 304)
+        return answer(
+            new NextResponse(null, { status: response.status, headers: response.status === 304 ? headers : {} })
+        )
+    headers['content-type'] ??= 'application/json'
+    return answer(new NextResponse(await response.arrayBuffer(), { status: response.status, headers }))
 }
 
 export { forward as DELETE, forward as GET, forward as PATCH, forward as POST, forward as PUT }

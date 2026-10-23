@@ -34,6 +34,7 @@ export const TRANSLATIONS = {
             FORBIDDEN: 'You do not have access to this',
             NOT_FOUND: 'Not found',
             CONFLICT: 'A conflict occurred',
+            PAYLOAD_TOO_LARGE: 'The request is too large',
             INTERNAL: 'Something went wrong on the server',
             EXAMPLE_NOT_FOUND: 'Example {id} was not found'
         },
@@ -41,7 +42,20 @@ export const TRANSLATIONS = {
             IS_STRING: '{property} must be a text',
             NOT_EMPTY: '{property} must not be empty',
             MIN_LENGTH: '{property} must be at least {constraints.0} characters long',
-            IS_EMAIL: '{property} must be a valid email address'
+            IS_EMAIL: '{property} must be a valid email address',
+            IS_IN: '{property} must be one of: {constraints.0}',
+            IS_OBJECT: '{property} must be an object',
+            IS_INT: '{property} must be a whole number',
+            MIN: '{property} must be at least {constraints.0}',
+            MAX: '{property} must be at most {constraints.0}',
+            MATCHES: '{property} has an invalid format',
+            IS_BOOLEAN: '{property} must be true or false',
+            IS_UUID: '{property} must be an id (uuid)',
+            IS_DATE: '{property} must be a date (ISO 8601)',
+            IS_ARRAY: '{property} must be a list',
+            ARRAY_MAX_SIZE: '{property} may have at most {constraints.0} items',
+            IS_NUMBER: '{property} must be a number',
+            MAX_LENGTH: '{property} must be at most {constraints.0} characters long'
         }
     },
     nl: {
@@ -52,6 +66,7 @@ export const TRANSLATIONS = {
             FORBIDDEN: 'Je hebt hier geen toegang toe',
             NOT_FOUND: 'Niet gevonden',
             CONFLICT: 'Er is een conflict opgetreden',
+            PAYLOAD_TOO_LARGE: 'Het verzoek is te groot',
             INTERNAL: 'Er is iets misgegaan op de server',
             EXAMPLE_NOT_FOUND: 'Voorbeeld {id} werd niet gevonden'
         },
@@ -59,7 +74,20 @@ export const TRANSLATIONS = {
             IS_STRING: '{property} moet een tekst zijn',
             NOT_EMPTY: '{property} mag niet leeg zijn',
             MIN_LENGTH: '{property} moet minstens {constraints.0} tekens lang zijn',
-            IS_EMAIL: '{property} moet een geldig e-mailadres zijn'
+            IS_EMAIL: '{property} moet een geldig e-mailadres zijn',
+            IS_IN: '{property} moet een van deze waarden zijn: {constraints.0}',
+            IS_OBJECT: '{property} moet een object zijn',
+            IS_INT: '{property} moet een geheel getal zijn',
+            MIN: '{property} moet minstens {constraints.0} zijn',
+            MAX: '{property} mag hoogstens {constraints.0} zijn',
+            MATCHES: '{property} heeft een ongeldige vorm',
+            IS_BOOLEAN: '{property} moet true of false zijn',
+            IS_UUID: '{property} moet een id (uuid) zijn',
+            IS_DATE: '{property} moet een datum zijn (ISO 8601)',
+            IS_ARRAY: '{property} moet een lijst zijn',
+            ARRAY_MAX_SIZE: '{property} mag hoogstens {constraints.0} elementen hebben',
+            IS_NUMBER: '{property} moet een getal zijn',
+            MAX_LENGTH: '{property} mag hoogstens {constraints.0} tekens lang zijn'
         }
     },
     fr: {
@@ -70,6 +98,7 @@ export const TRANSLATIONS = {
             FORBIDDEN: "Vous n'avez pas accès à cette ressource",
             NOT_FOUND: 'Introuvable',
             CONFLICT: 'Un conflit est survenu',
+            PAYLOAD_TOO_LARGE: 'La requête est trop volumineuse',
             INTERNAL: 'Une erreur est survenue sur le serveur',
             EXAMPLE_NOT_FOUND: "L'exemple {id} est introuvable"
         },
@@ -77,7 +106,20 @@ export const TRANSLATIONS = {
             IS_STRING: '{property} doit être une chaîne de caractères',
             NOT_EMPTY: 'Le champ {property} ne doit pas être vide',
             MIN_LENGTH: '{property} doit contenir au moins {constraints.0} caractères',
-            IS_EMAIL: '{property} doit être une adresse e-mail valide'
+            IS_EMAIL: '{property} doit être une adresse e-mail valide',
+            IS_IN: "{property} doit être l'une de ces valeurs : {constraints.0}",
+            IS_OBJECT: '{property} doit être un objet',
+            IS_INT: '{property} doit être un nombre entier',
+            MIN: '{property} doit être au moins {constraints.0}',
+            MAX: '{property} doit être au plus {constraints.0}',
+            MATCHES: "{property} n'a pas un format valable",
+            IS_BOOLEAN: '{property} doit être true ou false',
+            IS_UUID: '{property} doit être un identifiant (uuid)',
+            IS_DATE: '{property} doit être une date (ISO 8601)',
+            IS_ARRAY: '{property} doit être une liste',
+            ARRAY_MAX_SIZE: '{property} peut contenir au plus {constraints.0} éléments',
+            IS_NUMBER: '{property} doit être un nombre',
+            MAX_LENGTH: '{property} doit contenir au maximum {constraints.0} caractères'
         }
     },
     de: {
@@ -88,6 +130,7 @@ export const TRANSLATIONS = {
             FORBIDDEN: 'Du hast darauf keinen Zugriff',
             NOT_FOUND: 'Nicht gefunden',
             CONFLICT: 'Es ist ein Konflikt aufgetreten',
+            PAYLOAD_TOO_LARGE: 'Die Anfrage ist zu groß',
             INTERNAL: 'Auf dem Server ist ein Fehler aufgetreten',
             EXAMPLE_NOT_FOUND: 'Beispiel {id} wurde nicht gefunden'
         },
@@ -95,7 +138,20 @@ export const TRANSLATIONS = {
             IS_STRING: '{property} muss ein Text sein',
             NOT_EMPTY: '{property} darf nicht leer sein',
             MIN_LENGTH: '{property} muss mindestens {constraints.0} Zeichen lang sein',
-            IS_EMAIL: '{property} muss eine gültige E-Mail-Adresse sein'
+            IS_EMAIL: '{property} muss eine gültige E-Mail-Adresse sein',
+            IS_IN: '{property} muss einer dieser Werte sein: {constraints.0}',
+            IS_OBJECT: '{property} muss ein Objekt sein',
+            IS_INT: '{property} muss eine ganze Zahl sein',
+            MIN: '{property} muss mindestens {constraints.0} sein',
+            MAX: '{property} darf höchstens {constraints.0} sein',
+            MATCHES: '{property} hat ein ungültiges Format',
+            IS_BOOLEAN: '{property} muss true oder false sein',
+            IS_UUID: '{property} muss eine ID (uuid) sein',
+            IS_DATE: '{property} muss ein Datum sein (ISO 8601)',
+            IS_ARRAY: '{property} muss eine Liste sein',
+            ARRAY_MAX_SIZE: '{property} darf höchstens {constraints.0} Einträge haben',
+            IS_NUMBER: '{property} muss eine Zahl sein',
+            MAX_LENGTH: '{property} darf höchstens {constraints.0} Zeichen lang sein'
         }
     }
 }
@@ -305,7 +361,18 @@ const STATUS_KEYS: Record<number, string> = {
   403: 'errors.FORBIDDEN',
   404: 'errors.NOT_FOUND',
   409: 'errors.CONFLICT',
+  413: 'errors.PAYLOAD_TOO_LARGE',
 };
+
+/**
+ * The status of an error of the body parser (a body that is too large or not valid JSON): it has a \`type\` and a 4xx
+ * \`status\`. Such a request is the fault of the caller, so it is answered (413, 400 …) and not logged as a crash.
+ */
+function parserStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const { status, type } = error as { status?: unknown; type?: unknown };
+  return typeof type === 'string' && typeof status === 'number' && status >= 400 && status < 500 ? status : undefined;
+}
 
 /** Turns every error into the same JSON shape, with the message in the language of the request. */
 @Catch()
@@ -317,9 +384,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const response = http.getResponse<Response>();
     const request = http.getRequest<Request>();
 
-    const status = exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
-    // Deliberate HttpExceptions (such as a 503 for an unavailable database) are answered, not logged as crashes.
-    if (!(exception instanceof HttpException)) this.logger.error(exception instanceof Error ? exception.stack : String(exception));
+    const refused = exception instanceof HttpException ? undefined : parserStatus(exception);
+    const status =
+      exception instanceof HttpException ? exception.getStatus() : (refused ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    // Deliberate HttpExceptions (such as a 503 for an unavailable database) and a body the parser refuses are
+    // answered, not logged as crashes.
+    if (!(exception instanceof HttpException) && !refused)
+      this.logger.error(exception instanceof Error ? exception.stack : String(exception));
 
     const key = exception instanceof AppException ? exception.key : (STATUS_KEYS[status] ?? 'errors.INTERNAL');
     const args = exception instanceof AppException ? exception.args : undefined;
@@ -535,6 +606,20 @@ describe('API (e2e)', () => {
       });
     });
 
+    it('a body that is too large is a translated 413, not a crash', async () => {
+      const response = await http()
+        .post('/examples')
+        .set('Accept-Language', 'nl')
+        .send({ name: 'x'.repeat(200 * 1024), email: 'ada@example.com' })
+        .expect(413);
+      expect(response.body).toMatchObject({ statusCode: 413, error: 'errors.PAYLOAD_TOO_LARGE', message: 'Het verzoek is te groot' });
+    });
+
+    it('a body that is not valid JSON is a 400, not a crash', async () => {
+      const response = await http().post('/examples').set('Content-Type', 'application/json').send('{"name":').expect(400);
+      expect(response.body).toMatchObject({ statusCode: 400, error: 'errors.BAD_REQUEST' });
+    });
+
     it('unknown routes get a translated 404', async () => {
       const dutch = await http().get('/does-not-exist').set('Accept-Language', 'nl').expect(404);
       expect(dutch.body.message).toBe('Niet gevonden');
@@ -689,8 +774,8 @@ describe('API (e2e)', () => {\n`
         )
         result['src/common/all-exceptions.filter.ts'] = replaceOnce(
             files['src/common/all-exceptions.filter.ts'],
-            "  409: 'errors.CONFLICT',\n",
-            "  409: 'errors.CONFLICT',\n  429: 'errors.TOO_MANY_REQUESTS',\n"
+            "  413: 'errors.PAYLOAD_TOO_LARGE',\n",
+            "  413: 'errors.PAYLOAD_TOO_LARGE',\n  429: 'errors.TOO_MANY_REQUESTS',\n"
         )
         // The main e2e spec creates the whole app, so it needs a JWT secret too
         result['test/app.e2e-spec.ts'] = replaceOnce(
@@ -712,8 +797,7 @@ describe('API (e2e)', () => {\n`
             result[`src/i18n/${locale}/billing.json`] = json(oidc.BILLING_MESSAGES[locale])
             result[`src/i18n/${locale}/validation.json`] = json({
                 ...TRANSLATIONS[locale].validation,
-                ...login.VALIDATION[locale],
-                ...oidc.VALIDATION[locale]
+                ...login.VALIDATION[locale]
             })
         }
         // The member and platform endpoints need the access token of the OIDC server

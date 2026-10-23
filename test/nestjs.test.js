@@ -545,5 +545,36 @@ test('next steps for a local database mention the connection test, not Docker', 
 
 test('only unexpected errors are logged as crashes, deliberate HttpExceptions are not', () => {
     const filter = files['src/common/all-exceptions.filter.ts']
-    assert.match(filter, /if \(!\(exception instanceof HttpException\)\) this\.logger\.error/)
+    assert.match(filter, /if \(!\(exception instanceof HttpException\) && !refused\)\s+this\.logger\.error/)
+})
+
+test('a body the parser refuses (too large, not JSON) is answered with its 4xx status and never logged as a crash', () => {
+    const all = files['src/common/all-exceptions.filter.ts']
+    assert.match(all, /413: 'errors\.PAYLOAD_TOO_LARGE'/)
+    assert.match(all, /function parserStatus\(error: unknown\)/)
+    assert.match(all, /!\(exception instanceof HttpException\) && !refused/)
+    for (const locale of LOCALES) assert.ok(TRANSLATIONS[locale].errors.PAYLOAD_TOO_LARGE, locale)
+})
+
+test('the validation texts cover the usual class-validator decorators in every language', () => {
+    const keys = [
+        'IS_IN',
+        'IS_OBJECT',
+        'IS_INT',
+        'IS_NUMBER',
+        'MIN',
+        'MAX',
+        'MATCHES',
+        'IS_BOOLEAN',
+        'IS_UUID',
+        'IS_DATE',
+        'IS_ARRAY',
+        'ARRAY_MAX_SIZE',
+        'MAX_LENGTH'
+    ]
+    for (const locale of LOCALES) {
+        const validation = JSON.parse(files[`src/i18n/${locale}/validation.json`])
+        for (const key of keys) assert.ok(validation[key]?.includes('{property}'), `${locale} ${key}`)
+    }
+    for (const key of keys) assert.equal(new Set(LOCALES.map(l => TRANSLATIONS[l].validation[key])).size, 4, key)
 })

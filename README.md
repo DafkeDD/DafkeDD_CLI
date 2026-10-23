@@ -497,7 +497,19 @@ git switch developer
 
 ## Changelog
 
-- **0.39.2**: fix: the frontend of a linked app did not build (\`Can't resolve '@/components/ask-demo'\`): the "Ask a
+- **0.40.0**: fixes found in a real linked app.
+    - The session cookies of the frontend are named after its client id (`<client id>_session`, `<client id>_oidc`
+      instead of `app_session`): browsers share cookies between all ports of localhost, so the portal of the login
+      server and a linked app threw each other's session away. Everyone logs in once more after the update.
+    - `/api/app` of a linked frontend passes bodies and answers as bytes (uploads, images, PDFs) with their
+      `Content-Type` and `Accept`, and passes `If-None-Match`/`ETag` (304), `Cache-Control` and `Content-Disposition`
+      on.
+    - A body the parser refuses is answered instead of logged as a crash: too large is a translated 413
+      (`errors.PAYLOAD_TOO_LARGE`), invalid JSON a 400.
+    - Every backend gets the validation texts of the usual class-validator decorators in en, nl, fr and de (`IS_UUID`,
+      `IS_INT`, `IS_NUMBER`, `IS_BOOLEAN`, `IS_DATE`, `IS_ARRAY`, `IS_OBJECT`, `IS_IN`, `MIN`, `MAX`, `MATCHES`,
+      `ARRAY_MAX_SIZE`, `MAX_LENGTH`); before, only the login server had most of them.
+- **0.39.2**: fix: the frontend of a linked app did not build (`Can't resolve '@/components/ask-demo'`): the "Ask a
   demo" button of the profile page is now part of the linked frontend too. A new test checks that every file the
   generated frontend imports is generated as well.
 - **0.39.1**: longer link codes. The login server now makes link codes of 24 characters

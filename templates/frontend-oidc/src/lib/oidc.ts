@@ -32,8 +32,14 @@ export const REDIRECT_URI = APP_URL + '/api/auth/callback'
  */
 export const ACCOUNT_URL = (process.env.OIDC_ACCOUNT_URL ?? '').replace(/\/+$/, '')
 
-export const SESSION_COOKIE = 'app_session'
-export const FLOW_COOKIE = 'app_oidc'
+/**
+ * The cookies are named after the client id of this app: browsers share cookies between all ports of a host, so on
+ * localhost the frontend of the login server and a linked app would otherwise read (and throw away) each other's
+ * session, which was sealed with another AUTH_SECRET.
+ */
+const COOKIE_PREFIX = OIDC_CLIENT_ID.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+export const SESSION_COOKIE = `${COOKIE_PREFIX}_session`
+export const FLOW_COOKIE = `${COOKIE_PREFIX}_oidc`
 export const FLOW_SECONDS = 10 * 60
 /**
  * How long the session cookie lives: as long as a session of the login server (12 hours). The access token inside is

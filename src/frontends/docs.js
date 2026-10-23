@@ -143,7 +143,8 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 login cookie of the API along) → back to the API → \`/api/auth/callback\`
 → the page you came from. A next login of the same browser skips the password (single sign-on).
 
-**Session**: an httpOnly cookie \`app_session\`, encrypted with \`AUTH_SECRET\` (AES-256-GCM), with the name, email,
+**Session**: an httpOnly cookie \`<client id>_session\` (named after \`OIDC_CLIENT_ID\`, so the apps on the ports of
+localhost never share one; the login flow uses \`<client id>_oidc\`), encrypted with \`AUTH_SECRET\` (AES-256-GCM), with the name, email,
 organisation (tenant) with the role, whether the user is superadmin, the access token (10 minutes), the refresh token
 and the last ID token. It lives as long as the session of the login server (12 hours). \`src/proxy.ts\` renews the
 access token with the refresh token (\`src/lib/refresh.ts\`) before a page renders when it expires within a minute, and
@@ -298,7 +299,7 @@ none). Somebody who is logged in at that server is logged in here without a pass
 | \`/login\` | Starts a login at once: the login screen of the login server (the same in every app), where users also register; \`?error=\` stays here and shows why the last one failed (for example \`access_denied\` on the consent screen) |
 | \`/profile\` | Protected: name, email, organisation, role, and whether the login server accepts the access token |
 | \`/api/backend/...\` | Calls the API of the login server with the access token of the session (only for apps marked "our own application") |
-| \`/api/app/...\` | Calls the API of **this app** (\`./backend\`) with the same access token, added on the server (the browser never sees it); changes only from a page of this app (Origin check) |
+| \`/api/app/...\` | Calls the API of **this app** (\`./backend\`) with the same access token, added on the server (the browser never sees it); changes only from a page of this app (Origin check). Bodies and answers pass as bytes (uploads, images, PDFs), with \`Content-Type\`, \`Accept\`, \`If-None-Match\`/\`ETag\` (304), \`Cache-Control\` and \`Content-Disposition\` |
 
 The home page shows the **notes of the organisation** (\`src/components/notes.tsx\`): the example of data of this app,
 stored by its own API in its own database, per organisation. Everyone of the organisation adds notes, only its

@@ -34,62 +34,6 @@ export const SCRIPTS = {
     'mail:dev': 'docker run -d --rm --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit'
 }
 
-/** Extra validation messages (namespace "validation") used by the account and admin endpoints. */
-export const VALIDATION = {
-    en: {
-        IS_IN: '{property} must be one of: {constraints.0}',
-        IS_OBJECT: '{property} must be an object',
-        IS_INT: '{property} must be a whole number',
-        MIN: '{property} must be at least {constraints.0}',
-        MAX: '{property} must be at most {constraints.0}',
-        MATCHES: '{property} has an invalid format',
-        IS_BOOLEAN: '{property} must be true or false',
-        IS_UUID: '{property} must be an id (uuid)',
-        IS_DATE: '{property} must be a date (ISO 8601)',
-        IS_ARRAY: '{property} must be a list',
-        ARRAY_MAX_SIZE: '{property} may have at most {constraints.0} items'
-    },
-    nl: {
-        IS_IN: '{property} moet een van deze waarden zijn: {constraints.0}',
-        IS_OBJECT: '{property} moet een object zijn',
-        IS_INT: '{property} moet een geheel getal zijn',
-        MIN: '{property} moet minstens {constraints.0} zijn',
-        MAX: '{property} mag hoogstens {constraints.0} zijn',
-        MATCHES: '{property} heeft een ongeldige vorm',
-        IS_BOOLEAN: '{property} moet true of false zijn',
-        IS_UUID: '{property} moet een id (uuid) zijn',
-        IS_DATE: '{property} moet een datum zijn (ISO 8601)',
-        IS_ARRAY: '{property} moet een lijst zijn',
-        ARRAY_MAX_SIZE: '{property} mag hoogstens {constraints.0} elementen hebben'
-    },
-    fr: {
-        IS_IN: "{property} doit être l'une de ces valeurs : {constraints.0}",
-        IS_OBJECT: '{property} doit être un objet',
-        IS_INT: '{property} doit être un nombre entier',
-        MIN: '{property} doit être au moins {constraints.0}',
-        MAX: '{property} doit être au plus {constraints.0}',
-        MATCHES: "{property} n'a pas un format valable",
-        IS_BOOLEAN: '{property} doit être true ou false',
-        IS_UUID: '{property} doit être un identifiant (uuid)',
-        IS_DATE: '{property} doit être une date (ISO 8601)',
-        IS_ARRAY: '{property} doit être une liste',
-        ARRAY_MAX_SIZE: '{property} peut contenir au plus {constraints.0} éléments'
-    },
-    de: {
-        IS_IN: '{property} muss einer dieser Werte sein: {constraints.0}',
-        IS_OBJECT: '{property} muss ein Objekt sein',
-        IS_INT: '{property} muss eine ganze Zahl sein',
-        MIN: '{property} muss mindestens {constraints.0} sein',
-        MAX: '{property} darf höchstens {constraints.0} sein',
-        MATCHES: '{property} hat ein ungültiges Format',
-        IS_BOOLEAN: '{property} muss true oder false sein',
-        IS_UUID: '{property} muss eine ID (uuid) sein',
-        IS_DATE: '{property} muss ein Datum sein (ISO 8601)',
-        IS_ARRAY: '{property} muss eine Liste sein',
-        ARRAY_MAX_SIZE: '{property} darf höchstens {constraints.0} Einträge haben'
-    }
-}
-
 /** Texts of the licences (namespace "billing"): errors and the fake checkout. Every language has the same keys. */
 export const BILLING_MESSAGES = {
     en: {

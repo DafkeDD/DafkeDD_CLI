@@ -225,6 +225,18 @@ test('the linked frontend: login, session, profile and the notes of its own API;
     assert.match(proxy, /Authorization: 'Bearer ' \+ session\.accessToken/)
     assert.match(proxy, /request\.headers\.get\('origin'\) !== new URL\(APP_URL\)\.origin/)
     assert.match(all['src/components/notes.tsx'], /fetch\('\/api\/app\/notes'/)
+    // Uploads and downloads pass as bytes, with the headers for caching (ETag → 304) and downloads
+    assert.match(proxy, /body: hasBody \? await request\.arrayBuffer\(\) : undefined/)
+    assert.match(proxy, /new NextResponse\(await response\.arrayBuffer\(\)/)
+    assert.match(proxy, /'Content-Type': request\.headers\.get\('content-type'\) \?\? 'application\/json'/)
+    assert.match(proxy, /'If-None-Match': etag/)
+    for (const header of ['etag', 'cache-control', 'content-disposition'])
+        assert.ok(proxy.includes(`'${header}'`), header)
+    assert.match(proxy, /response\.status === 304/)
+    // Named after the client id: the portal of the login server on another port of localhost never shares them
+    assert.match(all['src/lib/oidc.ts'], /export const SESSION_COOKIE = `\$\{COOKIE_PREFIX\}_session`/)
+    assert.match(all['src/lib/oidc.ts'], /export const FLOW_COOKIE = `\$\{COOKIE_PREFIX\}_oidc`/)
+    assert.doesNotMatch(all['src/lib/oidc.ts'], /'app_session'/)
     // The licence for the product of the app: kept in the session, shown on the home page
     assert.match(all['src/lib/oidc.ts'], /license: licenseOf\(claims\.license\)/)
     assert.match(all['src/lib/refresh.ts'], /\blicense,\n[^}]*\broles\n/)
