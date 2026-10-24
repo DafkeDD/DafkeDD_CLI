@@ -217,12 +217,12 @@ test('the linked frontend: login, session, profile and the notes of its own API;
         assert.ok(!Object.keys(own).some(rel => rel.includes(`/${page}/`)), page)
     // The same shell as the login server: its account pages through OIDC_ACCOUNT_URL, this app's name in the sidebar
     assert.match(own['src/components/shell/app-shell.tsx'], /ACCOUNT_URL \+ path/)
-    assert.match(own['src/app/[locale]/profile/page.tsx'], /ACCOUNT_URL \+ '\/members'/)
+    assert.match(own['src/components/shell/app-shell.tsx'], /account\('\/members'\)/)
     assert.match(own['src/lib/brand.ts'], /export const APP_NAME: string \| null = "Planner"/)
     // No login form of its own: /login starts the login at the login server at once
     const login = own['src/app/[locale]/login/page.tsx']
     assert.ok(!login.includes('OidcLogin'))
-    assert.match(login, /<StartLogin error=\{error\} \/>/)
+    assert.match(login, /<StartLogin error=\{error\} returnTo=\{back\} \/>/)
     assert.match(own['src/lib/oidc.ts'], /OIDC_CLIENT_SECRET/)
     // The full frontend of the server itself is unchanged
     assert.match(oidcFrontendFiles()['src/lib/brand.ts'], /= null/)
@@ -263,7 +263,7 @@ test('the linked frontend: login, session, profile and the notes of its own API;
     assert.doesNotMatch(all['src/lib/oidc.ts'], /'app_session'/)
     // Every page of the linked app is protected: without a session the shell starts a login that comes back here
     const shell = all['src/components/shell/app-shell.tsx']
-    assert.match(shell, /if \(!session && external\) return <LoginRedirect \/>/)
+    assert.match(shell, /if \(!session\) return <LoginRedirect \/>/)
     const redirect = all['src/components/shell/login-redirect.tsx']
     assert.match(redirect, /<form ref=\{form\} action='\/api\/auth\/login' method='get'/)
     assert.match(redirect, /returnTo\.current\.value = window\.location\.pathname \+ window\.location\.search/)

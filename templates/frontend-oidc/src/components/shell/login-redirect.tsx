@@ -2,16 +2,17 @@
 
 import { useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
-import { AUTH, AUTH_TEXT, AUTH_TITLE, BUTTON } from '@/components/account-ui'
+import { AuthHeading, AuthLayout } from '@/components/pasport/auth-layout'
+import { Btn } from '@/components/pasport/ui'
 
 /** How long a login that came back without a session stops the next automatic one (no endless loop). */
 const RETRY_MS = 15_000
 const KEY = 'login-redirect'
 
 /**
- * A page of a linked app without a login (any more): starts a login at the login server that comes back to this page.
- * When the last automatic login came back without a session a moment ago (cookies blocked, for example), it says so
- * and waits for the button instead of trying again and again.
+ * A page without a login (any more), when the proxy did not catch it already (the session ended while the page was
+ * open): starts a login that comes back to this page. When the last automatic login came back without a session a
+ * moment ago (cookies blocked, for example), it says so and waits for the button instead of trying again and again.
  */
 export function LoginRedirect() {
     const t = useTranslations('Oidc')
@@ -35,17 +36,17 @@ export function LoginRedirect() {
         form.current?.requestSubmit()
     }, [])
     return (
-        <section className={AUTH + ' m-auto'}>
-            <h1 className={AUTH_TITLE}>{t('loginTitle')}</h1>
-            <p ref={stuck} hidden role='alert' className={AUTH_TEXT}>
+        <AuthLayout>
+            <AuthHeading title={t('loginTitle')} />
+            <p ref={stuck} hidden role='alert' style={{ marginBottom: 16 }}>
                 {t('loginStuck')}
             </p>
-            <form ref={form} action='/api/auth/login' method='get' className='flex flex-col'>
+            <form ref={form} action='/api/auth/login' method='get' style={{ display: 'flex', flexDirection: 'column' }}>
                 <input ref={returnTo} type='hidden' name='returnTo' defaultValue='/' />
-                <button type='submit' className={BUTTON}>
+                <Btn type='submit' size='lg' className='btn-block' icon='arrowRight'>
                     {t('signIn')}
-                </button>
+                </Btn>
             </form>
-        </section>
+        </AuthLayout>
     )
 }

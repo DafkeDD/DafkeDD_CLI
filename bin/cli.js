@@ -6,7 +6,8 @@ import { doctor } from '../src/doctor.js'
 const HELP = `DafkeDD_CLI v${version}
 
   DafkeDD_CLI            een nieuw project in deze map (frontend, backend, Claude Code, Google Cloud, GitHub)
-  DafkeDD_CLI update     een bestaand project bijwerken naar deze versie (agents, hooks, pipelines, Terraform);
+  DafkeDD_CLI update     een bestaand project bijwerken naar deze versie (agents, hooks, pipelines, Terraform,
+                         het Pasport-design van de frontend);
                          wat je zelf aanpaste wordt nooit overschreven (<bestand>.dafkedd-new ernaast)
   DafkeDD_CLI doctor     controleren of alles er is (node, gh, MCP-servers, database, labels, branchbescherming)
   DafkeDD_CLI --version`

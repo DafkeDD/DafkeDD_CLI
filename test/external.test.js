@@ -141,6 +141,7 @@ test('the login page of the frontend: "Log in with ...", only that, and going on
     const login = frontend['src/components/oidc-login.tsx']
     assert.match(login, /submit\('\/external', \{ csrf: state\.csrf \}\)/)
     assert.match(login, /call\('\/resume', \{ csrf: answer\.csrf \}\)/)
-    assert.match(login, /if \(!state\.password\)/)
+    // Only the other server (no password): its button, no email tab
+    assert.match(login, /\(tab === 'eid' && firstTab\) \|\| !state\.password \?/)
     assert.match(frontend['src/app/[locale]/login/page.tsx'], /externalError=\{error\}/)
 })

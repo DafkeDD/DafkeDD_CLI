@@ -1,33 +1,35 @@
 'use client'
 
-import { FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useState, useSyncExternalStore } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
+import { useEid } from '@dafkedd/eid/react'
 import { Link } from '@/i18n/navigation'
-import { AUTH, AUTH_TEXT, AUTH_TITLE, BUTTON, INPUT, LINK, OUTLINE, roleLabel } from '@/components/account-ui'
-import { AuthDivider, Icon, SsoButton } from '@/components/ui'
 import { EidBridge, EidPin, type EidToken } from '@/components/eid'
-import { MfaQr, RecoveryCodes } from '@/components/mfa-ui'
+import { AuthHeading, AuthLayout, Divider, loginVariant } from '@/components/pasport/auth-layout'
+import { Badge, Btn, ErrorNote, Field, Icon, Input, OkNote } from '@/components/pasport/ui'
+import { OtpInput, QrSvg } from '@/components/pasport/widgets'
 import { useAccountApi } from '@/lib/account'
 import { cancelled, getPasskey, type GetOptions, passkeysSupported } from '@/lib/webauthn'
 import { API_URL } from '@/lib/api'
 
 type Tenant = { id: string; name: string; role?: 'user' | 'admin' }
+type Login = {
+    clientId: string
+    clientName: string
+    csrf: string
+    loginHint: string
+    registration: boolean
+    eid: boolean
+    /** "Log in with a passkey" (OIDC_PASSKEYS, and this browser can). */
+    passkey: boolean
+    /** Email and password (false: only the other OpenID Connect server). */
+    password: boolean
+    /** "Log in with <name>": another OpenID Connect server (for example itsme®). */
+    external: { name: string } | null
+}
 type State =
     | { step: 'loading' }
-    | {
-          step: 'login' | 'eid'
-          clientName: string
-          csrf: string
-          loginHint: string
-          registration: boolean
-          eid: boolean
-          /** "Log in with a passkey" (OIDC_PASSKEYS, and this browser can). */
-          passkey: boolean
-          /** Email and password (false: only the other OpenID Connect server). */
-          password: boolean
-          /** "Log in with <name>": another OpenID Connect server. */
-          external: { name: string } | null
-      }
+    | ({ step: 'login' | 'eid' } & Login)
     | { step: 'tenant'; csrf: string; tenants: Tenant[]; platform: boolean }
     | { step: 'mfa'; csrf: string }
     | { step: 'mfa-setup'; csrf: string; secret: string; qrSvg: string }
@@ -43,7 +45,7 @@ type Answer = {
     location?: string
     csrf?: string
     tenants?: Tenant[]
-    step?: string
+    clientId?: string
     clientName?: string
     loginHint?: string
     registration?: boolean
@@ -62,8 +64,6 @@ type Answer = {
     platform?: boolean
 }
 
-const CHOICE =
-    'flex h-12 cursor-pointer items-center justify-between gap-3 rounded-[var(--r-md)] border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-left text-sm font-semibold hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-60'
 /** What a scope gives an application, in words (the consent screen and /security). */
 export function scopeLabel(t: (key: string) => string, scope: string): string {
     switch (scope) {
@@ -83,14 +83,65 @@ export function scopeLabel(t: (key: string) => string, scope: string): string {
 /** From this many organisations on, the choice gets a search field. */
 const SEARCH_FROM = 7
 
+/** The design's three steps of the eID: card, reading (PIN), verified, driven by the state of the eID program. */
+function EidSteps() {
+    const p = useTranslations('AuthScreen')
+    const eid = useEid()
+    const waiting = ['connecting', 'no-bridge', 'bridge-outdated', 'no-reader', 'no-card'].includes(eid.phase)
+    const steps = [
+        { key: 'insert', txt: p('stepInsert'), sub: p('stepInsertSub'), ic: 'eid', st: waiting ? 'active' : 'done' },
+        { key: 'reading', txt: p('stepPin'), sub: p('stepPinSub'), ic: 'key', st: waiting ? 'pending' : 'active' },
+        { key: 'success', txt: p('stepVerified'), sub: p('stepVerifiedSub'), ic: 'shieldCheck', st: 'pending' }
+    ]
+    return (
+        <div className='step-list' style={{ marginBottom: 18 }}>
+            {steps.map(s => (
+                <div className={`step-row ${s.st}`} key={s.key}>
+                    <div className='step-ic'>
+                        {s.st === 'done' ? (
+                            <Icon name='check' size={16} />
+                        ) : (
+                            <Icon
+                                name={s.key === 'insert' && eid.phase === 'connecting' ? 'loader' : s.ic}
+                                size={16}
+                                className={s.key === 'insert' && eid.phase === 'connecting' ? 'spin' : ''}
+                            />
+                        )}
+                    </div>
+                    <div>
+                        <div className='step-txt'>{s.txt}</div>
+                        <div className='step-sub'>{s.sub}</div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    )
+}
+
 /**
  * The login page of the OIDC server, shown by this frontend: /login?interaction=<id>. It talks to the JSON variant of
  * /oidc/interaction/<id> on the API (with credentials, so the browser keeps the session cookie of the login server)
  * and finally sends the browser back to the application that asked for the login.
  */
-export function OidcLogin({ interaction, externalError }: { interaction: string; externalError?: string }) {
+export function OidcLogin({
+    interaction,
+    externalError,
+    ownClient
+}: {
+    interaction: string
+    externalError?: string
+    /** The client id of this frontend: a login for another app says "Log in to <app>". */
+    ownClient?: string
+}) {
     const t = useTranslations('Oidc')
+    const p = useTranslations('AuthScreen')
     const locale = useLocale()
+    // The superadmin style (cookie of /admin/login): only known in the browser
+    const variant = useSyncExternalStore(
+        () => () => undefined,
+        loginVariant,
+        () => 'customer' as const
+    )
     const [state, setState] = useState<State>({ step: 'loading' })
     // Why the login at the other OpenID Connect server did not work (?error= of its callback)
     const [error, setError] = useState<string | null>(() =>
@@ -107,10 +158,14 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                     : t('externalFailed')
     )
     const [busy, setBusy] = useState(false)
+    const [tab, setTab] = useState<'eid' | 'email'>('eid')
     // Set when the password was right but the email address is not verified yet: offers to send the email again
     const [unverified, setUnverified] = useState('')
     const [resent, setResent] = useState(false)
     const [search, setSearch] = useState('')
+    const [code, setCode] = useState('')
+    const [useRecovery, setUseRecovery] = useState(false)
+    const [copied, setCopied] = useState(false)
     const account = useAccountApi()
     const base = `${API_URL}/oidc/interaction/${encodeURIComponent(interaction)}`
 
@@ -140,8 +195,8 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                     )
                 }
                 if (status === 200 && answer.csrf) {
-                    setState({
-                        step: 'login',
+                    const login: Login = {
+                        clientId: answer.clientId ?? '',
                         clientName: answer.clientName ?? '',
                         csrf: answer.csrf,
                         loginHint: answer.loginHint ?? '',
@@ -150,7 +205,10 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                         passkey: answer.passkey === true && passkeysSupported(),
                         password: answer.password !== false,
                         external: answer.external ?? null
-                    })
+                    }
+                    // Without eID, itsme® or passkey there is nothing on the first tab: open the email tab
+                    if (!login.eid && !login.external && !login.passkey) setTab('email')
+                    setState({ step: 'login', ...login })
                 } else {
                     setState({ step: 'fatal', message: answer.message ?? t('offline') })
                 }
@@ -186,6 +244,7 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                 })
             else setState({ step: 'recovery-codes', csrf: answer.csrf, codes: answer.recoveryCodes ?? [] })
             setError(answer.message ?? null)
+            setCode('')
             setBusy(false)
             return
         }
@@ -247,11 +306,7 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
         void submit('/external', { csrf: state.csrf })
     }
 
-    /**
-     * "Log in with a passkey": a challenge from the login server (kept in its login cookie), the device shows its
-     * passkeys for this site (fingerprint, face or PIN), and the signed answer goes back. Counts as two-step
-     * verification: on to the organisation choice or back to the application.
-     */
+    /** "Log in with a passkey": a challenge, the device signs it (fingerprint, face or PIN), the answer goes back. */
     async function onPasskey() {
         if (state.step !== 'login') return
         setBusy(true)
@@ -267,8 +322,8 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
                 return
             }
             handle(status, answer)
-        } catch (error) {
-            setError(cancelled(error) ? t('passkeyCancelled') : t('passkeyFailed'))
+        } catch (e) {
+            setError(cancelled(e) ? t('passkeyCancelled') : t('passkeyFailed'))
             setBusy(false)
         }
     }
@@ -292,8 +347,7 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
     async function eidSubmit(token: EidToken): Promise<string | null> {
         if (state.step !== 'eid') return t('eidFailed')
         const { status, answer } = await call('/eid', { csrf: state.csrf, token })
-        // The card and PIN are the first factor only: the code of the authenticator app (or its setup) follows, then the
-        // same handling as after the password
+        // The card and PIN are the first factor only: the authenticator code (or its setup) follows
         if (
             ['redirect', 'choose-tenant', 'no-tenant', 'expired', 'mfa', 'mfa-setup', 'consent'].includes(
                 answer.status ?? ''
@@ -305,323 +359,550 @@ export function OidcLogin({ interaction, externalError }: { interaction: string;
         return answer.message ?? t('eidFailed')
     }
 
+    const sendCode = (value = code) => {
+        if (state.step !== 'mfa' && state.step !== 'mfa-setup') return
+        if (!useRecovery && value.length < 6) return
+        void submit('/mfa', { csrf: state.csrf, code: value })
+    }
+
+    const layout = (children: ReactNode) => <AuthLayout variant={variant}>{children}</AuthLayout>
+
     if (state.step === 'loading')
-        return (
-            <p className={AUTH_TEXT + ' flex items-center gap-2'}>
-                <Icon name='loader' size={16} className='animate-spin' /> {t('busy')}
-            </p>
+        return layout(
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-3)' }}>
+                <Icon name='loader' className='spin' /> {t('busy')}
+            </div>
         )
 
-    if (state.step === 'fatal') {
-        return (
-            <section className={AUTH}>
-                <h1 className={AUTH_TITLE}>{t('loginTitle')}</h1>
-                <div role='alert' className='text-sm text-[var(--red)]'>
-                    {state.message}
+    if (state.step === 'fatal')
+        return layout(
+            <>
+                <AuthHeading title={t('loginTitle')} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <ErrorNote>{state.message}</ErrorNote>
+                    <form action='/api/auth/login' method='get' style={{ display: 'flex', flexDirection: 'column' }}>
+                        <Btn type='submit' size='lg' className='btn-block' icon='refresh'>
+                            {t('startAgain')}
+                        </Btn>
+                    </form>
                 </div>
-                <form action='/api/auth/login' method='get' className='flex flex-col'>
-                    <button type='submit' className={BUTTON + ' w-full'}>
-                        {t('startAgain')}
-                    </button>
-                </form>
-            </section>
+            </>
         )
-    }
 
     if (state.step === 'mfa' || state.step === 'mfa-setup') {
         const setup = state.step === 'mfa-setup' ? state : null
-        return (
-            <form
-                // A new form (not the login form reused by React): the password must never end up in the code field
-                key={state.step}
-                className={AUTH}
-                onSubmit={event => {
-                    event.preventDefault()
-                    const code = String(new FormData(event.currentTarget).get('code') ?? '')
-                    void submit('/mfa', { csrf: state.csrf, code })
-                }}
-            >
-                <div className='flex flex-col gap-1.5'>
-                    <h1 className={AUTH_TITLE}>{setup ? t('mfaSetupTitle') : t('mfaTitle')}</h1>
-                    <p className={AUTH_TEXT}>{setup ? t('mfaSetupText') : t('mfaText')}</p>
-                </div>
-                {setup && (
-                    <MfaQr qrSvg={setup.qrSvg} secret={setup.secret} label={t('mfaQr')} secretLabel={t('mfaSecret')} />
-                )}
-                <label className='flex flex-col gap-1.5 text-sm font-medium'>
-                    {t('mfaCode')}
-                    <input
-                        name='code'
-                        required
-                        minLength={6}
-                        maxLength={setup ? 7 : 20}
-                        autoComplete='one-time-code'
-                        inputMode={setup ? 'numeric' : 'text'}
-                        autoFocus
-                        className={INPUT + ' tracking-widest'}
-                    />
-                </label>
-                {error && (
-                    <div role='alert' className='text-sm text-[var(--red)]'>
-                        {error}
+        return layout(
+            <>
+                <AuthHeading
+                    title={setup ? p('mfaSetupTitle') : p('mfaTitle')}
+                    text={setup ? p('mfaSetupText') : p('mfaText')}
+                />
+                <form
+                    key={state.step}
+                    style={{ display: 'flex', flexDirection: 'column', gap: 18 }}
+                    onSubmit={e => {
+                        e.preventDefault()
+                        sendCode()
+                    }}
+                >
+                    <div className='mfa-head'>
+                        <div className='mfa-badge'>
+                            <Icon name='lock' size={20} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className='step-txt' style={{ fontSize: 14.5 }}>
+                                {setup ? p('authenticatorSetup') : p('authenticator')}
+                            </div>
+                            <div className='step-sub'>{setup ? p('authenticatorSetupSub') : p('authenticatorSub')}</div>
+                        </div>
+                        {setup ? (
+                            <Badge tone='amber' icon='alert'>
+                                {p('required')}
+                            </Badge>
+                        ) : (
+                            <Badge tone='accent' icon='shieldCheck'>
+                                2FA
+                            </Badge>
+                        )}
                     </div>
-                )}
-                <button type='submit' disabled={busy} className={BUTTON + ' w-full'}>
-                    {busy ? t('busy') : t('mfaSubmit')}
-                </button>
-            </form>
+                    {setup && (
+                        <div
+                            className='card card-pad'
+                            style={{
+                                background: 'var(--surface-2)',
+                                display: 'flex',
+                                gap: 18,
+                                alignItems: 'flex-start',
+                                flexWrap: 'wrap'
+                            }}
+                        >
+                            <QrSvg svg={setup.qrSvg} size={132} label={t('mfaQr')} />
+                            <div style={{ flex: '1 1 200px', minWidth: 200 }}>
+                                <p style={{ fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.6 }}>
+                                    {p('scanText')}
+                                </p>
+                                <div style={{ marginTop: 12 }}>
+                                    <div className='hint' style={{ marginBottom: 5 }}>
+                                        {t('mfaSecret')}
+                                    </div>
+                                    <div
+                                        className='t-mono'
+                                        style={{
+                                            fontSize: 13,
+                                            fontWeight: 600,
+                                            background: 'var(--surface)',
+                                            border: '1px solid var(--border)',
+                                            borderRadius: 'var(--r-sm)',
+                                            padding: '8px 11px',
+                                            letterSpacing: '.04em',
+                                            wordBreak: 'break-all',
+                                            userSelect: 'all'
+                                        }}
+                                    >
+                                        {setup.secret.replace(/(.{4})/g, '$1 ').trim()}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    <div>
+                        {useRecovery ? (
+                            <Field label={p('recoveryCode')}>
+                                <Input
+                                    className='t-mono'
+                                    value={code}
+                                    autoFocus
+                                    autoComplete='off'
+                                    maxLength={20}
+                                    onChange={e => setCode(e.target.value.trim())}
+                                />
+                            </Field>
+                        ) : (
+                            <OtpInput
+                                length={6}
+                                value={code}
+                                setValue={v => {
+                                    setCode(v)
+                                    if (error) setError(null)
+                                }}
+                                onComplete={v => sendCode(v)}
+                                error={!!error}
+                                autoFocus
+                                label={n => p('digit', { n })}
+                            />
+                        )}
+                        {error ? (
+                            <p
+                                className='hint'
+                                style={{
+                                    color: 'var(--red)',
+                                    marginTop: 11,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 6
+                                }}
+                            >
+                                <Icon name='alert' size={13} /> {error}
+                            </p>
+                        ) : (
+                            <p className='hint' style={{ marginTop: 11 }}>
+                                {useRecovery ? p('recoveryHint') : setup ? p('setupCodeHint') : p('codeHint')}
+                            </p>
+                        )}
+                    </div>
+                    {setup && (
+                        <div
+                            className='card card-pad'
+                            style={{
+                                display: 'flex',
+                                gap: 10,
+                                alignItems: 'flex-start',
+                                background: 'var(--amber-tint)',
+                                border: '1px solid var(--amber-border)'
+                            }}
+                        >
+                            <div style={{ color: 'var(--amber)', marginTop: 1, flex: 'none' }}>
+                                <Icon name='shieldCheck' size={16} />
+                            </div>
+                            <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.55 }}>{p('mandatory')}</p>
+                        </div>
+                    )}
+                    <Btn
+                        type='submit'
+                        variant='primary'
+                        size='lg'
+                        className='btn-block'
+                        icon='shieldCheck'
+                        disabled={(useRecovery ? code.length < 6 : code.length < 6) || busy}
+                    >
+                        {busy ? p('verifying') : setup ? p('confirmActivate') : p('verifyLogin')}
+                    </Btn>
+                    {!setup && (
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                            <a
+                                role='button'
+                                tabIndex={0}
+                                style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600, cursor: 'pointer' }}
+                                onClick={() => {
+                                    setUseRecovery(r => !r)
+                                    setCode('')
+                                    setError(null)
+                                }}
+                            >
+                                {useRecovery ? p('useApp') : p('useRecovery')}
+                            </a>
+                        </div>
+                    )}
+                </form>
+            </>
         )
     }
 
-    if (state.step === 'recovery-codes') {
-        return (
-            <section className={AUTH}>
-                <div className='flex flex-col gap-1.5'>
-                    <h1 className={AUTH_TITLE}>{t('recoveryTitle')}</h1>
-                    <p className={AUTH_TEXT}>{t('recoveryText')}</p>
-                </div>
-                <RecoveryCodes codes={state.codes} copyLabel={t('copyCodes')} copiedLabel={t('copied')} />
-                <button
-                    type='button'
-                    disabled={busy}
-                    className={BUTTON}
-                    onClick={() => void submit('/continue', { csrf: state.csrf })}
-                >
-                    {busy ? t('busy') : t('continue')}
-                </button>
-            </section>
-        )
-    }
-
-    if (state.step === 'consent') {
-        return (
-            <section className={AUTH}>
-                <div className='flex flex-col gap-1.5'>
-                    <h1 className={AUTH_TITLE}>{t('consentTitle', { client: state.clientName })}</h1>
-                    <p className={AUTH_TEXT}>{t('consentText', { client: state.clientName, email: state.email })}</p>
-                </div>
-                <ul className='flex list-disc flex-col gap-1 pl-5 text-sm'>
-                    {state.scopes.map(scope => (
-                        <li key={scope}>{scopeLabel(t, scope)}</li>
-                    ))}
-                </ul>
-                <p className='text-xs text-[var(--text-3)]'>{t('consentNote')}</p>
-                {error && (
-                    <div role='alert' className='text-sm text-[var(--red)]'>
-                        {error}
+    if (state.step === 'recovery-codes')
+        return layout(
+            <>
+                <AuthHeading title={t('recoveryTitle')} text={t('recoveryText')} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                    <div
+                        className='card card-pad t-mono'
+                        style={{
+                            background: 'var(--surface-2)',
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 1fr',
+                            gap: '8px 24px',
+                            fontSize: 14,
+                            fontWeight: 600,
+                            letterSpacing: '.03em'
+                        }}
+                    >
+                        {state.codes.map(c => (
+                            <span key={c}>{c}</span>
+                        ))}
                     </div>
-                )}
-                <button
-                    type='button'
-                    disabled={busy}
-                    className={BUTTON}
-                    onClick={() => void submit('/consent', { csrf: state.csrf, decision: 'allow' })}
-                >
-                    {busy ? t('busy') : t('consentAllow')}
-                </button>
-                <button
-                    type='button'
-                    disabled={busy}
-                    className={OUTLINE}
-                    onClick={() => void submit('/consent', { csrf: state.csrf, decision: 'deny' })}
-                >
-                    {t('consentDeny')}
-                </button>
-            </section>
+                    <Btn
+                        variant='secondary'
+                        icon={copied ? 'check' : 'copy'}
+                        onClick={() =>
+                            void navigator.clipboard
+                                ?.writeText(state.codes.join('\n'))
+                                .then(() => setCopied(true))
+                                .catch(() => undefined)
+                        }
+                    >
+                        {copied ? t('copied') : t('copyCodes')}
+                    </Btn>
+                    <Btn
+                        variant='primary'
+                        size='lg'
+                        className='btn-block'
+                        iconRight='arrowRight'
+                        disabled={busy}
+                        onClick={() => void submit('/continue', { csrf: state.csrf })}
+                    >
+                        {busy ? t('busy') : t('continue')}
+                    </Btn>
+                </div>
+            </>
         )
-    }
+
+    if (state.step === 'consent')
+        return layout(
+            <>
+                <AuthHeading
+                    title={t('consentTitle', { client: state.clientName })}
+                    text={t('consentText', { client: state.clientName, email: state.email })}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div className='card card-pad' style={{ background: 'var(--surface-2)', display: 'grid', gap: 10 }}>
+                        {state.scopes.map(scope => (
+                            <div key={scope} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
+                                <span
+                                    style={{
+                                        width: 22,
+                                        height: 22,
+                                        borderRadius: 999,
+                                        background: 'var(--accent-tint)',
+                                        color: 'var(--accent)',
+                                        display: 'grid',
+                                        placeItems: 'center',
+                                        flex: 'none'
+                                    }}
+                                >
+                                    <Icon name='check' size={13} />
+                                </span>
+                                {scopeLabel(t, scope)}
+                            </div>
+                        ))}
+                    </div>
+                    <p className='hint'>{t('consentNote')}</p>
+                    <ErrorNote>{error}</ErrorNote>
+                    <Btn
+                        variant='primary'
+                        size='lg'
+                        className='btn-block'
+                        icon='check'
+                        disabled={busy}
+                        onClick={() => void submit('/consent', { csrf: state.csrf, decision: 'allow' })}
+                    >
+                        {busy ? t('busy') : t('consentAllow')}
+                    </Btn>
+                    <Btn
+                        variant='ghost'
+                        size='lg'
+                        className='btn-block'
+                        disabled={busy}
+                        onClick={() => void submit('/consent', { csrf: state.csrf, decision: 'deny' })}
+                    >
+                        {t('consentDeny')}
+                    </Btn>
+                </div>
+            </>
+        )
 
     if (state.step === 'tenant') {
         const query = search.trim().toLowerCase()
         const shown = state.tenants.filter(tenant => tenant.name.toLowerCase().includes(query))
-        return (
-            <section className={AUTH}>
-                <h1 className={AUTH_TITLE}>{t('tenantTitle')}</h1>
-                <p className={AUTH_TEXT}>{t('tenantSubtitle')}</p>
-                {state.tenants.length >= SEARCH_FROM && (
-                    <input
-                        type='search'
-                        value={search}
-                        onChange={event => setSearch(event.target.value)}
-                        placeholder={t('searchTenant')}
-                        aria-label={t('searchTenant')}
-                        className={INPUT}
-                    />
-                )}
-                <div className='flex max-h-96 flex-col gap-2.5 overflow-y-auto'>
-                    {state.platform && (
-                        // A superadmin can also continue without an organisation: platform management
-                        <button
-                            type='button'
-                            disabled={busy}
-                            className={CHOICE}
-                            onClick={() => void submit('/tenant', { csrf: state.csrf, tenant: 'platform' })}
-                        >
-                            <span>{t('platformChoice')}</span>
-                            <span className='text-xs font-medium text-[var(--text-3)]'>{t('superadmin')}</span>
-                        </button>
-                    )}
-                    {shown.map(tenant => (
-                        <button
-                            key={tenant.id}
-                            type='button'
-                            disabled={busy}
-                            className={CHOICE}
-                            onClick={() => void submit('/tenant', { csrf: state.csrf, tenant: tenant.id })}
-                        >
-                            <span>{tenant.name}</span>
-                            {tenant.role && (
-                                <span className='text-xs font-medium text-[var(--text-3)]'>
-                                    {roleLabel(t, tenant.role)}
-                                </span>
-                            )}
-                        </button>
-                    ))}
-                    {shown.length === 0 && <p className='text-sm text-[var(--text-3)]'>{t('noTenantFound')}</p>}
+        const choice = (key: string, label: string, sub: string, icon: string, tenant: string) => (
+            <button
+                type='button'
+                key={key}
+                className='step-row'
+                disabled={busy}
+                style={{ cursor: 'pointer', textAlign: 'left', width: '100%' }}
+                onClick={() => void submit('/tenant', { csrf: state.csrf, tenant })}
+            >
+                <div className='step-ic'>
+                    <Icon name={icon} size={16} />
                 </div>
-            </section>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className='step-txt'>{label}</div>
+                    <div className='step-sub'>{sub}</div>
+                </div>
+                <Icon name='chevronRight' size={16} style={{ color: 'var(--text-3)' }} />
+            </button>
+        )
+        return layout(
+            <>
+                <AuthHeading title={t('tenantTitle')} text={t('tenantSubtitle')} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {state.tenants.length >= SEARCH_FROM && (
+                        <Input
+                            icon='search'
+                            type='search'
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder={t('searchTenant')}
+                            aria-label={t('searchTenant')}
+                        />
+                    )}
+                    <div className='step-list' style={{ maxHeight: 380, overflowY: 'auto', gap: 8 }}>
+                        {state.platform &&
+                            choice('platform', t('platformChoice'), t('superadmin'), 'shield', 'platform')}
+                        {shown.map(tenant =>
+                            choice(
+                                tenant.id,
+                                tenant.name,
+                                tenant.role === 'admin' ? t('role_admin') : t('role_user'),
+                                'building',
+                                tenant.id
+                            )
+                        )}
+                        {shown.length === 0 && <p className='hint'>{t('noTenantFound')}</p>}
+                    </div>
+                    <ErrorNote>{error}</ErrorNote>
+                </div>
+            </>
         )
     }
 
-    if (state.step === 'eid') {
-        return (
-            <section className={AUTH}>
-                <div className='flex flex-col gap-1.5'>
-                    <h1 className={AUTH_TITLE}>{t('eidTitle')}</h1>
-                    <p className={AUTH_TEXT}>{t('eidText')}</p>
-                </div>
+    if (state.step === 'eid')
+        return layout(
+            <>
+                <AuthHeading title={p('eidTitle')} text={p('eidText')} />
                 <EidBridge>
-                    <EidPin submitLabel={t('eidSubmit')} getNonce={eidNonce} onToken={eidSubmit} />
+                    <EidSteps />
+                    <EidPin submitLabel={p('eidSubmit')} getNonce={eidNonce} onToken={eidSubmit} />
                 </EidBridge>
-                <div className='flex flex-wrap items-center justify-between gap-2 text-sm'>
-                    <button type='button' className={LINK} onClick={() => setState({ ...state, step: 'login' })}>
-                        {t('eidBack')}
-                    </button>
-                    {state.registration && (
-                        <Link href='/register' className={LINK}>
-                            {t('register')}
-                        </Link>
-                    )}
+                <div style={{ marginTop: 16 }}>
+                    <Btn
+                        variant='ghost'
+                        size='sm'
+                        icon='arrowLeft'
+                        onClick={() => setState({ ...state, step: 'login' })}
+                    >
+                        {p('back')}
+                    </Btn>
                 </div>
-            </section>
+            </>
         )
-    }
 
-    const externalButton = state.external && (
-        <button type='button' disabled={busy} className={BUTTON} onClick={onExternal}>
-            {t('externalLogin', { name: state.external.name })}
-        </button>
-    )
-
-    // Only the other OpenID Connect server (OIDC_EXTERNAL_ONLY)
-    if (!state.password) {
-        return (
-            <section className={AUTH}>
-                <div className='flex flex-col gap-1.5'>
-                    <h1 className={AUTH_TITLE}>
-                        {state.clientName ? t('loginTitleApp', { client: state.clientName }) : t('loginTitle')}
-                    </h1>
-                    <p className={AUTH_TEXT}>{t('loginSubtitle', { client: state.clientName })}</p>
-                </div>
-                {error && (
-                    <div role='alert' className='text-sm text-[var(--red)]'>
-                        {error}
+    // The first screen: eID / itsme® / passkey, or email and password
+    const firstTab = state.eid || !!state.external || state.passkey
+    const externalIcon = state.external && /itsme/i.test(state.external.name) ? 'itsme' : 'globe'
+    return layout(
+        <>
+            <AuthHeading
+                title={
+                    variant === 'admin'
+                        ? p('adminLogin')
+                        : state.clientName && state.clientId !== ownClient
+                          ? t('loginTitleApp', { client: state.clientName })
+                          : p('welcome')
+                }
+                text={
+                    variant === 'admin'
+                        ? p('adminLoginText')
+                        : state.clientName && state.clientId !== ownClient
+                          ? t('loginSubtitle', { client: state.clientName })
+                          : p('welcomeText')
+                }
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {firstTab && state.password && (
+                    <div className='seg' style={{ display: 'flex' }} role='tablist'>
+                        <button
+                            type='button'
+                            role='tab'
+                            aria-selected={tab === 'eid'}
+                            className={tab === 'eid' ? 'active' : ''}
+                            style={{ flex: 1 }}
+                            onClick={() => setTab('eid')}
+                        >
+                            {state.external ? p('tabEidItsme') : p('tabEid')}
+                        </button>
+                        <button
+                            type='button'
+                            role='tab'
+                            aria-selected={tab === 'email'}
+                            className={tab === 'email' ? 'active' : ''}
+                            style={{ flex: 1 }}
+                            onClick={() => setTab('email')}
+                        >
+                            {p('tabEmail')}
+                        </button>
                     </div>
                 )}
-                {externalButton}
-            </section>
-        )
-    }
-
-    const title = state.clientName ? t('loginTitleApp', { client: state.clientName }) : t('loginTitle')
-    const others = state.eid || state.external || state.passkey
-    return (
-        <form key='login' onSubmit={onLogin} className={AUTH}>
-            <div className='flex flex-col gap-1.5'>
-                <h1 className={AUTH_TITLE}>{title}</h1>
-                <p className={AUTH_TEXT}>{t('loginSubtitle', { client: state.clientName })}</p>
+                <ErrorNote>{error}</ErrorNote>
+                {(tab === 'eid' && firstTab) || !state.password ? (
+                    <div className='fade-in' style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {state.eid && (
+                            <Btn
+                                variant='primary'
+                                size='lg'
+                                className='btn-block'
+                                icon='eid'
+                                disabled={busy}
+                                onClick={() => {
+                                    setError(null)
+                                    setState({ ...state, step: 'eid' })
+                                }}
+                            >
+                                {p('loginEid')}
+                            </Btn>
+                        )}
+                        {state.external && (
+                            <Btn
+                                variant={state.eid ? 'secondary' : 'primary'}
+                                size='lg'
+                                className='btn-block'
+                                icon={externalIcon}
+                                disabled={busy}
+                                onClick={onExternal}
+                            >
+                                {p('loginWith', { name: state.external.name })}
+                            </Btn>
+                        )}
+                        {state.passkey && (
+                            <Btn
+                                variant='secondary'
+                                size='lg'
+                                className='btn-block'
+                                icon='fingerprint'
+                                disabled={busy}
+                                onClick={() => void onPasskey()}
+                            >
+                                {t('passkeyLogin')}
+                            </Btn>
+                        )}
+                        <p className='hint' style={{ textAlign: 'center', marginTop: 2 }}>
+                            {p('eidHint')}
+                        </p>
+                    </div>
+                ) : (
+                    <form
+                        key='login'
+                        onSubmit={onLogin}
+                        className='fade-in'
+                        style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+                    >
+                        <Field label={t('email')}>
+                            <Input
+                                icon='mail'
+                                name='email'
+                                type='email'
+                                required
+                                maxLength={254}
+                                autoComplete='username'
+                                placeholder={p('emailPlaceholder')}
+                                defaultValue={state.loginHint}
+                            />
+                        </Field>
+                        <Field label={t('password')}>
+                            <Input
+                                icon='lock'
+                                name='password'
+                                type='password'
+                                required
+                                maxLength={128}
+                                autoComplete='current-password'
+                                placeholder='••••••••••'
+                            />
+                        </Field>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 }}>
+                            <Link
+                                href='/forgot-password'
+                                style={{
+                                    fontSize: 13.5,
+                                    color: 'var(--accent)',
+                                    fontWeight: 600,
+                                    whiteSpace: 'nowrap'
+                                }}
+                            >
+                                {t('forgotPassword')}
+                            </Link>
+                        </div>
+                        {unverified && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <Btn variant='secondary' size='sm' icon='mail' onClick={() => void resend()}>
+                                    {t('resend')}
+                                </Btn>
+                                {resent && <OkNote>{t('resent')}</OkNote>}
+                            </div>
+                        )}
+                        <Btn
+                            type='submit'
+                            variant='primary'
+                            size='lg'
+                            className='btn-block'
+                            iconRight='arrowRight'
+                            disabled={busy}
+                        >
+                            {busy ? t('busy') : p('login')}
+                        </Btn>
+                        <p className='hint' style={{ textAlign: 'center', marginTop: 2 }}>
+                            {p('emailHint')}
+                        </p>
+                    </form>
+                )}
+                {state.registration && variant === 'customer' && (
+                    <>
+                        <Divider label={t('noAccount')} />
+                        <Link href='/register' className='btn btn-ghost btn-lg btn-block'>
+                            <Icon name='plus' size={16} /> {t('register')}
+                        </Link>
+                    </>
+                )}
             </div>
-            {state.eid && (
-                <SsoButton
-                    icon={<Icon name='idcard' />}
-                    label={t('eidLogin')}
-                    description={t('eidHint')}
-                    onClick={() => {
-                        setError(null)
-                        setState({ ...state, step: 'eid' })
-                    }}
-                />
-            )}
-            {state.passkey && (
-                <SsoButton
-                    icon={<Icon name='key' />}
-                    label={t('passkeyLogin')}
-                    description={t('passkeyHint')}
-                    disabled={busy}
-                    onClick={() => void onPasskey()}
-                />
-            )}
-            {state.external && (
-                <SsoButton
-                    icon={<Icon name='globe' />}
-                    label={t('externalLogin', { name: state.external.name })}
-                    disabled={busy}
-                    onClick={onExternal}
-                />
-            )}
-            {others && <AuthDivider>{t('orEmail')}</AuthDivider>}
-            <label className='lui-field'>
-                <span className='text-sm font-semibold'>{t('email')}</span>
-                <input
-                    name='email'
-                    type='email'
-                    required
-                    maxLength={254}
-                    autoComplete='username'
-                    defaultValue={state.loginHint}
-                    className={INPUT}
-                />
-            </label>
-            <label className='lui-field'>
-                <span className='flex items-center justify-between text-sm font-semibold'>
-                    {t('password')}
-                    <Link href='/forgot-password' className={LINK + ' text-xs'}>
-                        {t('forgotPassword')}
-                    </Link>
-                </span>
-                <input
-                    name='password'
-                    type='password'
-                    required
-                    maxLength={128}
-                    autoComplete='current-password'
-                    className={INPUT}
-                />
-            </label>
-            {error && (
-                <div role='alert' className='text-sm text-[var(--red)]'>
-                    {error}
-                </div>
-            )}
-            {unverified && (
-                <div className='flex flex-col gap-1.5 text-sm'>
-                    <button type='button' className={LINK + ' self-start'} onClick={() => void resend()}>
-                        {t('resend')}
-                    </button>
-                    {resent && <div role='status'>{t('resent')}</div>}
-                </div>
-            )}
-            <button type='submit' disabled={busy} className={BUTTON + ' w-full'}>
-                {busy ? t('busy') : t('submit')}
-            </button>
-            {state.registration && (
-                <div className='lui-auth-footer'>
-                    {t('noAccount')}{' '}
-                    <Link href='/register' className={LINK}>
-                        {t('register')}
-                    </Link>
-                </div>
-            )}
-        </form>
+        </>
     )
 }

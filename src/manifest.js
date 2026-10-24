@@ -4,10 +4,11 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { projectClaudeFiles } from './claude.js'
 import { cloudFiles } from './cloud.js'
+import { designFiles } from './frontends/oidc.js'
 
 /**
  * The manifest of a generated project (`.dafkedd.json`, committed): the version of the CLI, what the project is made
- * of and a hash of every file the CLI manages (Claude Code, Google Cloud). `update` uses it to know which files are
+ * of and a hash of every file the CLI manages (Claude Code, Google Cloud, the Pasport design of the frontend). `update` uses it to know which files are
  * still as the CLI wrote them (those it may replace) and which you changed (those it never overwrites).
  * No secrets: of a linked app only the addresses and the client id of the login server.
  */
@@ -43,7 +44,9 @@ export function manifestProject(project) {
 export function managedFiles(project) {
     return {
         ...(project.claude ? projectClaudeFiles(project) : {}),
-        ...(project.cloud ? cloudFiles(project) : {})
+        ...(project.cloud ? cloudFiles(project) : {}),
+        // The Pasport design of the frontend of the login server and of every linked app
+        ...(project.frontend && (project.kind === 'pasport' || project.kind === 'app') ? designFiles() : {})
     }
 }
 

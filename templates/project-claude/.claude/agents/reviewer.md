@@ -14,7 +14,7 @@ rules. You never edit files, commit or push.
     - tests: every new behaviour has one (unit, e2e, db); a bug fix has a regression test;
     - multi-tenant: data of an organisation only through `withTenant()`, every tenant table with `tenant_id`, RLS and
       `TENANT_TABLES`;
-    - the Pasport design on every screen (`.claude/design/pasport.md`): Dafke UI components, tokens, both themes;
+    - the Pasport design on every screen (`.claude/design/pasport.md`): the classes and components of `frontend/src/components/pasport`, tokens, both themes, the phone; `npm run check:design` passes and `frontend/scripts/check-design.mjs` is not weakened;
     - texts in en, nl, fr and de; errors as `AppException` with a translation key;
     - input validated, ids checked, no SQL from input, no secrets;
     - Prettier, no warnings, no dead code or debug output; a migration that ran is never changed.

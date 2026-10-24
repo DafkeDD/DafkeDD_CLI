@@ -29,8 +29,15 @@ how the code is made testable.
 - **Design**: every screen follows the **Pasport design**, always. The brand book is
   `templates/project-claude/.claude/design/pasport.md`, the tokens are
   `templates/project-claude/.claude/design/pasport-tokens.json`, and the source is the Claude Design System "Pasport"
-  (https://claude.ai/artifact/QD82mLA9dWSEgtpubjgChq, synced from DafkeDD_UI). Use the Dafke UI components and the
-  tokens, never another look.
+  (https://claude.ai/artifact/QD82mLA9dWSEgtpubjgChq). It is built in `templates/frontend-oidc/src/styles/pasport.css`
+  and `templates/frontend-oidc/src/components/pasport/` (ported from `D:\test`, the reference), with the shell in
+  `templates/frontend-oidc/src/components/shell/`: every generated screen uses those (`AppPage`, `PageHead`,
+  `AuthLayout`, `Btn`, ...), never another look, and works at phone width (390px) too.
+  `templates/frontend-oidc/scripts/check-design.mjs` checks it in every project (`npm run check:design`, also in the
+  CI), and `update` keeps the files of `DESIGN_FILES` (`src/frontends/oidc.js`) in step: a new design file goes in that
+  list.
+- **Protected by default**: every page of a generated frontend needs a login (`src/proxy.ts` sends it to `/login`); only
+  `PUBLIC_PATHS` are open.
 - **Prettier everywhere** (`.prettierrc`: 4 spaces, no semicolons, single quotes, width 120). There are no warnings in
   the build, lint or tests of a generated project.
 - **Multi-tenant everywhere.**
@@ -56,16 +63,16 @@ how the code is made testable.
 
 They build and check; only the main session commits and pushes.
 
-| Agent        | Role                                                                                                  |
-| ------------ | ----------------------------------------------------------------------------------------------------- |
-| `frontend`   | Builds every UI of the generated frontends, always in the Pasport design with the Dafke UI components |
-| `nestjs`     | Builds the generated NestJS backends: endpoints, modules, DTOs, errors, Swagger, their tests and docs |
-| `postgresql` | Builds migrations, tables, Row-Level Security, a database per organisation, queries and db tests      |
-| `reviewer`   | Checks the staged change against the ticket and every rule above (read-only)                          |
-| `tester`     | Runs `npm run format:check`, `npm test` and, for generated code, `npm run verify` (read-only)         |
-| `docs`       | Checks that README, changelog, version, API docs and frontend docs are complete (read-only)           |
-| `i18n`       | Checks en, nl, fr and de: same keys, real translations, no hardcoded text (read-only)                 |
-| `security`   | Security review of login, tokens, tenants, billing, uploads, the database and the hooks (read-only)   |
+| Agent        | Role                                                                                                           |
+| ------------ | -------------------------------------------------------------------------------------------------------------- |
+| `frontend`   | Builds every UI of the generated frontends, always in the Pasport design (`pasport.css`, `components/pasport`) |
+| `nestjs`     | Builds the generated NestJS backends: endpoints, modules, DTOs, errors, Swagger, their tests and docs          |
+| `postgresql` | Builds migrations, tables, Row-Level Security, a database per organisation, queries and db tests               |
+| `reviewer`   | Checks the staged change against the ticket and every rule above (read-only)                                   |
+| `tester`     | Runs `npm run format:check`, `npm test` and, for generated code, `npm run verify` (read-only)                  |
+| `docs`       | Checks that README, changelog, version, API docs and frontend docs are complete (read-only)                    |
+| `i18n`       | Checks en, nl, fr and de: same keys, real translations, no hardcoded text (read-only)                          |
+| `security`   | Security review of login, tokens, tenants, billing, uploads, the database and the hooks (read-only)            |
 
 ## How work is done
 

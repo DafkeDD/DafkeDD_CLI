@@ -1,11 +1,13 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { getFormatter, getTranslations, setRequestLocale } from 'next-intl/server'
-import { BUTTON, CARD, LINK, roleLabel } from '@/components/account-ui'
+import { roleLabel } from '@/components/account-ui'
 import { AskDemo } from '@/components/ask-demo'
+import { PageHead } from '@/components/pasport/page-head'
+import { Avatar, Badge } from '@/components/pasport/ui'
 import { AppPage } from '@/components/shell/app-shell'
 import { PASPORT_API_URL } from '@/lib/pasport'
-import { ACCOUNT_URL, userinfo } from '@/lib/oidc'
+import { userinfo } from '@/lib/oidc'
 import { getSession } from '@/lib/session'
 
 /**
@@ -49,43 +51,53 @@ async function Profile() {
         [t('validUntil'), format.dateTime(new Date(session.expiresAt), { timeStyle: 'short' })]
     ]
 
+    const pages = await getTranslations('Pages')
     return (
-        <section className={CARD + ' max-w-xl'}>
-            <h1 className='text-xl font-semibold tracking-tight'>{t('profileTitle')}</h1>
-            <dl className='flex flex-col gap-3 text-sm'>
-                {rows.map(([label, value]) => (
-                    <div key={label} className='flex flex-col gap-0.5'>
-                        <dt className='text-xs text-[var(--text-3)]'>{label}</dt>
-                        <dd className='font-medium'>{value}</dd>
+        <div className='fade-in' style={{ maxWidth: 760, margin: '0 auto' }}>
+            <PageHead title={t('profileTitle')} text={pages('profileText')} />
+            <div
+                className='card card-pad'
+                style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 18, marginBottom: 20 }}
+            >
+                <Avatar name={session.name || session.email} size={62} />
+                <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+                    <div style={{ fontSize: 19, fontWeight: 650, letterSpacing: '-0.02em' }}>
+                        {session.name || session.email}
                     </div>
-                ))}
-            </dl>
-            <div className='flex flex-wrap gap-4 text-sm'>
-                <a href={ACCOUNT_URL + '/security'} className={LINK}>
-                    {t('securityTitle')}
-                </a>
-                {session.tenant?.role === 'admin' && (
-                    <a href={ACCOUNT_URL + '/members'} className={LINK}>
-                        {t('manageMembers')}
-                    </a>
-                )}
-                {session.superadmin && (
-                    <a href={ACCOUNT_URL + '/admin'} className={LINK}>
-                        {t('platformTitle')}
-                    </a>
-                )}
+                    <div className='t-muted' style={{ fontSize: 14 }}>
+                        {session.email}
+                    </div>
+                </div>
+                <Badge tone={api ? 'green' : 'red'} icon={api ? 'check' : 'alert'}>
+                    {api ? t('apiCheck') : t('apiFailed')}
+                </Badge>
             </div>
-            <div className={api ? 'text-sm text-[var(--green)]' : 'text-sm text-[var(--red)]'}>
-                {api ? t('apiCheck') : t('apiFailed')}
+            <div className='card card-pad' style={{ marginBottom: 20 }}>
+                <div className='t-eyebrow' style={{ marginBottom: 14 }}>
+                    {pages('profileDetails')}
+                </div>
+                <dl className='detail-grid'>
+                    {rows.map(([label, value]) => (
+                        <div key={label} className='detail-cell'>
+                            <dt className='dc-label'>{label}</dt>
+                            <dd className='dc-value'>{value}</dd>
+                        </div>
+                    ))}
+                </dl>
             </div>
             {licenses.length > 0 && (
-                <div className='flex flex-col gap-1.5 text-sm'>
-                    <h2 className='text-base font-semibold'>{l('myLicenses')}</h2>
-                    <ul className='flex flex-col gap-1'>
+                <div className='card card-pad'>
+                    <div className='t-eyebrow' style={{ marginBottom: 14 }}>
+                        {l('myLicenses')}
+                    </div>
+                    <ul style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         {licenses.map(license => (
-                            <li key={license.code}>
-                                <span className='font-medium'>{license.name}</span> ·{' '}
-                                <span className={license.access ? 'text-[var(--green)]' : 'text-[var(--text-3)]'}>
+                            <li
+                                key={license.code}
+                                style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}
+                            >
+                                <span style={{ fontWeight: 600 }}>{license.name}</span>
+                                <Badge tone={license.access ? 'green' : 'neutral'}>
                                     {license.via === 'trial' && license.endsAt
                                         ? l('trialUntil', {
                                               date: format.dateTime(new Date(license.endsAt), { dateStyle: 'medium' })
@@ -93,25 +105,15 @@ async function Profile() {
                                         : license.access
                                           ? l('licensed')
                                           : l('noLicense')}
-                                </span>
+                                </Badge>
                                 {/* No licence: ask a demo (once per product; it never starts by itself) */}
-                                {!license.access && (
-                                    <>
-                                        {' '}
-                                        <AskDemo code={license.code} />
-                                    </>
-                                )}
+                                {!license.access && <AskDemo code={license.code} />}
                             </li>
                         ))}
                     </ul>
                 </div>
             )}
-            <form method='post' action='/api/auth/logout'>
-                <button type='submit' className={BUTTON + ' w-full'}>
-                    {t('logout')}
-                </button>
-            </form>
-        </section>
+        </div>
     )
 }
 

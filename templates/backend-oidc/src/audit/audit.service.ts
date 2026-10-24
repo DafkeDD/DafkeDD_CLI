@@ -16,6 +16,16 @@ export interface AuditInput {
     details?: AuditDetails
 }
 
+/** An event as it was written: what a listener (onRecorded) gets. */
+export interface RecordedEvent {
+    tenantId: string | null
+    actorId: string | null
+    action: AuditAction
+    details: AuditDetails
+}
+
+export type AuditListener = (event: RecordedEvent) => Promise<void> | void
+
 /** Short values only: long texts are cut, and nothing that is not a plain value is stored. */
 function clean(details: AuditDetails = {}): AuditDetails {
     const result: AuditDetails = {}
@@ -41,6 +51,7 @@ function clean(details: AuditDetails = {}): AuditDetails {
 export class AuditService implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly logger = new Logger('AuditLog')
     private timer: NodeJS.Timeout | null = null
+    private readonly listeners: AuditListener[] = []
 
     constructor(
         @Inject(AUDIT_STORE) private readonly store: AuditStore,
@@ -53,22 +64,42 @@ export class AuditService implements OnApplicationBootstrap, OnModuleDestroy {
         return Number.isInteger(days) && days >= 0 ? days : 365
     }
 
+    /**
+     * Called after every event that was written (the notifications follow new organisations and members this way). A
+     * listener that fails is logged; it never fails the request.
+     */
+    onRecorded(listener: AuditListener) {
+        this.listeners.push(listener)
+    }
+
     async record(action: AuditAction, input: AuditInput = {}) {
         const context = requestContext.getStore()
+        const event: RecordedEvent = {
+            tenantId: input.tenantId !== undefined ? input.tenantId : (context?.tenantId ?? null),
+            actorId: input.actorId !== undefined ? input.actorId : (context?.actorId ?? null),
+            action,
+            details: clean(input.details)
+        }
         try {
             await this.store.add({
-                tenantId: input.tenantId !== undefined ? input.tenantId : (context?.tenantId ?? null),
-                actorId: input.actorId !== undefined ? input.actorId : (context?.actorId ?? null),
-                action,
+                ...event,
                 targetType: input.target?.type ?? null,
                 targetId: input.target?.id ?? null,
-                details: clean(input.details),
                 ip: context?.ip ?? null,
                 userAgent: context?.userAgent ?? null
             })
         } catch (error) {
             this.logger.error(`Could not record ${action}: ${error instanceof Error ? error.message : String(error)}`)
+            return
         }
+        for (const listener of this.listeners)
+            try {
+                await listener(event)
+            } catch (error) {
+                this.logger.warn(
+                    `A listener of ${action} failed: ${error instanceof Error ? error.message : String(error)}`
+                )
+            }
     }
 
     /** One page, newest first, and the `next` to ask the page after it (null: no more). */

@@ -955,6 +955,7 @@ const DISCOVERY_EXAMPLE = port => ({
 const TENANT = { id: '6b1d7c4e-0f1a-4c55-9e1e-2b9c1f3d8a10', name: 'Acme', role: 'admin' }
 const USER_ID = '1fb82908-476c-4460-951a-0fae1f01fcc6'
 const INVITATION_ID = '9d2c4e7a-3b1f-4c8e-a5d6-0e7f8a9b1c2d'
+const NOTIFICATION_ID = '4b8e1f2a-6c3d-4e9f-8a7b-2d1c0e9f8a6b'
 const TOKEN = 'v1.Qm9u…'
 const BAD_REQUEST = [400, 'errors.BAD_REQUEST']
 const INVALID_LINK = [400, 'oidc.INVALID_LINK']
@@ -1176,11 +1177,12 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/oidc/interaction/:id',
         tag: 'oidc',
         summary:
-            'The login page (HTML, in the language of the browser or ui_locales) of a running login. Valid 10 minutes. With `Accept: application/json` (the login page of the frontend): what the page shows — email and password (`password`), the eID, "Log in with <name>" (`external`) — and `pending: true` when the login came back from the other server halfway (then POST .../resume).',
+            'The login page (HTML, in the language of the browser or ui_locales) of a running login. Valid 10 minutes. With `Accept: application/json` (the login page of the frontend): what the page shows — the app that asks (`clientId`, `clientName`), email and password (`password`), the eID, "Log in with <name>" (`external`) — and `pending: true` when the login came back from the other server halfway (then POST .../resume).',
         response: {
             status: 200,
             example: {
                 step: 'login',
+                clientId: 'frontend',
                 clientName: 'Frontend',
                 registration: true,
                 password: true,
@@ -1992,6 +1994,58 @@ export const endpoints = ({ port = 4000 } = {}) => [
         errors: [
             [401, 'errors.UNAUTHORIZED'],
             [403, 'errors.FORBIDDEN', 'not a member']
+        ]
+    },
+    // ---------------------------------------------------------------- notifications (the bell)
+    {
+        method: 'GET',
+        path: '/me/notifications',
+        tag: 'notifications',
+        summary:
+            'The newest notifications of the logged in account (at most 40): of the organisation of the token, and the platform ones for superadmins. The frontend makes the text from `kind` and `params`; `link` is the page it opens.',
+        bearer: true,
+        response: {
+            status: 200,
+            example: [
+                {
+                    id: NOTIFICATION_ID,
+                    kind: 'member.joined',
+                    params: { name: 'Bob', email: 'bob@example.com' },
+                    link: '/members',
+                    createdAt: '2026-01-15T09:30:00.000Z',
+                    read: false
+                }
+            ]
+        },
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [403, 'errors.FORBIDDEN', 'the account is blocked']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/me/notifications/read-all',
+        tag: 'notifications',
+        summary: 'Mark every notification of the logged in account as read. Answers 204.',
+        bearer: true,
+        response: null,
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [403, 'errors.FORBIDDEN', 'the account is blocked']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/me/notifications/:id/read',
+        tag: 'notifications',
+        summary: 'Mark one notification as read. Answers 204.',
+        bearer: true,
+        pathExample: `/me/notifications/${NOTIFICATION_ID}/read`,
+        response: null,
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [403, 'errors.FORBIDDEN', 'the account is blocked'],
+            [404, 'errors.NOT_FOUND']
         ]
     },
     // ---------------------------------------------------------------- apps (superadmins)

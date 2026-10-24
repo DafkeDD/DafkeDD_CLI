@@ -8,6 +8,8 @@ import { BILLING_STORE } from '../src/billing/store/billing.store.js'
 import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
 import { AUDIT_STORE } from '../src/audit/audit.store.js'
 import { MemoryAuditStore } from '../src/audit/memory-audit.store.js'
+import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
+import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import type { Mail } from '../src/mail/mail.service.js'
 import { MailService } from '../src/mail/mail.service.js'
@@ -65,6 +67,8 @@ describe('Accounts, roles and the platform (e2e)', () => {
             .useValue(new MemoryBillingStore())
             .overrideProvider(AUDIT_STORE)
             .useValue(new MemoryAuditStore())
+            .overrideProvider(NOTIFICATIONS_STORE)
+            .useValue(new MemoryNotificationsStore())
             .overrideProvider(MailService)
             .useValue({
                 send: async (mail: Mail) => {
@@ -686,6 +690,8 @@ describe('Accounts, roles and the platform (e2e)', () => {
                 .useValue(new MemoryBillingStore())
                 .overrideProvider(AUDIT_STORE)
                 .useValue(new MemoryAuditStore())
+                .overrideProvider(NOTIFICATIONS_STORE)
+                .useValue(new MemoryNotificationsStore())
                 .overrideProvider(MailService)
                 .useValue({ send: async () => true })
                 .compile()

@@ -4,6 +4,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import pc from 'picocolors'
 import { ensureGitignore, GITIGNORE_LINES } from './claude.js'
+import { NOTIFICATIONS_MESSAGES, AUTH_SCREEN_MESSAGES, PAGES_MESSAGES } from './frontends/pasport-messages.js'
+import { SHELL_MESSAGES } from './frontends/oidc.js'
 import { kbFiles } from './kb.js'
 import { buildManifest, inferProject, managedFiles, manifestProject, MANIFEST, readManifest, sha } from './manifest.js'
 
@@ -45,8 +47,9 @@ const LABELS = {
 }
 
 /**
- * `DafkeDD_CLI update` in the folder of a project: the agents, skills, hooks, pipelines and Terraform of this version
- * of the CLI, without overwriting what you changed. Without a manifest (a project of an older CLI) it reads what the
+ * `DafkeDD_CLI update` in the folder of a project: the agents, skills, hooks, pipelines, Terraform and the Pasport design
+ * of the frontend (styles, components, shell, protected routes, missing texts) of this version of the CLI, without
+ * overwriting what you changed. Without a manifest (a project of an older CLI) it reads what the
  * project is made of from its folders and asks to confirm that first.
  */
 export async function update({ projectDir = process.cwd(), version, prompts = { confirm }, log = console.log } = {}) {
@@ -63,8 +66,11 @@ export async function update({ projectDir = process.cwd(), version, prompts = { 
         })
         if (!ok) return null
     }
-    if (!project.claude && !project.cloud) {
-        log(pc.dim('Dit project heeft geen Claude Code en geen Google Cloud: niets bij te werken.'))
+    const design = project.frontend && (project.kind === 'pasport' || project.kind === 'app')
+    if (!project.claude && !project.cloud && !design) {
+        log(
+            pc.dim('Dit project heeft geen Claude Code, geen Google Cloud en geen Pasport-design: niets bij te werken.')
+        )
     }
     const wanted = managedFiles(project)
     const disk = {}
@@ -90,6 +96,8 @@ export async function update({ projectDir = process.cwd(), version, prompts = { 
             await fs.writeFile(target, content)
             kbAdded.push(rel)
         }
+    // The texts of the design (shell, bell, login screens, page headers) that are missing: added, yours stay
+    const textsAdded = design ? await addDesignTexts(projectDir) : []
     await ensureGitignore(projectDir, project.claude ? GITIGNORE_LINES : [`*${NEW_SUFFIX}`])
 
     // The manifest remembers what the CLI wrote; a file you changed keeps the hash of the new version, so it is
@@ -105,12 +113,20 @@ export async function update({ projectDir = process.cwd(), version, prompts = { 
 
     const shown = plan.filter(entry => entry.action !== 'same')
     log('')
-    if (!shown.length && !kbAdded.length) log(`${pc.green('✔')} Alles is al bij met DafkeDD_CLI v${version}.`)
+    if (!shown.length && !kbAdded.length && !textsAdded.length)
+        log(`${pc.green('✔')} Alles is al bij met DafkeDD_CLI v${version}.`)
     for (const { rel, action } of shown)
         log(
             `${action === 'changed' || action === 'deleted' ? pc.yellow('!') : pc.green('✔')} ${rel}: ${LABELS[action].replace('<bestand>', rel)}`
         )
     if (kbAdded.length) log(`${pc.green('✔')} Kennisbank: ${kbAdded.length} ontbrekende bestanden toegevoegd`)
+    for (const file of textsAdded) log(`${pc.green('✔')} ${file}: ontbrekende teksten van het design toegevoegd`)
+    if (design && shown.some(entry => entry.rel.startsWith('frontend/')))
+        log(
+            pc.dim(
+                '\nHet Pasport-design is bijgewerkt: controleer met "npm run check:design" en "npm run build" in ./frontend.'
+            )
+        )
     if (plan.some(entry => entry.action === 'changed'))
         log(
             pc.dim(
@@ -137,4 +153,43 @@ export function describe(project) {
     ]
         .filter(Boolean)
         .join(' · ')
+}
+
+/** The namespaces of messages/*.json that the files of the Pasport design (DESIGN_FILES) use. */
+export const DESIGN_MESSAGES = {
+    Shell: SHELL_MESSAGES,
+    Notifications: NOTIFICATIONS_MESSAGES,
+    AuthScreen: AUTH_SCREEN_MESSAGES,
+    Pages: PAGES_MESSAGES
+}
+
+/** Adds what `from` has and `into` misses (also nested); never changes a text that is there. Returns the added keys. */
+export function addMissing(into, from, prefix = '') {
+    const added = []
+    for (const [key, value] of Object.entries(from)) {
+        if (!(key in into)) {
+            into[key] = value
+            added.push(prefix + key)
+        } else if (value && typeof value === 'object' && into[key] && typeof into[key] === 'object')
+            added.push(...addMissing(into[key], value, prefix + key + '.'))
+    }
+    return added
+}
+
+/** The missing texts of the design in frontend/messages/<locale>.json (4 spaces, as Prettier writes them). */
+async function addDesignTexts(projectDir) {
+    const added = []
+    for (const locale of Object.keys(SHELL_MESSAGES)) {
+        const file = path.join(projectDir, 'frontend', 'messages', `${locale}.json`)
+        if (!existsSync(file)) continue
+        const messages = JSON.parse(await fs.readFile(file, 'utf8'))
+        const keys = addMissing(
+            messages,
+            Object.fromEntries(Object.entries(DESIGN_MESSAGES).map(([name, texts]) => [name, texts[locale]]))
+        )
+        if (!keys.length) continue
+        await fs.writeFile(file, JSON.stringify(messages, null, 4) + '\n')
+        added.push(`frontend/messages/${locale}.json (${keys.length})`)
+    }
+    return added
 }

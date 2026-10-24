@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { getTranslations, setRequestLocale } from 'next-intl/server'
 import { Notice, WIDE_CARD } from '@/components/account-ui'
+import { PageHead } from '@/components/pasport/page-head'
 import { AppPage } from '@/components/shell/app-shell'
 import { Licenses } from '@/components/licenses'
 import { getSession } from '@/lib/session'
@@ -31,5 +32,11 @@ async function Content() {
             </section>
         )
     }
-    return <Licenses superadmin={session.superadmin} tenantId={session.tenant.id} />
+    const pg = await getTranslations('Pages')
+    return (
+        <>
+            <PageHead title={pg('licensesTitle')} text={pg('licensesText', { tenant: session.tenant.name })} />
+            <Licenses superadmin={session.superadmin} tenantId={session.tenant.id} />
+        </>
+    )
 }

@@ -8,6 +8,8 @@ import { BILLING_STORE } from '../src/billing/store/billing.store.js'
 import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
 import { AUDIT_STORE } from '../src/audit/audit.store.js'
 import { MemoryAuditStore } from '../src/audit/memory-audit.store.js'
+import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
+import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import { pkceChallenge, sha256 } from '../src/oidc/crypto.js'
 import { decodeUnverified } from '../src/oidc/jose.js'
@@ -64,6 +66,8 @@ describe('Sessions, refresh tokens, logout, revocation and introspection (e2e)',
             .useValue(new MemoryBillingStore())
             .overrideProvider(AUDIT_STORE)
             .useValue(new MemoryAuditStore())
+            .overrideProvider(NOTIFICATIONS_STORE)
+            .useValue(new MemoryNotificationsStore())
             .compile()
         app = moduleRef.createNestApplication()
         configureApp(app)

@@ -790,6 +790,11 @@ expire.
 - **Who is online**: every API request (and the heartbeat \`POST /me/heartbeat\` the frontend sends every minute while a
   page is open) writes \`tenant_members.last_seen_at\`, at most once a minute. A member is online after activity in the
   last 2 minutes; the members list also shows "last seen".
+- **Notifications** (the bell in the topbar, \`src/notifications\`): the superadmins hear of a new organisation, the
+  other admins of an organisation of an invitation and of a new member (followed through the audit log). Other code
+  injects \`NotificationsService\` and calls \`toUser\`, \`toTenantAdmins\` or \`toPlatform\` with a kind of
+  \`NOTIFICATION_KINDS\` (its texts are in the \`Notifications\` messages of the frontend). The frontend reads
+  \`GET /me/notifications\` every 30 seconds; notifications are kept 90 days.
 - **Open invitations** live in \`tenant_invitations\` (Row-Level Security per tenant) until they are accepted, withdrawn or
   expire: admins see them, send them again (a new link, 7 more days) or withdraw them (the link stops working).
 - The first account (the one the CLI created) is superadmin, **without an organisation**: it logs in to the platform

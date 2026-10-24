@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { getTranslations, setRequestLocale } from 'next-intl/server'
 import { Notice, SECONDARY, WIDE_CARD } from '@/components/account-ui'
+import { PageHead } from '@/components/pasport/page-head'
 import { AppPage } from '@/components/shell/app-shell'
 import { AuditLog } from '@/components/audit'
 import { Link } from '@/i18n/navigation'
@@ -44,10 +45,17 @@ async function Content({ searchParams }: { searchParams: Promise<{ scope?: strin
         )
     }
     const t = await getTranslations('Audit')
+    const pages = await getTranslations('Pages')
     // A superadmin in an organisation: its log, or the one of the whole platform
     const both = session.superadmin && session.tenant?.role === 'admin'
     return (
         <div className='flex w-full flex-col gap-4'>
+            <PageHead
+                title={platform ? pages('platformAuditTitle') : pages('auditTitle')}
+                text={
+                    platform ? pages('platformAuditText') : pages('auditText', { tenant: session.tenant?.name ?? '' })
+                }
+            />
             {both && (
                 <nav className='flex gap-2 text-sm'>
                     <Link

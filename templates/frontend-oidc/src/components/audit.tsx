@@ -22,7 +22,7 @@ type Page = { events: AuditEvent[]; next: string | null }
 type Tenant = { id: string; name: string }
 
 /** The kinds of events (the first part of an action, as the API names them). */
-export const AUDIT_CATEGORIES = ['login', 'account', 'members', 'platform', 'licences'] as const
+export const AUDIT_CATEGORIES = ['login', 'account', 'members', 'platform', 'licences', 'support', 'invoices'] as const
 
 const SELECT = SMALL_SELECT
 
@@ -156,7 +156,9 @@ function AuditRow({ event, showTenant }: { event: AuditEvent; showTenant: boolea
     const what = t.has(`actions.${key}`) ? t(`actions.${key}`) : event.action
     const who = event.actor
         ? (event.actor.name ?? event.actor.email ?? event.actor.id)
-        : event.action.startsWith('licences.') || event.action === 'login.backchannel_failed'
+        : event.action.startsWith('licences.') ||
+            event.action.startsWith('invoices.') ||
+            event.action === 'login.backchannel_failed'
           ? t('system')
           : t('anonymous')
 

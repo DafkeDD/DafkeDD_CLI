@@ -1,30 +1,34 @@
 import { type InputHTMLAttributes, type ReactNode, useId } from 'react'
 
 /**
- * Small building blocks for the account pages (login, registration, password, invitation, members, platform), in the
- * Pasport design: the classes of the DafkeDD UI components (src/components/ui) and the colours of its tokens.
+ * Small building blocks for the account pages (login, registration, password, invitation, members, licences,
+ * platform), in the Pasport design: the classes of src/styles/pasport.css (btn, card, field, alert-…) and fields with
+ * its tokens. New screens use the components of src/components/pasport (Btn, Field, Input, Badge, …) directly.
  */
-/** A form or step on the login screen (AuthPage): the screen itself is the card. */
+/** A form or step on the login screen (AuthLayout): the screen itself is the card. */
 export const AUTH = 'flex w-full flex-col gap-4 text-left'
 /** The title and the sentence under it on the login screen. */
-export const AUTH_TITLE = 'lui-auth-title'
+export const AUTH_TITLE = 't-h1 auth-title'
 export const AUTH_TEXT = 'text-sm leading-relaxed text-[var(--text-2)]'
 /** A card on a page in the shell (AppPage). */
-export const CARD = 'lui-card flex w-full flex-col gap-5 p-6 text-left'
+export const CARD = 'card card-pad flex w-full flex-col gap-5 text-left'
 export const WIDE_CARD = CARD
-/** The look of the DafkeDD UI Input, as utilities: a page can still set the width (w-40) or the height. */
+/**
+ * The look of the field of the design (.input), as utilities: a page can still set the width (w-40) or the height,
+ * which the class itself would not allow.
+ */
 const FIELD =
     'rounded-[var(--r-sm)] border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--text-3)] hover:border-[var(--text-3)] focus:border-[var(--accent)] focus:shadow-[var(--ring)] disabled:bg-[var(--surface-3)]'
 export const INPUT = 'h-[42px] w-full px-[13px] text-sm ' + FIELD
 export const SELECT = 'h-[42px] px-3 text-sm ' + FIELD
 export const SMALL_SELECT = 'h-[34px] px-2.5 text-[13px] ' + FIELD
 export const TEXTAREA = 'min-h-20 w-full px-[13px] py-2.5 font-mono text-xs ' + FIELD
-export const BUTTON = 'lui-btn lui-btn-primary'
-export const SECONDARY = 'lui-btn lui-btn-secondary lui-btn-sm'
+export const BUTTON = 'btn btn-primary'
+export const SECONDARY = 'btn btn-secondary btn-sm'
 /** A second choice next to BUTTON, as big (for example "Log in with eID"). */
-export const OUTLINE = 'lui-btn lui-btn-secondary'
+export const OUTLINE = 'btn btn-secondary'
 /** A destructive action next to SECONDARY (remove, revoke). */
-export const DANGER = 'lui-btn lui-btn-danger-soft lui-btn-sm'
+export const DANGER = 'btn btn-danger-soft btn-sm'
 /** A choice in a row of SECONDARY buttons that is on (aria-pressed or the current filter). */
 export const TOGGLE =
     SECONDARY +
@@ -34,8 +38,8 @@ export const LINK = 'cursor-pointer font-semibold text-[var(--accent-hover)] und
 export function Heading({ title, text }: { title: string; text?: ReactNode }) {
     return (
         <div className='flex flex-col gap-1.5'>
-            <h1 className='text-xl font-semibold tracking-tight'>{title}</h1>
-            {text && <p className='text-sm text-[var(--text-2)]'>{text}</p>}
+            <h2 className='t-h2'>{title}</h2>
+            {text && <p style={{ fontSize: 14 }}>{text}</p>}
         </div>
     )
 }
@@ -58,13 +62,13 @@ export function Field({
     const id = useId()
     // The hint is not part of the label, but described by it (screen readers read it after the label)
     return (
-        <div className='lui-field'>
-            <label htmlFor={id} className='text-sm font-semibold'>
+        <div className='field'>
+            <label htmlFor={id} className='label'>
                 {label}
             </label>
-            <input id={id} className={INPUT} aria-describedby={hint ? id + '-hint' : undefined} {...input} />
+            <input id={id} className='input' aria-describedby={hint ? id + '-hint' : undefined} {...input} />
             {hint && (
-                <span id={id + '-hint'} className='lui-field-hint'>
+                <span id={id + '-hint'} className='hint'>
                     {hint}
                 </span>
             )}
@@ -72,17 +76,22 @@ export function Field({
     )
 }
 
-/** An error or success message. A div, not a p: the DafkeDD UI theme gives every p its own colour. */
+/** An error or success message. A div, not a p: the design gives every p its own colour. */
 export function Notice({ tone, children }: { tone: 'error' | 'success'; children: ReactNode }) {
     return tone === 'error' ? (
-        <div role='alert' className='text-sm whitespace-pre-line text-[var(--red)]'>
+        <div role='alert' className='alert-error'>
             {children}
         </div>
     ) : (
-        <div role='status' className='text-sm text-[var(--green)]'>
+        <div role='status' className='alert-ok'>
             {children}
         </div>
     )
+}
+
+/** The page around an account screen in the shell: the content area already has its padding. */
+export function Page({ children }: { children: ReactNode }) {
+    return <div className='fade-in'>{children}</div>
 }
 
 /** "Log in" as a form: /api/auth/login is a route handler that needs a full page load. */

@@ -157,8 +157,9 @@ test('the frontend contacts the eID program only after a click, and never reads 
 })
 
 test('every eID text exists in all four languages', () => {
+    // The eID texts of the cards and the errors (the steps of the login screen are in AuthScreen, checked elsewhere)
     const keys = Object.keys(OIDC_MESSAGES.en).filter(key => key.startsWith('eid'))
-    assert.ok(keys.length >= 25)
+    assert.ok(keys.length >= 15)
     for (const locale of ['nl', 'fr', 'de'])
         for (const key of keys) assert.ok(OIDC_MESSAGES[locale][key]?.trim(), `${locale} ${key}`)
 })

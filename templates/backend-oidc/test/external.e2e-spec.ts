@@ -8,6 +8,8 @@ import type { App } from 'supertest/types.js'
 import { AppModule } from '../src/app.module.js'
 import { AUDIT_STORE } from '../src/audit/audit.store.js'
 import { MemoryAuditStore } from '../src/audit/memory-audit.store.js'
+import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
+import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
 import { BILLING_STORE } from '../src/billing/store/billing.store.js'
 import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
@@ -167,6 +169,8 @@ describe('Logging in at another OpenID Connect server (e2e)', () => {
             .useValue(new MemoryBillingStore())
             .overrideProvider(AUDIT_STORE)
             .useValue(audit)
+            .overrideProvider(NOTIFICATIONS_STORE)
+            .useValue(new MemoryNotificationsStore())
             .overrideProvider(MailService)
             .useValue({ send: async () => true })
             .compile()

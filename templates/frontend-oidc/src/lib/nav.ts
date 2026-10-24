@@ -1,7 +1,8 @@
-import type { IconName } from '@/components/ui'
-
-/** A page in the sidebar. `label` is a key of "Nav" in messages/*.json (in every language). */
-export type NavItem = { href: string; label: string; icon: IconName }
+/**
+ * A page in the sidebar. `label` is a key of "Nav" in messages/*.json (in every language), `icon` a name of ICONS in
+ * src/components/pasport/ui.tsx (the icons of the Pasport design).
+ */
+export type NavItem = { href: string; label: string; icon: string }
 
 /**
  * The pages of this app at the top of the sidebar: add yours here. The account, organisation and platform pages

@@ -1,7 +1,6 @@
 import { Suspense } from 'react'
 import { setRequestLocale } from 'next-intl/server'
 import { VerifyEmail } from '@/components/account-forms'
-import { AuthPage } from '@/components/shell/auth-screen'
 
 type Search = Promise<{ token?: string }>
 
@@ -15,12 +14,12 @@ export default async function VerifyEmailPage({
 }) {
     setRequestLocale((await params).locale)
     return (
-        <AuthPage>
+        <>
             {/* The token is only known per request: render that part when the request comes in */}
             <Suspense fallback={null}>
                 <WithToken searchParams={searchParams} />
             </Suspense>
-        </AuthPage>
+        </>
     )
 }
 

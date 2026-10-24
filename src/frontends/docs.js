@@ -119,11 +119,12 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | Path | What it does |
 | --- | --- |
 | \`/api/auth/login\` | Starts a login: state, nonce and a PKCE verifier go into an encrypted cookie, then to the login server |
-| \`/login\` | Without a login request: starts one at once (\`?error=\` stays and shows why the last login failed) |
+| \`/login\` | Without a login request: starts one at once and comes back to \`?returnTo=\` (\`?error=\` stays and shows why the last login failed). Every page that is not public sends a browser without a session here (\`src/proxy.ts\`) |
+| \`/admin/login\` | The same login in the dark superadmin style; afterwards the platform (\`/admin\`) |
 | \`/login?interaction=<id>\` | The login screen of the login server, for this frontend and for every app linked to it ("Log in to <app>": eID, passkey, email and password, "Log in with <name>" for another OpenID Connect server, second factor, organisation choice, and "Allow <application>?" for applications of others), shown by this frontend. Back from the other server it goes on where the login is (\`pending\`); \`&error=EXTERNAL_...\` shows why that login failed |
 | \`/api/auth/callback\` | Back from the login server: checks state and \`iss\`, exchanges the code, verifies the ID token |
 | \`/api/auth/backchannel-logout\` | POST from the login server (back-channel logout): a signed logout token when a session ended there; every browser of that session is logged out here at its next request |
-| \`/profile\` | Protected: name, email, organisation, role, and whether the API accepts the access token |
+| \`/profile\` | Name, email, organisation, role, the licences of the user (ask a demo) and whether the API accepts the access token |
 | \`/api/auth/logout\` | POST: logs out: revokes the refresh token, forgets the session and logs out of the login server too (\`end_session_endpoint\`), then back to the home page |
 | \`/register\` | Create an account and a new organisation (you become its admin), with a password or with the Belgian eID; a confirmation email follows |
 | \`/verify-email?token=\` | The link in the confirmation email: confirms the address, then you can log in |
@@ -132,7 +133,10 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | \`/invite?token=\` | The link in an invitation: join the organisation, or create your account for it. Shows the apps of the invitation (their roles, "with a licence") and, once accepted, an "Open <app>" button per app |
 | \`/security\` | Two-step verification of the own account (status, recovery codes left, new recovery codes), passkeys (add, rename, remove), the eID (link, unlink), the applications of others with access (take back), where the account is logged in (end one session, or all others) and its recent activity (logins, also failed ones, and security changes) |
 | \`/members\` | Admins: the members of the organisation with who is online, invite by email (optionally with apps: per app the roles and "Give a licence", \`src/components/invite-apps.tsx\`), open invitations (send again, withdraw), change roles (user, admin), disable or enable, remove, and the **roles per app** (the roles the developer of each app defined; members without roles given here have its default roles) |
-| \`/admin\` | Superadmins: every organisation (create, suspend), who is superadmin, the products for sale (prices per month and per year, stop selling), the discount codes (percentage or amount, 100% is free) and the **apps** that may log in (make one, change it, choose the product it sells, a link code, a new secret shown once, disable, remove; the apps of the clients file are read-only) |
+| \`/admin\` | Superadmins, in the superadmin panel (the same shell with the dark mark): every organisation (create, suspend, open) and who is superadmin |
+| \`/admin/catalog\` | Superadmins: the products for sale (prices per month and per year, stop selling) and the discount codes (percentage or amount, 100% is free) |
+| \`/admin/apps\` | Superadmins: the **apps** that may log in (make one, change it, choose the product it sells, a link code, a new secret shown once, disable, remove; the apps of the clients file are read-only) |
+| \`/admin/audit\` | Superadmins: the activity of the whole platform |
 | \`/licenses\` | Admins: per product the seats (bought, free, in use), buy seats per month or per year with a discount code, more or fewer seats, cancel, give or take back the seat of a member and start trials. Superadmins open an organisation on \`/admin\` and also give free seats and extend trials here |
 | \`/licenses/return\` | Back from the checkout of Mollie: asks the API how the payment went (no webhook needed on localhost) |
 | \`/audit\` | Admins: the audit log of the organisation (who did what and when, from which IP address and browser), with a filter per kind of event and "Show more". Superadmins: also \`/audit?scope=platform\`, every organisation and the events without one (failed logins, accounts) |
@@ -238,15 +242,33 @@ function pasportDesign(link) {
     return `
 ## Design (Pasport)
 
-The login server and every app linked to it look the same: one login screen, one shell (sidebar, topbar, content).
-Only the pages of the app change. Everything is built with **DafkeDD UI** (\`src/components/ui\`, always installed
-with this login) and its tokens; the design system is "Pasport" (teal accent, Hanken Grotesk, light and dark).
+The login server and every app linked to it look the same: one login screen, one shell (icon rail, topbar, content),
+on the desktop and on the phone. Only the pages of the app change. The design system is "Pasport" (teal accent,
+Hanken Grotesk, light and dark): its tokens and classes are in \`src/styles/pasport.css\` (loaded by the root layout,
+after the DafkeDD UI styles), its components in \`src/components/pasport\`. **This is the design every screen follows.**
+
+**Every page is protected**: \`src/proxy.ts\` sends a browser without a session to \`/login\` and, after the login, back
+to the page it asked for. Only the pages in \`PUBLIC_PATHS\` (the login, registration, password and invitation pages)
+are open; a new public page goes in that list.
+
+**Checked**: \`npm run check:design\` (\`scripts/check-design.mjs\`, also in the CI) fails when a page is not in
+\`<AppPage>\` (or, when it is public, in the login screen), when another component library, icon set or CSS framework is
+imported, or when a page or component writes a colour instead of a token (\`var(--accent)\`, \`var(--text-2)\`, ...).
+\`update\` of DafkeDD_CLI keeps the files of the design in step with the CLI; a file you changed gets the new version
+next to it (\`<file>.dafkedd-new\`).
 
 | File | What it is |
 | --- | --- |
-| \`src/components/shell/app-shell.tsx\` | \`<AppPage>\`: a page in the shell. The sidebar has this app's pages (\`APP_NAV\`), then "My account" (profile, security), the organisation (users, licences, activity: its admins) and the platform (superadmins) |
-| \`src/components/shell/shell-view.tsx\` | The sidebar, the topbar (language, light or dark, the user menu with profile, security and log out) and \`BrandMark\` |
-| \`src/components/shell/auth-screen.tsx\` | \`<AuthPage>\`: the login screen around a form, the teal panel with the eID card on the left (\`admin\`: the dark superadmin variant) |
+| \`src/styles/pasport.css\` | The tokens (light and dark) and every class of the design: buttons, fields, cards, tables, badges, tabs, modals, toasts, the shell, the login screens, and the phone layout |
+| \`src/components/pasport/ui.tsx\` | \`Icon\` (the icons of the design, \`ICONS\`), \`Btn\`, \`Field\`, \`Input\`, \`PasswordInput\`, \`Select\`, \`Toggle\`, \`Badge\`, \`Avatar\`, \`ErrorNote\`, \`OkNote\`, \`Skeleton\` |
+| \`src/components/pasport/widgets.tsx\` | \`Modal\`, \`OtpInput\` (the six boxes of a code), \`QrSvg\` |
+| \`src/components/pasport/page-head.tsx\` | \`PageHead\`: the title, the sentence under it and the actions of a page |
+| \`src/components/pasport/page-state.tsx\` | \`Loading\`, \`LoadError\`, \`Notice\`, \`ClientRedirect\` |
+| \`src/components/pasport/toast.tsx\` | \`useToast\` (a message at the bottom right), \`ThemeToggle\`, \`LocaleFloat\` |
+| \`src/components/pasport/auth-layout.tsx\` | \`AuthLayout\`: the login screen, the teal panel with the eID card on the left (the dark variant for \`/admin/login\`), the form on the right; only the form on a phone |
+| \`src/components/shell/app-shell.tsx\` | \`<AppPage>\`: a page in the shell. The rail has this app's pages (\`APP_NAV\`), then the organisation (users, licences, activity: its admins) and the platform (superadmins); \`<AppPage admin>\` is the superadmin panel |
+| \`src/components/shell/shell-view.tsx\` | The rail (collapsible, a drawer on a phone), the topbar (search for a page with ⌘K, the notifications bell, light or dark, the user menu with profile, security, language and log out) and \`BrandMark\` |
+| \`src/components/pasport/notifications.tsx\` | The bell: the notifications of the account on the login server (\`GET /me/notifications\` every 30 seconds through \`/api/backend\`), unread count, mark as read, a click opens its page (on the login server for a linked app) |
 | \`src/components/shell/start-login.tsx\` | \`/login\` without a login request: starts one at once |
 | \`src/lib/nav.ts\` | \`APP_NAV\`: the pages of this app in the sidebar |
 | \`src/lib/brand.ts\` | \`BRAND\` (the platform, \`Pasport\`) and \`APP_NAME\` (${link ? `\`${link.name}\`` : '\`null\` on the login server'}) |
@@ -256,26 +278,29 @@ with this login) and its tokens; the design system is "Pasport" (teal accent, Ha
 ${'```'}tsx
 // src/app/[locale]/planning/page.tsx
 import { setRequestLocale } from 'next-intl/server'
+import { PageHead } from '@/components/pasport/page-head'
+import { Btn } from '@/components/pasport/ui'
 import { AppPage } from '@/components/shell/app-shell'
-import { PageHeader } from '@/components/ui'
 
 export default async function PlanningPage({ params }: { params: Promise<{ locale: string }> }) {
     setRequestLocale((await params).locale)
     return (
         <AppPage>
-            <PageHeader title='Planning' description='This week' />
+            <PageHead title='Planning' text='This week' actions={<Btn icon='plus'>New</Btn>} />
+            <div className='card card-pad'>...</div>
         </AppPage>
     )
 }
 ${'```'}
 
 Then add it to the sidebar: \`{ href: '/planning', label: 'planning', icon: 'calendar' }\` in \`APP_NAV\`, and the key
-\`planning\` in the \`Nav\` namespace of **every** \`messages/<language>.json\`. Icons are the names of the DafkeDD UI
-\`Icon\` (\`ICON_NAMES\`). \`<AppPage wide>\` uses the whole width. The texts of the shell are in the \`Shell\` namespace.
+\`planning\` in the \`Nav\` namespace of **every** \`messages/<language>.json\` (the texts are never hard-coded). Icons
+are the names of \`ICONS\` in \`src/components/pasport/ui.tsx\`. \`<AppPage wide>\` uses the whole width. The texts of the
+shell are in the \`Shell\` namespace, those of the page headers in \`Pages\`, of the login screens in \`AuthScreen\`.
 
-The DafkeDD UI stylesheet is not in a CSS layer, so it wins from Tailwind classes on the same element: a \`lui-\` class
-keeps its colours and sizes. Give such an element another look with the important variant (\`bg-[var(--accent-tint)]!\`)
-or use the constants of \`src/components/account-ui.tsx\` (\`CARD\`, \`BUTTON\`, \`INPUT\`, \`DANGER\`, ...).
+The stylesheet of the design is not in a CSS layer, so it wins from Tailwind classes on the same element (\`.input\` is
+always 100% wide). Give such an element another size or look with the important variant (\`w-40!\`), or use the
+constants of \`src/components/account-ui.tsx\` (\`INPUT\`, \`SELECT\`: fields of the design that take a width).
 `
 }
 
@@ -290,8 +315,9 @@ addresses of this frontend to that app (redirect URI \`http://localhost:${link.p
 \`http://localhost:${link.port}\`, back-channel logout \`http://localhost:${link.port}/api/auth/backchannel-logout\` when the app had
 none). Somebody who is logged in at that server is logged in here without a password (single sign-on).
 
-**Every page is protected.** A page in the shell (\`AppPage\`) without a session sends the browser to the login
-server (\`src/components/shell/login-redirect.tsx\`) and back to the same page afterwards. When a login comes back
+**Every page is protected.** Without a session \`src/proxy.ts\` sends the browser to \`/login\`, which starts the login
+at the login server and comes back to the same page afterwards (\`src/components/shell/login-redirect.tsx\` does the
+same when a session ends while a page is open). When a login comes back
 without a session within 15 seconds (cookies blocked, for example), it shows a "Log in" button instead of trying again.
 
 | Path | What it does |

@@ -20,6 +20,13 @@ import {
     oidcFrontendFiles,
     SHELL_MESSAGES
 } from './oidc.js'
+import {
+    AUTH_SCREEN_MESSAGES,
+    INVITE_MESSAGES,
+    NOTIFICATIONS_MESSAGES,
+    PAGES_MESSAGES,
+    REGISTER_MESSAGES
+} from './pasport-messages.js'
 
 export const DIR = 'frontend'
 export const LOCALES = ['en', 'nl', 'fr', 'de']
@@ -860,6 +867,21 @@ export function withApi(fileMap, api, { ui }) {
               })
             : {})
     }
+    // The Pasport design has its own icons: the status card too (no react-icons in an OIDC frontend)
+    if (api.oidc)
+        result['src/components/api-status.tsx'] = replaceOnce(
+            replaceOnce(
+                replaceOnce(
+                    result['src/components/api-status.tsx'],
+                    "import { LuDatabase, LuServer } from 'react-icons/lu';",
+                    "import { Icon } from '@/components/pasport/ui';"
+                ),
+                '<LuServer aria-hidden className="mt-0.5 shrink-0" />',
+                '<Icon name="server" size={16} className="mt-0.5 shrink-0" />'
+            ),
+            '<LuDatabase aria-hidden className="mt-0.5 shrink-0" />',
+            '<Icon name="database" size={16} className="mt-0.5 shrink-0" />'
+        )
     for (const locale of LOCALES) {
         result[`messages/${locale}.json`] =
             JSON.stringify(
@@ -875,6 +897,12 @@ export function withApi(fileMap, api, { ui }) {
                               Apps: APPS_MESSAGES[locale],
                               Shell: SHELL_MESSAGES[locale],
                               Nav: NAV_MESSAGES[locale],
+                              AuthScreen: AUTH_SCREEN_MESSAGES[locale],
+                              Pages: PAGES_MESSAGES[locale],
+                              Notifications: NOTIFICATIONS_MESSAGES[locale],
+                              ...(api.linked
+                                  ? {}
+                                  : { Register: REGISTER_MESSAGES[locale], Invite: INVITE_MESSAGES[locale] }),
                               AppRoles: APP_ROLES_MESSAGES[locale],
                               ...(api.linked
                                   ? { Notes: NOTES_MESSAGES[locale], AppLicense: APP_LICENSE_MESSAGES[locale] }
@@ -1081,11 +1109,16 @@ export const nextjs = {
                 weight: 2,
                 run: () => exec('npm', ['install', 'next-intl@latest'], { cwd: root })
             },
-            {
-                title: 'react-icons installeren',
-                weight: 2,
-                run: () => exec('npm', ['install', 'react-icons@latest'], { cwd: root })
-            },
+            // The Pasport design (OIDC) has its own icons: no react-icons there
+            ...(api?.oidc
+                ? []
+                : [
+                      {
+                          title: 'react-icons installeren',
+                          weight: 2,
+                          run: () => exec('npm', ['install', 'react-icons@latest'], { cwd: root })
+                      }
+                  ]),
             // The fonts of the Pasport design, self-hosted (the build never needs Google Fonts)
             ...(api?.oidc
                 ? [
@@ -1208,6 +1241,8 @@ export const nextjs = {
                     pkg.scripts = { ...pkg.scripts, format: 'prettier --write .', 'format:check': 'prettier --check .' }
                     // A virtual card reader with a test eID (PIN 1234) that may log in on this frontend
                     if (api?.oidc && !api.linked) pkg.scripts['eid:mock'] = EID_MOCK_SCRIPT
+                    // The Pasport design, checked (also in the CI): scripts/check-design.mjs
+                    if (api?.oidc) pkg.scripts['check:design'] = 'node scripts/check-design.mjs'
                     await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
 
                     await exec('npx', ['--no-install', 'prettier', '--write', '.'], { cwd: root })

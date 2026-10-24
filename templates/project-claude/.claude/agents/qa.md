@@ -29,8 +29,8 @@ commit or push. You report what works, what does not, with screenshots or the ro
   like `Notes.title` on screen), no text that does not fit.
 - Phone width (`browser_resize` to 390×844): the sidebar collapses, nothing scrolls sideways, every control can be
   reached.
-- The Pasport design (`.claude/design/pasport.md`): Dafke UI components, the shell, the tokens; anything that looks
-  different is a finding.
+- The Pasport design (`.claude/design/pasport.md`): the shell, the classes and components of `src/components/pasport`, the tokens, the phone width; anything that looks
+  different is a finding. `npm run check:design` in `./frontend` must pass.
 - Take a screenshot of each state you report.
 
 ## In the database (PostgreSQL MCP, read-only)

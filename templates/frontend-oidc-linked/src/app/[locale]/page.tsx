@@ -4,8 +4,8 @@ import { ApiStatus } from '@/components/api-status'
 import { AppLicense } from '@/components/app-license'
 import { Notes } from '@/components/notes'
 import { SessionLinks } from '@/components/session-links'
+import { PageHead } from '@/components/pasport/page-head'
 import { AppPage } from '@/components/shell/app-shell'
-import { PageHeader } from '@/components/ui'
 import { getSession } from '@/lib/session'
 
 /**
@@ -19,7 +19,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
 
     return (
         <AppPage>
-            <PageHeader title={t('title')} description={t('description')} />
+            <PageHead title={t('title')} text={t('description')} />
             <div className='flex flex-col gap-4'>
                 <Suspense fallback={null}>
                     <SessionLinks />

@@ -578,3 +578,8 @@ test('the validation texts cover the usual class-validator decorators in every l
     }
     for (const key of keys) assert.equal(new Set(LOCALES.map(l => TRANSLATIONS[l].validation[key])).size, 4, key)
 })
+
+test('the backend overrides dependencies of NestJS with a known vulnerability (npm audit in the CI)', async () => {
+    const { SECURITY_OVERRIDES } = await import('../src/backends/nestjs.js')
+    assert.match(SECURITY_OVERRIDES.multer, /^\^2\.(5|[6-9])\./)
+})

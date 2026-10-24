@@ -81,8 +81,8 @@ test('every route is documented, also in the README', () => {
     assert.ok(frontendReadme({ ui: 'none', api: { port: 4000, oidc: true } }).includes('the **apps** that may log in'))
 })
 
-test('the frontend: the card "Apps" on /admin, PUT through /api/backend, the texts in four languages', () => {
-    assert.match(frontend['src/app/[locale]/admin/page.tsx'], /<Apps \/>/)
+test('the frontend: the apps on /admin/apps, PUT through /api/backend, the texts in four languages', () => {
+    assert.match(frontend['src/app/[locale]/admin/apps/page.tsx'], /<Apps \/>/)
     const apps = frontend['src/components/apps.tsx']
     assert.match(apps, /useTranslations\('Apps'\)/)
     assert.match(apps, /admin\/clients\/\$\{app\.clientId\}\/secret/)
@@ -181,6 +181,7 @@ test('roles per app: migration 12, the roles claim, /members for the admins, rol
 test('invitations with apps: migration 13, roles and a seat on accepting, the apps on /members and /invite', async () => {
     const { MAIL_MESSAGES } = await import('../src/backends/oidc.js')
     const { OIDC_MESSAGES } = await import('../src/frontends/oidc.js')
+    const { INVITE_MESSAGES } = await import('../src/frontends/pasport-messages.js')
     assert.match(backend['src/database/migrations.ts'], /id: 13,\s+name: 'apps in invitations'/)
     assert.match(backend['src/database/migrations.ts'], /ALTER TABLE tenant_invitations ADD COLUMN apps jsonb/)
     assert.match(backend['src/oidc/store/pg-oidc.store.ts'], /JSON\.stringify\(invitation\.apps\)/)
@@ -194,9 +195,12 @@ test('invitations with apps: migration 13, roles and a seat on accepting, the ap
     for (const locale of LANGUAGES) {
         assert.ok(JSON.parse(backend[`src/i18n/${locale}/oidc.json`]).INVITATION_APP_UNKNOWN, locale)
         assert.match(MAIL_MESSAGES[locale].INVITE_APPS, /\{apps\}/, locale)
-        for (const key of ['inviteAppsTitle', 'inviteSeat', 'invitationApps', 'inviteAppsText', 'inviteOpenApp'])
+        for (const key of ['inviteAppsTitle', 'inviteSeat', 'invitationApps'])
             assert.ok(OIDC_MESSAGES[locale][key], `${locale} ${key}`)
-        assert.match(OIDC_MESSAGES[locale].inviteOpenApp, /\{app\}/, locale)
+        // The invitation screen (/invite): the apps, "with a licence", "Open <app>"
+        for (const key of ['appsTitle', 'withLicense', 'openApp', 'noFreeLicense'])
+            assert.ok(INVITE_MESSAGES[locale][key], `${locale} ${key}`)
+        assert.match(INVITE_MESSAGES[locale].openApp, /\{app\}/, locale)
         for (const key of ['app', 'apps', 'roles']) assert.ok(AUDIT_MESSAGES[locale].details[key], `${locale} ${key}`)
         assert.ok(AUDIT_MESSAGES[locale].reasons.invitation, locale)
     }
@@ -213,7 +217,7 @@ test('invitations with apps: migration 13, roles and a seat on accepting, the ap
     assert.ok(frontend['src/components/invite-apps.tsx'])
     assert.match(frontend['src/components/members.tsx'], /<InviteApps /)
     assert.match(frontend['src/components/members.tsx'], /apps: invitationApps\(apps, choice\)/)
-    assert.match(frontend['src/components/account-forms.tsx'], /t\('inviteOpenApp', \{ app: app\.name \}\)/)
+    assert.match(frontend['src/components/account-forms.tsx'], /v\('openApp', \{ app: app\.name \}\)/)
     assert.match(frontend['src/components/app-roles.tsx'], /filter\(app => app\.roles\.length > 0\)/)
     assert.ok(frontendReadme({ api: { port: 4000, oidc: true } }).includes('Open <app>'))
 })

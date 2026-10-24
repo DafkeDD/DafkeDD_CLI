@@ -1,4 +1,11 @@
 import test from 'node:test'
+import {
+    AUTH_SCREEN_MESSAGES,
+    INVITE_MESSAGES,
+    NOTIFICATIONS_MESSAGES,
+    PAGES_MESSAGES,
+    REGISTER_MESSAGES
+} from '../src/frontends/pasport-messages.js'
 import assert from 'node:assert/strict'
 import { files, ignoreUiInEslint, nextjs, uiFiles, uiFor, withApi, LOCALES } from '../src/frontends/nextjs.js'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -108,7 +115,12 @@ test('every text exists in all four languages, and every text the code uses exis
         Apps: APPS_MESSAGES,
         Shell: SHELL_MESSAGES,
         Nav: NAV_MESSAGES,
-        AppRoles: APP_ROLES_MESSAGES
+        AppRoles: APP_ROLES_MESSAGES,
+        AuthScreen: AUTH_SCREEN_MESSAGES,
+        Register: REGISTER_MESSAGES,
+        Invite: INVITE_MESSAGES,
+        Pages: PAGES_MESSAGES,
+        Notifications: NOTIFICATIONS_MESSAGES
     }
     // HomePage: the texts of the Next.js home page (nextjs.js); Nav: used with the label of APP_NAV as key
     const dynamic = new Set(['Nav'])
@@ -252,9 +264,25 @@ test('the API proxy only forwards members, platform and two-step calls, with the
     assert.match(route, /Authorization: 'Bearer ' \+ session\.accessToken/)
     assert.match(route, /request\.headers\.get\('origin'\) !== new URL\(APP_URL\)\.origin/)
     const allowed = new RegExp(/const ALLOWED =\s+\/(.+)\/$/m.exec(route)[1])
-    for (const path of ['tenants/current/members', 'admin/tenants', 'me/mfa', 'me/mfa/recovery-codes'])
+    for (const path of [
+        'tenants/current/members',
+        'admin/tenants',
+        'me/mfa',
+        'me/mfa/recovery-codes',
+        'me/notifications',
+        'me/notifications/read-all',
+        'me/notifications/4b8e1f2a-6c3d-4e9f-8a7b-2d1c0e9f8a6b/read'
+    ])
         assert.ok(allowed.test(path), path)
-    for (const path of ['oidc/token', 'health', 'tenants/other/members', '../admin', 'me/profile'])
+    for (const path of [
+        'oidc/token',
+        'health',
+        'tenants/other/members',
+        '../admin',
+        'me/profile',
+        'me/notifications/x/read',
+        'me/notificationsx'
+    ])
         assert.ok(!allowed.test(path), path)
 })
 
@@ -268,35 +296,84 @@ test('the Pasport design: one layout, the shell around every page and the login 
     assert.match(layout, /import '@fontsource-variable\/hanken-grotesk'/)
     assert.ok(!layout.includes('next/font'), 'no request to Google Fonts during the build')
     assert.match(layout, /<ThemeProvider>/)
-    assert.ok(!layout.includes('HeaderNav'))
-    for (const page of ['members', 'licenses', 'admin', 'audit', 'security', 'profile'])
+    assert.match(layout, /<ToastProvider>\{children\}<\/ToastProvider>/)
+    // The stylesheet of the design, after the DafkeDD UI styles of globals.css
+    assert.ok(layout.indexOf("import '../globals.css'") < layout.indexOf("import '../../styles/pasport.css'"))
+    const css = templates['src/styles/pasport.css']
+    for (const part of ['.app-shell', '.sidebar', '.rail-item', '.topbar', '.tb-user-pop', '.auth-wrap', '.auth-aside'])
+        assert.ok(css.includes(part), part)
+    // The phone: the rail becomes a drawer behind the menu button, the login panel disappears
+    assert.match(css, /@media \(max-width: 860px\)/)
+    assert.ok(!/market|vault|wizard|tour-/.test(css), 'nothing of one app in the design')
+    // The bell of the topbar: its popover, also on the phone
+    assert.match(css, /\.notif-pop/)
+    assert.match(templates['src/components/shell/shell-view.tsx'], /<NotificationBell accountUrl=\{accountUrl\} \/>/)
+    for (const page of ['members', 'licenses', 'admin', 'admin/catalog', 'admin/apps', 'admin/audit', 'audit'])
         assert.match(templates[`src/app/[locale]/${page}/page.tsx`], /<AppPage/, page)
-    for (const page of ['login', 'register', 'forgot-password', 'reset-password', 'verify-email', 'invite'])
-        assert.match(templates[`src/app/[locale]/${page}/page.tsx`], /<AuthPage>/, page)
+    for (const page of ['security', 'profile'])
+        assert.match(templates[`src/app/[locale]/${page}/page.tsx`], /<AppPage>/)
+    for (const page of ['admin', 'admin/catalog', 'admin/apps', 'admin/audit'])
+        assert.match(templates[`src/app/[locale]/${page}/page.tsx`], /<AppPage wide admin>/, page)
+    // The auth screens draw the login screen of the design themselves
+    assert.match(templates['src/components/oidc-login.tsx'], /<AuthLayout variant=\{variant\}>/)
+    for (const name of ['Register', 'ForgotPassword', 'ResetPassword', 'VerifyEmail', 'AcceptInvitation'])
+        assert.match(templates['src/components/account-forms.tsx'], new RegExp(`export function ${name}\\(`), name)
+    assert.equal(templates['src/components/account-forms.tsx'].match(/<AuthLayout/g).length >= 5, true)
     const shell = templates['src/components/shell/app-shell.tsx']
     // Organisation pages for its admins, the platform for superadmins; ACCOUNT_URL is empty on the login server
-    assert.match(shell, /if \(admin\)/)
+    assert.match(shell, /if \(tenantAdmin\)/)
     assert.match(shell, /if \(session\.superadmin\)/)
     assert.match(shell, /ACCOUNT_URL \+ path/)
     assert.match(shell, /APP_NAV\.map/)
+    assert.match(shell, /if \(!session\) return <LoginRedirect \/>/)
     const view = templates['src/components/shell/shell-view.tsx']
-    for (const part of ['<Sidebar>', '<SidebarBrand', '<Topbar>', '<ThemeToggle', '<LocaleSwitcher />', '<Presence />'])
+    for (const part of [
+        "className={'app-shell'",
+        "className={'sidebar'",
+        "className='rail-nav'",
+        "className='topbar'",
+        "className='nav-toggle'",
+        "className='rail-toggle'",
+        "className='tb-search'",
+        '<ThemeToggle',
+        '<Presence />',
+        "className='user-pop-locales'"
+    ])
         assert.ok(view.includes(part), part)
     assert.match(view, /action='\/api\/auth\/logout'/)
     assert.match(templates['src/components/presence.tsx'], /me\/heartbeat/)
-    const screen = templates['src/components/shell/auth-screen.tsx']
-    assert.match(screen, /<AuthLayout asideTone=\{admin \? 'ink' : 'accent'\}/)
-    // The login screen says which app asks, eID first, registering only here (on the login server)
+    const screen = templates['src/components/pasport/auth-layout.tsx']
+    assert.match(screen, /className='auth-wrap'/)
+    assert.match(screen, /<LocaleFloat label=\{shell\('language'\)\} \/>/)
+    // The login screen says which app asks (not for its own frontend), eID first, registering only here
     const login = templates['src/components/oidc-login.tsx']
     assert.match(login, /t\('loginTitleApp', \{ client: state\.clientName \}\)/)
-    assert.ok(login.indexOf("t('eidLogin')") < login.indexOf("name='email'"), 'eID before the email field')
+    assert.match(login, /state\.clientId !== ownClient/)
+    assert.match(templates['src/app/[locale]/login/page.tsx'], /ownClient=\{OIDC_CLIENT_ID\}/)
+    assert.ok(login.indexOf("p('tabEid')") < login.indexOf("p('tabEmail')"), 'eID before the email tab')
     assert.match(login, /href='\/register'/)
     assert.match(templates['src/lib/brand.ts'], /export const APP_NAME: string \| null = null/)
     assert.match(templates['src/lib/nav.ts'], /export const APP_NAV: NavItem\[\]/)
-    // No hard-coded colours outside the login panel: everything comes from the DafkeDD UI tokens
+    // No hard-coded colours from Tailwind: everything comes from the tokens of the design
     for (const [rel, content] of Object.entries(templates))
-        if (rel.endsWith('.tsx') && !rel.endsWith('auth-screen.tsx'))
+        if (rel.endsWith('.tsx'))
             assert.ok(!/(?:bg|text|border)-(?:black|white|red|green|amber)[-/]\d/.test(content), rel)
+})
+
+test('every page is protected: the proxy sends a browser without a session to /login and back afterwards', () => {
+    const proxy = templates['src/proxy.ts']
+    assert.match(proxy, /export const PUBLIC_PATHS = \[/)
+    for (const path of ['/login', '/admin/login', '/register', '/forgot-password', '/reset-password', '/verify-email'])
+        assert.ok(proxy.includes(`'${path}'`), path)
+    assert.match(proxy, /if \(!session && !isPublic\(request\.nextUrl\.pathname\)\)/)
+    assert.match(proxy, /new URL\('\/login', request\.url\)/)
+    assert.match(proxy, /login\.searchParams\.set\('returnTo', back\)/)
+    // /login hands returnTo on to the login (only a path of this app)
+    const login = templates['src/app/[locale]/login/page.tsx']
+    assert.match(login, /returnTo\?\.startsWith\('\/'\) && !returnTo\.startsWith\('\/\/'\)/)
+    assert.match(templates['src/components/shell/start-login.tsx'], /name='returnTo'/)
+    // /admin/login: the dark login of the superadmins, back to the platform
+    assert.match(templates['src/app/[locale]/admin/login/page.tsx'], /<StartLogin admin/)
 })
 
 test('a superadmin on the platform (no organisation) goes to /admin instead of seeing an error', () => {
@@ -332,4 +409,70 @@ test('with the OIDC login DafkeDD UI is always installed, whatever the answer; E
     } finally {
         await rm(dir, { recursive: true, force: true })
     }
+})
+
+test('the bell: every kind of notification of the backend has a text and an icon in the frontend', async () => {
+    const store = await readFile(
+        new URL('../templates/backend-oidc/src/notifications/notifications.store.ts', import.meta.url),
+        'utf8'
+    )
+    const kinds = [
+        ...store
+            .slice(store.indexOf('NOTIFICATION_KINDS'))
+            .split('] as const')[0]
+            .matchAll(/'([a-z_.]+)'/g)
+    ].map(match => match[1])
+    assert.ok(kinds.length >= 3)
+    const bell = templates['src/components/pasport/notifications.tsx']
+    for (const kind of kinds) assert.match(bell, new RegExp(`case '${kind.replace('.', '\\.')}':`), kind)
+    // Polls the login server through the proxy of the frontend, and marks as read there
+    assert.match(bell, /fetch\('\/api\/backend\/me\/notifications'/)
+    assert.match(bell, /'read-all'/)
+})
+
+test('the design check of every project: the generated frontends pass, a page outside the design does not', async t => {
+    const { execFileSync } = await import('node:child_process')
+    const { mkdir } = await import('node:fs/promises')
+    for (const linked of [null, { name: 'Planner', apiUrl: 'https://api.login.example.com' }]) {
+        const dir = await mkdtemp(path.join(tmpdir(), 'dafkedd-design-'))
+        t.after(() => rm(dir, { recursive: true, force: true }))
+        const all = withApi(files, { oidc: true, port: 4000, linked }, { ui: true })
+        // The Pasport design has its own icons: no react-icons in an OIDC frontend
+        for (const [rel, content] of Object.entries(all))
+            if (rel !== 'scripts/check-design.mjs') assert.ok(!/react-icons|lucide-react/.test(content), rel)
+        all['package.json'] = JSON.stringify({ dependencies: { next: '16.0.0' } })
+        for (const [rel, content] of Object.entries(all)) {
+            await mkdir(path.dirname(path.join(dir, rel)), { recursive: true })
+            await writeFile(path.join(dir, rel), content)
+        }
+        const check = () =>
+            execFileSync('node', ['scripts/check-design.mjs'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' })
+        assert.match(check(), /The Pasport design: \d+ pages, \d+ files OK/)
+        // A page without the shell, another icon set, a colour of its own, and a component library
+        await mkdir(path.join(dir, 'src/app/[locale]/reports'), { recursive: true })
+        await writeFile(
+            path.join(dir, 'src/app/[locale]/reports/page.tsx'),
+            "import { LuChart } from 'react-icons/lu'\nexport default function Reports() {\n    return <div style={{ color: '#ff0000' }}><LuChart /> Ticket #123</div>\n}\n"
+        )
+        await writeFile(path.join(dir, 'package.json'), JSON.stringify({ dependencies: { '@mui/material': '7' } }))
+        const failed = (() => {
+            try {
+                check()
+                return null
+            } catch (error) {
+                return String(error.stderr)
+            }
+        })()
+        assert.ok(failed, 'the check fails')
+        assert.match(failed, /reports\/page\.tsx: imports react-icons\/lu/)
+        assert.match(failed, /reports\/page\.tsx: the colour #ff0000/)
+        assert.match(failed, /reports\/page\.tsx: every page sits in the shell: <AppPage>/)
+        assert.match(failed, /package\.json: @mui\/material/)
+        assert.ok(!failed.includes('#123'), 'a number in a text is not a colour')
+    }
+    // The script of the frontend
+    assert.match(
+        await readFile(new URL('../src/frontends/nextjs.js', import.meta.url), 'utf8'),
+        /'check:design'\] = 'node scripts\/check-design\.mjs'/
+    )
 })

@@ -75,7 +75,7 @@ export function projectClaudeMd(project) {
     const parts = [
         ...(project.frontend
             ? [
-                  '- `./frontend`: Next.js (App Router), next-intl, Tailwind CSS and the Dafke UI components, in the Pasport design. `npm run dev`.'
+                  '- `./frontend`: Next.js (App Router), next-intl, Tailwind CSS, in the Pasport design (`src/styles/pasport.css`, `src/components/pasport`). `npm run dev`.'
               ]
             : []),
         ...(project.backend
@@ -130,9 +130,21 @@ export function projectClaudeMd(project) {
         '- **Documentation is mandatory**: every endpoint in `docs/api.md` and the README of the backend (body, example,',
         '  response, errors), every page and call of the frontend in `docs/frontend.md`, every setting in `.env.example`.',
         '- **Four languages**: every text in en, nl, fr and de with the same keys (English is the default).',
-        '- **The Pasport design**, always: `.claude/design/pasport.md` and `.claude/design/pasport-tokens.json` (from the',
-        '  Claude Design System "Pasport", https://claude.ai/artifact/QD82mLA9dWSEgtpubjgChq). Dafke UI components and',
-        '  tokens only.',
+        ...(project.kind === 'pasport' || project.kind === 'app'
+            ? [
+                  '- **The Pasport design**, always and only: `.claude/design/pasport.md` and `.claude/design/pasport-tokens.json` (from',
+                  '  the Claude Design System "Pasport", https://claude.ai/artifact/QD82mLA9dWSEgtpubjgChq), built in',
+                  '  `frontend/src/styles/pasport.css` and `frontend/src/components/pasport/` with the shell in',
+                  '  `frontend/src/components/shell/`. That is the design to follow on every screen, on desktop and on the phone (390px).',
+                  '  `npm run check:design` in `./frontend` (also in the CI) checks it; `update` of DafkeDD_CLI keeps the design files current.',
+                  '- **Protected by default**: every page needs a login; `frontend/src/proxy.ts` sends the browser to `/login`. Only the',
+                  '  pages in `PUBLIC_PATHS` are open.'
+              ]
+            : [
+                  '- **The Pasport design**, always: `.claude/design/pasport.md` and `.claude/design/pasport-tokens.json` (from the',
+                  '  Claude Design System "Pasport", https://claude.ai/artifact/QD82mLA9dWSEgtpubjgChq). Dafke UI components and',
+                  '  tokens only.'
+              ]),
         ...(project.kind === 'pasport' || project.kind === 'app'
             ? [
                   '- **Multi-tenant**: data of an organisation only through `withTenant()`; every tenant table has a `tenant_id`,',
@@ -256,6 +268,12 @@ export function ciWorkflow(project) {
             ...setup('frontend'),
             '            - run: npm run format:check',
             '            - run: npm run lint',
+            ...(project.kind === 'pasport' || project.kind === 'app'
+                ? [
+                      '            # The Pasport design: the shell on every page, its components, icons and colour tokens only',
+                      '            - run: npm run check:design'
+                  ]
+                : []),
             '            - run: npm run build',
             ...(lighthouseUrls(project).length
                 ? [

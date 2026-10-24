@@ -127,7 +127,7 @@ export class OidcController {
     @ApiProduces('text/html', 'application/json')
     @ApiOkResponse({
         description:
-            'The login form, or { step, clientName, registration, password, eid, external, pending, csrf, loginHint }'
+            'The login form, or { step, clientId, clientName, registration, password, eid, external, pending, csrf, loginHint }'
     })
     @ApiResponse({
         status: 410,
@@ -146,6 +146,8 @@ export class OidcController {
             const external = this.config.external
             return this.json(response, 200, {
                 step: 'login',
+                // The app that asked for the login: its own login screen says "Log in to <app>" for another app
+                clientId: found.interaction.params.clientId,
                 clientName: found.client.name,
                 registration: this.config.registrationOpen,
                 // Email and password (not when only the other OpenID Connect server is allowed)

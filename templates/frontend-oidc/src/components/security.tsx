@@ -143,31 +143,23 @@ export function Security() {
     )
 }
 
-type EidStatus = { enabled: boolean; linked: boolean; linkedAt: string | null; hasPassword: boolean }
+export type EidStatus = {
+    enabled: boolean
+    linked: boolean
+    linkedAt: string | null
+    hasPassword: boolean
+    /** Every account must have its eID linked (OIDC_EID_REQUIRED; never for a superadmin). */
+    required?: boolean
+}
 
 /**
- * /security: the Belgian eID of the own account (GET/POST/DELETE /me/eid through /api/backend). Linked, the account
- * can log in with the card and its PIN. Hidden when the login server has no eID login (OIDC_EID=off).
+ * Links the eID of the card to the own account (POST /me/eid/challenge, then POST /me/eid through /api/backend): the
+ * PIN step of the bridge. `onLinked` gets the new status. Used on /security and on the screen that asks for the eID.
  */
-export function EidSecurity() {
+export function EidLink({ onLinked }: { onLinked: (status: EidStatus) => void }) {
     const t = useTranslations('Oidc')
-    const locale = useLocale()
     const backend = useBackend()
-    const [status, setStatus] = useState<EidStatus | null>(null)
-    const [linking, setLinking] = useState(false)
-    const [error, setError] = useState('')
-    const [busy, setBusy] = useState(false)
     const challenge = useRef('')
-
-    useEffect(() => {
-        backend('me/eid')
-            .then(result => {
-                if (result.status === 200) setStatus(result.body as unknown as EidStatus)
-            })
-            .catch(() => undefined)
-        // once when the page opens
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
 
     async function nonce(): Promise<string | { error: string }> {
         const result = await backend('me/eid/challenge', 'POST')
@@ -179,10 +171,40 @@ export function EidSecurity() {
     async function link(token: EidToken): Promise<string | null> {
         const result = await backend('me/eid', 'POST', { challenge: challenge.current, token })
         if (result.status !== 200) return result.message || t('eidFailed')
-        setStatus(result.body as unknown as EidStatus)
-        setLinking(false)
+        onLinked(result.body as unknown as EidStatus)
         return null
     }
+
+    return (
+        <EidBridge>
+            <EidPin submitLabel={t('eidLinkSubmit')} getNonce={nonce} onToken={link} />
+        </EidBridge>
+    )
+}
+
+/**
+ * /security: the Belgian eID of the own account (GET/POST/DELETE /me/eid through /api/backend). Linked, the account
+ * can log in with the card and its PIN. Hidden when the login server has no eID login (OIDC_EID=off). Not unlinked
+ * while every account must have one (OIDC_EID_REQUIRED).
+ */
+export function EidSecurity() {
+    const t = useTranslations('Oidc')
+    const locale = useLocale()
+    const backend = useBackend()
+    const [status, setStatus] = useState<EidStatus | null>(null)
+    const [linking, setLinking] = useState(false)
+    const [error, setError] = useState('')
+    const [busy, setBusy] = useState(false)
+
+    useEffect(() => {
+        backend('me/eid')
+            .then(result => {
+                if (result.status === 200) setStatus(result.body as unknown as EidStatus)
+            })
+            .catch(() => undefined)
+        // once when the page opens
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     async function unlink() {
         setBusy(true)
@@ -204,7 +226,7 @@ export function EidSecurity() {
             )}
             {error && <Notice tone='error'>{error}</Notice>}
             {status.linked ? (
-                status.hasPassword ? (
+                status.required ? null : status.hasPassword ? (
                     <button
                         type='button'
                         disabled={busy}
@@ -217,9 +239,12 @@ export function EidSecurity() {
                     <p className='text-sm text-[var(--text-2)]'>{t('eidOnlyLogin')}</p>
                 )
             ) : linking ? (
-                <EidBridge>
-                    <EidPin submitLabel={t('eidLinkSubmit')} getNonce={nonce} onToken={link} />
-                </EidBridge>
+                <EidLink
+                    onLinked={next => {
+                        setStatus(next)
+                        setLinking(false)
+                    }}
+                />
             ) : (
                 <button type='button' className={BUTTON} onClick={() => setLinking(true)}>
                     {t('eidLink')}

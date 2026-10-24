@@ -187,7 +187,7 @@ export function Members({
                                         (member.online ? 'bg-[var(--green)]' : 'bg-[var(--surface-3)]')
                                     }
                                 />
-                                <div className='flex min-w-0 flex-1 flex-col'>
+                                <div className='flex min-w-0 flex-1 basis-48 flex-col'>
                                     <span className='truncate text-sm font-semibold'>
                                         {member.name}
                                         {member.userId === me && (
@@ -322,7 +322,7 @@ export function Members({
                     <ul className='flex flex-col divide-y divide-[var(--border)]'>
                         {invitations.map(invitation => (
                             <li key={invitation.id} className='flex flex-wrap items-center gap-3 py-3'>
-                                <div className='flex min-w-0 flex-1 flex-col'>
+                                <div className='flex min-w-0 flex-1 basis-48 flex-col'>
                                     <span className='truncate text-sm font-semibold'>
                                         {invitation.email}{' '}
                                         <span className='font-normal text-[var(--text-3)]'>

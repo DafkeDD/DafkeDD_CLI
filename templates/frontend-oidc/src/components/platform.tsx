@@ -107,7 +107,7 @@ export function Platform({ me }: { me: string }) {
                 <ul className='flex flex-col divide-y divide-[var(--border)]'>
                     {tenants.map(tenant => (
                         <li key={tenant.id} className='flex flex-wrap items-center gap-3 py-3'>
-                            <div className='flex min-w-0 flex-1 flex-col'>
+                            <div className='flex min-w-0 flex-1 basis-48 flex-col'>
                                 <span className='truncate text-sm font-semibold'>{tenant.name}</span>
                                 <span className='truncate text-xs text-[var(--text-3)]'>
                                     {tenant.slug} · {t('memberCount', { count: tenant.members })}
@@ -183,7 +183,7 @@ export function Platform({ me }: { me: string }) {
                 <ul className='flex flex-col divide-y divide-[var(--border)]'>
                     {admins.map(admin => (
                         <li key={admin.userId} className='flex flex-wrap items-center gap-3 py-3'>
-                            <div className='flex min-w-0 flex-1 flex-col'>
+                            <div className='flex min-w-0 flex-1 basis-48 flex-col'>
                                 <span className='truncate text-sm font-semibold'>
                                     {admin.name}
                                     {admin.userId === me && (

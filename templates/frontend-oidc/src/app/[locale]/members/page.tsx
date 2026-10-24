@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { getTranslations, setRequestLocale } from 'next-intl/server'
 import { Notice, WIDE_CARD } from '@/components/account-ui'
+import { PageHead } from '@/components/pasport/page-head'
 import { AppPage } from '@/components/shell/app-shell'
 import { AppRoles } from '@/components/app-roles'
 import { Members } from '@/components/members'
@@ -32,8 +33,10 @@ async function Content() {
             </section>
         )
     }
+    const pg = await getTranslations('Pages')
     return (
         <div className='flex flex-col gap-6'>
+            <PageHead title={pg('membersTitle')} text={pg('membersText', { tenant: session.tenant.name })} />
             <Members tenantName={session.tenant.name} me={session.sub} superadmin={session.superadmin} />
             {/* The roles per app: only shown when an app of this server has roles */}
             <AppRoles />

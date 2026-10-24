@@ -2,38 +2,47 @@
 
 import { useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
-import { AUTH, AUTH_TEXT, AUTH_TITLE, BUTTON } from '@/components/account-ui'
-import { Icon } from '@/components/ui'
+import { AuthHeading, AuthLayout } from '@/components/pasport/auth-layout'
+import { Btn, ErrorNote, Icon } from '@/components/pasport/ui'
 
 /**
- * /login without a login request: starts one at once (to the login screen of the login server), so every app shows
- * the same login. With ?error= it stays here and says why the last login failed, with a button to try again.
+ * /login (and /admin/login) without a login request: starts one at once (to the login screen of the login server), so
+ * every app shows the same login, and comes back to `returnTo` (the page that needed the login). With ?error= it stays
+ * here and says why the last login failed, with a button to try again. The superadmin variant leaves a short-lived
+ * cookie, so the login screen shows the dark superadmin style, and comes back to the platform (/admin).
  */
-export function StartLogin({ error, returnTo }: { error?: string; returnTo?: string }) {
+export function StartLogin({ error, returnTo, admin = false }: { error?: string; returnTo?: string; admin?: boolean }) {
     const t = useTranslations('Oidc')
     // A GET form, not a link: /api/auth/login is a route handler that needs a full page load
     const form = useRef<HTMLFormElement>(null)
     useEffect(() => {
+        document.cookie = `pp-login-ui=${admin ? 'admin' : 'customer'}; path=/; max-age=600; samesite=lax`
         if (!error) form.current?.requestSubmit()
-    }, [error])
+    }, [admin, error])
+    const back = returnTo ?? (admin ? '/admin' : undefined)
     return (
-        <section className={AUTH}>
-            <h1 className={AUTH_TITLE}>{t('loginTitle')}</h1>
-            {error ? (
-                <div role='alert' className='text-sm text-[var(--red)]'>
-                    {error === 'offline' ? t('offline') : t('failed', { error })}
-                </div>
-            ) : (
-                <p className={AUTH_TEXT + ' flex items-center gap-2'}>
-                    <Icon name='loader' size={16} className='animate-spin' /> {t('busy')}
-                </p>
-            )}
-            <form ref={form} action='/api/auth/login' method='get' className='flex flex-col'>
-                {returnTo && <input type='hidden' name='returnTo' value={returnTo} />}
-                <button type='submit' className={BUTTON}>
-                    {error ? t('startAgain') : t('signIn')}
-                </button>
-            </form>
-        </section>
+        <AuthLayout variant={admin ? 'admin' : 'customer'}>
+            <AuthHeading title={t('loginTitle')} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {error ? (
+                    <ErrorNote>{error === 'offline' ? t('offline') : t('failed', { error })}</ErrorNote>
+                ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-3)' }}>
+                        <Icon name='loader' className='spin' /> {t('busy')}
+                    </div>
+                )}
+                <form
+                    ref={form}
+                    action='/api/auth/login'
+                    method='get'
+                    style={{ display: 'flex', flexDirection: 'column' }}
+                >
+                    {back && <input type='hidden' name='returnTo' value={back} />}
+                    <Btn type='submit' size='lg' className='btn-block' icon={error ? 'refresh' : 'arrowRight'}>
+                        {error ? t('startAgain') : t('signIn')}
+                    </Btn>
+                </form>
+            </div>
+        </AuthLayout>
     )
 }

@@ -6,8 +6,11 @@ The design every frontend made by or with this CLI follows, always. The source o
 system wins: update both copies.
 
 Pasport is the look of the login server and of every app linked to it: one login screen, one shell (sidebar, topbar,
-content), one set of components. Only the content of a page changes from app to app. Build every screen with the Dafke
-UI components (`@dafke/ui`, here `window.DafkeUI`) and the tokens below; never restyle them per app.
+content), one set of components. Only the content of a page changes from app to app; never restyle them per app.
+
+**In this project the design is built in `frontend/src/styles/pasport.css` (the tokens and every class) and
+`frontend/src/components/pasport/` (the components), with the shell in `frontend/src/components/shell/`. That is the
+design to follow: use those, and build anything new from those classes and tokens — on desktop and on the phone.**
 
 ## Content fundamentals
 
@@ -78,30 +81,48 @@ never has a login or registration form of its own.
   `surface`.
 - On narrow screens the aside disappears and the card fills the screen.
 
-### The shell (`PortalShell`)
+### The shell
 
-Every app, the login server's own portal included, uses the same shell:
+Every app, the login server's own portal included, uses the same shell (`frontend/src/components/shell/`):
 
-- `AppShell` with a `Sidebar`: `SidebarBrand` (the shield mark, the product name, a subtitle such as "Klantenportaal" or
-  the app's name), `SidebarSection` labels, `SidebarItem`s with an icon and an optional count badge, `SidebarFooter` for
-  the profile.
-- A `Topbar` with `TopbarSearch` (⌘K), notifications, `ThemeToggle` and the user's `Avatar` with a menu (profile,
-  security, log out).
-- `Content` with a `PageHeader` (title, description, one primary action), then the page.
-- Only the sidebar items and the content belong to the app. Account pages (profile, security, members, licences) live on
+- The **icon rail** on the left (`.sidebar`): the shield mark with the product name and a subtitle ("Klantenportaal",
+  the app's name, or "Superadmin" in the dark variant of the platform), the pages as `rail-item`s with an icon, section
+  labels per organisation. Collapsed to icons by default, expanded by the button in the topbar (remembered).
+- The **topbar** (`.topbar`): the menu button, the search for a page (⌘K), the notifications bell (`NotificationBell`, a
+  red count of unread ones, a popover with "mark all as read"), the theme button and the user's name, the organisation
+  and the `Avatar` (with the online dot) opening the menu: profile, security, language, log out. Something new to tell
+  users is a kind in `backend/src/notifications/notifications.store.ts` with its texts and icon in the bell, never an
+  alert of its own.
+- The **content** (`.content`): a `PageHead` (title, description, one primary action), then the page.
+- **On the phone** (≤ 860px) the rail is a drawer behind the menu button with a backdrop, the topbar keeps the menu
+  button, the bell and the user, and the content gets smaller padding; forms and grids go to one column.
+- Only the rail items and the content belong to the app. Account pages (profile, security, members, licences) live on
   the login server; an app links there.
+
+### The login screens
+
+The login, registration, password, email and invitation screens use `AuthLayout`: the teal panel with the eID card on
+the left (dark for the superadmin login at `/admin/login`), the form on the right in `auth-card`, the theme and the
+language buttons at the bottom right. On the phone only the form.
 
 ## Iconography
 
-- The Dafke UI icon set (`Icon`, `ICON_NAMES`): one stroke glyph per name, 20px in the sidebar, 16–18px inline,
-  inheriting `currentColor`.
+- The icon set of the design (`Icon` and `ICONS` in `frontend/src/components/pasport/ui.tsx`): one stroke glyph per
+  name, 20px in the rail, 16–18px inline, inheriting `currentColor`. A missing icon is added there in the same style.
 - The brand mark is the `shield` icon on an `accent` tile with `r-md` corners (40px, 34px small). There is no logo file:
   the name "Pasport" is set in `h3` weight 700 beside the mark.
 - Never mix in another icon library or emoji.
 
 ## Using it in code
 
-- In a Next.js app: `npx dafke-ui init`, then `npx dafke-ui add <component>` (or `add --all`), and import
-  `@dafke/ui/styles` once in the root layout. DafkeDD_CLI does this for the login server and for every linked app.
-- Here: the components are `window.DafkeUI.<Name>`, the stylesheet is `components/bundle.css`, the props are in
-  `components/index.d.ts`.
+- In this project: `frontend/src/styles/pasport.css` (imported once by the root layout, after the DafkeDD UI styles) and
+  the components of `frontend/src/components/pasport/`. DafkeDD_CLI generates both for the login server and for every
+  linked app; `npx --allow-git=all github:DafkeDD/DafkeDD_CLI update` keeps them in step (the styles, the components,
+  the shell, the protected routes and their texts; a file you changed gets the new version next to it as
+  `<file>.dafkedd-new`).
+- `npm run check:design` in `./frontend` (also in the CI) checks the rules a machine can check: every page in `AppPage`,
+  or in the login screen (`AuthLayout`) when it is in `PUBLIC_PATHS`; no other component library, icon set or CSS
+  framework; no colour written in a page or component (only the tokens). What it cannot see (spacing, the phone, both
+  themes) the reviewer and qa check on screenshots.
+- The DafkeDD UI components (`@/components/ui`) are installed too (the theme provider, charts); on screen the classes
+  and components of Pasport come first.

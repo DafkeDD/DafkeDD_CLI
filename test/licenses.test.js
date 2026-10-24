@@ -170,7 +170,7 @@ test('the frontend has /licenses, the return page and the admin of products and 
         'src/components/billing-admin.tsx'
     ])
         assert.ok(frontend[rel], rel)
-    assert.match(frontend['src/app/[locale]/admin/page.tsx'], /<BillingAdmin \/>/)
+    assert.match(frontend['src/app/[locale]/admin/catalog/page.tsx'], /<BillingAdmin \/>/)
     // The own licences, and asking a demo of one product
     assert.match(
         frontend['src/app/api/backend/[...path]/route.ts'],

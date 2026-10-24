@@ -16,7 +16,8 @@ import {
     readManifest,
     sha
 } from '../src/manifest.js'
-import { NEW_SUFFIX, planUpdate, update } from '../src/update.js'
+import { addMissing, DESIGN_MESSAGES, NEW_SUFFIX, planUpdate, update } from '../src/update.js'
+import { DESIGN_FILES } from '../src/frontends/oidc.js'
 
 const project = {
     ...describeProject({
@@ -223,4 +224,68 @@ test('the name of a project comes from CLAUDE.md or Terraform, not only from its
     })
     assert.equal(inferProject(dir).link.product, 'planner')
     assert.equal(inferProject(dir).name, 'my-planner')
+})
+
+test('update keeps the Pasport design of the frontend in step: styles, components, shell, protected routes', async t => {
+    const files = managedFiles(project)
+    for (const rel of DESIGN_FILES) assert.ok(files[`frontend/${rel}`], rel)
+    for (const rel of ['frontend/src/proxy.ts', 'frontend/src/styles/pasport.css', 'frontend/scripts/check-design.mjs'])
+        assert.ok(files[rel], rel)
+    // The pages and APP_NAV are yours: never managed
+    for (const rel of ['frontend/src/app/[locale]/page.tsx', 'frontend/src/lib/nav.ts', 'frontend/src/lib/brand.ts'])
+        assert.ok(!files[rel], rel)
+    // Only the login server and linked apps have the design
+    const api = { ...project, kind: 'api', link: null }
+    assert.ok(!Object.keys(managedFiles(api)).some(rel => rel.startsWith('frontend/src/')))
+
+    // An older project: the shell it has is yours (no manifest entry), the new one comes next to it; the missing
+    // design files and texts are added, your texts stay
+    const dir = await tempDir(t)
+    await writeAll(dir, files)
+    await fs.writeFile(path.join(dir, 'frontend', 'package.json'), '{}')
+    await fs.writeFile(path.join(dir, 'frontend/src/components/shell/shell-view.tsx'), 'my old shell')
+    await fs.rm(path.join(dir, 'frontend/src/components/pasport/notifications.tsx'))
+    const manifest = await buildManifest({ projectDir: dir, project, version: '0.46.0' })
+    delete manifest.files['frontend/src/components/shell/shell-view.tsx']
+    delete manifest.files['frontend/src/components/pasport/notifications.tsx']
+    await fs.writeFile(path.join(dir, MANIFEST), JSON.stringify(manifest))
+    await fs.mkdir(path.join(dir, 'frontend/messages'), { recursive: true })
+    const old = { Shell: { logout: 'Bye', mine: 'Mine' }, Nav: { home: 'Home' } }
+    for (const locale of ['en', 'nl', 'fr', 'de'])
+        await fs.writeFile(path.join(dir, `frontend/messages/${locale}.json`), JSON.stringify(old))
+
+    const lines = []
+    const plan = await update({ projectDir: dir, version: '0.47.1', log: line => lines.push(line) })
+    const action = rel => plan.find(entry => entry.rel === rel).action
+    assert.equal(action('frontend/src/components/shell/shell-view.tsx'), 'changed')
+    assert.equal(action('frontend/src/components/pasport/notifications.tsx'), 'new')
+    assert.equal(
+        await fs.readFile(path.join(dir, 'frontend/src/components/shell/shell-view.tsx'), 'utf8'),
+        'my old shell'
+    )
+    assert.equal(
+        await fs.readFile(path.join(dir, 'frontend/src/components/shell/shell-view.tsx' + NEW_SUFFIX), 'utf8'),
+        files['frontend/src/components/shell/shell-view.tsx']
+    )
+    const nl = JSON.parse(await fs.readFile(path.join(dir, 'frontend/messages/nl.json'), 'utf8'))
+    assert.equal(nl.Shell.logout, 'Bye')
+    assert.equal(nl.Shell.mine, 'Mine')
+    assert.equal(nl.Shell.notifications, DESIGN_MESSAGES.Shell.nl.notifications)
+    assert.deepEqual(nl.Notifications, DESIGN_MESSAGES.Notifications.nl)
+    assert.deepEqual(nl.Nav, { home: 'Home' })
+    assert.ok(lines.some(line => /messages\/nl\.json.*teksten van het design/.test(line)))
+    assert.ok(lines.some(line => /check:design/.test(line)))
+
+    // Again: only your shell stays different, the texts are complete
+    const again = await update({ projectDir: dir, version: '0.47.1', log: silent })
+    assert.deepEqual(
+        again.filter(entry => entry.action !== 'same').map(entry => entry.rel),
+        ['frontend/src/components/shell/shell-view.tsx']
+    )
+})
+
+test('addMissing adds missing texts, also nested ones, and never changes one that is there', () => {
+    const into = { a: 'mine', b: { c: 'mine' } }
+    assert.deepEqual(addMissing(into, { a: 'new', b: { c: 'new', d: 'new' }, e: { f: 'new' } }), ['b.d', 'e'])
+    assert.deepEqual(into, { a: 'mine', b: { c: 'mine', d: 'new' }, e: { f: 'new' } })
 })

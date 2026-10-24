@@ -379,11 +379,24 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
 - **Invitations with apps**: a beheerder who invites someone ticks the apps, the roles in each app and "Give a licence";
   the email names the apps, accepting gives the roles and a free seat, and the invitation page offers "Open <app>".
 - **One design everywhere (Pasport)**: the frontend of the login server and every linked frontend get the same login
-  screen (the teal panel with the eID card, "Log in to <app>", eID and passkey first, then email and password) and the
-  same shell: a sidebar with the app's own pages (`src/lib/nav.ts`), "My account", the organisation (its admins) and the
-  platform (superadmins), and a topbar with language, light or dark and the user menu. A linked app has no login or
-  registration form: `/login` goes straight to the login screen of the server, where users register. Pages use
-  `<AppPage>` or `<AuthPage>` (`src/components/shell`); see "Design (Pasport)" in `docs/frontend.md`.
+  screens and the same shell, on the desktop and on the phone, built in `src/styles/pasport.css` (the tokens and every
+  class of the design) and `src/components/pasport` (`Btn`, `Field`, `Input`, `Badge`, `Avatar`, `Modal`, `PageHead`,
+  `AuthLayout`, toasts, ...):
+    - the login screen: the teal panel with the eID card (dark for superadmins at `/admin/login`), the tabs eID and
+      email, the steps of the eID, the six boxes of the code, the language and theme at the bottom right;
+    - the shell: an icon rail (collapsible; a drawer on a phone) with the app's own pages (`src/lib/nav.ts`), the
+      organisation (its admins) and the platform (superadmins); a topbar with the search for a page (⌘K), light or dark
+      and the user menu (profile, security, language, log out); the superadmin panel (`/admin`, `/admin/catalog`,
+      `/admin/apps`, `/admin/audit`) in the same shell with the dark mark;
+    - every page starts with a `PageHead`.
+
+    A linked app has no login or registration form: `/login` goes straight to the login screen of the server, where
+    users register. Pages use `<AppPage>` (`src/components/shell`); see "Design (Pasport)" in `docs/frontend.md`. The
+    agents of Claude Code (`frontend`, `qa`, `reviewer`) are told that this is the design to follow, at 1440 and 390
+    pixels wide.
+
+- **Protected by default**: every page needs a login. `src/proxy.ts` sends a browser without a session to `/login` and
+  back to the page afterwards; only `PUBLIC_PATHS` (login, registration, password, email and invitation pages) are open.
 
 The TypeScript files of this feature live as real files in `templates/backend-oidc` and `templates/frontend-oidc` (see
 Development).
@@ -688,6 +701,33 @@ git switch developer
 
 ## Changelog
 
+- **0.47.1**: the Pasport design stays the design of every project.
+    - `update` also keeps the Pasport design of the frontend in step (login server and linked apps): `pasport.css`, the
+      components of `src/components/pasport`, the shell, the layout, the protected routes (`src/proxy.ts`) and the proxy
+      to the API; a file you changed gets the new version next to it (`<file>.dafkedd-new`). Missing texts of the design
+      are added to `messages/*.json`, yours stay.
+    - `npm run check:design` in every OIDC frontend, also in the CI (`frontend/scripts/check-design.mjs`): every page in
+      `AppPage`, or in the login screen when it is public; no other component library, icon set or CSS framework; no
+      colours written in a page. The agents run it, the reviewer checks that it is not weakened.
+    - No react-icons in an OIDC frontend any more: the status card on the home page uses the icons of the design.
+- **0.47.0**: the frontend in the real Pasport design, like the reference project.
+    - The shell: icon rail (collapsible, a drawer on the phone), topbar with the search for a page, theme and the user
+      menu (profile, security, language, log out); the superadmin panel split into `/admin`, `/admin/catalog`,
+      `/admin/apps` and `/admin/audit`.
+    - The login screens: login with tabs for eID and email, the eID steps, two-step verification with six boxes,
+      registration in steps, invitations, password and email screens; `/admin/login` in the dark superadmin style.
+    - `src/styles/pasport.css` and `src/components/pasport` in every OIDC frontend (also linked apps); page headers
+      (`PageHead`) on every page; the profile and security pages in the cards of the design.
+    - Every page protected by default (`src/proxy.ts`, `PUBLIC_PATHS`), back to the page after the login.
+    - The login screen says "Log in to <app>" only for another app (`clientId` in `GET /oidc/interaction/:id`).
+    - The agents, `CLAUDE.md` and `.claude/design/pasport.md` of a project: this is the design to follow, on the phone
+      too.
+    - On the phone: the closed drawer casts no shadow, rows with buttons (members, licences, organisations) wrap under
+      the name, the profile header wraps its badge.
+    - The notifications bell in the topbar, like the reference: `src/notifications` in the backend
+      (`GET /me/notifications`, read one or all; superadmins hear of new organisations, admins of invitations and new
+      members; other code calls `NotificationsService`), polled every 30 seconds by the frontend, also in linked apps.
+    - The backend pins `multer` to `^2.5.0` (npm `overrides`) for a denial-of-service advisory in older versions.
 - **0.46.3**: `protect-branches.mjs` no longer reports private vulnerability reporting as failed for a private
   repository (GitHub only has it for public ones).
 - **0.46.2**: `doctor` says "niet beschermd" for a branch without protection, and for a private repository that GitHub

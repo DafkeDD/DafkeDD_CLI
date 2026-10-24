@@ -5,10 +5,10 @@ import { freshSession } from '@/lib/refresh'
 
 /**
  * Only these parts of the API can be called through this route: members, the platform, the own two-step verification,
- * the eID, the own sessions, passkeys and allowed applications, licences and audit log, and the heartbeat (who is online).
+ * the eID, the own sessions, passkeys and allowed applications, licences and audit log, the heartbeat (who is online) and the notifications (the bell).
  */
 const ALLOWED =
-    /^(tenants\/current\/|admin\/|me\/mfa|me\/eid|me\/sessions|me\/passkeys|me\/licenses(?:\/[a-z0-9-]+\/trial)?$|me\/audit$|me\/heartbeat$)[A-Za-z0-9/_-]*$/
+    /^(tenants\/current\/|admin\/|me\/mfa|me\/eid|me\/sessions|me\/passkeys|me\/licenses(?:\/[a-z0-9-]+\/trial)?$|me\/audit$|me\/heartbeat$|me\/notifications(?:\/read-all|\/[0-9a-f-]{36}\/read)?$)[A-Za-z0-9/_-]*$/
 
 /**
  * The IP address chain of the browser for the API (X-Forwarded-For): what a proxy in front of this app sent, and the

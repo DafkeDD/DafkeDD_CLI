@@ -12,6 +12,12 @@ import * as oidc from './oidc.js'
 import * as appBackend from './app.js'
 import { backendReadme } from './docs.js'
 
+/**
+ * npm overrides of the backend: a dependency of a dependency (of NestJS) at a version without a known vulnerability,
+ * until NestJS itself asks for it. The CI fails on `npm audit --audit-level=high`; remove an entry once NestJS has it.
+ * - multer: GHSA-q7qp-rjg7-q26m (denial of service, fixed in 2.5.0), used by @nestjs/platform-express.
+ */
+export const SECURITY_OVERRIDES = { multer: '^2.5.0' }
 export const DIR = 'backend'
 export const LOCALES = ['en', 'nl', 'fr', 'de']
 export const DEFAULT_LOCALE = 'en'
@@ -813,10 +819,10 @@ describe('API (e2e)', () => {\n`
             replaceOnce(
                 result['src/app.module.ts'],
                 "import { HealthController } from './health/health.controller.js';\n",
-                "import { HealthController } from './health/health.controller.js';\nimport { OidcModule } from './oidc/oidc.module.js';\nimport { TenantsModule } from './tenants/tenants.module.js';\nimport { BillingModule } from './billing/billing.module.js';\n"
+                "import { HealthController } from './health/health.controller.js';\nimport { OidcModule } from './oidc/oidc.module.js';\nimport { TenantsModule } from './tenants/tenants.module.js';\nimport { BillingModule } from './billing/billing.module.js';\nimport { NotificationsModule } from './notifications/notifications.module.js';\n"
             ),
             '    DatabaseModule,\n',
-            '    DatabaseModule,\n    OidcModule,\n    TenantsModule,\n    BillingModule,\n'
+            '    DatabaseModule,\n    OidcModule,\n    TenantsModule,\n    BillingModule,\n    NotificationsModule,\n'
         )
         result['src/setup.ts'] = replaceOnce(
             replaceOnce(
@@ -831,7 +837,7 @@ describe('API (e2e)', () => {\n`
         let e2e = replaceOnce(
             result['test/app.e2e-spec.ts'],
             "import { DatabaseService } from '../src/database/database.service.js';\n",
-            "import { randomBytes } from 'node:crypto';\nimport { AUDIT_STORE } from '../src/audit/audit.store.js';\nimport { MemoryAuditStore } from '../src/audit/memory-audit.store.js';\nimport { BILLING_STORE } from '../src/billing/store/billing.store.js';\nimport { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js';\nimport { DatabaseService } from '../src/database/database.service.js';\nimport { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js';\nimport { OIDC_STORE } from '../src/oidc/store/oidc.store.js';\n"
+            "import { randomBytes } from 'node:crypto';\nimport { AUDIT_STORE } from '../src/audit/audit.store.js';\nimport { MemoryAuditStore } from '../src/audit/memory-audit.store.js';\nimport { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js';\nimport { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js';\nimport { BILLING_STORE } from '../src/billing/store/billing.store.js';\nimport { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js';\nimport { DatabaseService } from '../src/database/database.service.js';\nimport { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js';\nimport { OIDC_STORE } from '../src/oidc/store/oidc.store.js';\n"
         )
         e2e = replaceOnce(
             e2e,
@@ -841,7 +847,7 @@ describe('API (e2e)', () => {\n`
         result['test/app.e2e-spec.ts'] = replaceOnce(
             e2e,
             '      .useValue(database)\n',
-            '      .useValue(database)\n      .overrideProvider(OIDC_STORE)\n      .useValue(new MemoryOidcStore())\n      .overrideProvider(BILLING_STORE)\n      .useValue(new MemoryBillingStore())\n      .overrideProvider(AUDIT_STORE)\n      .useValue(new MemoryAuditStore())\n'
+            '      .useValue(database)\n      .overrideProvider(OIDC_STORE)\n      .useValue(new MemoryOidcStore())\n      .overrideProvider(BILLING_STORE)\n      .useValue(new MemoryBillingStore())\n      .overrideProvider(AUDIT_STORE)\n      .useValue(new MemoryAuditStore())\n      .overrideProvider(NOTIFICATIONS_STORE)\n      .useValue(new MemoryNotificationsStore())\n'
         )
     }
     if (app) Object.assign(result, appFiles(result, database, app, appBackend.options(appOptions)))
@@ -1229,10 +1235,20 @@ export const nestjs = {
             {
                 title: 'Prettier installeren (backend)',
                 weight: 2,
-                run: () =>
-                    exec('npm', ['install', '--save-dev', 'prettier@latest', 'prettier-plugin-tailwindcss@latest'], {
-                        cwd: root
-                    })
+                run: async () => {
+                    // Fixed versions of dependencies of dependencies with a known vulnerability (npm audit in the CI)
+                    const pkgPath = path.join(root, 'package.json')
+                    const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'))
+                    pkg.overrides = { ...pkg.overrides, ...SECURITY_OVERRIDES }
+                    await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+                    await exec(
+                        'npm',
+                        ['install', '--save-dev', 'prettier@latest', 'prettier-plugin-tailwindcss@latest'],
+                        {
+                            cwd: root
+                        }
+                    )
+                }
             },
             {
                 title: 'i18n en API configureren',

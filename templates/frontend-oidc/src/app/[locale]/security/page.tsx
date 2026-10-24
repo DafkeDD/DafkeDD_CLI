@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
-import { setRequestLocale } from 'next-intl/server'
+import { getTranslations, setRequestLocale } from 'next-intl/server'
+import { PageHead } from '@/components/pasport/page-head'
 import { AppPage } from '@/components/shell/app-shell'
 import { AuditLog } from '@/components/audit'
 import { ConsentsSecurity } from '@/components/consents'
@@ -25,14 +26,20 @@ export default async function SecurityPage({ params }: { params: Promise<{ local
 
 async function Content() {
     if (!(await getSession())) redirect('/api/auth/login?returnTo=/security')
+    const pg = await getTranslations('Pages')
     return (
-        <div className='flex w-full max-w-2xl flex-col gap-6'>
-            <Security />
-            <PasskeysSecurity />
-            <EidSecurity />
-            <SessionsSecurity />
-            <ConsentsSecurity />
-            <AuditLog scope='me' />
+        <div className='fade-in' style={{ maxWidth: 980, margin: '0 auto' }}>
+            <PageHead title={pg('securityTitle')} text={pg('securityText')} />
+            <div className='security-grid'>
+                <Security />
+                <PasskeysSecurity />
+                <EidSecurity />
+                <SessionsSecurity />
+                <ConsentsSecurity />
+            </div>
+            <div style={{ marginTop: 18 }}>
+                <AuditLog scope='me' />
+            </div>
         </div>
     )
 }

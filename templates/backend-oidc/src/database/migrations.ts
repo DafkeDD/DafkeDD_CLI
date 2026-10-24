@@ -563,5 +563,26 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON app_role_assignments TO ${role};
 -- [{ "clientId": "planner", "roles": ["editor"] or null (the default roles), "seat": true }]
 ALTER TABLE tenant_invitations ADD COLUMN apps jsonb NOT NULL DEFAULT '[]';
 `
+    },
+    {
+        id: 14,
+        name: 'notifications',
+        sql: `
+-- Notifications of an account (the bell): in one organisation, or tenant_id NULL: the platform, for superadmins. The
+-- text is made by the frontend from kind and params; link is the page it opens. Kept 90 days.
+CREATE TABLE notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
+  tenant_id uuid REFERENCES tenants (id) ON DELETE CASCADE,
+  kind text NOT NULL CHECK (kind ~ '^[a-z]+\\.[a-z_]+$'),
+  params jsonb NOT NULL DEFAULT '{}',
+  link text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  read_at timestamptz
+);
+CREATE INDEX notifications_user ON notifications (user_id, created_at DESC);
+CREATE INDEX notifications_created ON notifications (created_at);
+${isolate('notifications', 'tenant_id')}
+`
     }
 ]

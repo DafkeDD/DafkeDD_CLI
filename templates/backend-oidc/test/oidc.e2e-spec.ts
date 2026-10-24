@@ -8,6 +8,8 @@ import { BILLING_STORE } from '../src/billing/store/billing.store.js'
 import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
 import { AUDIT_STORE } from '../src/audit/audit.store.js'
 import { MemoryAuditStore } from '../src/audit/memory-audit.store.js'
+import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
+import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import { pkceChallenge, sha256 } from '../src/oidc/crypto.js'
 import { decodeUnverified, halfHash, verifyJwt, type JwsAlgorithm } from '../src/oidc/jose.js'
@@ -77,6 +79,8 @@ describe('OpenID Connect (e2e)', () => {
             .useValue(new MemoryBillingStore())
             .overrideProvider(AUDIT_STORE)
             .useValue(new MemoryAuditStore())
+            .overrideProvider(NOTIFICATIONS_STORE)
+            .useValue(new MemoryNotificationsStore())
             .compile()
         app = moduleRef.createNestApplication()
         configureApp(app)
@@ -687,6 +691,8 @@ describe('OpenID Connect (e2e)', () => {
             const response = await json(http().get('/oidc/interaction/' + id), cookie).expect(200)
             expect(response.body).toMatchObject({
                 step: 'login',
+                // The app that asks: the login screen of its own frontend says "Welcome back", of another app its name
+                clientId: 'frontend',
                 clientName: 'Frontend',
                 loginHint: 'alice@example.com'
             })
