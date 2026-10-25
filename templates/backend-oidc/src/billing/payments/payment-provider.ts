@@ -25,6 +25,8 @@ export interface NewPayment {
     redirectUrl: string
     webhookUrl: string | null
     metadata: Record<string, string>
+    /** A payment method of Mollie (creditcard, bancontact); left out: the customer chooses on the checkout. */
+    method?: string | null
 }
 
 export interface NewSubscription {

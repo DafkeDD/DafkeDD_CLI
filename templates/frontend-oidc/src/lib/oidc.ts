@@ -33,6 +33,16 @@ export const REDIRECT_URI = APP_URL + '/api/auth/callback'
 export const ACCOUNT_URL = (process.env.OIDC_ACCOUNT_URL ?? '').replace(/\/+$/, '')
 
 /**
+ * True when a request comes from a page of this app (the Origin header): the address of APP_URL, or the address the
+ * browser used for this request (127.0.0.1 instead of localhost, a proxy with another name). Another site's Origin is
+ * never one of them, so it cannot use the session cookie.
+ */
+export function fromThisApp(request: Request): boolean {
+    const origin = request.headers.get('origin')
+    return origin !== null && (origin === new URL(APP_URL).origin || origin === new URL(request.url).origin)
+}
+
+/**
  * The cookies are named after the client id of this app: browsers share cookies between all ports of a host, so on
  * localhost the frontend of the login server and a linked app would otherwise read (and throw away) each other's
  * session, which was sealed with another AUTH_SECRET.

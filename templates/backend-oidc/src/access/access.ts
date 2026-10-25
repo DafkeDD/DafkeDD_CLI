@@ -1,3 +1,4 @@
+import { presence } from './presence.js'
 import {
     applyDecorators,
     type CanActivate,
@@ -15,6 +16,7 @@ import type { Request } from 'express'
 import { setActor } from '../audit/audit.context.js'
 import { AppException } from '../common/app.exception.js'
 import { OAuthError } from '../oidc/oauth.error.js'
+import { OidcConfig } from '../oidc/oidc.config.js'
 import { OidcService } from '../oidc/oidc.service.js'
 import { OIDC_STORE, type OidcStore, type TenantRole } from '../oidc/store/oidc.store.js'
 
@@ -40,6 +42,7 @@ export interface AuthContext {
 }
 
 const LEVEL = 'access-level'
+const EID_OPTIONAL = 'eid-optional'
 
 /** "Last seen" of a member is written at most once a minute (who is online). */
 const TOUCH_MS = 60_000
@@ -57,7 +60,8 @@ export class AccessGuard implements CanActivate {
     constructor(
         private readonly oidc: OidcService,
         @Inject(OIDC_STORE) private readonly store: OidcStore,
-        private readonly reflector: Reflector
+        private readonly reflector: Reflector,
+        private readonly config: OidcConfig
     ) {}
 
     async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -77,6 +81,8 @@ export class AccessGuard implements CanActivate {
         const tenant = claims.tenant as { id?: unknown; name?: unknown } | undefined
         const user = typeof claims.sub === 'string' ? await this.store.findUserById(claims.sub) : null
         if (user?.status !== 'active') throw new AppException('errors.UNAUTHORIZED', HttpStatus.UNAUTHORIZED)
+        // Who is online (the support team gets new tickets only while online)
+        presence.touch(user.id)
         // verifyAccessToken checked that this session is still active (not logged out)
         const sessionId = typeof claims.sid === 'string' ? claims.sid : ''
         await this.touch('session:' + sessionId, () => this.store.touchSession(sessionId))
@@ -102,6 +108,7 @@ export class AccessGuard implements CanActivate {
         const role: TenantRole | null = user.isSuperadmin ? 'admin' : await this.store.findMemberRole(found.id, user.id)
         if (!role) throw forbidden
         if (needed === 'admin' && role !== 'admin') throw forbidden
+        await this.assertEid(context, user)
 
         await this.touch(found.id + ':' + user.id, () => this.store.touchMember(found.id, user.id))
         request.auth = {
@@ -115,6 +122,21 @@ export class AccessGuard implements CanActivate {
         // The audit log knows who does what in this request
         setActor(user.id, found.id)
         return true
+    }
+
+    /**
+     * OIDC_EID_REQUIRED: an account without a linked eID only reaches the routes marked @EidOptional() (to link it and
+     * to keep the page working); everything else answers 403 oidc.EID_REQUIRED. Superadmins never need one.
+     */
+    private async assertEid(context: ExecutionContext, user: { id: string; isSuperadmin: boolean }) {
+        if (user.isSuperadmin || !this.config.eidRequired) return
+        const optional = this.reflector.getAllAndOverride<boolean | undefined>(EID_OPTIONAL, [
+            context.getHandler(),
+            context.getClass()
+        ])
+        if (optional) return
+        if (!(await this.store.findIdentifier(user.id, 'eid')))
+            throw new AppException('oidc.EID_REQUIRED', HttpStatus.FORBIDDEN)
     }
 
     /** Whether the client of a token is one of our own applications; looked up at most once a minute per client. */
@@ -156,6 +178,13 @@ export const Access = (level: AccessLevel = 'user') =>
             description: `errors.FORBIDDEN: ${level === 'account' ? 'the account is blocked' : 'not ' + (level === 'user' ? 'a member' : level)}`
         })
     )
+
+/**
+ * A route (or controller) that an account without a linked eID may still use while OIDC_EID_REQUIRED is on: linking
+ * the eID itself and the minimum around it (profile, notifications, heartbeat, sessions). Every other route protected
+ * with @Access() answers 403 oidc.EID_REQUIRED to such an account.
+ */
+export const EidOptional = () => SetMetadata(EID_OPTIONAL, true)
 
 /** The caller of a route protected with @Access(). */
 export const Auth = createParamDecorator(

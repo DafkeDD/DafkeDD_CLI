@@ -24,12 +24,15 @@ import {
 import { I18n, I18nContext } from 'nestjs-i18n'
 import { Access, Auth, type AuthContext } from '../access/access.js'
 import { AppException } from '../common/app.exception.js'
-import { AccountService } from '../oidc/account.service.js'
 import { MfaService } from '../oidc/mfa.service.js'
-import { slugify } from '../oidc/oidc.config.js'
 import { OIDC_STORE, type OidcStore } from '../oidc/store/oidc.store.js'
 import { assertChanged } from './change-result.js'
-import { CreateTenantDto, SuperadminDto, TenantStatusDto } from './platform.dto.js'
+import { CreateTenantDto, SuperadminDto, UpdateTenantDto } from './platform.dto.js'
+import { TenantsService } from './tenants.service.js'
+
+const TENANT =
+    '{ id, slug, name, status, provisioning, createdAt, members, apps, plan, city, contact: { name, email } | null, ' +
+    'billing: { company, vat, billingAddress, billingEmail } }'
 
 /** The whole platform, for superadmins only: every tenant, and who is superadmin. */
 @ApiTags('platform (superadmin)')
@@ -38,55 +41,45 @@ import { CreateTenantDto, SuperadminDto, TenantStatusDto } from './platform.dto.
 export class PlatformController {
     constructor(
         @Inject(OIDC_STORE) private readonly store: OidcStore,
-        private readonly accounts: AccountService,
         private readonly mfa: MfaService,
-        private readonly audit: AuditService
+        private readonly audit: AuditService,
+        private readonly tenantsService: TenantsService
     ) {}
 
     @Get('tenants')
-    @ApiOperation({ summary: 'Every tenant with its status and number of members' })
-    @ApiOkResponse({ description: '[{ id, slug, name, status, createdAt, members }]' })
+    @ApiOperation({
+        summary:
+            'Every tenant: status, provisioning (nobody joined yet), members, apps (a valid subscription or grant), plan, city and contact'
+    })
+    @ApiOkResponse({ description: `[${TENANT}]` })
     tenants() {
-        return this.store.listTenants()
+        return this.tenantsService.list()
+    }
+
+    @Get('tenants/:id')
+    @ApiOperation({ summary: 'One tenant (the same item as in the list)' })
+    @ApiOkResponse({ description: TENANT })
+    @ApiNotFoundResponse({ description: 'oidc.TENANT_NOT_FOUND' })
+    tenant(@Param('id', new ParseUUIDPipe()) id: string) {
+        return this.tenantsService.get(id)
     }
 
     @Post('tenants')
-    @ApiOperation({ summary: 'Create a tenant; with adminEmail that person gets an invitation to become its admin' })
-    @ApiCreatedResponse({ description: '{ tenant, invited }' })
-    async createTenant(@Auth() auth: AuthContext, @Body() body: CreateTenantDto, @I18n() i18n: I18nContext) {
-        const tenant = await this.store.createTenant(body.name.trim(), slugify(body.name))
-        await this.audit.record('platform.tenant_created', {
-            tenantId: tenant.id,
-            target: { type: 'tenant', id: tenant.id },
-            details: { name: tenant.name }
-        })
-        let invited: string | null = null
-        if (body.adminEmail) {
-            const inviter = await this.store.findUserById(auth.userId)
-            invited = (
-                await this.accounts.invite(
-                    { userId: auth.userId, name: inviter?.name ?? '' },
-                    tenant,
-                    { email: body.adminEmail, role: 'admin' },
-                    i18n.lang
-                )
-            ).email
-        }
-        return { tenant, invited }
+    @ApiOperation({
+        summary:
+            'Create a tenant; with adminEmail that person gets an invitation to become its admin (your own email: you are its admin at once)'
+    })
+    @ApiCreatedResponse({ description: `{ tenant: ${TENANT}, invited: email | null, joined }` })
+    createTenant(@Auth() auth: AuthContext, @Body() body: CreateTenantDto, @I18n() i18n: I18nContext) {
+        return this.tenantsService.create(auth, body, i18n.lang)
     }
 
     @Patch('tenants/:id')
-    @ApiOperation({ summary: 'Suspend or reactivate a tenant' })
-    @ApiOkResponse({ description: '{ id, status }' })
+    @ApiOperation({ summary: 'Suspend or reactivate a tenant, rename it, change its plan or city' })
+    @ApiOkResponse({ description: TENANT })
     @ApiNotFoundResponse({ description: 'oidc.TENANT_NOT_FOUND' })
-    async setStatus(@Param('id', new ParseUUIDPipe()) id: string, @Body() body: TenantStatusDto) {
-        if (!(await this.store.setTenantStatus(id, body.status)))
-            throw new AppException('oidc.TENANT_NOT_FOUND', HttpStatus.NOT_FOUND)
-        await this.audit.record(
-            body.status === 'suspended' ? 'platform.tenant_suspended' : 'platform.tenant_activated',
-            { tenantId: id, target: { type: 'tenant', id } }
-        )
-        return { id, status: body.status }
+    updateTenant(@Param('id', new ParseUUIDPipe()) id: string, @Body() body: UpdateTenantDto) {
+        return this.tenantsService.update(id, body)
     }
 
     @Get('superadmins')

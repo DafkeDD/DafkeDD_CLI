@@ -79,6 +79,7 @@ export class MollieProvider implements PaymentProvider {
             sequenceType: payment.sequenceType,
             redirectUrl: payment.redirectUrl,
             ...(payment.webhookUrl ? { webhookUrl: payment.webhookUrl } : {}),
+            ...(payment.method ? { method: payment.method } : {}),
             metadata: payment.metadata
         })
         const checkoutUrl = created?._links?.checkout?.href

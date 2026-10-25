@@ -17,6 +17,7 @@ import { I18n, I18nContext } from 'nestjs-i18n'
 import {
     AcceptInvitationDto,
     EmailDto,
+    InvitationEidDto,
     RegisterDto,
     RegisterEidDto,
     ResetPasswordDto,
@@ -42,15 +43,21 @@ export class AccountController {
             'Create an account and a new organisation (the account becomes its admin). Sends a verification email. Always answers the same, also when the email address has an account (its owner gets an email instead).'
     })
     @ApiAcceptedResponse({ description: '{ status: "check-email" }' })
-    @ApiForbiddenResponse({ description: 'oidc.REGISTRATION_CLOSED (OIDC_REGISTRATION=closed or eid)' })
+    @ApiForbiddenResponse({
+        description:
+            'oidc.REGISTRATION_CLOSED (OIDC_REGISTRATION=closed or eid) or oidc.EID_REQUIRED (OIDC_EID_REQUIRED: only with the eID)'
+    })
     @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS' })
     register(@Body() body: RegisterDto, @Req() request: Request, @I18n() i18n: I18nContext) {
         return this.accounts.register(body, i18n.lang, ip(request))
     }
 
     @Get('registration')
-    @ApiOperation({ summary: 'Which ways of registering are open: with a password, with the Belgian eID' })
-    @ApiOkResponse({ description: '{ password, eid }' })
+    @ApiOperation({
+        summary:
+            'Which ways of registering are open: with a password, with the Belgian eID; eidRequired: every account must have its eID (OIDC_EID_REQUIRED)'
+    })
+    @ApiOkResponse({ description: '{ password, eid, eidRequired }' })
     registration() {
         return this.accounts.registrationOptions()
     }
@@ -59,7 +66,7 @@ export class AccountController {
     @HttpCode(HttpStatus.OK)
     @ApiOperation({
         summary:
-            'Start registering with the Belgian eID: a nonce for the eID bridge and an encrypted challenge to send back (valid 5 minutes)'
+            'Start registering with the Belgian eID (or reading the eID for an invitation): a nonce for the eID bridge and an encrypted challenge to send back (valid 5 minutes)'
     })
     @ApiOkResponse({ description: '{ challenge, nonce, expiresAt }' })
     @ApiNotFoundResponse({ description: 'oidc.EID_DISABLED (OIDC_EID=off)' })
@@ -86,9 +93,13 @@ export class AccountController {
 
     @Post('verify-email')
     @HttpCode(HttpStatus.OK)
-    @ApiOperation({ summary: 'Confirm an email address with the token of the link in the verification email' })
-    @ApiOkResponse({ description: '{ status: "verified", email }' })
+    @ApiOperation({
+        summary:
+            'Confirm an email address with the token of the link in the email: the first address (after registering) or a new one (changed on the profile: it changes now)'
+    })
+    @ApiOkResponse({ description: '{ status: "verified" | "email-changed", email }' })
     @ApiBadRequestResponse({ description: 'oidc.INVALID_LINK: invalid, expired or for another address' })
+    @ApiConflictResponse({ description: 'oidc.EMAIL_TAKEN: another account took the new address meanwhile' })
     verifyEmail(@Body() body: TokenDto) {
         return this.accounts.verifyEmail(body)
     }
@@ -126,21 +137,38 @@ export class AccountController {
     @Get('invitation')
     @ApiOperation({ summary: 'The details of an invitation, for the page that accepts it' })
     @ApiQuery({ name: 'token', description: 'The token from the link in the invitation email' })
-    @ApiOkResponse({ description: '{ email, tenantName, role, inviterName, accountExists }' })
+    @ApiOkResponse({ description: '{ email, tenantName, role, inviterName, accountExists, eid, eidRequired }' })
     @ApiBadRequestResponse({ description: 'oidc.INVALID_LINK' })
     invitation(@Query('token') token: string) {
         return this.accounts.invitation(token)
+    }
+
+    @Post('invitation/eid')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({
+        summary:
+            'Read the eID of the invitee (a new account): the challenge of POST eid/challenge and the token of the bridge. Answers the name on the card and the verified eID (encrypted, 15 minutes) for POST invitation/accept.'
+    })
+    @ApiOkResponse({ description: '{ name, firstName, lastName, eid }' })
+    @ApiBadRequestResponse({ description: 'oidc.INVALID_LINK or oidc.EID_EXPIRED' })
+    @ApiUnauthorizedResponse({ description: 'oidc.EID_INVALID: the token of the bridge is not valid' })
+    @ApiNotFoundResponse({ description: 'oidc.EID_DISABLED (OIDC_EID=off)' })
+    @ApiConflictResponse({ description: 'oidc.EID_ALREADY_LINKED: this eID belongs to an account already' })
+    @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS' })
+    invitationEid(@Body() body: InvitationEidDto, @Req() request: Request) {
+        return this.accounts.invitationEid(body, ip(request))
     }
 
     @Post('invitation/accept')
     @HttpCode(HttpStatus.OK)
     @ApiOperation({
         summary:
-            'Accept an invitation. With an account it joins the organisation; without one, name and password create it (verified).'
+            'Accept an invitation. With an account it joins the organisation; without one, name and password create it (verified), with the eID of POST invitation/eid linked (needed when OIDC_EID_REQUIRED is on).'
     })
     @ApiOkResponse({ description: '{ status: "accepted", tenantName, accountExists }' })
-    @ApiBadRequestResponse({ description: 'oidc.INVALID_LINK or oidc.ACCOUNT_DETAILS_NEEDED' })
-    @ApiConflictResponse({ description: 'errors.CONFLICT' })
+    @ApiBadRequestResponse({ description: 'oidc.INVALID_LINK, oidc.ACCOUNT_DETAILS_NEEDED or oidc.EID_EXPIRED' })
+    @ApiForbiddenResponse({ description: 'oidc.EID_REQUIRED: a new account needs the eID (OIDC_EID_REQUIRED)' })
+    @ApiConflictResponse({ description: 'errors.CONFLICT or oidc.EID_ALREADY_LINKED' })
     acceptInvitation(@Body() body: AcceptInvitationDto, @I18n() i18n: I18nContext) {
         return this.accounts.acceptInvitation(body, i18n.lang)
     }

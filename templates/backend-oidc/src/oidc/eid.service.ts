@@ -11,13 +11,27 @@ import { AppException } from '../common/app.exception.js'
 import { decrypt, deriveKey, encrypt } from './crypto.js'
 import { OIDC, OidcConfig } from './oidc.config.js'
 
+/** "85073100323" as "85.07.31-003.23" (other lengths as they are). */
+export function formatNationalNumber(digits: string): string {
+    const d = digits.replace(/\D/g, '')
+    if (d.length !== 11) return d
+    return `${d.slice(0, 2)}.${d.slice(2, 4)}.${d.slice(4, 6)}-${d.slice(6, 9)}.${d.slice(9)}`
+}
+
 /** What an eID challenge is for: registering a new account, or linking the eID to the logged in account. */
 export type EidPurpose = 'register' | 'link'
 
-/** The person of a verified eID login. Only the hash of the national register number leaves this service. */
+/**
+ * The person of a verified eID login. The national register number only leaves this service as a hash (to find the
+ * account) and encrypted (shown to the account itself on its profile).
+ */
 export interface EidPerson {
     /** HMAC-SHA256 of the national register number (user_identifiers.value_hash). */
     valueHash: string
+    /** The national register number (only digits), encrypted: see sealNationalNumber. */
+    rrnEncrypted: string
+    /** The address on the card, when the bridge gives it (the login token does not: null). */
+    address: string | null
     firstNames: string
     lastName: string
     /** "Jan Pieter Specimen". */
@@ -95,6 +109,36 @@ export class EidService {
         }
     }
 
+    private get proofKey(): Buffer {
+        return deriveKey(this.config.masterKey(), 'oidc eid proof v1')
+    }
+
+    /**
+     * A verified eID person, encrypted for the next step of the same flow (the browser keeps it, for example while the
+     * invitee of an invitation chooses a password). `bind` ties it to one flow (the invitation); it expires after
+     * OIDC.EID_PROOF_SECONDS.
+     */
+    sealPerson(person: EidPerson, bind: string, now = Date.now()): string {
+        const expiresAt = now + OIDC.EID_PROOF_SECONDS * 1000
+        return encrypt(JSON.stringify({ p: person, e: expiresAt }), this.proofKey, `eid:proof:${bind}`)
+    }
+
+    /** The person of sealPerson; oidc.EID_EXPIRED when it is invalid, expired or for another flow. */
+    openPerson(sealed: unknown, bind: string, now = Date.now()): EidPerson {
+        try {
+            if (typeof sealed !== 'string' || sealed.length > 4000) throw new Error('invalid')
+            const data = JSON.parse(decrypt(sealed, this.proofKey, `eid:proof:${bind}`)) as {
+                p?: EidPerson
+                e?: unknown
+            }
+            if (typeof data.e !== 'number' || data.e <= now || typeof data.p?.valueHash !== 'string')
+                throw new Error('expired')
+            return data.p
+        } catch {
+            throw new AppException('oidc.EID_EXPIRED', HttpStatus.BAD_REQUEST)
+        }
+    }
+
     /**
      * Checks the token of the bridge for this nonce. Throws oidc.EID_INVALID (401) when it is not valid, and
      * oidc.EID_UNAVAILABLE (503) when the OCSP service of the eID could not be reached (fail closed).
@@ -113,6 +157,8 @@ export class EidService {
             const lastName = identity.lastName.trim()
             return {
                 valueHash: this.hash(identity.nationalNumber),
+                rrnEncrypted: this.sealNationalNumber(identity.nationalNumber),
+                address: null,
                 firstNames,
                 lastName,
                 name: [firstNames, lastName].filter(Boolean).join(' ')
@@ -133,6 +179,25 @@ export class EidService {
         return createHmac('sha256', deriveKey(this.config.masterKey(), 'oidc identifier v1'))
             .update('eid:' + nationalNumber.replace(/\D/g, ''))
             .digest('base64url')
+    }
+
+    private get rrnKey(): Buffer {
+        return deriveKey(this.config.masterKey(), 'oidc national number v1')
+    }
+
+    /** The national register number (only digits), encrypted (AES-256-GCM, a key derived from OIDC_MASTER_KEY). */
+    sealNationalNumber(nationalNumber: string): string {
+        return encrypt(nationalNumber.replace(/\D/g, ''), this.rrnKey, 'rrn')
+    }
+
+    /** The national register number as "YY.MM.DD-XXX.XX"; null when it cannot be read. */
+    openNationalNumber(encrypted: string | null): string | null {
+        if (!encrypted) return null
+        try {
+            return formatNationalNumber(decrypt(encrypted, this.rrnKey, 'rrn'))
+        } catch {
+            return null
+        }
     }
 
     /** on: the Belgian root CAs (the default of the library). test: also the test PKI of the bridge with --mock. */

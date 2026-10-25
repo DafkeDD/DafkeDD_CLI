@@ -4,7 +4,7 @@ import { buildFiles } from '../src/backends/nestjs.js'
 import { endpoints } from '../src/backends/docs.js'
 import { frontendReadme } from '../src/frontends/docs.js'
 import { files as nextFiles, withApi } from '../src/frontends/nextjs.js'
-import { APPS_MESSAGES, AUDIT_MESSAGES, oidcFrontendFiles } from '../src/frontends/oidc.js'
+import { AUDIT_MESSAGES, oidcFrontendFiles } from '../src/frontends/oidc.js'
 
 const DB = {
     id: 'postgres',
@@ -78,14 +78,15 @@ test('every route is documented, also in the README', () => {
     ])
         assert.ok(documented.includes(route), route)
     assert.ok(backend['README.md'].includes('superadmins make apps on `/admin`'))
-    assert.ok(frontendReadme({ ui: 'none', api: { port: 4000, oidc: true } }).includes('the **apps** that may log in'))
+    assert.ok(frontendReadme({ ui: 'none', api: { port: 4000, oidc: true } }).includes('per app its **connection**'))
 })
 
-test('the frontend: the apps on /admin/apps, PUT through /api/backend, the texts in four languages', () => {
-    assert.match(frontend['src/app/[locale]/admin/apps/page.tsx'], /<Apps \/>/)
-    const apps = frontend['src/components/apps.tsx']
-    assert.match(apps, /useTranslations\('Apps'\)/)
-    assert.match(apps, /admin\/clients\/\$\{app\.clientId\}\/secret/)
+test('the frontend: the apps in the app catalogue (tab "Connection"), PUT through /api/backend, the texts', () => {
+    // /admin/apps (old links) goes to the catalogue: an app is connected there, or made as an internal app
+    assert.match(frontend['src/app/[locale]/admin/(panel)/apps/page.tsx'], /\/admin\/catalog/)
+    const apps = frontend['src/components/pasport/admin/connection.tsx']
+    assert.match(apps, /useT\('Catalog'\)/)
+    assert.match(apps, /admin\/clients\/\$\{encodeURIComponent\(client\.clientId\)\}\/secret/)
     const proxy = frontend['src/app/api/backend/[...path]/route.ts']
     assert.match(proxy, /forward as PUT/)
     const allowed = new RegExp(/const APPS = \/(.+)\/$/m.exec(proxy)[1])
@@ -95,13 +96,12 @@ test('the frontend: the apps on /admin/apps, PUT through /api/backend, the texts
         assert.ok(!allowed.test(path), path)
 
     for (const language of LANGUAGES) {
-        assert.deepEqual(Object.keys(APPS_MESSAGES[language]).sort(), Object.keys(APPS_MESSAGES.en).sort(), language)
         for (const action of ['created', 'updated', 'secret_rotated', 'disabled', 'enabled', 'deleted'])
             assert.ok(AUDIT_MESSAGES[language].actions['platform_client_' + action], `${language} ${action}`)
         assert.ok(AUDIT_MESSAGES[language].details.firstParty, language)
     }
     const all = withApi({ ...nextFiles }, { port: 4000, oidc: true }, { ui: false })
-    assert.deepEqual(JSON.parse(all['messages/fr.json']).Apps, APPS_MESSAGES.fr)
+    assert.ok(JSON.parse(all['messages/fr.json']).Portal.Catalog)
 })
 
 test('an app is a product: migration 11, the licence claim in its tokens, the product on /admin', () => {
@@ -123,11 +123,9 @@ test('an app is a product: migration 11, the licence claim in its tokens, the pr
         const oidc = JSON.parse(backend[`src/i18n/${locale}/oidc.json`])
         assert.match(oidc.CLIENT_UNKNOWN_PRODUCT, /\{product\}/, locale)
         assert.match(oidc.CLIENT_PRODUCT_TAKEN, /\{app\}/, locale)
-        for (const key of ['product', 'productNone', 'productHint', 'sells'])
-            assert.ok(APPS_MESSAGES[locale][key], `${locale} ${key}`)
     }
-    assert.match(frontend['src/components/apps.tsx'], /backend\('admin\/products'\)/)
-    assert.match(frontend['src/components/apps.tsx'], /<select name='product'/)
+    // A catalogue app sells its product (its code); an internal app sells none
+    assert.match(frontend['src/components/pasport/admin/connection.tsx'], /\{ product: clientId \}/)
     // Documented: the field, the errors, the claim
     const create = endpoints({ database: DB, oidc: true }).find(e => e.method === 'POST' && e.path === '/admin/clients')
     assert.ok(create.body.fields.some(([name]) => name === 'product'))
@@ -138,10 +136,9 @@ test('an app is a product: migration 11, the licence claim in its tokens, the pr
     assert.ok(backend['test/clients.e2e-spec.ts'].includes('its tokens carry the licence of the user'))
 })
 
-test('roles per app: migration 12, the roles claim, /members for the admins, roles:push in the app', async () => {
+test('roles per app: migration 12, the roles claim, /users for the admins, roles:push in the app', async () => {
     const { buildFiles: build } = await import('../src/backends/nestjs.js')
     const { DEFAULT_ROLES } = await import('../src/backends/app.js')
-    const { APP_ROLES_MESSAGES } = await import('../src/frontends/oidc.js')
     assert.match(backend['src/database/migrations.ts'], /id: 12,\s+name: 'roles per app'/)
     assert.match(backend['src/database/migrations.ts'], /CREATE TABLE app_role_assignments/)
     assert.match(backend['src/database/database.constants.ts'], /'app_role_assignments'/)
@@ -155,10 +152,9 @@ test('roles per app: migration 12, the roles claim, /members for the admins, rol
     for (const locale of LANGUAGES) {
         const oidc = JSON.parse(backend[`src/i18n/${locale}/oidc.json`])
         for (const key of ['APP_NOT_FOUND', 'ROLE_UNKNOWN', 'ROLES_INVALID']) assert.ok(oidc[key], `${locale} ${key}`)
-        assert.deepEqual(Object.keys(APP_ROLES_MESSAGES[locale]), Object.keys(APP_ROLES_MESSAGES.en), locale)
     }
-    // The members page of the login server, through /api/backend (client ids may have dots)
-    assert.match(frontend['src/app/[locale]/members/page.tsx'], /<AppRoles \/>/)
+    // The users page of the login server (/users), through /api/backend (client ids may have dots)
+    assert.match(frontend['src/components/pasport/customer/users.tsx'], /'tenants\/current\/apps'/)
     assert.match(frontend['src/app/api/backend/[...path]/route.ts'], /!APP_ROLES\.test\(path\)/)
     // The app: config/app-roles.json, @Roles, the push script
     const LINK = {
@@ -178,9 +174,8 @@ test('roles per app: migration 12, the roles claim, /members for the admins, rol
     assert.ok(backend['test/clients.e2e-spec.ts'].includes('roles per app: the developer sends them'))
 })
 
-test('invitations with apps: migration 13, roles and a seat on accepting, the apps on /members and /invite', async () => {
+test('invitations with apps: migration 13, roles and a seat on accepting, the apps on /users and /invite', async () => {
     const { MAIL_MESSAGES } = await import('../src/backends/oidc.js')
-    const { OIDC_MESSAGES } = await import('../src/frontends/oidc.js')
     const { INVITE_MESSAGES } = await import('../src/frontends/pasport-messages.js')
     assert.match(backend['src/database/migrations.ts'], /id: 13,\s+name: 'apps in invitations'/)
     assert.match(backend['src/database/migrations.ts'], /ALTER TABLE tenant_invitations ADD COLUMN apps jsonb/)
@@ -195,8 +190,6 @@ test('invitations with apps: migration 13, roles and a seat on accepting, the ap
     for (const locale of LANGUAGES) {
         assert.ok(JSON.parse(backend[`src/i18n/${locale}/oidc.json`]).INVITATION_APP_UNKNOWN, locale)
         assert.match(MAIL_MESSAGES[locale].INVITE_APPS, /\{apps\}/, locale)
-        for (const key of ['inviteAppsTitle', 'inviteSeat', 'invitationApps'])
-            assert.ok(OIDC_MESSAGES[locale][key], `${locale} ${key}`)
         // The invitation screen (/invite): the apps, "with a licence", "Open <app>"
         for (const key of ['appsTitle', 'withLicense', 'openApp', 'noFreeLicense'])
             assert.ok(INVITE_MESSAGES[locale][key], `${locale} ${key}`)
@@ -214,10 +207,9 @@ test('invitations with apps: migration 13, roles and a seat on accepting, the ap
     assert.ok(backend['README.md'].includes('### Invitations with apps'))
     assert.ok(backend['test/clients.e2e-spec.ts'].includes('an invitation with apps'))
     // The frontend: the apps in the invitation form, on the invitation page "Open <app>"
-    assert.ok(frontend['src/components/invite-apps.tsx'])
-    assert.match(frontend['src/components/members.tsx'], /<InviteApps /)
-    assert.match(frontend['src/components/members.tsx'], /apps: invitationApps\(apps, choice\)/)
+    const users = frontend['src/components/pasport/customer/users.tsx']
+    assert.match(users, /apps: invited\.map\(code => \{/)
+    assert.match(users, /filter\(a => a\.roles\.length > 0\)/)
     assert.match(frontend['src/components/account-forms.tsx'], /v\('openApp', \{ app: app\.name \}\)/)
-    assert.match(frontend['src/components/app-roles.tsx'], /filter\(app => app\.roles\.length > 0\)/)
     assert.ok(frontendReadme({ api: { port: 4000, oidc: true } }).includes('Open <app>'))
 })

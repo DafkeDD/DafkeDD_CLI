@@ -23,7 +23,10 @@ export class MyLicensesController {
         summary: 'Ask a demo: a trial of the product for myself (BILLING_TRIAL_DAYS, 14), once per product'
     })
     @ApiCreatedResponse({ description: '{ userId, endsAt }' })
-    @ApiConflictResponse({ description: 'billing.DEMO_USED: the demo of this product was used already' })
+    @ApiConflictResponse({
+        description:
+            'billing.DEMO_USED: the demo of this product was used already; billing.DEMO_DISABLED: it has no demo'
+    })
     trial(@Auth() auth: AuthContext, @Param('productCode', ProductCodePipe) code: string) {
         return this.billing.requestDemo(auth.tenantId, code, auth.userId)
     }

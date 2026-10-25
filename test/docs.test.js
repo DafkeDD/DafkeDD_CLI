@@ -67,14 +67,18 @@ function routesOf(files) {
     const routes = []
     for (const [rel, content] of Object.entries(files)) {
         if (!rel.endsWith('.controller.ts')) continue
-        const prefix = content.match(/@Controller\('([^']*)'\)/)?.[1] ?? ''
-        // @ApiExcludeEndpoint(): only for development (the fake checkout), not part of the API
-        for (const [, method, sub, excluded] of content.matchAll(
-            /@(Get|Post|Put|Patch|Delete)\((?:'([^']*)')?\)(\s*@ApiExcludeEndpoint\(\))?/g
-        )) {
-            if (excluded) continue
-            const parts = [prefix, sub ?? ''].filter(Boolean)
-            routes.push({ rel, key: `${method.toUpperCase()} /${parts.join('/')}` })
+        // A file may hold several controllers: each route belongs to the @Controller above it
+        const parts = content.split(/(?=@Controller\()/)
+        for (const part of parts) {
+            const prefix = part.match(/^@Controller\('([^']*)'\)/)?.[1] ?? ''
+            // @ApiExcludeEndpoint(): only for development (the fake checkout), not part of the API
+            for (const [, method, sub, excluded] of part.matchAll(
+                /@(Get|Post|Put|Patch|Delete)\((?:'([^']*)')?\)(\s*@ApiExcludeEndpoint\(\))?/g
+            )) {
+                if (excluded) continue
+                const path = [prefix, sub ?? ''].filter(Boolean)
+                routes.push({ rel, key: `${method.toUpperCase()} /${path.join('/')}` })
+            }
         }
     }
     return routes

@@ -1,6 +1,15 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common'
-import { ApiConflictResponse, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common'
+import {
+    ApiConflictResponse,
+    ApiCreatedResponse,
+    ApiNoContentResponse,
+    ApiNotFoundResponse,
+    ApiOkResponse,
+    ApiOperation,
+    ApiTags
+} from '@nestjs/swagger'
 import { Access, Auth, type AuthContext } from '../access/access.js'
+import { ClientsService } from '../oidc/clients/clients.service.js'
 import {
     DiscountActiveDto,
     DiscountDto,
@@ -17,12 +26,16 @@ import { ProductCodePipe } from './product-code.pipe.js'
 @Controller('admin')
 @Access('superadmin')
 export class BillingAdminController {
-    constructor(private readonly billing: BillingService) {}
+    constructor(
+        private readonly billing: BillingService,
+        private readonly clients: ClientsService
+    ) {}
 
     @Get('products')
     @ApiOperation({ summary: 'Every product, also the ones that are no longer sold' })
     @ApiOkResponse({
-        description: '[{ id, code, name, description, priceMonthCents, priceYearCents, currency, active }]'
+        description:
+            '[{ id, code, name, description, priceMonthCents, priceYearCents, currency, active, icon, category, short, features, color, requiresVault, demoEnabled, launchUrl, sort }]'
     })
     products() {
         return this.billing.products()
@@ -39,8 +52,26 @@ export class BillingAdminController {
     @Patch('products/:code')
     @ApiOperation({ summary: 'Change a product: name, description, prices (new purchases), or stop selling it' })
     @ApiOkResponse({ description: 'The product' })
-    updateProduct(@Param('code', ProductCodePipe) code: string, @Body() body: UpdateProductDto) {
-        return this.billing.updateProduct(code, body)
+    async updateProduct(@Param('code', ProductCodePipe) code: string, @Body() body: UpdateProductDto) {
+        const updated = await this.billing.updateProduct(code, body)
+        // The OIDC app of this product (client id = code) follows: off with the product, and its link codes stop
+        if (body.active === undefined) await this.clients.revokeLinkCodes(code)
+        else await this.clients.followProduct(code, body.active)
+        return updated
+    }
+
+    @Delete('products/:code')
+    @HttpCode(204)
+    @ApiOperation({
+        summary:
+            'Remove a product from the catalogue, with its free seats and trials, and the OIDC app with the same code'
+    })
+    @ApiNoContentResponse({ description: 'Removed' })
+    @ApiConflictResponse({ description: 'billing.PRODUCT_IN_USE: an organisation still has a running subscription' })
+    async deleteProduct(@Param('code', ProductCodePipe) code: string) {
+        await this.billing.deleteProduct(code)
+        // Its OIDC app (client id = code) goes along, so no app is left behind that can still log in
+        await this.clients.removeWithProduct(code)
     }
 
     @Get('discounts')
@@ -90,9 +121,24 @@ export class BillingAdminController {
     }
 
     @Post('tenants/:id/trials')
-    @ApiOperation({ summary: 'Extend the trial of a member by a number of days (or start one)' })
+    @ApiOperation({
+        summary:
+            'Extend the trial of a member by a number of days (or start one, also after an ended one); also when the demo of the product is off'
+    })
     @ApiCreatedResponse({ description: '{ userId, endsAt }' })
     extendTrial(@Param('id', ParseUUIDPipe) id: string, @Body() body: ExtendTrialDto) {
         return this.billing.extendTrial(id, body.productCode, body.userId, body.days)
+    }
+
+    @Delete('tenants/:id/trials/:productCode/:userId')
+    @ApiOperation({ summary: 'End the running trial of a member now (it stays: it counts as used)' })
+    @ApiOkResponse({ description: '{ userId, endsAt }' })
+    @ApiNotFoundResponse({ description: 'billing.TRIAL_NOT_FOUND: no running trial' })
+    endTrial(
+        @Param('id', ParseUUIDPipe) id: string,
+        @Param('productCode', ProductCodePipe) code: string,
+        @Param('userId', ParseUUIDPipe) userId: string
+    ) {
+        return this.billing.endTrial(id, code, userId)
     }
 }

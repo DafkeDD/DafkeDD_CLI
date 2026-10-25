@@ -17,7 +17,7 @@ import {
     sha
 } from '../src/manifest.js'
 import { addMissing, DESIGN_MESSAGES, NEW_SUFFIX, planUpdate, update } from '../src/update.js'
-import { DESIGN_FILES } from '../src/frontends/oidc.js'
+import { DESIGN_FILES, designFiles } from '../src/frontends/oidc.js'
 
 const project = {
     ...describeProject({
@@ -228,7 +228,9 @@ test('the name of a project comes from CLAUDE.md or Terraform, not only from its
 
 test('update keeps the Pasport design of the frontend in step: styles, components, shell, protected routes', async t => {
     const files = managedFiles(project)
+    // A linked app has every design file (the login server all but the shell of AppPage)
     for (const rel of DESIGN_FILES) assert.ok(files[`frontend/${rel}`], rel)
+    assert.ok(Object.keys(designFiles()).length < Object.keys(designFiles({ linked: true })).length)
     for (const rel of ['frontend/src/proxy.ts', 'frontend/src/styles/pasport.css', 'frontend/scripts/check-design.mjs'])
         assert.ok(files[rel], rel)
     // The pages and APP_NAV are yours: never managed
@@ -244,10 +246,10 @@ test('update keeps the Pasport design of the frontend in step: styles, component
     await writeAll(dir, files)
     await fs.writeFile(path.join(dir, 'frontend', 'package.json'), '{}')
     await fs.writeFile(path.join(dir, 'frontend/src/components/shell/shell-view.tsx'), 'my old shell')
-    await fs.rm(path.join(dir, 'frontend/src/components/pasport/notifications.tsx'))
+    await fs.rm(path.join(dir, 'frontend/src/components/pasport/tour.tsx'))
     const manifest = await buildManifest({ projectDir: dir, project, version: '0.46.0' })
     delete manifest.files['frontend/src/components/shell/shell-view.tsx']
-    delete manifest.files['frontend/src/components/pasport/notifications.tsx']
+    delete manifest.files['frontend/src/components/pasport/tour.tsx']
     await fs.writeFile(path.join(dir, MANIFEST), JSON.stringify(manifest))
     await fs.mkdir(path.join(dir, 'frontend/messages'), { recursive: true })
     const old = { Shell: { logout: 'Bye', mine: 'Mine' }, Nav: { home: 'Home' } }
@@ -258,7 +260,7 @@ test('update keeps the Pasport design of the frontend in step: styles, component
     const plan = await update({ projectDir: dir, version: '0.47.1', log: line => lines.push(line) })
     const action = rel => plan.find(entry => entry.rel === rel).action
     assert.equal(action('frontend/src/components/shell/shell-view.tsx'), 'changed')
-    assert.equal(action('frontend/src/components/pasport/notifications.tsx'), 'new')
+    assert.equal(action('frontend/src/components/pasport/tour.tsx'), 'new')
     assert.equal(
         await fs.readFile(path.join(dir, 'frontend/src/components/shell/shell-view.tsx'), 'utf8'),
         'my old shell'
@@ -271,7 +273,7 @@ test('update keeps the Pasport design of the frontend in step: styles, component
     assert.equal(nl.Shell.logout, 'Bye')
     assert.equal(nl.Shell.mine, 'Mine')
     assert.equal(nl.Shell.notifications, DESIGN_MESSAGES.Shell.nl.notifications)
-    assert.deepEqual(nl.Notifications, DESIGN_MESSAGES.Notifications.nl)
+    assert.deepEqual(nl.Portal, DESIGN_MESSAGES.Portal.nl)
     assert.deepEqual(nl.Nav, { home: 'Home' })
     assert.ok(lines.some(line => /messages\/nl\.json.*teksten van het design/.test(line)))
     assert.ok(lines.some(line => /check:design/.test(line)))

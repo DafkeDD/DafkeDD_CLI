@@ -1,14 +1,20 @@
 import { type NextRequest, NextResponse } from 'next/server'
+import { cookieOptions, fromThisApp, SESSION_COOKIE, SESSION_SECONDS } from '@/lib/oidc'
 import { PASPORT_API_URL } from '@/lib/pasport'
-import { APP_URL, cookieOptions, SESSION_COOKIE, SESSION_SECONDS } from '@/lib/oidc'
 import { freshSession } from '@/lib/refresh'
 
 /**
  * Only these parts of the API can be called through this route: members, the platform, the own two-step verification,
- * the eID, the own sessions, passkeys and allowed applications, licences and audit log, the heartbeat (who is online) and the notifications (the bell).
+ * the eID, the own sessions, passkeys and allowed applications, licences and audit log, the heartbeat (who is online),
+ * the own profile, the eHealth vault and the notifications.
  */
 const ALLOWED =
-    /^(tenants\/current\/|admin\/|me\/mfa|me\/eid|me\/sessions|me\/passkeys|me\/licenses(?:\/[a-z0-9-]+\/trial)?$|me\/audit$|me\/heartbeat$|me\/notifications(?:\/read-all|\/[0-9a-f-]{36}\/read)?$)[A-Za-z0-9/_-]*$/
+    /^(?:(?:tenants\/current|admin)\/[A-Za-z0-9/_-]+|me\/(?:mfa|eid|sessions|passkeys)(?:\/[A-Za-z0-9/_-]+)?|me\/licenses(?:\/[a-z0-9-]+\/trial)?|me\/(?:audit|heartbeat|status|out-of-office|profile|vault|vault\/password|password))$/
+/**
+ * The notifications: the list, all read, or one read. The id of a computed notification has colons and dots
+ * (contract:<id>:<date>), never an empty or ".." segment.
+ */
+const NOTIFICATIONS = /^me\/notifications(\/read-all|\/[A-Za-z0-9:_-]+(\.[A-Za-z0-9:_-]+)*\/read)?$/
 
 /**
  * The IP address chain of the browser for the API (X-Forwarded-For): what a proxy in front of this app sent, and the
@@ -25,16 +31,22 @@ function forwardedFor(request: NextRequest): string {
  */
 /** The allowed applications: a client id may contain dots (com.example.app), never an empty or ".." segment. */
 const CONSENTS = /^me\/consents(\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*)?$/
-/** The roles per app of the organisation (its admins): a client id may contain dots too. */
-const APP_ROLES = /^tenants\/current\/apps(\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*\/members(\/[0-9a-f-]{36})?)?$/
 /** The apps on /admin (superadmins), with the same rule for their client id. */
 const APPS = /^admin\/clients(\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*(\/secret|\/link-code)?)?$/
+/** The roles per app of the organisation (its admins), with the same rule for the client id. */
+const APP_ROLES = /^tenants\/current\/apps(\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*\/members(\/[0-9a-f-]{36})?)?$/
 
 async function forward(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
     const path = (await params).path.join('/')
-    if (!ALLOWED.test(path) && !CONSENTS.test(path) && !APPS.test(path) && !APP_ROLES.test(path))
+    if (
+        !ALLOWED.test(path) &&
+        !CONSENTS.test(path) &&
+        !APPS.test(path) &&
+        !APP_ROLES.test(path) &&
+        !NOTIFICATIONS.test(path)
+    )
         return NextResponse.json({ error: 'not-found' }, { status: 404 })
-    if (request.method !== 'GET' && request.headers.get('origin') !== new URL(APP_URL).origin)
+    if (request.method !== 'GET' && !fromThisApp(request))
         return NextResponse.json({ error: 'origin' }, { status: 403 })
     // Renews the access token with the refresh token when it (almost) expired
     const { session, cookie } = await freshSession(request.cookies.get(SESSION_COOKIE)?.value)
@@ -50,7 +62,8 @@ async function forward(request: NextRequest, { params }: { params: Promise<{ pat
         method: request.method,
         headers: {
             Authorization: 'Bearer ' + session.accessToken,
-            Accept: 'application/json',
+            // JSON, or the file the route gives (a PDF)
+            Accept: 'application/json, application/pdf;q=0.9, */*;q=0.1',
             'Accept-Language': request.headers.get('accept-language') ?? 'en',
             // The audit log of the API records the browser and the IP address of the user, not those of this server
             'User-Agent': request.headers.get('user-agent') ?? '',
@@ -62,11 +75,21 @@ async function forward(request: NextRequest, { params }: { params: Promise<{ pat
     }).catch(() => null)
     if (!response) return answer(NextResponse.json({ error: 'offline' }, { status: 502 }))
     if (response.status === 204) return answer(new NextResponse(null, { status: 204 }))
+    // A file (the PDF of an invoice): passed on as it comes, with its type, name and length, never as text
+    const type = response.headers.get('content-type') ?? 'application/json'
+    if (response.ok && !/^(application\/json|text\/)/i.test(type)) {
+        const headers = new Headers({ 'Content-Type': type, 'Cache-Control': 'private, no-store' })
+        for (const name of ['content-disposition', 'content-length']) {
+            const value = response.headers.get(name)
+            if (value) headers.set(name, value)
+        }
+        return answer(new NextResponse(response.body, { status: response.status, headers }))
+    }
     // 401: the session ended at the login server (logged out elsewhere, ended on /security): forget it here too
     return answer(
         new NextResponse(await response.text(), {
             status: response.status,
-            headers: { 'Content-Type': response.headers.get('content-type') ?? 'application/json' }
+            headers: { 'Content-Type': type }
         }),
         response.status === 401
     )

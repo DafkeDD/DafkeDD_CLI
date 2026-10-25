@@ -3,7 +3,7 @@ import type { Mail } from './mail.service.js'
 /** Translates a key of src/i18n/<language>/mail.json with its arguments. */
 export type MailTranslate = (key: string, args?: Record<string, string>) => string
 
-export type MailKind = 'verify' | 'exists' | 'reset' | 'invite'
+export type MailKind = 'verify' | 'exists' | 'reset' | 'invite' | 'confirm'
 
 const escape = (value: string) =>
     value.replace(

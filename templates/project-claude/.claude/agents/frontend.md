@@ -17,29 +17,35 @@ in the project are the design, and a new screen looks as if it was always part o
    - `frontend/src/styles/pasport.css`: the tokens (light and dark) and every class of the design (`btn`, `card`,
      `field`, `input`, `badge`, `tbl`, `tabs`, `modal`, `page-head`, the shell, the login screens) and the phone layout;
    - `frontend/src/components/pasport/`: `ui.tsx` (`Icon`, `Btn`, `Field`, `Input`, `PasswordInput`, `Select`,
-     `Toggle`, `Badge`, `Avatar`, `ErrorNote`, `OkNote`, `Skeleton`), `widgets.tsx` (`Modal`, `OtpInput`, `QrSvg`),
-     `page-head.tsx` (`PageHead`), `page-state.tsx` (`Loading`, `LoadError`, `Notice`), `toast.tsx` (`useToast`,
-     `ThemeToggle`, `LocaleFloat`), `auth-layout.tsx` (the login screen);
-   - the shell: `frontend/src/components/shell/` (`AppPage`, the rail, the topbar, the user's menu);
-   - an existing page like the one you build (`/profile`, `/security`, `/members`, `/admin`).
+     `Toggle`, `Badge`, `Avatar`, `AppIcon`, `ErrorNote`, `OkNote`, `Skeleton`), `widgets.tsx` (`Modal`, `OtpInput`,
+     `QrCode`, the charts), `page-state.tsx` (`Loading`, `LoadError`, `Notice`), `toast.tsx` (`useToast`,
+     `ThemeToggle`, `LocaleFloat`), `auth-layout.tsx` (the login screen), `shell.tsx` (`Shell`, the rail, the topbar,
+     the user's menu; on the login server `CustomerShell` and `AdminShell`);
+   - the pages: on the login server the route groups `src/app/[locale]/(portal)` (the customer portal) and
+     `src/app/[locale]/admin/(panel)` (the superadmin panel), whose `layout.tsx` draws the shell, with their
+     components in `src/components/pasport/customer`, `admin` and `tickets`; in a linked app `AppPage`
+     (`src/components/shell/app-shell.tsx`);
+   - an existing page like the one you build (`/dashboard`, `/users`, `/support`, `/admin/tenants`).
 3. Read `CLAUDE.md`.
 
 ## The Pasport rules
 
 - **The components of the design**: those of `@/components/pasport/*` and the classes of `pasport.css`, and the shell
-  (`AppPage`). Something the design does not have yet is built from those classes and tokens, in
+  (`AppPage`, or the layout of a route group of the login server). Something the design does not have yet is built from those classes and tokens, in
   `src/components/pasport`, so the next screen can use it too. Never another component library, icon set or emoji (an
   icon that is missing goes into `ICONS` of `ui.tsx`, in the same stroke style).
 - **Tokens only**: colours, radii, shadows and fonts from the CSS variables (`var(--accent)`, `var(--surface)`,
   `var(--text-2)`, `var(--r-md)`, `var(--sh-sm)`, …). No hex values, no Tailwind colour classes, no new fonts. Light and
   dark must both look right.
-- **One shell**: every page in `AppPage`; a new page in the rail through `APP_NAV` (`src/lib/nav.ts`). A linked app
+- **One shell**: on the login server every page in the route group of the portal or the panel (its layout draws
+  `CustomerShell` or `AdminShell`; a new page in the rail goes in `shell.tsx`), in a linked app every page in
+  `AppPage` with a new page in the rail through `APP_NAV` (`src/lib/nav.ts`). A linked app
   never gets a login or registration of its own: that is the login server's. The login and account screens use
   `AuthLayout`.
 - **Protected by default**: every page needs a login. `src/proxy.ts` sends a browser without a session to `/login` (and
   back afterwards); only the pages in `PUBLIC_PATHS` are open. Add a page there only when it must be open (a sign-up,
   a public link), never to "make it work".
-- **Shape**: a `PageHead` with one primary action; content in `card card-pad`; tables in `tbl` inside `table-wrap`;
+- **Shape**: a page head (`page-head`, `PageHead` in a linked app) with one primary action; content in `card card-pad`; tables in `tbl` inside `table-wrap`;
   dialogs with `Modal`; no coloured left borders; status is a `Badge` with a word; codes and amounts in `t-mono`.
 - **The phone is not optional**: every screen works at 390px wide. The rail becomes a drawer behind the menu button,
   the login panel disappears, `page-head` stacks its actions, tables scroll inside `table-wrap`, forms go to one
@@ -54,7 +60,7 @@ in the project are the design, and a new screen looks as if it was always part o
 ## How you work
 
 Tests or checks first where they exist, then the change, then `npm run lint`, `npm run format:check`,
-`npm run check:design` (the design check of the CI: every page in `AppPage` or the login screen, only the components,
+`npm run check:design` (the design check of the CI: every page in the shell or the login screen, only the components,
 icons and colour tokens of the design) and `npm run build` in `./frontend`. A red design check is never "fixed" by
 changing the check: change the screen. Look at what you built in a real browser with the Playwright MCP (`npm run dev`, then the page) at
 1440×900 **and** 390×844, in light **and** dark, and take a screenshot of each before you say it is done; a screen that

@@ -42,10 +42,10 @@ const PASPORT_PAGES = [
         'everyone',
         { en: 'Home', nl: 'Start', fr: 'Accueil', de: 'Start' },
         {
-            en: 'The first page: log in, or go on to your organisation and its apps.',
-            nl: 'De eerste pagina: inloggen, of verder naar je organisatie en haar apps.',
-            fr: 'La première page : se connecter, ou continuer vers votre organisation et ses applications.',
-            de: 'Die erste Seite: anmelden oder weiter zu deiner Organisation und ihren Apps.'
+            en: 'The first page: log in, or go on to the dashboard of your organisation (superadmins: the panel).',
+            nl: 'De eerste pagina: inloggen, of verder naar het dashboard van je organisatie (superadmins: het paneel).',
+            fr: 'La première page : se connecter, ou continuer vers le tableau de bord de votre organisation (superadmins : le panneau).',
+            de: 'Die erste Seite: anmelden oder weiter zum Dashboard deiner Organisation (Superadmins: das Panel).'
         }
     ),
     page(
@@ -136,15 +136,87 @@ const PASPORT_PAGES = [
         }
     ),
     page(
+        'dashboard',
+        '/dashboard',
+        'member',
+        { en: 'Dashboard', nl: 'Dashboard', fr: 'Tableau de bord', de: 'Dashboard' },
+        {
+            en: 'The apps of your organisation, your licences and your open tickets at a glance.',
+            nl: 'De apps van je organisatie, je licenties en je open tickets in één oogopslag.',
+            fr: "Les applications de votre organisation, vos licences et vos tickets ouverts en un coup d'œil.",
+            de: 'Die Apps deiner Organisation, deine Lizenzen und deine offenen Tickets auf einen Blick.'
+        }
+    ),
+    page(
+        'marketplace',
+        '/marketplace',
+        'member',
+        { en: 'Discover apps', nl: 'Ontdek apps', fr: 'Découvrir des applications', de: 'Apps entdecken' },
+        {
+            en: 'Every app of the platform: try one with a demo, or buy it through the wizard.',
+            nl: 'Alle apps van het platform: probeer er een met een demo, of koop ze via de wizard.',
+            fr: "Toutes les applications de la plateforme : essayez-en une avec une démo, ou achetez-la avec l'assistant.",
+            de: 'Alle Apps der Plattform: probiere eine mit einer Demo aus oder kaufe sie mit dem Assistenten.'
+        }
+    ),
+    page(
+        'vault',
+        '/vault',
+        'member',
+        { en: 'Vault', nl: 'Vault', fr: 'Coffre-fort', de: 'Tresor' },
+        {
+            en: 'Doctors: your eHealth certificate, stored encrypted, for the apps that sign with it.',
+            nl: 'Artsen: je eHealth-certificaat, versleuteld bewaard, voor de apps die ermee ondertekenen.',
+            fr: 'Médecins : votre certificat eHealth, conservé chiffré, pour les applications qui signent avec.',
+            de: 'Ärzte: dein eHealth-Zertifikat, verschlüsselt gespeichert, für die Apps, die damit signieren.'
+        }
+    ),
+    page(
+        'users',
+        '/users',
+        'admin',
+        { en: 'Users', nl: 'Gebruikers', fr: 'Utilisateurs', de: 'Benutzer' },
+        {
+            en: 'Invite people, give them apps, roles and licences, disable or remove them, and see who is online.',
+            nl: 'Mensen uitnodigen, hun apps, rollen en licenties geven, hen uitschakelen of verwijderen, en zien wie online is.',
+            fr: 'Inviter des personnes, leur donner des applications, des rôles et des licences, les désactiver ou les retirer, et voir qui est en ligne.',
+            de: 'Personen einladen, ihnen Apps, Rollen und Lizenzen geben, sie deaktivieren oder entfernen und sehen, wer online ist.'
+        }
+    ),
+    page(
+        'invoices',
+        '/invoices',
+        'admin',
+        { en: 'Invoices', nl: 'Facturen', fr: 'Factures', de: 'Rechnungen' },
+        {
+            en: 'The invoices of your organisation: pay the open ones, download the PDF, see when contracts renew.',
+            nl: 'De facturen van je organisatie: de open betalen, de pdf downloaden, zien wanneer contracten verlengen.',
+            fr: 'Les factures de votre organisation : payer celles qui sont ouvertes, télécharger le PDF, voir quand les contrats se renouvellent.',
+            de: 'Die Rechnungen deiner Organisation: offene bezahlen, das PDF herunterladen, sehen, wann Verträge verlängert werden.'
+        }
+    ),
+    page(
+        'support',
+        '/support',
+        'member',
+        { en: 'Support', nl: 'Support', fr: 'Support', de: 'Support' },
+        {
+            en: 'Ask a question in a ticket, follow the answers, and rate the help when it is closed.',
+            nl: 'Een vraag stellen in een ticket, de antwoorden volgen, en de hulp beoordelen wanneer het gesloten is.',
+            fr: "Poser une question dans un ticket, suivre les réponses et évaluer l'aide une fois le ticket clôturé.",
+            de: 'Eine Frage in einem Ticket stellen, die Antworten verfolgen und die Hilfe bewerten, wenn es geschlossen ist.'
+        }
+    ),
+    page(
         'profile',
         '/profile',
         'member',
-        { en: 'Profile', nl: 'Profiel', fr: 'Profil', de: 'Profil' },
+        { en: 'My profile', nl: 'Mijn profiel', fr: 'Mon profil', de: 'Mein Profil' },
         {
-            en: 'Your name, e-mail address, organisation and role, your licences, and a demo of an app.',
-            nl: 'Je naam, e-mailadres, organisatie en rol, je licenties, en een demo van een app.',
-            fr: "Votre nom, adresse e-mail, organisation et rôle, vos licences, et une démo d'une application.",
-            de: 'Dein Name, deine E-Mail-Adresse, Organisation und Rolle, deine Lizenzen und eine Demo einer App.'
+            en: 'Your name, e-mail address, phone and language, the billing details of your organisation and your eID.',
+            nl: 'Je naam, e-mailadres, telefoon en taal, de facturatiegegevens van je organisatie en je eID.',
+            fr: 'Votre nom, adresse e-mail, téléphone et langue, les données de facturation de votre organisation et votre eID.',
+            de: 'Dein Name, deine E-Mail-Adresse, Telefon und Sprache, die Rechnungsdaten deiner Organisation und deine eID.'
         }
     ),
     page(
@@ -157,30 +229,6 @@ const PASPORT_PAGES = [
             nl: 'Je wachtwoord, tweestapsverificatie, passkeys, je eID en de toestellen waar je ingelogd bent.',
             fr: 'Votre mot de passe, la vérification en deux étapes, les passkeys, votre eID et les appareils où vous êtes connecté.',
             de: 'Dein Passwort, die Zwei-Schritt-Verifizierung, Passkeys, deine eID und die Geräte, auf denen du angemeldet bist.'
-        }
-    ),
-    page(
-        'members',
-        '/members',
-        'admin',
-        { en: 'Members', nl: 'Gebruikers', fr: 'Membres', de: 'Mitglieder' },
-        {
-            en: 'Invite people, give them apps, roles and licences, disable or remove them, and see who is online.',
-            nl: 'Mensen uitnodigen, hun apps, rollen en licenties geven, hen uitschakelen of verwijderen, en zien wie online is.',
-            fr: 'Inviter des personnes, leur donner des applications, des rôles et des licences, les désactiver ou les retirer, et voir qui est en ligne.',
-            de: 'Personen einladen, ihnen Apps, Rollen und Lizenzen geben, sie deaktivieren oder entfernen und sehen, wer online ist.'
-        }
-    ),
-    page(
-        'licenses',
-        '/licenses',
-        'admin',
-        { en: 'Licences', nl: 'Licenties', fr: 'Licences', de: 'Lizenzen' },
-        {
-            en: 'Buy licences per app, monthly or yearly, give them to members and see the invoices.',
-            nl: 'Licenties per app kopen, per maand of per jaar, ze aan gebruikers geven en de facturen zien.',
-            fr: 'Acheter des licences par application, au mois ou à l’année, les attribuer aux membres et voir les factures.',
-            de: 'Lizenzen pro App kaufen, monatlich oder jährlich, sie Mitgliedern geben und die Rechnungen sehen.'
         }
     ),
     page(
@@ -197,14 +245,50 @@ const PASPORT_PAGES = [
     ),
     page(
         'admin',
-        '/admin',
+        '/admin/stats',
         'superadmin',
-        { en: 'Platform', nl: 'Platform', fr: 'Plateforme', de: 'Plattform' },
+        { en: 'Statistics', nl: 'Statistieken', fr: 'Statistiques', de: 'Statistiken' },
         {
-            en: 'Manage every organisation, the apps and their link codes, the products, prices and discount codes.',
-            nl: 'Alle organisaties beheren, de apps en hun koppelcodes, de producten, prijzen en kortingscodes.',
-            fr: 'Gérer toutes les organisations, les applications et leurs codes de liaison, les produits, les prix et les codes de réduction.',
-            de: 'Alle Organisationen verwalten, die Apps und ihre Verknüpfungscodes, die Produkte, Preise und Rabattcodes.'
+            en: 'The superadmin panel opens here: organisations, users, revenue and tickets of the whole platform.',
+            nl: 'Het superadminpaneel opent hier: organisaties, gebruikers, omzet en tickets van het hele platform.',
+            fr: "Le panneau superadmin s'ouvre ici : organisations, utilisateurs, chiffre d'affaires et tickets de toute la plateforme.",
+            de: 'Das Superadmin-Panel öffnet sich hier: Organisationen, Benutzer, Umsatz und Tickets der ganzen Plattform.'
+        }
+    ),
+    page(
+        'admin-tenants',
+        '/admin/tenants',
+        'superadmin',
+        { en: 'Tenants', nl: 'Tenants', fr: 'Organisations', de: 'Mandanten' },
+        {
+            en: 'Every organisation: create, suspend or open one, with its members, apps, licences and billing details.',
+            nl: 'Alle organisaties: een aanmaken, schorsen of openen, met haar leden, apps, licenties en facturatiegegevens.',
+            fr: 'Toutes les organisations : en créer, suspendre ou ouvrir une, avec ses membres, applications, licences et données de facturation.',
+            de: 'Alle Organisationen: eine anlegen, sperren oder öffnen, mit ihren Mitgliedern, Apps, Lizenzen und Rechnungsdaten.'
+        }
+    ),
+    page(
+        'admin-tickets',
+        '/admin/tickets',
+        'superadmin',
+        { en: 'Tickets', nl: 'Tickets', fr: 'Tickets', de: 'Tickets' },
+        {
+            en: 'The support team: claim a ticket, answer it, add an internal note with @mentions, and close it.',
+            nl: 'Het supportteam: een ticket opnemen, beantwoorden, een interne notitie met @vermeldingen toevoegen, en sluiten.',
+            fr: "L'équipe support : prendre un ticket, y répondre, ajouter une note interne avec des @mentions, et le clôturer.",
+            de: 'Das Support-Team: ein Ticket übernehmen, beantworten, eine interne Notiz mit @Erwähnungen hinzufügen und schließen.'
+        }
+    ),
+    page(
+        'admin-catalog',
+        '/admin/catalog',
+        'superadmin',
+        { en: 'App catalogue', nl: 'App-catalogus', fr: 'Catalogue des applications', de: 'App-Katalog' },
+        {
+            en: 'The apps of the platform: their prices, the demo, their connection (link code, secret) and the discount codes.',
+            nl: 'De apps van het platform: hun prijzen, de demo, hun koppeling (koppelcode, geheim) en de kortingscodes.',
+            fr: 'Les applications de la plateforme : leurs prix, la démo, leur connexion (code de liaison, secret) et les codes de réduction.',
+            de: 'Die Apps der Plattform: ihre Preise, die Demo, ihre Verbindung (Verknüpfungscode, Geheimnis) und die Rabattcodes.'
         }
     )
 ]

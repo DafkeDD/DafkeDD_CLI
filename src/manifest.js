@@ -46,7 +46,9 @@ export function managedFiles(project) {
         ...(project.claude ? projectClaudeFiles(project) : {}),
         ...(project.cloud ? cloudFiles(project) : {}),
         // The Pasport design of the frontend of the login server and of every linked app
-        ...(project.frontend && (project.kind === 'pasport' || project.kind === 'app') ? designFiles() : {})
+        ...(project.frontend && (project.kind === 'pasport' || project.kind === 'app')
+            ? designFiles({ linked: project.kind === 'app' })
+            : {})
     }
 }
 

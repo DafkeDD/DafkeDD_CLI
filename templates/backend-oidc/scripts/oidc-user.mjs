@@ -1,6 +1,7 @@
 // Creates or updates a user and adds it to a tenant: npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme
 // Options: --password <text> (otherwise a random password is printed once), --role user|admin (default user),
-// --tenant-name "Acme", --superadmin (admin of every tenant of the platform),
+// --tenant-name "Acme", --superadmin (admin of every tenant of the platform; --tenant is then optional),
+// A superadmin without a tenant (platform management): npm run oidc:superadmin -- --email ada@example.com --name "Ada"
 // --reset-mfa (removes two-step verification: the user sets it up again at the next login, e.g. after losing the phone).
 // Start the API once first: it creates the tables.
 import { randomBytes, scrypt } from 'node:crypto'
@@ -26,6 +27,9 @@ const { values } = parseArgs({
     }
 })
 
+// The same table as USERS_TABLE in src/database/database.constants.ts (fixed, whatever DATABASE_NAME is)
+const USERS_TABLE = '"__USERS_TABLE__"'
+
 const email = values.email?.trim().toLowerCase()
 const tenantSlug = values.tenant?.trim().toLowerCase()
 
@@ -49,9 +53,8 @@ if (values['reset-mfa']) {
     }
     const client = await connect()
     try {
-        const users = '"' + process.env.DATABASE_NAME + 'users"'
         const { rows } = await client.query(
-            `UPDATE ${users} SET totp_secret = NULL, totp_enabled = false, totp_last_step = NULL, recovery_codes = '{}',
+            `UPDATE ${USERS_TABLE} SET totp_secret = NULL, totp_enabled = false, totp_last_step = NULL, recovery_codes = '{}',
          updated_at = now() WHERE lower(email) = lower($1) RETURNING id`,
             [email]
         )
@@ -72,12 +75,14 @@ if (values['reset-mfa']) {
 if (
     !email ||
     !/^[^@\s]+@[^@\s]+$/.test(email) ||
-    !tenantSlug ||
-    !/^[a-z0-9][a-z0-9-]{1,62}$/.test(tenantSlug) ||
+    // Only a superadmin can be without a tenant: it logs in to the platform management
+    (!tenantSlug && !values.superadmin) ||
+    (tenantSlug && !/^[a-z0-9][a-z0-9-]{1,62}$/.test(tenantSlug)) ||
     !['user', 'admin'].includes(values.role)
 ) {
     console.error(
-        'Usage: npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme [--role user|admin] [--superadmin] [--password ...]'
+        'Usage: npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme [--role user|admin] [--superadmin] [--password ...]\n' +
+            '       npm run oidc:superadmin -- --email ada@example.com --name "Ada" [--password ...]'
     )
     process.exit(1)
 }
@@ -99,17 +104,12 @@ if (password.length < 12) {
     console.error('Use a password of at least 12 characters.')
     process.exit(1)
 }
-const usersTable = '"' + process.env.DATABASE_NAME + 'users"'
+const usersTable = USERS_TABLE
 
 let client
 try {
     client = await connect()
     await client.query('BEGIN')
-    const tenant = await client.query(
-        `INSERT INTO tenants (slug, name) VALUES ($1, $2)
-     ON CONFLICT (slug) DO UPDATE SET name = COALESCE($3, tenants.name) RETURNING id, name`,
-        [tenantSlug, values['tenant-name'] ?? tenantSlug, values['tenant-name'] ?? null]
-    )
     const user = await client.query(
         `INSERT INTO ${usersTable} (email, email_verified, name, password_hash, is_superadmin) VALUES ($1, true, $2, $3, $5)
      ON CONFLICT (lower(email)) DO UPDATE SET password_hash = EXCLUDED.password_hash, name = COALESCE($4, ${usersTable}.name),
@@ -117,15 +117,22 @@ try {
      RETURNING id`,
         [email, values.name ?? email, await hashPassword(password), values.name ?? null, values.superadmin]
     )
-    await client.query(
-        `INSERT INTO tenant_members (tenant_id, user_id, role) VALUES ($1, $2, $3)
+    if (tenantSlug) {
+        const tenant = await client.query(
+            `INSERT INTO tenants (slug, name) VALUES ($1, $2)
+     ON CONFLICT (slug) DO UPDATE SET name = COALESCE($3, tenants.name) RETURNING id, name`,
+            [tenantSlug, values['tenant-name'] ?? tenantSlug, values['tenant-name'] ?? null]
+        )
+        await client.query(
+            `INSERT INTO tenant_members (tenant_id, user_id, role) VALUES ($1, $2, $3)
      ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
-        [tenant.rows[0].id, user.rows[0].id, values.role]
-    )
+            [tenant.rows[0].id, user.rows[0].id, values.role]
+        )
+        console.log(
+            `User ${email} is ${values.role} of "${tenant.rows[0].name}" (${tenantSlug})${values.superadmin ? ' and superadmin' : ''}.`
+        )
+    } else console.log(`User ${email} is superadmin (platform management, no organisation).`)
     await client.query('COMMIT')
-    console.log(
-        `User ${email} is ${values.role} of "${tenant.rows[0].name}" (${tenantSlug})${values.superadmin ? ' and superadmin' : ''}.`
-    )
     if (generated) console.log(`Password (shown once): ${password}`)
 } catch (error) {
     await client?.query('ROLLBACK').catch(() => undefined)

@@ -1,12 +1,14 @@
 import { Controller, Delete, Get, Param } from '@nestjs/common'
 import { ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { Access, Auth, type AuthContext } from '../access/access.js'
+import { Access, Auth, type AuthContext, EidOptional } from '../access/access.js'
 import { SessionsService } from './sessions.service.js'
 
 /** The sessions (logged in browsers) of the own account: see them and end them. */
 @ApiTags('sessions')
 @Controller('me/sessions')
 @Access('account')
+// Also without a linked eID (OIDC_EID_REQUIRED): logging out keeps working
+@EidOptional()
 export class SessionsController {
     constructor(private readonly sessions: SessionsService) {}
 

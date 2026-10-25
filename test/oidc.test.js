@@ -313,3 +313,16 @@ test('the summary shows the superadmin and the temporary password once; next sho
     assert.match(next, /oidc\/\.well-known\/openid-configuration/)
     assert.match(next, /npm run oidc:user/)
 })
+
+test('the vault reads PKCS#12 with node:crypto; node-forge is only for the tests; uploads get a larger body', () => {
+    const reader = files['src/vault/pkcs12.ts']
+    assert.ok(!reader.includes('node-forge'), 'no library with an open advisory in production')
+    assert.match(reader, /from 'node:crypto'/)
+    assert.ok(files['src/vault/pkcs12.spec.ts'].includes('RC2 and 3DES (legacy)'))
+    assert.ok(!oidc.PACKAGES.dependencies.some(name => name.startsWith('node-forge')))
+    assert.ok(oidc.PACKAGES.devDependencies.some(name => name.startsWith('node-forge')))
+    for (const rel of Object.keys(files).filter(rel => rel.startsWith('src/') && !rel.endsWith('.spec.ts')))
+        assert.ok(!files[rel].includes("from 'node-forge'"), rel)
+    assert.match(files['src/setup.ts'], /json\(\{ limit: '3mb' \}\)/)
+    assert.match(files['src/app.module.ts'], /SupportModule,\s+StatsModule/)
+})

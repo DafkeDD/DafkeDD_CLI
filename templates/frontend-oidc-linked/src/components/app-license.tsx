@@ -11,7 +11,7 @@ export async function AppLicense({ license, admin }: { license: License; admin: 
     const t = await getTranslations('AppLicense')
     const format = await getFormatter()
     const licenses = (
-        <a href={ACCOUNT_URL + '/licenses'} className={LINK}>
+        <a href={ACCOUNT_URL + '/users'} className={LINK}>
             {t('manage')}
         </a>
     )

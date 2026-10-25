@@ -1,12 +1,14 @@
 import { Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
 import { ApiNoContentResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { Access, Auth, type AuthContext } from '../access/access.js'
+import { Access, Auth, type AuthContext, EidOptional } from '../access/access.js'
 import { NotificationsService } from './notifications.service.js'
 
 /** The notifications of the logged in account (the bell): of its organisation, and of the platform for superadmins. */
 @ApiTags('notifications')
 @Controller('me/notifications')
 @Access('account')
+// Also without a linked eID (OIDC_EID_REQUIRED): the bell of the page keeps working
+@EidOptional()
 export class NotificationsController {
     constructor(private readonly notifications: NotificationsService) {}
 
@@ -15,7 +17,7 @@ export class NotificationsController {
         summary:
             'The newest notifications (at most 40): of the organisation of the token, and the platform ones for superadmins'
     })
-    @ApiOkResponse({ description: '[{ id, kind, params, link, createdAt, read }]' })
+    @ApiOkResponse({ description: '[{ id, kind, params, nav: { screen, id? }, createdAt, read }]' })
     list(@Auth() auth: AuthContext) {
         return this.notifications.list(auth)
     }
@@ -30,7 +32,9 @@ export class NotificationsController {
 
     @Post(':id/read')
     @HttpCode(HttpStatus.NO_CONTENT)
-    @ApiOperation({ summary: 'Mark one notification as read' })
+    @ApiOperation({
+        summary: 'Mark one notification as read (a uuid, or the id of a computed one such as contract:<id>:<date>)'
+    })
     @ApiNoContentResponse({ description: 'Read' })
     @ApiNotFoundResponse({ description: 'errors.NOT_FOUND' })
     async read(@Auth() auth: AuthContext, @Param('id') id: string) {

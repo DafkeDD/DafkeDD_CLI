@@ -2,12 +2,13 @@ import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Post } from '@nest
 import {
     ApiBadRequestResponse,
     ApiConflictResponse,
+    ApiForbiddenResponse,
     ApiOkResponse,
     ApiOperation,
     ApiTags,
     ApiUnauthorizedResponse
 } from '@nestjs/swagger'
-import { Access, Auth, type AuthContext } from '../access/access.js'
+import { Access, Auth, type AuthContext, EidOptional } from '../access/access.js'
 import { EidTokenDto } from './account.dto.js'
 import { AccountService } from './account.service.js'
 
@@ -15,12 +16,16 @@ import { AccountService } from './account.service.js'
 @ApiTags('eID')
 @Controller('me/eid')
 @Access('account')
+// Linking the eID is what an account without one must do (OIDC_EID_REQUIRED)
+@EidOptional()
 export class EidController {
     constructor(private readonly accounts: AccountService) {}
 
     @Get()
     @ApiOperation({ summary: 'Is an eID linked to this account (and is eID login available at all)?' })
-    @ApiOkResponse({ description: '{ enabled, linked, linkedAt, lastUsedAt, hasPassword }' })
+    @ApiOkResponse({
+        description: '{ enabled, linked, linkedAt, lastUsedAt, hasPassword, required } (required: OIDC_EID_REQUIRED)'
+    })
     status(@Auth() auth: AuthContext) {
         return this.accounts.eidStatus(auth.userId)
     }
@@ -53,6 +58,7 @@ export class EidController {
     @ApiOperation({ summary: 'Unlink the eID (not when the account has no password: the eID is then its only login)' })
     @ApiOkResponse({ description: 'The new status: { enabled, linked: false, ... }' })
     @ApiConflictResponse({ description: 'oidc.EID_ONLY_LOGIN: choose a password first (forgot password)' })
+    @ApiForbiddenResponse({ description: 'oidc.EID_REQUIRED: every account must keep its eID (OIDC_EID_REQUIRED)' })
     unlink(@Auth() auth: AuthContext) {
         return this.accounts.unlinkEid(auth.userId)
     }

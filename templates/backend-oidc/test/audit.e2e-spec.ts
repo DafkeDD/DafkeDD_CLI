@@ -6,8 +6,6 @@ import type { App } from 'supertest/types.js'
 import { AppModule } from '../src/app.module.js'
 import { AUDIT_STORE } from '../src/audit/audit.store.js'
 import { MemoryAuditStore } from '../src/audit/memory-audit.store.js'
-import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
-import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
 import { BILLING_STORE } from '../src/billing/store/billing.store.js'
 import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
@@ -19,11 +17,17 @@ import { hashPassword } from '../src/oidc/password.js'
 import { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js'
 import { OIDC_STORE } from '../src/oidc/store/oidc.store.js'
 import { configureApp } from '../src/setup.js'
+import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
+import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
+import { INVOICES_STORE } from '../src/billing/invoices/invoices.store.js'
+import { MemoryInvoicesStore } from '../src/billing/invoices/memory-invoices.store.js'
 
 process.env.OIDC_MASTER_KEY ??= randomBytes(32).toString('hex')
 process.env.OIDC_LOGIN_RATE_LIMIT = '1000'
 process.env.OIDC_LOGIN_UI_URL = ''
 process.env.OIDC_MFA = 'optional'
+// The accounts of these tests have no eID (the tests of OIDC_EID_REQUIRED are in eid.e2e-spec.ts)
+process.env.OIDC_EID_REQUIRED = 'off'
 process.env.APP_URL = 'http://localhost:3000'
 
 const REDIRECT = 'http://localhost:3000/api/auth/callback'
@@ -73,14 +77,24 @@ describe('Audit log (e2e)', () => {
         const moduleRef = await Test.createTestingModule({ imports: [AppModule, OidcModule] })
             .overrideProvider(DatabaseService)
             .useValue({ ping: vi.fn().mockResolvedValue(true), query: vi.fn().mockResolvedValue({ rows: [] }) })
+            .overrideProvider(NOTIFICATIONS_STORE)
+            .useValue(new MemoryNotificationsStore())
+            .overrideProvider(INVOICES_STORE)
+            .useValue(
+                new MemoryInvoicesStore(async () => ({
+                    tenantName: 'Test',
+                    company: null,
+                    vat: null,
+                    billingAddress: null,
+                    billingEmail: null
+                }))
+            )
             .overrideProvider(OIDC_STORE)
             .useValue(store)
             .overrideProvider(BILLING_STORE)
             .useValue(new MemoryBillingStore())
             .overrideProvider(AUDIT_STORE)
             .useValue(audit)
-            .overrideProvider(NOTIFICATIONS_STORE)
-            .useValue(new MemoryNotificationsStore())
             .overrideProvider(MailService)
             .useValue({ send: async () => true })
             .compile()

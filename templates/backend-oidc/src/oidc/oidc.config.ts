@@ -51,6 +51,8 @@ export const OIDC = {
     EID_AMR: ['sc', 'pin'],
     /** An eID challenge (nonce) is valid for 5 minutes. */
     EID_CHALLENGE_SECONDS: 5 * 60,
+    /** A verified eID waits this long for the rest of its form (an invitation: the name and the password). */
+    EID_PROOF_SECONDS: 15 * 60,
     /** Lifetimes of the links in emails. */
     VERIFY_EMAIL_SECONDS: 24 * 60 * 60,
     RESET_PASSWORD_SECONDS: 60 * 60,
@@ -145,6 +147,18 @@ export class OidcConfig {
     get eid(): 'off' | 'on' | 'test' {
         const value = this.config.get<string>('OIDC_EID') ?? 'off'
         return value === 'on' || value === 'test' ? value : 'off'
+    }
+
+    /**
+     * Every account must have its Belgian eID linked (OIDC_EID_REQUIRED): `on` or `off`; by default on when the eID
+     * login is on (OIDC_EID on or test). Then registration is only possible with the eID, a new account of an invitation
+     * reads the eID first, and the API refuses (403 oidc.EID_REQUIRED) an account without one, except the routes to link
+     * it (@EidOptional) and superadmins. Never when there is no eID login (OIDC_EID=off or OIDC_EXTERNAL_ONLY).
+     */
+    get eidRequired(): boolean {
+        if (this.eid === 'off' || this.externalOnly) return false
+        const value = this.config.get<string>('OIDC_EID_REQUIRED')
+        return value ? value !== 'off' : true
     }
 
     /**

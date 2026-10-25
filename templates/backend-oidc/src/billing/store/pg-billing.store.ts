@@ -1,24 +1,27 @@
 import { Injectable } from '@nestjs/common'
 import type { QueryResultRow } from 'pg'
 import { DatabaseService } from '../../database/database.service.js'
-import type {
-    Assignment,
-    AssignResult,
-    BillingStore,
-    DiscountCode,
-    Grant,
-    NewDiscountCode,
-    NewProduct,
-    NewPayment,
-    Payment,
-    Product,
-    Subscription,
-    Trial
+import {
+    CATALOG_DEFAULTS,
+    type Assignment,
+    type AssignResult,
+    type BillingStore,
+    type DiscountCode,
+    type Environment,
+    type Grant,
+    type NewDiscountCode,
+    type NewProduct,
+    type NewPayment,
+    type Payment,
+    type Product,
+    type Subscription,
+    type Trial
 } from './billing.store.js'
 
 const PRODUCT_COLUMNS =
     'id, code, name, description, price_month_cents AS "priceMonthCents", price_year_cents AS "priceYearCents", ' +
-    'currency, active, created_at AS "createdAt"'
+    'currency, active, created_at AS "createdAt", icon, category, short_description AS "short", features, color, ' +
+    'requires_vault AS "requiresVault", demo_enabled AS "demoEnabled", launch_url AS "launchUrl", sort'
 const DISCOUNT_COLUMNS =
     'id, code, percent_off AS "percentOff", amount_off_cents AS "amountOffCents", product_id AS "productId", duration, ' +
     'duration_periods AS "durationPeriods", max_redemptions AS "maxRedemptions", redemptions, expires_at AS "expiresAt", ' +
@@ -27,7 +30,7 @@ const SUBSCRIPTION_COLUMNS =
     'id, tenant_id AS "tenantId", product_id AS "productId", interval, seats, status, ' +
     'provider_subscription_id AS "providerSubscriptionId", current_period_end AS "currentPeriodEnd", ' +
     'cancel_at_period_end AS "cancelAtPeriodEnd", discount_code_id AS "discountCodeId", ' +
-    'discount_periods_left AS "discountPeriodsLeft"'
+    'discount_periods_left AS "discountPeriodsLeft", environment_name AS "environmentName", region'
 const GRANT_COLUMNS =
     'id, tenant_id AS "tenantId", product_id AS "productId", seats, ends_at AS "endsAt", note, created_at AS "createdAt"'
 const TRIAL_COLUMNS =
@@ -45,14 +48,25 @@ const SUBSCRIPTION_FIELDS: Record<string, string> = {
     currentPeriodEnd: 'current_period_end',
     cancelAtPeriodEnd: 'cancel_at_period_end',
     discountCodeId: 'discount_code_id',
-    discountPeriodsLeft: 'discount_periods_left'
+    discountPeriodsLeft: 'discount_periods_left',
+    environmentName: 'environment_name',
+    region: 'region'
 }
 const PRODUCT_FIELDS: Record<string, string> = {
     name: 'name',
     description: 'description',
     priceMonthCents: 'price_month_cents',
     priceYearCents: 'price_year_cents',
-    active: 'active'
+    active: 'active',
+    icon: 'icon',
+    category: 'category',
+    short: 'short_description',
+    features: 'features',
+    color: 'color',
+    requiresVault: 'requires_vault',
+    demoEnabled: 'demo_enabled',
+    launchUrl: 'launch_url',
+    sort: 'sort'
 }
 
 /** "SET a = $2, b = $3" from the fields that are given (undefined fields stay as they are). */
@@ -99,28 +113,60 @@ export class PgBillingStore implements BillingStore {
 
     async createProduct(product: NewProduct) {
         const rows = await this.query<Product>(
-            `INSERT INTO license_products (code, name, description, price_month_cents, price_year_cents, active)
-       VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (code) DO NOTHING RETURNING ${PRODUCT_COLUMNS}`,
+            `INSERT INTO license_products (code, name, description, price_month_cents, price_year_cents, active, icon,
+                               category, short_description, features, color, requires_vault, demo_enabled, launch_url,
+                               sort)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       ON CONFLICT (code) DO NOTHING RETURNING ${PRODUCT_COLUMNS}`,
             [
                 product.code,
                 product.name,
                 product.description,
                 product.priceMonthCents,
                 product.priceYearCents,
-                product.active
+                product.active,
+                product.icon ?? CATALOG_DEFAULTS.icon,
+                product.category ?? CATALOG_DEFAULTS.category,
+                product.short ?? CATALOG_DEFAULTS.short,
+                JSON.stringify(product.features ?? CATALOG_DEFAULTS.features),
+                product.color ?? CATALOG_DEFAULTS.color,
+                product.requiresVault ?? CATALOG_DEFAULTS.requiresVault,
+                product.demoEnabled ?? CATALOG_DEFAULTS.demoEnabled,
+                product.launchUrl ?? CATALOG_DEFAULTS.launchUrl,
+                product.sort ?? CATALOG_DEFAULTS.sort
             ]
         )
         return rows[0] ?? null
     }
 
     async updateProduct(id: string, change: Partial<Omit<NewProduct, 'code'>>) {
-        const { sql, values } = setClause(change, PRODUCT_FIELDS)
+        // jsonb: pg would send a JavaScript array as a PostgreSQL array
+        const { sql, values } = setClause(
+            { ...change, features: change.features && JSON.stringify(change.features) },
+            PRODUCT_FIELDS
+        )
         if (!sql) return this.findProduct(id)
         const rows = await this.query<Product>(
             `UPDATE license_products SET ${sql} WHERE id = $1 RETURNING ${PRODUCT_COLUMNS}`,
             [id, ...values]
         )
         return rows[0] ?? null
+    }
+
+    async deleteProduct(id: string) {
+        const rows = await this.query<{ deleted: boolean; found: boolean }>(
+            `WITH removed AS (
+                 DELETE FROM license_products
+                 WHERE id = $1
+                   AND NOT EXISTS (SELECT 1 FROM tenant_subscriptions WHERE product_id = $1 AND status <> 'canceled')
+                 RETURNING id
+             )
+             SELECT EXISTS (SELECT 1 FROM removed) AS deleted,
+                    EXISTS (SELECT 1 FROM license_products WHERE id = $1) OR EXISTS (SELECT 1 FROM removed) AS found`,
+            [id]
+        )
+        if (rows[0]?.deleted) return 'deleted'
+        return rows[0]?.found ? 'in_use' : 'missing'
     }
 
     // ---------------------------------------------------------------- discount codes
@@ -224,6 +270,22 @@ export class PgBillingStore implements BillingStore {
         await this.query('UPDATE tenants SET payment_customer_id = $2 WHERE id = $1', [tenantId, customerId])
     }
 
+    listEnvironments(tenantId: string) {
+        return this.query<Environment>(
+            `SELECT product_id AS "productId", environment_name AS name, region, created_at AS since
+         FROM tenant_subscriptions WHERE tenant_id = $1`,
+            [tenantId]
+        )
+    }
+
+    async listAllOwnership() {
+        const [subscriptions, grants] = await Promise.all([
+            this.query<Subscription>(`SELECT ${SUBSCRIPTION_COLUMNS} FROM tenant_subscriptions`),
+            this.query<Grant>(`SELECT ${GRANT_COLUMNS} FROM license_grants`)
+        ])
+        return { subscriptions, grants }
+    }
+
     listSubscriptions(tenantId: string) {
         return this.query<Subscription>(
             `SELECT ${SUBSCRIPTION_COLUMNS} FROM tenant_subscriptions WHERE tenant_id = $1`,
@@ -258,13 +320,14 @@ export class PgBillingStore implements BillingStore {
     async saveSubscription(subscription: Omit<Subscription, 'id'>) {
         const rows = await this.query<Subscription>(
             `INSERT INTO tenant_subscriptions (tenant_id, product_id, interval, seats, status, provider_subscription_id,
-                                         current_period_end, cancel_at_period_end, discount_code_id, discount_periods_left)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                                         current_period_end, cancel_at_period_end, discount_code_id, discount_periods_left,
+                                         environment_name, region)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        ON CONFLICT (tenant_id, product_id) DO UPDATE SET interval = EXCLUDED.interval, seats = EXCLUDED.seats,
          status = EXCLUDED.status, provider_subscription_id = EXCLUDED.provider_subscription_id,
          current_period_end = EXCLUDED.current_period_end, cancel_at_period_end = EXCLUDED.cancel_at_period_end,
          discount_code_id = EXCLUDED.discount_code_id, discount_periods_left = EXCLUDED.discount_periods_left,
-         updated_at = now()
+         environment_name = EXCLUDED.environment_name, region = EXCLUDED.region, updated_at = now()
        RETURNING ${SUBSCRIPTION_COLUMNS}`,
             [
                 subscription.tenantId,
@@ -276,7 +339,9 @@ export class PgBillingStore implements BillingStore {
                 subscription.currentPeriodEnd,
                 subscription.cancelAtPeriodEnd,
                 subscription.discountCodeId,
-                subscription.discountPeriodsLeft
+                subscription.discountPeriodsLeft,
+                subscription.environmentName ?? null,
+                subscription.region ?? null
             ]
         )
         return rows[0] as Subscription

@@ -4,8 +4,9 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import pc from 'picocolors'
 import { ensureGitignore, GITIGNORE_LINES } from './claude.js'
-import { NOTIFICATIONS_MESSAGES, AUTH_SCREEN_MESSAGES, PAGES_MESSAGES } from './frontends/pasport-messages.js'
+import { AUTH_SCREEN_MESSAGES, EID_GATE_MESSAGES, PASSWORD_MESSAGES } from './frontends/pasport-messages.js'
 import { SHELL_MESSAGES } from './frontends/oidc.js'
+import { PORTAL_MESSAGES } from './frontends/portal-messages.js'
 import { kbFiles } from './kb.js'
 import { buildManifest, inferProject, managedFiles, manifestProject, MANIFEST, readManifest, sha } from './manifest.js'
 
@@ -158,9 +159,10 @@ export function describe(project) {
 /** The namespaces of messages/*.json that the files of the Pasport design (DESIGN_FILES) use. */
 export const DESIGN_MESSAGES = {
     Shell: SHELL_MESSAGES,
-    Notifications: NOTIFICATIONS_MESSAGES,
     AuthScreen: AUTH_SCREEN_MESSAGES,
-    Pages: PAGES_MESSAGES
+    Password: PASSWORD_MESSAGES,
+    EidGate: EID_GATE_MESSAGES,
+    Portal: PORTAL_MESSAGES
 }
 
 /** Adds what `from` has and `into` misses (also nested); never changes a text that is there. Returns the added keys. */

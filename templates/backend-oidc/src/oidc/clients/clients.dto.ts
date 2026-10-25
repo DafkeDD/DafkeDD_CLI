@@ -107,7 +107,7 @@ export class LinkDto {
         description: 'The link code of /admin (one time, 15 minutes)'
     })
     @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
-    @MinLength(12, { message: i18nValidationMessage('validation.MIN_LENGTH') })
+    @MinLength(24, { message: i18nValidationMessage('validation.MIN_LENGTH') })
     @MaxLength(48, { message: i18nValidationMessage('validation.MAX_LENGTH') })
     code!: string
 
@@ -157,7 +157,7 @@ export class LinkRolesDto {
         description: 'A link code of the app on /admin (one time, 15 minutes)'
     })
     @IsString({ message: i18nValidationMessage('validation.IS_STRING') })
-    @MinLength(12, { message: i18nValidationMessage('validation.MIN_LENGTH') })
+    @MinLength(24, { message: i18nValidationMessage('validation.MIN_LENGTH') })
     @MaxLength(48, { message: i18nValidationMessage('validation.MAX_LENGTH') })
     code!: string
 

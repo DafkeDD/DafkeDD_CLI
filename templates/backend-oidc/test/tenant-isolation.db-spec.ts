@@ -343,6 +343,21 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
             store.linkIdentifier(kim.id, 'eid', 'hash-' + randomUUID())
         ])
         expect([...links].sort()).toEqual(['exists', 'ok'])
+        // An invited account with its eID (one transaction): refused, and nothing created, when the eID is taken
+        const ivy = await store.createUserWithIdentifier(account('ivy@example.com'), {
+            type: 'eid',
+            valueHash: 'hash-ivy'
+        })
+        expect(ivy).toMatchObject({ email: 'ivy@example.com' })
+        expect(
+            await store.createUserWithIdentifier(account('ivo@example.com'), { type: 'eid', valueHash: 'hash-ivy' })
+        ).toBe('identifier-taken')
+        expect(await store.findUserByEmail('ivo@example.com')).toBeNull()
+        const ivyId = ivy && typeof ivy === 'object' ? ivy.id : ''
+        expect((await store.listLinkedUsers('eid', [ivyId, kim.id, user.ada, 'not-a-uuid'])).sort()).toEqual(
+            [ivyId, kim.id].sort()
+        )
+        expect(await store.listLinkedUsers('eid', [])).toEqual([])
 
         await store.touchIdentifier('eid', eid.valueHash)
         expect((await store.findIdentifier(jan.id, 'eid'))?.lastUsedAt).toBeInstanceOf(Date)
@@ -483,7 +498,11 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         expect(await store.setMemberStatus(tenantId, chief, 'disabled')).toBe('last-admin')
         expect(await store.setMemberStatus(tenantId, helper, 'disabled')).toBe('ok')
         expect(await store.findMemberRole(tenantId, helper)).toBeNull()
-        expect(await store.findMember(tenantId, helper)).toEqual({ role: 'user', status: 'disabled' })
+        expect(await store.findMember(tenantId, helper)).toEqual({
+            role: 'user',
+            status: 'disabled',
+            profession: 'staff'
+        })
         expect(await store.listMemberships(helper)).toEqual([])
         // A disabled admin does not count as the active admin
         await store.setMemberRole(tenantId, helper, 'admin')

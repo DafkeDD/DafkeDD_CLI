@@ -20,7 +20,10 @@ import { MfaController } from './mfa.controller.js'
 import { MfaService } from './mfa.service.js'
 import { OidcConfig } from './oidc.config.js'
 import { PasskeyService } from './passkeys/passkey.service.js'
+import { PasswordController } from './password.controller.js'
 import { PasskeysController } from './passkeys/passkeys.controller.js'
+import { ProfileController } from './profile.controller.js'
+import { ProfileService } from './profile.service.js'
 import { OidcController } from './oidc.controller.js'
 import { OidcService } from './oidc.service.js'
 import { OIDC_STORE } from './store/oidc.store.js'
@@ -39,10 +42,12 @@ import { WellKnownController } from './well-known.controller.js'
         MfaController,
         EidController,
         SessionsController,
+        LinkController,
+        PasswordController,
         PasskeysController,
         ConsentsController,
         ClientsController,
-        LinkController,
+        ProfileController,
         WellKnownController
     ],
     providers: [
@@ -55,6 +60,7 @@ import { WellKnownController } from './well-known.controller.js'
         BackchannelService,
         ClientsService,
         AccountService,
+        ProfileService,
         MfaService,
         EidService,
         TokensService,
@@ -71,16 +77,16 @@ import { WellKnownController } from './well-known.controller.js'
         ExternalService,
         PasskeyService,
         BackchannelService,
+        ClientsService,
         TokensService,
         SessionsService,
         AccountService,
         MfaService,
         EidService,
         KeysService,
-        // The rate limit of the logins, for other modules with endpoints that check a secret (an app, a code)
-        LoginLimiter,
         OidcConfig,
         AccessGuard,
+        LoginLimiter,
         OIDC_STORE
     ]
 })

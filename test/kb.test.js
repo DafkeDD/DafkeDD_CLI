@@ -12,7 +12,7 @@ test('the knowledge base knows the pages the CLI generates, for each kind of pro
         ['/', '/login', '/profile']
     )
     const pasport = kbPages('pasport').map(page => page.id)
-    for (const id of ['login', 'register', 'profile', 'security', 'members', 'licenses', 'audit', 'admin'])
+    for (const id of ['login', 'register', 'dashboard', 'users', 'support', 'vault', 'security', 'audit', 'admin'])
         assert.ok(pasport.includes(id), id)
     assert.deepEqual(
         kbPages(null).map(page => page.id),
@@ -32,12 +32,12 @@ test('every page has a title and a purpose in the four languages, all different'
 })
 
 test('a page of the knowledge base: purpose, where and who, screenshots in light and dark, the tables to fill', () => {
-    const [members] = kbPages('pasport').filter(page => page.id === 'members')
+    const [members] = kbPages('pasport').filter(page => page.id === 'users')
     const nl = kbPage(members, 'nl')
     assert.match(nl, /^# Gebruikers\n/)
-    assert.match(nl, /\*\*Waar\*\*: `\/members` · \*\*Wie\*\*: De beheerder van de organisatie/)
-    assert.match(nl, /!\[Gebruikers\]\(\.\.\/screenshots\/nl\/members-light\.png\)/)
-    assert.match(nl, /!\[Gebruikers\]\(\.\.\/screenshots\/nl\/members-dark\.png\)/)
+    assert.match(nl, /\*\*Waar\*\*: `\/users` · \*\*Wie\*\*: De beheerder van de organisatie/)
+    assert.match(nl, /!\[Gebruikers\]\(\.\.\/screenshots\/nl\/users-light\.png\)/)
+    assert.match(nl, /!\[Gebruikers\]\(\.\.\/screenshots\/nl\/users-dark\.png\)/)
     assert.match(nl, /## Wat je hier kunt doen\n\n<!-- kb: .+ -->\n\n\| Element \| Wat het doet \| Wat je dan ziet \|/)
     assert.match(nl, /## Meldingen/)
     assert.match(kbPage(members, 'fr'), /## Ce que vous pouvez faire ici/)

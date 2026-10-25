@@ -8,8 +8,6 @@ import { BILLING_STORE } from '../src/billing/store/billing.store.js'
 import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
 import { AUDIT_STORE } from '../src/audit/audit.store.js'
 import { MemoryAuditStore } from '../src/audit/memory-audit.store.js'
-import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
-import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import type { Mail } from '../src/mail/mail.service.js'
 import { MailService } from '../src/mail/mail.service.js'
@@ -21,6 +19,10 @@ import { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js'
 import { OIDC_STORE } from '../src/oidc/store/oidc.store.js'
 import { base32Decode, hotp, totpStep } from '../src/oidc/totp.js'
 import { configureApp } from '../src/setup.js'
+import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
+import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
+import { INVOICES_STORE } from '../src/billing/invoices/invoices.store.js'
+import { MemoryInvoicesStore } from '../src/billing/invoices/memory-invoices.store.js'
 
 process.env.OIDC_MASTER_KEY ??= randomBytes(32).toString('hex')
 process.env.OIDC_LOGIN_RATE_LIMIT = '1000'
@@ -28,6 +30,8 @@ process.env.OIDC_LOGIN_UI_URL = ''
 process.env.OIDC_REGISTRATION = 'open'
 // Two-step verification is required by default; the tests that are not about it switch it off
 process.env.OIDC_MFA = 'optional'
+// The accounts of these tests have no eID (the tests of OIDC_EID_REQUIRED are in eid.e2e-spec.ts)
+process.env.OIDC_EID_REQUIRED = 'off'
 process.env.APP_URL = 'http://localhost:3000'
 
 const REDIRECT = 'http://localhost:3000/api/auth/callback'
@@ -61,14 +65,24 @@ describe('Accounts, roles and the platform (e2e)', () => {
         const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
             .overrideProvider(DatabaseService)
             .useValue({ ping: vi.fn().mockResolvedValue(true), query: vi.fn().mockResolvedValue({ rows: [] }) })
+            .overrideProvider(NOTIFICATIONS_STORE)
+            .useValue(new MemoryNotificationsStore())
+            .overrideProvider(INVOICES_STORE)
+            .useValue(
+                new MemoryInvoicesStore(async () => ({
+                    tenantName: 'Test',
+                    company: null,
+                    vat: null,
+                    billingAddress: null,
+                    billingEmail: null
+                }))
+            )
             .overrideProvider(OIDC_STORE)
             .useValue(store)
             .overrideProvider(BILLING_STORE)
             .useValue(new MemoryBillingStore())
             .overrideProvider(AUDIT_STORE)
             .useValue(new MemoryAuditStore())
-            .overrideProvider(NOTIFICATIONS_STORE)
-            .useValue(new MemoryNotificationsStore())
             .overrideProvider(MailService)
             .useValue({
                 send: async (mail: Mail) => {
@@ -353,6 +367,126 @@ describe('Accounts, roles and the platform (e2e)', () => {
             await http().post('/me/heartbeat').expect(401)
         })
 
+        it('keeps the status a member chose, shown to the admins only while online', async () => {
+            const alice = await accessToken('alice@example.com')
+            const me = () => http().get('/me/status').set(bearer(alice.access_token))
+            expect((await me().expect(200)).body).toMatchObject({
+                status: 'available',
+                outOfOffice: { enabled: false, active: false }
+            })
+            await http().put('/me/status').set(bearer(alice.access_token)).send({ status: 'dnd' }).expect(200)
+            expect((await me().expect(200)).body).toMatchObject({ status: 'dnd' })
+            await http().put('/me/status').set(bearer(alice.access_token)).send({ status: 'sleeping' }).expect(400)
+            await http().put('/me/status').send({ status: 'busy' }).expect(401)
+
+            const members = async () =>
+                (await http().get('/tenants/current/members').set(bearer(alice.access_token)).expect(200)).body as {
+                    userId: string
+                    online: boolean
+                    presence: string
+                }[]
+            expect((await members()).find(member => member.userId === ids.alice)).toMatchObject({
+                online: true,
+                presence: 'dnd'
+            })
+            // Not online (no request in the last two minutes): offline, whatever was chosen
+            const bob = store.members.find(member => member.userId === ids.bob && member.tenantId === ids.acme)
+            if (bob) bob.lastSeenAt = new Date(Date.now() - 3 * 60_000)
+            store.presences.set(ids.bob, 'busy')
+            expect((await members()).find(member => member.userId === ids.bob)).toMatchObject({
+                online: false,
+                presence: 'offline'
+            })
+            // Appear offline: online, but shown as offline
+            await http().put('/me/status').set(bearer(alice.access_token)).send({ status: 'offline' }).expect(200)
+            expect((await members()).find(member => member.userId === ids.alice)).toMatchObject({
+                online: false,
+                presence: 'offline'
+            })
+            await http().put('/me/status').set(bearer(alice.access_token)).send({ status: 'available' }).expect(200)
+            store.presences.delete(ids.bob)
+        })
+
+        it('shows "available" as away after 5 minutes without use, but keeps a chosen busy', async () => {
+            const alice = await accessToken('alice@example.com')
+            const shown = async () =>
+                (
+                    (await http().get('/tenants/current/members').set(bearer(alice.access_token)).expect(200)).body as {
+                        userId: string
+                        presence: string
+                    }[]
+                ).find(member => member.userId === ids.alice)?.presence
+            const beat = (idle: boolean) =>
+                http().post('/me/heartbeat').set(bearer(alice.access_token)).send({ idle }).expect(204)
+            await beat(true)
+            expect(await shown()).toBe('away')
+            await http().put('/me/status').set(bearer(alice.access_token)).send({ status: 'busy' }).expect(200)
+            expect(await shown()).toBe('busy')
+            await http().put('/me/status').set(bearer(alice.access_token)).send({ status: 'available' }).expect(200)
+            // The mouse moved again
+            await beat(false)
+            expect(await shown()).toBe('available')
+            await http().post('/me/heartbeat').set(bearer(alice.access_token)).send({ idle: 'yes' }).expect(400)
+        })
+
+        it('a new login starts as available, whatever was chosen before', async () => {
+            const before = await accessToken('alice@example.com')
+            await http().put('/me/status').set(bearer(before.access_token)).send({ status: 'dnd' }).expect(200)
+            await http().post('/me/heartbeat').set(bearer(before.access_token)).send({ idle: true }).expect(204)
+            const after = await accessToken('alice@example.com')
+            expect((await http().get('/me/status').set(bearer(after.access_token)).expect(200)).body).toMatchObject({
+                status: 'available'
+            })
+            const members = (await http().get('/tenants/current/members').set(bearer(after.access_token)).expect(200))
+                .body as { userId: string; presence: string }[]
+            expect(members.find(member => member.userId === ids.alice)?.presence).toBe('available')
+        })
+
+        it('an out-of-office reply: on, in its period, shown to the admins as out of office', async () => {
+            const alice = await accessToken('alice@example.com')
+            const ooo = (body: object) => http().put('/me/out-of-office').set(bearer(alice.access_token)).send(body)
+            const shown = async () =>
+                (
+                    (await http().get('/tenants/current/members').set(bearer(alice.access_token)).expect(200)).body as {
+                        userId: string
+                        presence: string
+                    }[]
+                ).find(member => member.userId === ids.alice)?.presence
+
+            const until = new Date(Date.now() + 7 * 86_400_000).toISOString()
+            const on = await ooo({
+                enabled: true,
+                until,
+                internalMessage: '  Sofie takes over  ',
+                externalMessage: 'Back next week.'
+            }).expect(200)
+            expect(on.body.outOfOffice).toEqual({
+                enabled: true,
+                from: null,
+                until,
+                internalMessage: 'Sofie takes over',
+                externalMessage: 'Back next week.',
+                active: true
+            })
+            expect(await shown()).toBe('ooo')
+            // Only from tomorrow: not active yet
+            const tomorrow = new Date(Date.now() + 86_400_000).toISOString()
+            expect((await ooo({ enabled: true, from: tomorrow, until }).expect(200)).body.outOfOffice.active).toBe(
+                false
+            )
+            expect(await shown()).toBe('available')
+            // The end before the start, a date that is no date, a message that is too long
+            const wrong = await ooo({ enabled: true, from: until, until: tomorrow })
+                .set('Accept-Language', 'nl')
+                .expect(400)
+            expect(wrong.body.error).toBe('errors.OUT_OF_OFFICE_DATES')
+            await ooo({ enabled: true, until: 'next week' }).expect(400)
+            await ooo({ enabled: true, internalMessage: 'x'.repeat(1001) }).expect(400)
+            await http().put('/me/out-of-office').send({ enabled: false }).expect(401)
+            await ooo({ enabled: false }).expect(200)
+            expect(await shown()).toBe('available')
+        })
+
         it('disables a member at once (no API, no login, sessions end) and enables it again', async () => {
             const tenant = store.addTenant('trio', 'Trio')
             const boss = store.addUser({
@@ -441,6 +575,9 @@ describe('Accounts, roles and the platform (e2e)', () => {
                 role: 'user',
                 inviterName: 'Alice',
                 accountExists: false,
+                // OIDC_EID of .env; the eID is not required in these tests
+                eid: expect.any(Boolean),
+                eidRequired: false,
                 apps: []
             })
             const missing = await http().post('/oidc/account/invitation/accept').send({ token }).expect(400)
@@ -602,6 +739,18 @@ describe('Accounts, roles and the platform (e2e)', () => {
                 .expect(200)
             expect((await accessToken('boss@umbrella.com')).access_token).toBeTruthy()
 
+            // Your own email: you are its admin at once, no invitation (the next login offers the organisation)
+            const own = await http()
+                .post('/admin/tenants')
+                .set(bearer(root))
+                .send({ name: 'Initech', adminEmail: 'Root@Example.com' })
+                .expect(201)
+            expect(own.body).toMatchObject({ invited: null, joined: true })
+            const tenants = await http().get('/admin/tenants').set(bearer(root)).expect(200)
+            expect(tenants.body).toEqual(
+                expect.arrayContaining([expect.objectContaining({ id: own.body.tenant.id, members: 1 })])
+            )
+
             await http()
                 .patch('/admin/tenants/' + created.body.tenant.id)
                 .set(bearer(root))
@@ -684,14 +833,24 @@ describe('Accounts, roles and the platform (e2e)', () => {
             const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
                 .overrideProvider(DatabaseService)
                 .useValue({ ping: vi.fn().mockResolvedValue(true), query: vi.fn().mockResolvedValue({ rows: [] }) })
+                .overrideProvider(NOTIFICATIONS_STORE)
+                .useValue(new MemoryNotificationsStore())
+                .overrideProvider(INVOICES_STORE)
+                .useValue(
+                    new MemoryInvoicesStore(async () => ({
+                        tenantName: 'Test',
+                        company: null,
+                        vat: null,
+                        billingAddress: null,
+                        billingEmail: null
+                    }))
+                )
                 .overrideProvider(OIDC_STORE)
                 .useValue(empty)
                 .overrideProvider(BILLING_STORE)
                 .useValue(new MemoryBillingStore())
                 .overrideProvider(AUDIT_STORE)
                 .useValue(new MemoryAuditStore())
-                .overrideProvider(NOTIFICATIONS_STORE)
-                .useValue(new MemoryNotificationsStore())
                 .overrideProvider(MailService)
                 .useValue({ send: async () => true })
                 .compile()

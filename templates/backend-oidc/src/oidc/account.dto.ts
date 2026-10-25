@@ -16,7 +16,7 @@ import {
 } from 'class-validator'
 import { i18nValidationMessage } from 'nestjs-i18n'
 import { OIDC } from './oidc.config.js'
-import { TENANT_ROLES, type TenantRole } from './store/oidc.store.js'
+import { PROFESSIONS, type Profession, TENANT_ROLES, type TenantRole } from './store/oidc.store.js'
 
 const isString = { message: i18nValidationMessage('validation.IS_STRING') }
 const minLength = { message: i18nValidationMessage('validation.MIN_LENGTH') }
@@ -29,7 +29,27 @@ const arrayMaxSize = { message: i18nValidationMessage('validation.ARRAY_MAX_SIZE
 const isBoolean = { message: i18nValidationMessage('validation.IS_BOOLEAN') }
 const matches = { message: i18nValidationMessage('validation.MATCHES') }
 
-export class RegisterDto {
+/** A phone number: digits, spaces and + ( ) . / - (at most 30 characters). */
+export const PHONE = /^[0-9+()./ -]{0,30}$/
+
+/** Optional phone and language of a new account (registration). */
+export class RegistrationExtrasDto {
+    @ApiPropertyOptional({ example: '+32 470 12 34 56' })
+    @IsOptional()
+    @Matches(PHONE, matches)
+    phone?: string
+
+    @ApiPropertyOptional({
+        enum: OIDC.LOCALES,
+        example: 'nl',
+        description: 'Language of the account (default: the language of the request)'
+    })
+    @IsOptional()
+    @IsIn(OIDC.LOCALES, isIn)
+    locale?: string
+}
+
+export class RegisterDto extends RegistrationExtrasDto {
     @ApiProperty({ example: 'Ada Lovelace' })
     @IsString(isString)
     @MinLength(2, minLength)
@@ -76,6 +96,24 @@ export class ResetPasswordDto extends TokenDto {
     password!: string
 }
 
+/** A new password for the logged in account (POST /me/password). */
+export class ChangePasswordDto {
+    @ApiPropertyOptional({
+        example: 'correct-horse-battery',
+        description: 'The password of now; not needed when the account has none yet (eID only)'
+    })
+    @IsOptional()
+    @IsString(isString)
+    @MaxLength(OIDC.PASSWORD_MAX, maxLength)
+    currentPassword?: string
+
+    @ApiProperty({ example: 'a-new-long-password', minLength: OIDC.PASSWORD_MIN })
+    @IsString(isString)
+    @MinLength(OIDC.PASSWORD_MIN, minLength)
+    @MaxLength(OIDC.PASSWORD_MAX, maxLength)
+    newPassword!: string
+}
+
 export class AcceptInvitationDto extends TokenDto {
     @ApiPropertyOptional({ example: 'Ada Lovelace', description: 'Only for a new account' })
     @IsOptional()
@@ -90,6 +128,15 @@ export class AcceptInvitationDto extends TokenDto {
     @MinLength(OIDC.PASSWORD_MIN, minLength)
     @MaxLength(OIDC.PASSWORD_MAX, maxLength)
     password?: string
+
+    @ApiPropertyOptional({
+        description:
+            'Only for a new account: the read eID of POST /oidc/account/invitation/eid (needed when OIDC_EID_REQUIRED is on)'
+    })
+    @IsOptional()
+    @IsString(isString)
+    @MaxLength(4000, maxLength)
+    eid?: string
 }
 
 /** An app in an invitation: the roles the new member gets in it, and whether it gets a seat. */
@@ -143,6 +190,12 @@ export class RoleDto {
     role!: TenantRole
 }
 
+export class ProfessionDto {
+    @ApiProperty({ enum: PROFESSIONS, example: 'doctor', description: 'doctor: may use the eHealth vault' })
+    @IsIn(PROFESSIONS, isIn)
+    profession!: Profession
+}
+
 export class MemberStatusDto {
     @ApiProperty({ enum: ['active', 'disabled'], example: 'disabled' })
     @IsIn(['active', 'disabled'], isIn)
@@ -182,4 +235,22 @@ export class RegisterEidDto extends EidTokenDto {
     @MinLength(2, minLength)
     @MaxLength(100, maxLength)
     organisation!: string
+
+    @ApiPropertyOptional({ example: '+32 470 12 34 56' })
+    @IsOptional()
+    @Matches(PHONE, matches)
+    phone?: string
+
+    @ApiPropertyOptional({ enum: OIDC.LOCALES, example: 'nl', description: 'Default: the language of the request' })
+    @IsOptional()
+    @IsIn(OIDC.LOCALES, isIn)
+    locale?: string
+}
+
+/** The eID of the invitee of an invitation (a new account), read before the name and the password are chosen. */
+export class InvitationEidDto extends EidTokenDto {
+    @ApiProperty({ description: 'The token from the link in the invitation email' })
+    @IsString(isString)
+    @MaxLength(2000, maxLength)
+    invitation!: string
 }

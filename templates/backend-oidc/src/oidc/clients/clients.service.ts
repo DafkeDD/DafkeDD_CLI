@@ -153,6 +153,7 @@ export class ClientsService {
         const fields = this.fields(body)
         const product = await this.product(body.product, clientId)
         await this.store.updateClient(clientId, { ...fields, product })
+        await this.revokeLinkCodes(clientId)
         await this.audit.record('platform.client_updated', {
             tenantId: null,
             target: { type: 'client', id: clientId },
@@ -175,6 +176,7 @@ export class ClientsService {
         if (client.type !== 'confidential') throw new AppException('oidc.CLIENT_PUBLIC', HttpStatus.CONFLICT)
         const secret = newSecret()
         await this.store.setClientSecret(clientId, sha256(secret))
+        await this.revokeLinkCodes(clientId)
         await this.audit.record('platform.client_secret_rotated', {
             tenantId: null,
             target: { type: 'client', id: clientId },
@@ -186,6 +188,7 @@ export class ClientsService {
     async setEnabled(clientId: string, enabled: boolean) {
         const client = await this.editable(clientId)
         await this.store.setClientDisabled(clientId, !enabled)
+        await this.revokeLinkCodes(clientId)
         if (client.disabled === !enabled) return this.get(clientId)
         await this.audit.record(enabled ? 'platform.client_enabled' : 'platform.client_disabled', {
             tenantId: null,
@@ -193,6 +196,11 @@ export class ClientsService {
             details: { client: clientId, name: client.name }
         })
         return this.get(clientId)
+    }
+
+    /** Every link code of the app stops (used or not): called whenever the app is changed. A no-op without codes. */
+    async revokeLinkCodes(clientId: string) {
+        await this.store.deleteLinkCodes(clientId)
     }
 
     /**
@@ -297,6 +305,29 @@ export class ClientsService {
         if (!clientId) throw new AppException('oidc.LINK_CODE_INVALID', HttpStatus.BAD_REQUEST)
         await this.setRoles(clientId, roles)
         return { clientId, roles: roles.map(role => role.key) }
+    }
+
+    /**
+     * For a catalogue app (client id = app code): switches the OIDC app of it on or off together with the app.
+     * Nothing happens without an OIDC app, or for one of the clients file.
+     */
+    async followProduct(clientId: string, enabled: boolean) {
+        const client = await this.store.findClientSummary(clientId)
+        if (client?.source !== 'admin') return
+        if (client.disabled === !enabled) return this.revokeLinkCodes(clientId)
+        await this.setEnabled(clientId, enabled)
+    }
+
+    /** For a catalogue app that is deleted: its OIDC app goes along, enabled or not. Nothing without one. */
+    async removeWithProduct(clientId: string) {
+        const client = await this.store.findClientSummary(clientId)
+        if (client?.source !== 'admin') return
+        await this.store.deleteClient(clientId)
+        await this.audit.record('platform.client_deleted', {
+            tenantId: null,
+            target: { type: 'client', id: clientId },
+            details: { client: clientId, name: client.name }
+        })
     }
 
     /** Removes the app with its codes, refresh tokens and consents. Only a disabled one (two steps on purpose). */

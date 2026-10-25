@@ -4,8 +4,40 @@ export const BILLING_STORE = Symbol('BILLING_STORE')
 export type Interval = 'month' | 'year'
 export const INTERVALS: readonly Interval[] = ['month', 'year']
 
+/** How a product looks in the app catalogue. */
+export interface ProductCatalog {
+    /** An icon key: checklist, calendar, invoice, users, idcard, euro, roster, box, ... */
+    icon: string
+    category: string
+    /** The line on its card (description is the long text). */
+    short: string
+    features: string[]
+    /** Hex colour (#0d9488), or null. */
+    color: string | null
+    /** Needs the eHealth vault (an eHealth certificate of a doctor). */
+    requiresVault: boolean
+    /** Customers can try it for free (a trial; a member has to ask it). A superadmin can always give one. */
+    demoEnabled: boolean
+    /** Where the app opens; may contain {slug} (the slug of the organisation). */
+    launchUrl: string | null
+    /** Lower first in the catalogue (then by name). */
+    sort: number
+}
+
+export const CATALOG_DEFAULTS: ProductCatalog = {
+    icon: 'box',
+    category: '',
+    short: '',
+    features: [],
+    color: null,
+    requiresVault: false,
+    demoEnabled: true,
+    launchUrl: null,
+    sort: 0
+}
+
 /** A product that is sold per user (seat), per organisation. Prices in cents, as charged. */
-export interface Product {
+export interface Product extends ProductCatalog {
     id: string
     code: string
     name: string
@@ -17,7 +49,8 @@ export interface Product {
     createdAt: Date
 }
 
-export type NewProduct = Omit<Product, 'id' | 'createdAt' | 'currency'>
+/** A new product; the catalogue fields left out get CATALOG_DEFAULTS. */
+export type NewProduct = Omit<Product, 'id' | 'createdAt' | 'currency' | keyof ProductCatalog> & Partial<ProductCatalog>
 
 export type SubscriptionStatus = 'pending' | 'active' | 'past_due' | 'canceled'
 
@@ -37,6 +70,10 @@ export interface Subscription {
     discountCodeId: string | null
     /** Periods that still get the discount: null means forever (or no discount). */
     discountPeriodsLeft: number | null
+    /** The practice name chosen at the purchase (where the app runs). */
+    environmentName?: string | null
+    /** The region it runs in: eu-west-1, eu-west-3 or eu-central-1. */
+    region?: string | null
 }
 
 export type DiscountDuration = 'once' | 'repeating' | 'forever'
@@ -89,13 +126,15 @@ export interface Assignment {
     assignedAt: Date
 }
 
-export type PaymentKind = 'first' | 'seats' | 'recurring'
+/** invoices: one payment of all open invoices of an organisation (no subscription). */
+export type PaymentKind = 'first' | 'seats' | 'recurring' | 'invoices'
 
 export interface Payment {
     /** The id of the payment provider (tr_...). */
     id: string
     tenantId: string
-    subscriptionId: string
+    /** null for a payment of open invoices (kind invoices). */
+    subscriptionId: string | null
     kind: PaymentKind
     /** first: the seats bought; seats: the seats added; recurring: the seats paid for. */
     seats: number
@@ -115,6 +154,14 @@ export type NewPayment = Omit<Payment, 'createdAt' | 'paidAt' | 'appliedAt'>
 /** Result of giving someone a seat. */
 export type AssignResult = 'ok' | 'exists' | 'full'
 
+/** Where the app of a subscription runs: the practice name and region chosen at the purchase, and since when. */
+export interface Environment {
+    productId: string
+    name: string | null
+    region: string | null
+    since: Date | null
+}
+
 export interface BillingStore {
     // ---------------------------------------------------------------- products
     listProducts(): Promise<Product[]>
@@ -123,6 +170,8 @@ export interface BillingStore {
     /** null when the code exists already. */
     createProduct(product: NewProduct): Promise<Product | null>
     updateProduct(id: string, change: Partial<Omit<NewProduct, 'code'>>): Promise<Product | null>
+    /** 'in_use' while an organisation still has a running subscription; free seats, trials and assignments go along. */
+    deleteProduct(id: string): Promise<'deleted' | 'in_use' | 'missing'>
 
     // ---------------------------------------------------------------- discount codes
     listDiscounts(): Promise<DiscountCode[]>
@@ -141,6 +190,10 @@ export interface BillingStore {
     getCustomerId(tenantId: string): Promise<string | null>
     setCustomerId(tenantId: string, customerId: string): Promise<void>
     listSubscriptions(tenantId: string): Promise<Subscription[]>
+    /** The environment of every subscription of an organisation (the app catalogue). */
+    listEnvironments(tenantId: string): Promise<Environment[]>
+    /** Every subscription and grant of every organisation (superadmins: which apps each one has). */
+    listAllOwnership(): Promise<{ subscriptions: Subscription[]; grants: Grant[] }>
     findSubscription(tenantId: string, productId: string): Promise<Subscription | null>
     findSubscriptionById(id: string): Promise<Subscription | null>
     findSubscriptionByProviderId(providerSubscriptionId: string): Promise<Subscription | null>

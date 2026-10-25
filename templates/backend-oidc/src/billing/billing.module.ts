@@ -1,9 +1,16 @@
 import { Module } from '@nestjs/common'
 import { OidcModule } from '../oidc/oidc.module.js'
 import { BillingAdminController } from './billing-admin.controller.js'
+import { BillingNotifications } from './billing-notifications.js'
 import { BillingConfig } from './billing.config.js'
 import { BillingController } from './billing.controller.js'
 import { BillingService } from './billing.service.js'
+import { CatalogController } from './catalog.controller.js'
+import { CatalogService } from './catalog.service.js'
+import { InvoicesController } from './invoices/invoices.controller.js'
+import { InvoicesService } from './invoices/invoices.service.js'
+import { INVOICES_STORE } from './invoices/invoices.store.js'
+import { PgInvoicesStore } from './invoices/pg-invoices.store.js'
 import { LicenseGuard } from './license.guard.js'
 import { LicensesController } from './licenses.controller.js'
 import { MyLicensesController } from './my-licenses.controller.js'
@@ -19,12 +26,23 @@ import { PgBillingStore } from './store/pg-billing.store.js'
  */
 @Module({
     imports: [OidcModule],
-    controllers: [LicensesController, MyLicensesController, BillingAdminController, BillingController],
+    controllers: [
+        LicensesController,
+        MyLicensesController,
+        BillingAdminController,
+        BillingController,
+        CatalogController,
+        InvoicesController
+    ],
     providers: [
         BillingConfig,
         BillingService,
+        CatalogService,
         LicenseGuard,
+        InvoicesService,
+        BillingNotifications,
         { provide: BILLING_STORE, useClass: PgBillingStore },
+        { provide: INVOICES_STORE, useClass: PgInvoicesStore },
         {
             provide: PAYMENT_PROVIDER,
             inject: [BillingConfig],
@@ -43,6 +61,6 @@ import { PgBillingStore } from './store/pg-billing.store.js'
             }
         }
     ],
-    exports: [BillingService, LicenseGuard]
+    exports: [BillingService, CatalogService, LicenseGuard, InvoicesService, INVOICES_STORE]
 })
 export class BillingModule {}

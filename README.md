@@ -701,6 +701,42 @@ git switch developer
 
 ## Changelog
 
+- **0.48.0**: the login server is the whole Pasport portal of the reference project, with everything the CLI had.
+    - The customer portal (`src/app/[locale]/(portal)`, `CustomerShell`): dashboard, "Discover apps" (the app catalogue,
+      a demo per app), the purchase wizard (seats, monthly or yearly, a discount code, the checkout), the eHealth vault
+      for doctors, users (invite with apps, roles and licences, profession, status), invoices (VAT, FAC numbers, PDF,
+      pay the open ones), support tickets (images, rating the help), profile, security, activity, and a tour of the
+      portal.
+    - The superadmin panel (`src/app/[locale]/admin/(panel)`, `AdminShell`): statistics, tenants (overview and detail:
+      members, invitations, apps, licences, billing, "Open"), every user, the tickets of the support team (claim,
+      internal notes with @mentions), the app catalogue with the connection of each app (link code, secret, roles),
+      discount codes, activity and ratings. `/members`, `/licenses` and `/admin/apps` (older links) go to the new pages.
+    - The shell (`src/components/pasport/shell.tsx`) of the login server and of every linked app: badges in the rail,
+      the bell with toasts and a chime for tickets, the own status and the out-of-office reply in the user menu (like
+      Teams and Outlook), and still the search for a page, the language, external links and the eID screen.
+    - The backend: tickets (`/tenants/current/tickets`, `/admin/tickets`), invoices, the app catalogue, the vault
+      (`/me/vault`, `POST /vault/credentials` for apps), statistics, status and out-of-office, profession, the tenant
+      detail for superadmins; migrations 14 to 21 (the CLI's 1 to 13 stay as they were). Every new route is documented.
+    - The vault reads PKCS#12 files with `node:crypto` (`src/vault/pkcs12.ts`: AES, 3DES and the RC2 of older Windows
+      and Java files), so no library with an open advisory runs in production (`node-forge` only makes the certificates
+      of the tests); image uploads of the tickets get a larger JSON body (3 MB), every other route keeps 100 kB.
+    - The texts of the portal in `messages/<language>.json` → `Portal` (`useT` of `src/components/pasport/i18n.ts`),
+      German in the du-form; the design check accepts a page in a route group whose layout draws the shell.
+    - Security and the own profile, as in the reference project:
+        - Change the password on `/security` (`POST /me/password`; the first one for an account that only had its eID),
+          every other session ends.
+        - The own profile on `/profile` (`GET`/`PATCH /me/profile`): first and last name, phone, language, a new email
+          address after confirming the link sent to it, the billing details of the organisation
+          (`/tenants/current/billing`, its admins change them) and what the eID says (national register number and
+          address, encrypted, only for the account itself).
+        - The superadmin panel has its own `/admin/profile` and `/admin/security`.
+        - `OIDC_EID_REQUIRED=on` (default off): every account must link its eID; registering only with the eID, a new
+          account of an invitation reads it first (`POST /oidc/account/invitation/eid`), and the frontend shows the eID
+          screen until it is linked. Registration asks the phone (optional) and the language.
+        - A superadmin who creates an organisation with their own email is its admin at once (no invitation to
+          themselves), so the next login offers the organisation.
+        - Expired logins are cleaned up every hour; a login at another OpenID Connect server needs a verified email
+          address; the link codes of an app stop when the app is changed.
 - **0.47.1**: the Pasport design stays the design of every project.
     - `update` also keeps the Pasport design of the frontend in step (login server and linked apps): `pasport.css`, the
       components of `src/components/pasport`, the shell, the layout, the protected routes (`src/proxy.ts`) and the proxy

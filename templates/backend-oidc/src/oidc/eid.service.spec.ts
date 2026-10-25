@@ -30,6 +30,25 @@ const errorKey = (work: () => unknown) => {
 }
 
 describe('EidService', () => {
+    it('seals a verified person for one flow, until it expires', () => {
+        const eid = setup()
+        const person = {
+            valueHash: 'hash',
+            rrnEncrypted: 'sealed',
+            address: null,
+            firstNames: 'Jan',
+            lastName: 'Specimen',
+            name: 'Jan Specimen'
+        }
+        const now = Date.now()
+        const sealed = eid.sealPerson(person, 'invite:1', now)
+        expect(sealed).not.toContain('Specimen')
+        expect(eid.openPerson(sealed, 'invite:1', now)).toEqual(person)
+        expect(errorKey(() => eid.openPerson(sealed, 'invite:2', now))).toBe('oidc.EID_EXPIRED')
+        expect(errorKey(() => eid.openPerson(sealed, 'invite:1', now + 16 * 60 * 1000))).toBe('oidc.EID_EXPIRED')
+        expect(errorKey(() => eid.openPerson('x', 'invite:1', now))).toBe('oidc.EID_EXPIRED')
+    })
+
     it('opens its own challenge only for the same purpose and account, before it expires', () => {
         const eid = setup()
         const { challenge, nonce, expiresAt } = eid.challenge('link', 'user-1')
@@ -45,7 +64,7 @@ describe('EidService', () => {
         expect(errorKey(() => eid.openChallenge({}, 'link', 'user-1'))).toBe('oidc.EID_EXPIRED')
     })
 
-    it('verifies a token of the bridge and gives the name and a hash, never the national register number', async () => {
+    it('verifies a token of the bridge and gives the name, a hash and the encrypted national register number', async () => {
         const eid = setup()
         const nonce = eid.nonce()
         const { token } = await new MockEidClient({ origin: ORIGIN, readDelayMs: 0 }).authenticate({
@@ -57,9 +76,15 @@ describe('EidService', () => {
             valueHash: eid.hash(SAMPLE_IDENTITY.nationalNumber),
             firstNames: SAMPLE_IDENTITY.firstNames,
             lastName: SAMPLE_IDENTITY.lastName,
-            name: `${SAMPLE_IDENTITY.firstNames} ${SAMPLE_IDENTITY.lastName}`
+            name: `${SAMPLE_IDENTITY.firstNames} ${SAMPLE_IDENTITY.lastName}`,
+            rrnEncrypted: expect.stringMatching(/^v1\./),
+            address: null
         })
         expect(JSON.stringify(person)).not.toContain(SAMPLE_IDENTITY.nationalNumber)
+        // Only this server can read it back (for the profile of the account itself)
+        expect(eid.openNationalNumber(person.rrnEncrypted)?.replace(/\D/g, '')).toBe(
+            SAMPLE_IDENTITY.nationalNumber.replace(/\D/g, '')
+        )
     })
 
     it('refuses the test cards with OIDC_EID=on (only the Belgian root CAs)', async () => {

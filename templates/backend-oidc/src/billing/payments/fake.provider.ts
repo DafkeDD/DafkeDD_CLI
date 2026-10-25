@@ -16,7 +16,7 @@ export class FakeProvider implements PaymentProvider {
     readonly name = 'fake'
     readonly payments = new Map<
         string,
-        ProviderPayment & { redirectUrl: string; description: string; customerId: string }
+        ProviderPayment & { redirectUrl: string; description: string; customerId: string; method?: string | null }
     >()
     readonly subscriptions = new Map<string, NewSubscription & { canceled: boolean }>()
 
@@ -40,7 +40,8 @@ export class FakeProvider implements PaymentProvider {
             metadata: payment.metadata,
             redirectUrl: payment.redirectUrl,
             description: payment.description,
-            customerId: payment.customerId
+            customerId: payment.customerId,
+            method: payment.method ?? null
         })
         return { id, checkoutUrl: `${this.checkoutBase}/${id}` }
     }

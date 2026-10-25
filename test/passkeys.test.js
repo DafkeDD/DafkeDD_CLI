@@ -112,7 +112,7 @@ test('the frontend: "Log in with a passkey", the card on /security and the texts
     assert.match(frontend['src/lib/webauthn.ts'], /navigator\.credentials\.get\(/)
     assert.match(frontend['src/lib/webauthn.ts'], /navigator\.credentials\.create\(/)
     assert.match(frontend['src/components/passkeys.tsx'], /backend\('me\/passkeys\/options', 'POST'\)/)
-    assert.match(frontend['src/app/[locale]/security/page.tsx'], /<PasskeysSecurity \/>/)
+    assert.match(frontend['src/app/[locale]/(portal)/security/page.tsx'], /<PasskeysSecurity \/>/)
     const route = frontend['src/app/api/backend/[...path]/route.ts']
     const allowed = new RegExp(/const ALLOWED =\s+\/(.+)\/$/m.exec(route)[1])
     for (const path of ['me/passkeys', 'me/passkeys/options', 'me/passkeys/6a1d1f8e-3c55-4f7b-a1a8-0e2b1b9c2d11'])

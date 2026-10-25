@@ -8,14 +8,12 @@ import { run } from '../runner.js'
 import { AUTH_MESSAGES, authFiles } from './auth.js'
 import { frontendReadme } from './docs.js'
 import {
-    APPS_MESSAGES,
     AUDIT_MESSAGES,
     envLocal,
     LICENSE_MESSAGES,
     NAV_MESSAGES,
     NOTES_MESSAGES,
     APP_LICENSE_MESSAGES,
-    APP_ROLES_MESSAGES,
     OIDC_MESSAGES,
     oidcFrontendFiles,
     SHELL_MESSAGES
@@ -23,10 +21,12 @@ import {
 import {
     AUTH_SCREEN_MESSAGES,
     INVITE_MESSAGES,
-    NOTIFICATIONS_MESSAGES,
-    PAGES_MESSAGES,
+    EID_GATE_MESSAGES,
+    PASSWORD_MESSAGES,
+    PROFILE_MESSAGES,
     REGISTER_MESSAGES
 } from './pasport-messages.js'
+import { PORTAL_MESSAGES } from './portal-messages.js'
 
 export const DIR = 'frontend'
 export const LOCALES = ['en', 'nl', 'fr', 'de']
@@ -894,16 +894,16 @@ export function withApi(fileMap, api, { ui }) {
                               Oidc: OIDC_MESSAGES[locale],
                               Licenses: LICENSE_MESSAGES[locale],
                               Audit: AUDIT_MESSAGES[locale],
-                              Apps: APPS_MESSAGES[locale],
                               Shell: SHELL_MESSAGES[locale],
                               Nav: NAV_MESSAGES[locale],
                               AuthScreen: AUTH_SCREEN_MESSAGES[locale],
-                              Pages: PAGES_MESSAGES[locale],
-                              Notifications: NOTIFICATIONS_MESSAGES[locale],
+                              Password: PASSWORD_MESSAGES[locale],
+                              EidGate: EID_GATE_MESSAGES[locale],
+                              Profile: PROFILE_MESSAGES[locale],
+                              Portal: PORTAL_MESSAGES[locale],
                               ...(api.linked
                                   ? {}
                                   : { Register: REGISTER_MESSAGES[locale], Invite: INVITE_MESSAGES[locale] }),
-                              AppRoles: APP_ROLES_MESSAGES[locale],
                               ...(api.linked
                                   ? { Notes: NOTES_MESSAGES[locale], AppLicense: APP_LICENSE_MESSAGES[locale] }
                                   : {})

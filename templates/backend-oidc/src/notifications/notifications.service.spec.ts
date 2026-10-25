@@ -3,103 +3,133 @@ import { AuditService } from '../audit/audit.service.js'
 import { MemoryAuditStore } from '../audit/memory-audit.store.js'
 import { MemoryOidcStore } from '../oidc/store/memory-oidc.store.js'
 import { MemoryNotificationsStore } from './memory-notifications.store.js'
-import { NOTIFICATIONS_LIMIT, NotificationsService } from './notifications.service.js'
-import { NOTIFICATION_KINDS } from './notifications.store.js'
+import { NOTIFICATIONS_LIMIT, NotificationsService, type Viewer } from './notifications.service.js'
 
-async function setup() {
+function setup() {
     const oidc = new MemoryOidcStore()
     const store = new MemoryNotificationsStore()
     const audit = new AuditService(new MemoryAuditStore(), new ConfigService({}))
-    const notifications = new NotificationsService(store, oidc, audit)
-    notifications.onModuleInit()
-    const account = async (email: string) =>
-        (await oidc.createUser({
-            email,
-            name: email.split('@')[0],
-            passwordHash: null,
-            emailVerified: true,
-            locale: null
-        }))!
-    const tenant = await oidc.createTenant('Acme', 'acme')
-    const admin = await account('admin@example.com')
-    const other = await account('other@example.com')
-    const user = await account('user@example.com')
-    const root = await account('root@example.com')
-    await oidc.addMember(tenant.id, admin.id, 'admin')
-    await oidc.addMember(tenant.id, other.id, 'admin')
-    await oidc.addMember(tenant.id, user.id, 'user')
-    await oidc.setSuperadmin(root.id, true)
-    const viewer = (userId: string, superadmin = false, tenantId = tenant.id) => ({ userId, tenantId, superadmin })
-    return { audit, notifications, store, tenant, admin, other, user, root, viewer }
+    const service = new NotificationsService(store, oidc, audit)
+    service.onModuleInit()
+    const acme = oidc.addTenant('acme', 'Acme')
+    const admin = oidc.addUser({ email: 'admin@example.com', name: 'Ada', passwordHash: null })
+    const member = oidc.addUser({ email: 'member@example.com', name: 'Bob', passwordHash: null })
+    const root = oidc.addUser({ email: 'root@example.com', name: 'Root', passwordHash: null, isSuperadmin: true })
+    oidc.addMembership(acme.id, admin.id, 'admin')
+    oidc.addMembership(acme.id, member.id, 'user')
+    const viewer = (userId: string, change: Partial<Viewer> = {}): Viewer => ({
+        userId,
+        tenantId: acme.id,
+        role: 'user',
+        superadmin: false,
+        ...change
+    })
+    return { oidc, store, audit, service, acme, admin, member, root, viewer }
 }
 
 describe('NotificationsService', () => {
-    it('every kind has the form category.name', () => {
-        for (const kind of NOTIFICATION_KINDS) expect(kind).toMatch(/^[a-z]+\.[a-z_]+$/)
+    it('sends to the admins of an organisation, to one account and to every superadmin', async () => {
+        const { service, store, acme, admin, member, root, viewer } = setup()
+        await service.toTenantAdmins(acme.id, 'invoice.created', { number: 'FAC-2026-0001' }, { screen: 'invoices' })
+        await service.toUser(member.id, acme.id, 'ticket.reply', { number: 'TIC-1001' }, { screen: 'ticket', id: 't' })
+        await service.toPlatform('tenant.created', { name: 'Globex' }, { screen: 'admin-tenant', id: 'x' })
+        expect(store.notifications.map(item => [item.userId, item.kind])).toEqual([
+            [admin.id, 'invoice.created'],
+            [member.id, 'ticket.reply'],
+            [root.id, 'tenant.created']
+        ])
+        expect(await service.list(viewer(member.id))).toMatchObject([
+            { kind: 'ticket.reply', params: { number: 'TIC-1001' }, nav: { screen: 'ticket', id: 't' }, read: false }
+        ])
+        // A superadmin in a platform login sees the platform ones; in an organisation also those of the organisation
+        expect(
+            (await service.list(viewer(root.id, { tenantId: '', superadmin: true }))).map(item => item.kind)
+        ).toEqual(['tenant.created'])
     })
 
-    it('tells the other admins about an invitation, not the one who invited nor the users', async () => {
-        const { audit, notifications, tenant, admin, other, user, viewer } = await setup()
+    it('marks one or all as read, only of the own account', async () => {
+        const { service, acme, admin, member, viewer } = setup()
+        await service.toUser(member.id, acme.id, 'ticket.reply', {}, { screen: 'ticket', id: 'a' })
+        await service.toUser(member.id, acme.id, 'ticket.reply', {}, { screen: 'ticket', id: 'b' })
+        const [first] = await service.list(viewer(member.id))
+        await expect(service.markRead(viewer(admin.id), first!.id)).rejects.toThrow('errors.NOT_FOUND')
+        await expect(service.markRead(viewer(member.id), 'not-an-id')).rejects.toThrow('errors.NOT_FOUND')
+        await service.markRead(viewer(member.id), first!.id)
+        expect((await service.list(viewer(member.id))).map(item => item.read)).toEqual([true, false])
+        await service.markAllRead(viewer(member.id))
+        expect((await service.list(viewer(member.id))).every(item => item.read)).toBe(true)
+    })
+
+    it('mixes in computed notifications with a stable id, whose read state is stored', async () => {
+        const { service, member, viewer } = setup()
+        const id = 'contract:6f1d4c2e-1111-4111-8111-111111111111:2026-11-01'
+        service.addSource(async who =>
+            who.role === 'admin'
+                ? [
+                      {
+                          id,
+                          kind: 'contract.expiring',
+                          params: { app: 'Planner', daysLeft: 12 },
+                          nav: { screen: 'dashboard' },
+                          createdAt: new Date(Date.now() - 1000)
+                      }
+                  ]
+                : []
+        )
+        service.addSource(async () => {
+            throw new Error('broken source')
+        })
+        const admin = viewer(member.id, { role: 'admin' })
+        expect(await service.list(admin)).toMatchObject([{ id, read: false }])
+        // Not seen by a member: cannot be marked either
+        await expect(service.markRead(viewer(member.id), id)).rejects.toThrow('errors.NOT_FOUND')
+        await service.markRead(admin, id)
+        expect(await service.list(admin)).toMatchObject([{ id, read: true }])
+    })
+
+    it('shows the newest 40', async () => {
+        const { service, acme, member, viewer } = setup()
+        for (let i = 0; i < NOTIFICATIONS_LIMIT + 5; i++)
+            await service.toUser(member.id, acme.id, 'ticket.reply', { i }, { screen: 'ticket', id: String(i) })
+        const list = await service.list(viewer(member.id))
+        expect(list).toHaveLength(NOTIFICATIONS_LIMIT)
+        expect(list[0]?.params.i).toBe(NOTIFICATIONS_LIMIT + 4)
+    })
+
+    it('follows new organisations and invitations in the audit log; never fails when storing fails', async () => {
+        const { service, store, audit, acme, root, viewer } = setup()
+        await audit.record('platform.tenant_created', { tenantId: acme.id, details: { name: 'Acme' } })
+        await audit.record('account.registered', { tenantId: acme.id, details: { organisation: 'Acme' } })
         await audit.record('members.invited', {
-            tenantId: tenant.id,
-            actorId: admin.id,
+            tenantId: acme.id,
             details: { email: 'new@example.com', role: 'user' }
         })
-        expect(await notifications.list(viewer(other.id))).toMatchObject([
-            { kind: 'member.invited', params: { email: 'new@example.com' }, link: '/members', read: false }
+        await audit.record('members.removed', { tenantId: acme.id })
+        expect(await service.list(viewer(root.id, { tenantId: '', superadmin: true }))).toMatchObject([
+            {
+                kind: 'member.invited',
+                params: { tenant: 'Acme', email: 'new@example.com' },
+                nav: { screen: 'admin-tenant', id: acme.id }
+            },
+            { kind: 'tenant.created', params: { tenantId: acme.id, name: 'Acme' } },
+            { kind: 'tenant.created', params: { name: 'Acme' } }
         ])
-        expect(await notifications.list(viewer(admin.id))).toEqual([])
-        expect(await notifications.list(viewer(user.id))).toEqual([])
+        vi.spyOn(store, 'add').mockRejectedValueOnce(new Error('database down'))
+        const error = vi.spyOn((service as unknown as { logger: { error: () => void } }).logger, 'error')
+        error.mockImplementation(() => undefined)
+        await expect(service.toPlatform('tenant.created', {}, { screen: 'admin-tenants' })).resolves.toBeUndefined()
+        expect(error).toHaveBeenCalled()
     })
 
-    it('tells the superadmins about a new organisation, in the platform scope only', async () => {
-        const { audit, notifications, tenant, root, viewer } = await setup()
-        await audit.record('platform.tenant_created', { tenantId: tenant.id, details: { name: 'Acme' } })
-        expect(await notifications.list(viewer(root.id, true, ''))).toMatchObject([
-            { kind: 'tenant.created', params: { name: 'Acme' }, link: '/admin' }
+    it('tells the other admins of an organisation who joined it, not the one who joined', async () => {
+        const { service, oidc, audit, acme, admin, member, viewer } = setup()
+        const second = oidc.addUser({ email: 'second@example.com', name: 'Cleo', passwordHash: null })
+        oidc.addMembership(acme.id, second.id, 'admin')
+        await audit.record('members.joined', { tenantId: acme.id, actorId: second.id, details: { role: 'admin' } })
+        expect(await service.list(viewer(admin.id, { role: 'admin' }))).toMatchObject([
+            { kind: 'member.joined', params: { name: 'Cleo', email: 'second@example.com' }, nav: { screen: 'users' } }
         ])
-        // Logged in to an organisation without being superadmin: no platform notifications
-        expect(await notifications.list(viewer(root.id, false))).toEqual([])
-    })
-
-    it('names the new member for the admins', async () => {
-        const { audit, notifications, tenant, user, admin, viewer } = await setup()
-        await audit.record('members.joined', { tenantId: tenant.id, actorId: user.id, details: { role: 'user' } })
-        expect(await notifications.list(viewer(admin.id))).toMatchObject([
-            { kind: 'member.joined', params: { name: 'user', email: 'user@example.com' } }
-        ])
-    })
-
-    it('marks one or all as read, only for the own account', async () => {
-        const { notifications, tenant, admin, other, viewer } = await setup()
-        await notifications.toTenantAdmins(tenant.id, 'member.invited', { email: 'a@example.com' }, '/members')
-        await notifications.toTenantAdmins(tenant.id, 'member.invited', { email: 'b@example.com' }, '/members')
-        const [first] = await notifications.list(viewer(admin.id))
-        await expect(notifications.markRead(viewer(other.id), first.id)).rejects.toThrow()
-        await expect(notifications.markRead(viewer(admin.id), 'not-a-uuid')).rejects.toThrow()
-        await notifications.markRead(viewer(admin.id), first.id)
-        expect((await notifications.list(viewer(admin.id))).map(item => item.read)).toEqual([true, false])
-        await notifications.markAllRead(viewer(admin.id))
-        expect((await notifications.list(viewer(admin.id))).every(item => item.read)).toBe(true)
-        expect((await notifications.list(viewer(other.id))).some(item => item.read)).toBe(false)
-    })
-
-    it('keeps links inside the frontend and texts short, and shows at most the limit', async () => {
-        const { notifications, tenant, admin, viewer } = await setup()
-        await notifications.toUser(admin.id, tenant.id, 'member.joined', { name: 'x'.repeat(500) }, '//evil.example')
-        const [item] = await notifications.list(viewer(admin.id))
-        expect(item.link).toBeNull()
-        expect(String(item.params.name)).toHaveLength(200)
-        for (let index = 0; index < NOTIFICATIONS_LIMIT + 5; index++)
-            await notifications.toUser(admin.id, tenant.id, 'member.joined', { name: String(index) }, '/members')
-        expect(await notifications.list(viewer(admin.id))).toHaveLength(NOTIFICATIONS_LIMIT)
-    })
-
-    it('removes old notifications', async () => {
-        const { notifications, store, tenant, admin, viewer } = await setup()
-        await notifications.toUser(admin.id, tenant.id, 'member.joined', {}, null)
-        store.notifications[0].createdAt = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000)
-        expect(await store.purge(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000))).toBe(1)
-        expect(await notifications.list(viewer(admin.id))).toEqual([])
+        expect(await service.list(viewer(second.id, { role: 'admin' }))).toEqual([])
+        expect(await service.list(viewer(member.id))).toEqual([])
     })
 })

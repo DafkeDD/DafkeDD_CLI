@@ -15,15 +15,13 @@ import {
     type ReactElement,
     type ReactNode
 } from 'react'
+import type { ShownPresence } from '@/lib/portal'
 import { createPortal } from 'react-dom'
 
 /**
  * The building blocks of the Pasport design (src/styles/pasport.css): icons, buttons, fields, the select, badges, the
  * avatar and the notes. Every screen of the login server and of its apps uses them.
  */
-
-/** The coloured dot on an avatar: online (available) or not. */
-export type PresenceDot = 'available' | 'busy' | 'dnd' | 'brb' | 'away' | 'offline'
 
 /* ============================ ICONS (1:1 from the design) ============================ */
 /** The icons of the design (name: SVG path); a page in APP_NAV (src/lib/nav.ts) names one of these. */
@@ -492,7 +490,7 @@ export function Avatar({
     square?: boolean
     color?: string | null
     /** A coloured dot for the status (available, busy, …); without it no dot. */
-    status?: PresenceDot | null
+    status?: ShownPresence | null
     /** The name of the status (tooltip and screen readers). */
     statusLabel?: string
 }) {
@@ -545,4 +543,38 @@ export function OkNote({ children }: { children: ReactNode }) {
 /** Shimmer placeholder while data loads. */
 export function Skeleton({ h = 18, w = '100%', style }: { h?: number; w?: number | string; style?: CSSProperties }) {
     return <div className='skeleton' style={{ height: h, width: w, ...style }} />
+}
+
+/** The colours of the apps in the design (used when a product has no colour of its own). */
+export const APP_COLORS: Record<string, string> = {
+    todo: '#0d9488',
+    agenda: '#2563eb',
+    facturatie: '#7c3aed',
+    crm: '#db2777',
+    dossier: '#ea580c',
+    boekhoud: '#0891b2',
+    planning: '#4f46e5',
+    personeelsplanning: '#4f46e5',
+    signature: '#16a34a'
+}
+
+export function appColor(app: { code?: string; color?: string | null }) {
+    return app.color || (app.code ? APP_COLORS[app.code] : undefined) || 'var(--accent)'
+}
+
+export function AppIcon({
+    app,
+    size = 48
+}: {
+    app: { code?: string; icon?: string | null; color?: string | null }
+    size?: number
+}) {
+    return (
+        <span
+            className='appicon'
+            style={{ width: size, height: size, background: appColor(app), borderRadius: size * 0.26 }}
+        >
+            <Icon name={app.icon || 'box'} size={size * 0.52} />
+        </span>
+    )
 }

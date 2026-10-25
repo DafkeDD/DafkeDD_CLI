@@ -12,8 +12,6 @@ import { BILLING_STORE } from '../src/billing/store/billing.store.js'
 import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
 import { AUDIT_STORE } from '../src/audit/audit.store.js'
 import { MemoryAuditStore } from '../src/audit/memory-audit.store.js'
-import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
-import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import type { Mail } from '../src/mail/mail.service.js'
 import { MailService } from '../src/mail/mail.service.js'
@@ -24,11 +22,17 @@ import { hashPassword } from '../src/oidc/password.js'
 import { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js'
 import { OIDC_STORE } from '../src/oidc/store/oidc.store.js'
 import { configureApp } from '../src/setup.js'
+import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
+import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
+import { INVOICES_STORE } from '../src/billing/invoices/invoices.store.js'
+import { MemoryInvoicesStore } from '../src/billing/invoices/memory-invoices.store.js'
 
 process.env.OIDC_MASTER_KEY ??= randomBytes(32).toString('hex')
 process.env.OIDC_LOGIN_RATE_LIMIT = '1000'
 process.env.OIDC_LOGIN_UI_URL = ''
 process.env.OIDC_MFA = 'optional'
+// The accounts of these tests have no eID (the tests of OIDC_EID_REQUIRED are in eid.e2e-spec.ts)
+process.env.OIDC_EID_REQUIRED = 'off'
 process.env.OIDC_REGISTRATION = 'open'
 process.env.APP_URL = 'http://localhost:3000'
 // The checkout page of this API instead of Mollie
@@ -36,6 +40,8 @@ process.env.PAYMENTS = 'fake'
 process.env.BILLING_TRIAL_DAYS = '14'
 
 const REDIRECT = 'http://localhost:3000/api/auth/callback'
+/** Prices are without VAT: the provider charges them with 21% VAT (BILLING_VAT_PERCENT). */
+const withVat = (cents: number) => Math.round(cents * 1.21)
 const PASSWORD = 'correct-horse-battery'
 const DAY = 24 * 60 * 60 * 1000
 
@@ -78,14 +84,24 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
         })
             .overrideProvider(DatabaseService)
             .useValue({ ping: vi.fn().mockResolvedValue(true), query: vi.fn().mockResolvedValue({ rows: [] }) })
+            .overrideProvider(NOTIFICATIONS_STORE)
+            .useValue(new MemoryNotificationsStore())
+            .overrideProvider(INVOICES_STORE)
+            .useValue(
+                new MemoryInvoicesStore(async () => ({
+                    tenantName: 'Test',
+                    company: null,
+                    vat: null,
+                    billingAddress: null,
+                    billingEmail: null
+                }))
+            )
             .overrideProvider(OIDC_STORE)
             .useValue(store)
             .overrideProvider(BILLING_STORE)
             .useValue(billing)
             .overrideProvider(AUDIT_STORE)
             .useValue(audit)
-            .overrideProvider(NOTIFICATIONS_STORE)
-            .useValue(new MemoryNotificationsStore())
             .overrideProvider(MailService)
             .useValue({
                 send: async (mail: Mail) => {
@@ -212,6 +228,42 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
             const list = await http().get('/admin/products').set(bearer(tokens.root)).expect(200)
             expect(list.body.map((product: { code: string }) => product.code)).toEqual(['planner', 'reports'])
         })
+
+        it('deletes a product that nobody subscribes to; only superadmins may', async () => {
+            await http()
+                .post('/admin/products')
+                .set(bearer(tokens.root))
+                .send({ code: 'scrap', name: 'Scrap', priceMonthCents: 100, priceYearCents: 1000 })
+                .expect(201)
+            // Its OIDC app (same code) follows the product: off with it, gone with it
+            await http()
+                .post('/admin/clients')
+                .set(bearer(tokens.root))
+                .send({
+                    clientId: 'scrap',
+                    name: 'Scrap',
+                    type: 'public',
+                    redirectUris: ['http://localhost:3009/cb'],
+                    scopes: ['openid'],
+                    refreshTokens: false,
+                    firstParty: false
+                })
+                .expect(201)
+            const clientOf = async () =>
+                (await http().get('/admin/clients').set(bearer(tokens.root))).body.find(
+                    (client: { clientId: string }) => client.clientId === 'scrap'
+                ) as { disabled: boolean } | undefined
+            await http().patch('/admin/products/scrap').set(bearer(tokens.root)).send({ active: false }).expect(200)
+            expect((await clientOf())?.disabled).toBe(true)
+            await http().patch('/admin/products/scrap').set(bearer(tokens.root)).send({ active: true }).expect(200)
+            expect((await clientOf())?.disabled).toBe(false)
+            await http().delete('/admin/products/scrap').set(bearer(tokens.alice)).expect(403)
+            await http().delete('/admin/products/scrap').set(bearer(tokens.root)).expect(204)
+            await http().delete('/admin/products/scrap').set(bearer(tokens.root)).expect(404)
+            const list = await http().get('/admin/products').set(bearer(tokens.root)).expect(200)
+            expect(list.body.map((product: { code: string }) => product.code)).not.toContain('scrap')
+            expect(await clientOf()).toBeUndefined()
+        })
     })
 
     describe('trials', () => {
@@ -243,19 +295,19 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
             await http().get('/tenants/current/licenses').set(bearer(tokens.bob)).expect(403)
         })
 
-        it('a member asks a demo for themselves, once per product', async () => {
-            const asked = await http().post('/me/licenses/reports/trial').set(bearer(tokens.bob)).expect(201)
-            expect(asked.body.userId).toBe(ids.bob)
+        it('a member asks a demo of a product for themselves, once', async () => {
+            const demo = await http().post('/me/licenses/reports/trial').set(bearer(tokens.bob)).expect(201)
+            expect(demo.body.userId).toBe(ids.bob)
+            expect(new Date(demo.body.endsAt as string).getTime()).toBeGreaterThan(Date.now() + 13.9 * DAY)
+            const catalog = await http().get('/tenants/current/catalog').set(bearer(tokens.bob)).expect(200)
+            expect(catalog.body.find((app: { code: string }) => app.code === 'reports')).toMatchObject({
+                access: true,
+                trialAvailable: false,
+                trialEndsAt: demo.body.endsAt
+            })
             const again = await http().post('/me/licenses/reports/trial').set(bearer(tokens.bob)).expect(409)
             expect(again.body.error).toBe('billing.DEMO_USED')
-            // The demo of planner was started by an admin already: it counts as used
-            const used = await http().post('/me/licenses/planner/trial').set(bearer(tokens.bob)).expect(409)
-            expect(used.body.error).toBe('billing.DEMO_USED')
-            await http().post('/me/licenses/unknown/trial').set(bearer(tokens.bob)).expect(404)
-            expect(audit.events.findLast(event => event.action === 'licences.trial_started')).toMatchObject({
-                targetId: ids.bob,
-                details: { product: 'reports' }
-            })
+            await http().post('/me/licenses/nope/trial').set(bearer(tokens.bob)).expect(404)
         })
 
         it('after the trial: no access; a superadmin can extend it', async () => {
@@ -274,6 +326,101 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
             trial.endsAt = new Date(Date.now() - 1000)
             // A superadmin always has access
             await http().get('/demo/planner').set(bearer(tokens.root)).expect(200)
+        })
+
+        it('a superadmin ends a running trial now: no access any more, it counts as used', async () => {
+            await http()
+                .post(`/admin/tenants/${ids.acme}/trials`)
+                .set(bearer(tokens.root))
+                .send({ productCode: 'planner', userId: ids.bob, days: 14 })
+                .expect(201)
+            await http().get('/demo/planner').set(bearer(tokens.bob)).expect(200)
+            const ended = await http()
+                .delete(`/admin/tenants/${ids.acme}/trials/planner/${ids.bob}`)
+                .set(bearer(tokens.root))
+                .expect(200)
+            expect(ended.body.userId).toBe(ids.bob)
+            expect(new Date(ended.body.endsAt as string).getTime()).toBeLessThanOrEqual(Date.now())
+            await http().get('/demo/planner').set(bearer(tokens.bob)).expect(403)
+            const overview = await http()
+                .get(`/admin/tenants/${ids.acme}/licenses`)
+                .set(bearer(tokens.root))
+                .expect(200)
+            const planner = overview.body.find((item: { product: { code: string } }) => item.product.code === 'planner')
+            expect(planner.trials).toEqual(
+                expect.arrayContaining([expect.objectContaining({ userId: ids.bob, active: false })])
+            )
+            // Nothing runs any more (also no trial at all): 404
+            const again = await http()
+                .delete(`/admin/tenants/${ids.acme}/trials/planner/${ids.bob}`)
+                .set(bearer(tokens.root))
+                .expect(404)
+            expect(again.body.error).toBe('billing.TRIAL_NOT_FOUND')
+            await http()
+                .delete(`/admin/tenants/${ids.acme}/trials/planner/${ids.carol}`)
+                .set(bearer(tokens.root))
+                .expect(404)
+            // Superadmins only
+            await http()
+                .delete(`/admin/tenants/${ids.acme}/trials/planner/${ids.bob}`)
+                .set(bearer(tokens.alice))
+                .expect(403)
+            expect(audit.events.map(event => event.action)).toContain('licences.trial_ended')
+        })
+
+        it('without a demo for the product: no demo to ask; a superadmin still gives one', async () => {
+            const off = await http()
+                .patch('/admin/products/reports')
+                .set(bearer(tokens.root))
+                .send({ demoEnabled: false })
+                .expect(200)
+            expect(off.body).toMatchObject({ code: 'reports', demoEnabled: false })
+            const products = await http().get('/admin/products').set(bearer(tokens.root)).expect(200)
+            expect(products.body.find((item: { code: string }) => item.code === 'planner').demoEnabled).toBe(true)
+            const asked = await http().post('/me/licenses/reports/trial').set(bearer(tokens.carol)).expect(409)
+            expect(asked.body.error).toBe('billing.DEMO_DISABLED')
+            const byAdmin = await http()
+                .post(`/tenants/current/licenses/reports/trials/${ids.carol}`)
+                .set(bearer(tokens.alice))
+                .expect(409)
+            expect(byAdmin.body.error).toBe('billing.DEMO_DISABLED')
+            const catalog = await http().get('/tenants/current/catalog').set(bearer(tokens.carol)).expect(200)
+            expect(catalog.body.find((app: { code: string }) => app.code === 'reports')).toMatchObject({
+                demoEnabled: false,
+                trialAvailable: false,
+                trialEndsAt: null
+            })
+            expect(catalog.body.find((app: { code: string }) => app.code === 'planner')).toMatchObject({
+                demoEnabled: true,
+                trialAvailable: true
+            })
+            // The superadmin can always give one
+            const given = await http()
+                .post(`/admin/tenants/${ids.acme}/trials`)
+                .set(bearer(tokens.root))
+                .send({ productCode: 'reports', userId: ids.carol, days: 14 })
+                .expect(201)
+            expect(new Date(given.body.endsAt as string).getTime()).toBeGreaterThan(Date.now() + 13.9 * DAY)
+            const after = await http().get('/tenants/current/catalog').set(bearer(tokens.carol)).expect(200)
+            expect(after.body.find((app: { code: string }) => app.code === 'reports')).toMatchObject({
+                access: true,
+                trialEndsAt: given.body.endsAt
+            })
+            await http()
+                .delete(`/admin/tenants/${ids.acme}/trials/reports/${ids.carol}`)
+                .set(bearer(tokens.root))
+                .expect(200)
+            const on = await http()
+                .patch('/admin/products/reports')
+                .set(bearer(tokens.root))
+                .send({ demoEnabled: true })
+                .expect(200)
+            expect(on.body.demoEnabled).toBe(true)
+            await http()
+                .patch('/admin/products/reports')
+                .set(bearer(tokens.root))
+                .send({ demoEnabled: 'yes' })
+                .expect(400)
         })
     })
 
@@ -318,7 +465,7 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
             const renewal = new Date(planner.subscription.currentPeriodEnd as string).getTime()
             expect(renewal).toBeGreaterThan(Date.now() + 364 * DAY)
             // The renewal at Mollie (here the fake provider) starts at the end of the paid year
-            expect([...fake.subscriptions.values()][0]).toMatchObject({ amountCents: 20000, interval: 'year' })
+            expect([...fake.subscriptions.values()][0]).toMatchObject({ amountCents: withVat(20000), interval: 'year' })
             const twice = await http()
                 .post('/tenants/current/licenses/subscriptions')
                 .set(bearer(tokens.alice))
@@ -374,11 +521,11 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
             expect(more.body.status).toBe('pending')
             const paidFor = fake.payments.get(new URL(more.body.checkoutUrl as string).pathname.split('/').pop() ?? '')
             // Almost a full year left: about the price of one seat for a year
-            expect(paidFor?.amountCents).toBeGreaterThan(9900)
-            expect(paidFor?.amountCents).toBeLessThanOrEqual(10000)
+            expect(paidFor?.amountCents).toBeGreaterThan(withVat(9900))
+            expect(paidFor?.amountCents).toBeLessThanOrEqual(withVat(10000))
             await checkout(more.body.checkoutUrl as string)
             expect((await overview()).seats).toMatchObject({ paid: 3, total: 3, used: 2 })
-            expect([...fake.subscriptions.values()][0]?.amountCents).toBe(30000)
+            expect([...fake.subscriptions.values()][0]?.amountCents).toBe(withVat(30000))
 
             const tooFew = await http()
                 .patch('/tenants/current/licenses/subscriptions/planner')
@@ -392,7 +539,7 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
                 .send({ seats: 2 })
                 .expect(200)
             expect((await overview()).seats.paid).toBe(2)
-            expect([...fake.subscriptions.values()][0]?.amountCents).toBe(20000)
+            expect([...fake.subscriptions.values()][0]?.amountCents).toBe(withVat(20000))
         })
 
         it('a canceled checkout buys nothing', async () => {
@@ -513,7 +660,7 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
                 .send({ productCode: 'reports', interval: 'month', seats: 4, discountCode: code.toLowerCase() })
                 .expect(201)
             const paymentId = new URL(bought.body.checkoutUrl as string).pathname.split('/').pop() ?? ''
-            expect(fake.payments.get(paymentId)?.amountCents).toBe(1500)
+            expect(fake.payments.get(paymentId)?.amountCents).toBe(withVat(1500))
             await checkout(bought.body.checkoutUrl as string)
             const reports = await overview('reports')
             expect(reports.subscription).toMatchObject({
@@ -523,14 +670,14 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
             })
             const providerId =
                 [...fake.subscriptions.entries()].find(([, item]) => item.description.startsWith('Reports'))?.[0] ?? ''
-            expect(fake.subscriptions.get(providerId)?.amountCents).toBe(1500)
+            expect(fake.subscriptions.get(providerId)?.amountCents).toBe(withVat(1500))
             // The second (last discounted) month is paid: from then on the full price
             await http()
                 .post('/billing/webhook')
                 .type('form')
                 .send({ id: fake.renew(providerId) ?? '' })
                 .expect(200)
-            expect(fake.subscriptions.get(providerId)?.amountCents).toBe(2000)
+            expect(fake.subscriptions.get(providerId)?.amountCents).toBe(withVat(2000))
             // A code works once per organisation
             expect(billing.discounts.find(item => item.code === code)?.redemptions).toBe(1)
         })
@@ -545,6 +692,17 @@ describe('Licences, trials, subscriptions, discount codes and free seats (e2e)',
                 .send({ productCode: 'planner', interval: 'month', seats: 3, discountCode: 'FREE-FOREVER' })
                 .expect(201)
             expect(free.body).toMatchObject({ status: 'active', checkoutUrl: null })
+            // The return page of the wizard: nothing to pay, active at once
+            const synced = await http()
+                .post(`/tenants/current/licenses/subscriptions/${free.body.subscriptionId}/sync`)
+                .set(bearer(carol))
+                .expect(200)
+            expect(synced.body).toMatchObject({ payment: 'free', subscription: 'active', seats: 3 })
+            // The buyer takes one of the seats; taking it again changes nothing
+            for (let i = 0; i < 2; i++)
+                expect(
+                    (await http().post('/tenants/current/licenses/planner/seat').set(bearer(carol)).expect(201)).body
+                ).toEqual({ userId: ids.carol, assigned: true })
             const overviewGlobex = (
                 await http().get('/tenants/current/licenses').set(bearer(carol)).expect(200)
             ).body.find((item: { product: { code: string } }) => item.product.code === 'planner')

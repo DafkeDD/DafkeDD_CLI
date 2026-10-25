@@ -4,7 +4,7 @@ import { DatabaseService } from '../database/database.service.js'
 import type { NewNotification, NotificationsStore, StoredNotification } from './notifications.store.js'
 
 const COLUMNS =
-    'id, user_id AS "userId", tenant_id AS "tenantId", kind, params, link, created_at AS "createdAt", read_at AS "readAt"'
+    'id, user_id AS "userId", tenant_id AS "tenantId", kind, params, nav, created_at AS "createdAt", read_at AS "readAt"'
 
 /** "(tenant_id = ANY($n) OR tenant_id IS NULL)" for the scopes (organisations and/or the platform). */
 function scopeClause(scopes: (string | null)[], index: number) {
@@ -30,14 +30,14 @@ export class PgNotificationsStore implements NotificationsStore {
     async add(notifications: NewNotification[]) {
         if (notifications.length === 0) return
         await this.query(
-            `INSERT INTO notifications (user_id, tenant_id, kind, params, link)
-       SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::jsonb[], $5::text[])`,
+            `INSERT INTO notifications (user_id, tenant_id, kind, params, nav)
+       SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::jsonb[], $5::jsonb[])`,
             [
                 notifications.map(item => item.userId),
                 notifications.map(item => item.tenantId),
                 notifications.map(item => item.kind),
                 notifications.map(item => JSON.stringify(item.params)),
-                notifications.map(item => item.link)
+                notifications.map(item => JSON.stringify(item.nav))
             ]
         )
     }
@@ -67,8 +67,20 @@ export class PgNotificationsStore implements NotificationsStore {
         )
     }
 
-    async purge(before: Date) {
-        const rows = await this.query('DELETE FROM notifications WHERE created_at < $1 RETURNING 1', [before])
-        return rows.length
+    async readKeys(userId: string, keys: string[]) {
+        if (keys.length === 0) return new Set<string>()
+        const rows = await this.query<{ key: string }>(
+            'SELECT key FROM notification_reads WHERE user_id = $1 AND key = ANY($2::text[])',
+            [userId, keys]
+        )
+        return new Set(rows.map(row => row.key))
+    }
+
+    async addReads(userId: string, keys: string[]) {
+        if (keys.length === 0) return
+        await this.query(
+            `INSERT INTO notification_reads (user_id, key) SELECT $1, unnest($2::text[]) ON CONFLICT DO NOTHING`,
+            [userId, keys]
+        )
     }
 }

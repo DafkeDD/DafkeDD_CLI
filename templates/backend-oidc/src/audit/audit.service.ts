@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleD
 import { ConfigService } from '@nestjs/config'
 import type { AuditAction, AuditDetails, AuditTargetType } from './audit.actions.js'
 import { requestContext } from './audit.context.js'
-import { AUDIT_STORE, type AuditQuery, type AuditStore } from './audit.store.js'
+import { AUDIT_STORE, type AuditQuery, type AuditStore, type NewAuditEvent } from './audit.store.js'
 
 const DAY = 24 * 60 * 60 * 1000
 /** The longest text kept in the details of an event. */
@@ -16,15 +16,8 @@ export interface AuditInput {
     details?: AuditDetails
 }
 
-/** An event as it was written: what a listener (onRecorded) gets. */
-export interface RecordedEvent {
-    tenantId: string | null
-    actorId: string | null
-    action: AuditAction
-    details: AuditDetails
-}
-
-export type AuditListener = (event: RecordedEvent) => Promise<void> | void
+/** An event as it was recorded (for the listeners of onRecorded). */
+export type RecordedEvent = NewAuditEvent & { action: AuditAction }
 
 /** Short values only: long texts are cut, and nothing that is not a plain value is stored. */
 function clean(details: AuditDetails = {}): AuditDetails {
@@ -51,7 +44,6 @@ function clean(details: AuditDetails = {}): AuditDetails {
 export class AuditService implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly logger = new Logger('AuditLog')
     private timer: NodeJS.Timeout | null = null
-    private readonly listeners: AuditListener[] = []
 
     constructor(
         @Inject(AUDIT_STORE) private readonly store: AuditStore,
@@ -64,11 +56,10 @@ export class AuditService implements OnApplicationBootstrap, OnModuleDestroy {
         return Number.isInteger(days) && days >= 0 ? days : 365
     }
 
-    /**
-     * Called after every event that was written (the notifications follow new organisations and members this way). A
-     * listener that fails is logged; it never fails the request.
-     */
-    onRecorded(listener: AuditListener) {
+    /** Called after every recorded event (the notifications follow some of them). */
+    private readonly listeners: ((event: RecordedEvent) => Promise<void>)[] = []
+
+    onRecorded(listener: (event: RecordedEvent) => Promise<void>) {
         this.listeners.push(listener)
     }
 
@@ -78,28 +69,23 @@ export class AuditService implements OnApplicationBootstrap, OnModuleDestroy {
             tenantId: input.tenantId !== undefined ? input.tenantId : (context?.tenantId ?? null),
             actorId: input.actorId !== undefined ? input.actorId : (context?.actorId ?? null),
             action,
-            details: clean(input.details)
+            targetType: input.target?.type ?? null,
+            targetId: input.target?.id ?? null,
+            details: clean(input.details),
+            ip: context?.ip ?? null,
+            userAgent: context?.userAgent ?? null
         }
         try {
-            await this.store.add({
-                ...event,
-                targetType: input.target?.type ?? null,
-                targetId: input.target?.id ?? null,
-                ip: context?.ip ?? null,
-                userAgent: context?.userAgent ?? null
-            })
+            await this.store.add(event)
         } catch (error) {
             this.logger.error(`Could not record ${action}: ${error instanceof Error ? error.message : String(error)}`)
-            return
         }
         for (const listener of this.listeners)
-            try {
-                await listener(event)
-            } catch (error) {
-                this.logger.warn(
+            await listener(event).catch((error: unknown) =>
+                this.logger.error(
                     `A listener of ${action} failed: ${error instanceof Error ? error.message : String(error)}`
                 )
-            }
+            )
     }
 
     /** One page, newest first, and the `next` to ask the page after it (null: no more). */

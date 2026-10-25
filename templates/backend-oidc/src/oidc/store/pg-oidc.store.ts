@@ -24,6 +24,14 @@ import type {
     NewAccount,
     NewPasskey,
     OidcClient,
+    OutOfOffice,
+    Presence,
+    Profession,
+    ProfileChanges,
+    TenantChanges,
+    TenantDetails,
+    TenantSummary,
+    UserProfile,
     Passkey,
     OidcStore,
     Session,
@@ -41,6 +49,42 @@ const USER_COLUMNS =
     'id, email, email_verified AS "emailVerified", name, locale, password_hash AS "passwordHash", status, ' +
     'is_superadmin AS "isSuperadmin", totp_enabled AS "mfaEnabled"'
 const TENANT_COLUMNS = 'id, slug, name, status, created_at AS "createdAt"'
+const PROFILE_COLUMNS =
+    'first_name AS "firstName", last_name AS "lastName", phone, pending_email AS "pendingEmail", ' +
+    'rrn_enc AS "rrnEncrypted", address'
+const DETAIL_COLUMNS =
+    'company, vat, billing_address AS "billingAddress", billing_email AS "billingEmail", city, plan, ' +
+    'contact_name AS "contactName"'
+/** Columns of the fields of a profile and of a tenant that can change. */
+const PROFILE_FIELDS: Record<keyof ProfileChanges, string> = {
+    firstName: 'first_name',
+    lastName: 'last_name',
+    phone: 'phone',
+    name: 'name',
+    locale: 'locale'
+}
+const TENANT_FIELDS: Record<keyof TenantChanges, string> = {
+    name: 'name',
+    company: 'company',
+    vat: 'vat',
+    billingAddress: 'billing_address',
+    billingEmail: 'billing_email',
+    city: 'city',
+    plan: 'plan',
+    contactName: 'contact_name'
+}
+
+/** "a = $2, b = $3" of the fields that are given (undefined stays as it is), the values from $2 on. */
+function setFields<K extends string>(changes: Partial<Record<K, unknown>>, columns: Record<K, string>) {
+    const entries = (Object.entries(changes) as [K, unknown][]).filter(
+        ([key, value]) => value !== undefined && columns[key]
+    )
+    return {
+        sql: entries.map(([key], index) => `${columns[key]} = $${index + 2}`).join(', '),
+        values: entries.map(([, value]) => value)
+    }
+}
+
 const INVITATION_COLUMNS =
     'id, tenant_id AS "tenantId", email, role, invited_by AS "invitedBy", apps, created_at AS "createdAt", expires_at AS "expiresAt"'
 
@@ -62,9 +106,19 @@ async function insertTenant(db: Queryable, name: string, slug: string): Promise<
 const insertUser = async (db: Queryable, account: NewAccount) =>
     (
         await db.query<StoredUser>(
-            `INSERT INTO ${USERS} (email, email_verified, name, locale, password_hash) VALUES ($1, $2, $3, $4, $5)
+            `INSERT INTO ${USERS} (email, email_verified, name, locale, password_hash, first_name, last_name, phone)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (lower(email)) DO NOTHING RETURNING ${USER_COLUMNS}`,
-            [account.email, account.emailVerified, account.name, account.locale, account.passwordHash]
+            [
+                account.email,
+                account.emailVerified,
+                account.name,
+                account.locale,
+                account.passwordHash,
+                account.firstName ?? null,
+                account.lastName ?? null,
+                account.phone ?? null
+            ]
         )
     ).rows[0] ?? null
 const PASSKEY_COLUMNS =
@@ -74,7 +128,7 @@ const PASSKEY_COLUMNS =
 const IDENTIFIER_COLUMNS =
     'type, value_hash AS "valueHash", user_id AS "userId", created_at AS "createdAt", last_used_at AS "lastUsedAt"'
 
-/** Rolls back registerWithIdentifier when the identifier belongs to an account already. */
+/** Rolls back registerWithIdentifier and createUserWithIdentifier when the identifier belongs to an account already. */
 class IdentifierTaken extends Error {}
 
 /** A uuid as PostgreSQL accepts it: anything else can never be a session id (and would make the query fail). */
@@ -253,6 +307,10 @@ export class PgOidcStore implements OidcStore {
                 [codeHash, clientId, createdBy, expiresAt]
             )
         })
+    }
+
+    async deleteLinkCodes(clientId: string) {
+        await this.query('DELETE FROM oidc_link_codes WHERE client_id = $1', [clientId])
     }
 
     async useLinkCode(codeHash: string) {
@@ -727,6 +785,16 @@ export class PgOidcStore implements OidcStore {
         return rows[0] ?? null
     }
 
+    async listLinkedUsers(type: IdentifierType, userIds: string[]) {
+        const ids = userIds.filter(id => UUID.test(id))
+        if (ids.length === 0) return []
+        const rows = await this.query<{ userId: string }>(
+            `SELECT user_id AS "userId" FROM user_identifiers WHERE type = $1 AND user_id = ANY($2::uuid[])`,
+            [type, ids]
+        )
+        return rows.map(row => row.userId)
+    }
+
     async findIdentifier(userId: string, type: IdentifierType) {
         const rows = await this.query<UserIdentifier>(
             `SELECT ${IDENTIFIER_COLUMNS} FROM user_identifiers WHERE user_id = $1 AND type = $2`,
@@ -852,6 +920,25 @@ export class PgOidcStore implements OidcStore {
         return insertUser(this.database, account)
     }
 
+    async createUserWithIdentifier(account: NewAccount, identifier: { type: IdentifierType; valueHash: string }) {
+        await this.database.ready()
+        try {
+            return await this.database.transaction(async db => {
+                const user = await insertUser(db, account)
+                if (!user) return null
+                const linked = await db.query(
+                    `INSERT INTO user_identifiers (type, value_hash, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING 1`,
+                    [identifier.type, identifier.valueHash, user.id]
+                )
+                if (linked.rows.length === 0) throw new IdentifierTaken()
+                return user
+            })
+        } catch (error) {
+            if (error instanceof IdentifierTaken) return 'identifier-taken' as const
+            throw error
+        }
+    }
+
     async setEmailVerified(userId: string) {
         await this.query(`UPDATE ${USERS} SET email_verified = true, updated_at = now() WHERE id = $1`, [userId])
     }
@@ -889,6 +976,81 @@ export class PgOidcStore implements OidcStore {
 
     async endUserSessions(userId: string) {
         await this.query('UPDATE oidc_sessions SET expires_at = least(expires_at, now()) WHERE user_id = $1', [userId])
+    }
+
+    // ---------------------------------------------------------------- the own profile
+
+    async findProfile(userId: string) {
+        const rows = await this.query<UserProfile>(`SELECT ${PROFILE_COLUMNS} FROM ${USERS} WHERE id = $1`, [userId])
+        return rows[0] ?? null
+    }
+
+    async updateProfile(userId: string, changes: ProfileChanges) {
+        const { sql, values } = setFields(changes, PROFILE_FIELDS)
+        if (!sql) return
+        await this.query(`UPDATE ${USERS} SET ${sql}, updated_at = now() WHERE id = $1`, [userId, ...values])
+    }
+
+    async findPresence(userId: string) {
+        const rows = await this.query<{ presence: Presence }>(`SELECT presence FROM ${USERS} WHERE id = $1`, [userId])
+        return rows[0]?.presence ?? null
+    }
+
+    async setPresence(userId: string, presence: Presence) {
+        await this.query(`UPDATE ${USERS} SET presence = $2 WHERE id = $1`, [userId, presence])
+    }
+
+    async findOutOfOffice(userId: string) {
+        return (await this.listOutOfOffice([userId], false)).get(userId) ?? null
+    }
+
+    async setOutOfOffice(userId: string, ooo: OutOfOffice) {
+        await this.query(
+            `UPDATE ${USERS} SET ooo_enabled = $2, ooo_from = $3, ooo_until = $4, ooo_internal = $5, ooo_external = $6
+        WHERE id = $1`,
+            [userId, ooo.enabled, ooo.from, ooo.until, ooo.internalMessage, ooo.externalMessage]
+        )
+    }
+
+    async listOutOfOffice(userIds: string[], onlyEnabled = true) {
+        const result = new Map<string, OutOfOffice>()
+        if (userIds.length === 0) return result
+        const rows = await this.query<OutOfOffice & { id: string }>(
+            `SELECT id, ooo_enabled AS enabled, ooo_from AS "from", ooo_until AS "until",
+              ooo_internal AS "internalMessage", ooo_external AS "externalMessage"
+         FROM ${USERS} WHERE id = ANY($1::uuid[])${onlyEnabled ? ' AND ooo_enabled' : ''}`,
+            [userIds]
+        )
+        for (const { id, ...ooo } of rows) result.set(id, ooo)
+        return result
+    }
+
+    async setPendingEmail(userId: string, email: string | null) {
+        await this.query(`UPDATE ${USERS} SET pending_email = $2, updated_at = now() WHERE id = $1`, [userId, email])
+    }
+
+    async changeEmail(userId: string, email: string) {
+        // The unique index on lower(email) decides when two accounts take the same address at the same moment
+        try {
+            const rows = await this.query(
+                `UPDATE ${USERS} SET email = $2, email_verified = true, pending_email = NULL, updated_at = now()
+          WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM ${USERS} o WHERE lower(o.email) = lower($2) AND o.id <> $1)
+          RETURNING 1`,
+                [userId, email]
+            )
+            return rows.length === 1
+        } catch (error) {
+            if ((error as { code?: string }).code === '23505') return false
+            throw error
+        }
+    }
+
+    async setEidDetails(userId: string, details: { rrnEncrypted: string | null; address: string | null }) {
+        await this.query(
+            `UPDATE ${USERS} SET rrn_enc = $2, address = CASE WHEN $2::text IS NULL THEN NULL ELSE coalesce($3, address) END,
+              updated_at = now() WHERE id = $1`,
+            [userId, details.rrnEncrypted, details.address]
+        )
     }
 
     // ---------------------------------------------------------------- two-factor authentication
@@ -970,6 +1132,48 @@ export class PgOidcStore implements OidcStore {
         return insertTenant(this.database, name, slug)
     }
 
+    async findTenantDetails(id: string) {
+        const rows = await this.query<TenantDetails>(`SELECT ${DETAIL_COLUMNS} FROM tenants WHERE id = $1`, [id])
+        return rows[0] ?? null
+    }
+
+    async updateTenant(id: string, changes: TenantChanges) {
+        const { sql, values } = setFields(changes, TENANT_FIELDS)
+        if (!sql) return (await this.findTenant(id)) !== null
+        const rows = await this.query(`UPDATE tenants SET ${sql} WHERE id = $1 RETURNING 1`, [id, ...values])
+        return rows.length === 1
+    }
+
+    private tenantSummaries(where: string, params: unknown[]) {
+        return this.query<TenantSummary>(
+            `SELECT t.id, t.slug, t.name, t.status, t.created_at AS "createdAt",
+              t.company, t.vat, t.billing_address AS "billingAddress", t.billing_email AS "billingEmail", t.city, t.plan,
+              t.contact_name AS "contactName",
+              (SELECT count(*)::int FROM tenant_members m WHERE m.tenant_id = t.id) AS members,
+              (SELECT count(*)::int FROM tenant_invitations i WHERE i.tenant_id = t.id AND i.expires_at > now())
+                AS invitations,
+              coalesce(
+                (SELECT json_build_object('name', u.name, 'email', u.email)
+                   FROM tenant_members m JOIN ${USERS} u ON u.id = m.user_id
+                  WHERE m.tenant_id = t.id AND m.role = 'admin' ORDER BY m.created_at LIMIT 1),
+                (SELECT json_build_object('name', t.contact_name, 'email', i.email)
+                   FROM tenant_invitations i
+                  WHERE i.tenant_id = t.id AND i.role = 'admin' AND i.expires_at > now()
+                  ORDER BY i.created_at DESC LIMIT 1)
+              ) AS contact
+         FROM tenants t ${where} ORDER BY lower(t.name)`,
+            params
+        )
+    }
+
+    listTenantSummaries() {
+        return this.tenantSummaries('', [])
+    }
+
+    async findTenantSummary(id: string) {
+        return (await this.tenantSummaries('WHERE t.id = $1', [id]))[0] ?? null
+    }
+
     async setTenantStatus(id: string, status: Tenant['status']) {
         await this.database.ready()
         const result = await this.database.query('UPDATE tenants SET status = $2 WHERE id = $1', [id, status])
@@ -985,8 +1189,8 @@ export class PgOidcStore implements OidcStore {
     }
 
     async findMember(tenantId: string, userId: string) {
-        const rows = await this.query<{ role: TenantRole; status: MemberStatus }>(
-            'SELECT role, status FROM tenant_members WHERE tenant_id = $1 AND user_id = $2',
+        const rows = await this.query<{ role: TenantRole; status: MemberStatus; profession: Profession }>(
+            'SELECT role, status, profession FROM tenant_members WHERE tenant_id = $1 AND user_id = $2',
             [tenantId, userId]
         )
         return rows[0] ?? null
@@ -1068,7 +1272,7 @@ export class PgOidcStore implements OidcStore {
         return this.database.withTenant(tenantId, async db => {
             const { rows } = await db.query<TenantMember>(
                 `SELECT m.user_id AS "userId", u.name, u.email, u.email_verified AS "emailVerified", m.role, m.status,
-                m.last_seen_at AS "lastSeenAt"
+                m.profession, m.last_seen_at AS "lastSeenAt", u.presence
            FROM tenant_members m JOIN ${USERS} u ON u.id = m.user_id
           ORDER BY lower(u.name), u.email`
             )
@@ -1092,6 +1296,17 @@ export class PgOidcStore implements OidcStore {
         return this.changeMember(tenantId, userId, status === 'disabled', db =>
             db.query('UPDATE tenant_members SET status = $2 WHERE user_id = $1', [userId, status])
         )
+    }
+
+    async setMemberProfession(tenantId: string, userId: string, profession: Profession) {
+        await this.database.ready()
+        return this.database.withTenant(tenantId, async db => {
+            const result = await db.query('UPDATE tenant_members SET profession = $2 WHERE user_id = $1', [
+                userId,
+                profession
+            ])
+            return (result.rowCount ?? 0) > 0
+        })
     }
 
     /** Locks the members of the tenant, refuses to lose its last active admin, then applies `change`. */

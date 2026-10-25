@@ -2,22 +2,24 @@ import test from 'node:test'
 import {
     AUTH_SCREEN_MESSAGES,
     INVITE_MESSAGES,
-    NOTIFICATIONS_MESSAGES,
-    PAGES_MESSAGES,
+    EID_GATE_MESSAGES,
+    PASSWORD_MESSAGES,
+    PROFILE_MESSAGES,
     REGISTER_MESSAGES
 } from '../src/frontends/pasport-messages.js'
+import { PORTAL_MESSAGES } from '../src/frontends/portal-messages.js'
 import assert from 'node:assert/strict'
 import { files, ignoreUiInEslint, nextjs, uiFiles, uiFor, withApi, LOCALES } from '../src/frontends/nextjs.js'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
-    APPS_MESSAGES,
+    APP_LICENSE_MESSAGES,
     AUDIT_MESSAGES,
+    NOTES_MESSAGES,
     envLocal,
     LICENSE_MESSAGES,
     NAV_MESSAGES,
-    APP_ROLES_MESSAGES,
     OIDC_MESSAGES,
     oidcFrontendFiles,
     SHELL_MESSAGES
@@ -37,32 +39,33 @@ test('the frontend login files are copied with the API port filled in', () => {
         'src/app/api/auth/callback/route.ts',
         'src/app/api/auth/logout/route.ts',
         'src/app/[locale]/login/page.tsx',
-        'src/app/[locale]/profile/page.tsx',
         'src/components/oidc-login.tsx',
-        'src/components/session-links.tsx',
         'src/app/[locale]/register/page.tsx',
         'src/app/[locale]/verify-email/page.tsx',
         'src/app/[locale]/forgot-password/page.tsx',
-        'src/app/[locale]/reset-password/page.tsx',
         'src/app/[locale]/invite/page.tsx',
-        'src/app/[locale]/members/page.tsx',
+        'src/app/[locale]/reset-password/page.tsx',
+        'src/app/[locale]/(portal)/layout.tsx',
+        'src/app/[locale]/(portal)/dashboard/page.tsx',
+        'src/app/[locale]/(portal)/users/page.tsx',
+        'src/app/[locale]/(portal)/profile/page.tsx',
+        'src/app/[locale]/(portal)/security/page.tsx',
+        'src/app/[locale]/(portal)/support/page.tsx',
+        'src/app/[locale]/(portal)/vault/page.tsx',
         'src/app/[locale]/admin/page.tsx',
-        'src/app/[locale]/security/page.tsx',
+        'src/app/[locale]/admin/(panel)/layout.tsx',
+        'src/app/[locale]/admin/(panel)/tenants/page.tsx',
+        'src/app/[locale]/admin/(panel)/tickets/page.tsx',
         'src/app/api/backend/[...path]/route.ts',
         'src/components/account-forms.tsx',
         'src/components/account-ui.tsx',
-        'src/components/members.tsx',
-        'src/components/platform.tsx',
         'src/components/mfa-ui.tsx',
         'src/components/security.tsx',
         'src/lib/account.ts',
         'src/components/presence.tsx',
-        'src/components/shell/app-shell.tsx',
-        'src/components/shell/shell-view.tsx',
-        'src/components/shell/auth-screen.tsx',
+        'src/components/pasport/shell.tsx',
         'src/components/shell/start-login.tsx',
         'src/lib/brand.ts',
-        'src/lib/nav.ts',
         'src/app/[locale]/layout.tsx',
         'src/app/[locale]/page.tsx'
     ]) {
@@ -112,31 +115,51 @@ test('every text exists in all four languages, and every text the code uses exis
         Oidc: OIDC_MESSAGES,
         Licenses: LICENSE_MESSAGES,
         Audit: AUDIT_MESSAGES,
-        Apps: APPS_MESSAGES,
         Shell: SHELL_MESSAGES,
         Nav: NAV_MESSAGES,
-        AppRoles: APP_ROLES_MESSAGES,
         AuthScreen: AUTH_SCREEN_MESSAGES,
         Register: REGISTER_MESSAGES,
         Invite: INVITE_MESSAGES,
-        Pages: PAGES_MESSAGES,
-        Notifications: NOTIFICATIONS_MESSAGES
+        Password: PASSWORD_MESSAGES,
+        EidGate: EID_GATE_MESSAGES,
+        Profile: PROFILE_MESSAGES,
+        AppLicense: APP_LICENSE_MESSAGES,
+        Notes: NOTES_MESSAGES,
+        // The portal of the login server (useT('Shell') → Portal.Shell, src/components/pasport/i18n.ts)
+        ...Object.fromEntries(
+            Object.keys(PORTAL_MESSAGES.en).map(part => [
+                `Portal.${part}`,
+                Object.fromEntries(LOCALES.map(locale => [locale, PORTAL_MESSAGES[locale][part]]))
+            ])
+        )
     }
     // HomePage: the texts of the Next.js home page (nextjs.js); Nav: used with the label of APP_NAV as key
     const dynamic = new Set(['Nav'])
     const used = Object.fromEntries([...Object.keys(namespaces), 'HomePage'].map(name => [name, new Set()]))
-    for (const content of Object.values(templates)) {
-        // const t = useTranslations('Oidc'), const l = await getTranslations('Licenses'), ...
+    // The login server and a linked app: together they use every text
+    for (const content of [...Object.values(templates), ...Object.values(oidcFrontendFiles({ linked: true }))]) {
+        // const t = useTranslations('Oidc'), const l = await getTranslations('Licenses'), const t = useT('Shell'), ...
+        // A name can stand for several namespaces in one file (t = useT('Catalog') in one component, t = useT('Codes')
+        // in the next): a text it uses must exist in one of them, and counts as used in each
         const names = new Map()
-        for (const match of content.matchAll(/\b(\w+) = (?:await )?(?:use|get)Translations\('(\w+)'\)/g)) {
-            names.set(match[1], match[2])
-        }
+        const bind = (name, namespace) => names.set(name, new Set([...(names.get(name) ?? []), namespace]))
+        for (const match of content.matchAll(/\b(\w+) = (?:await )?(?:use|get)Translations\('([\w.]+)'\)/g))
+            bind(match[1], match[2])
+        for (const match of content.matchAll(/\b(\w+) = useT\('(\w+)'\)/g)) bind(match[1], `Portal.${match[2]}`)
         // helpers that are handed t, like roleLabel(t, role), use the Oidc texts
-        if (!names.size) names.set('t', 'Oidc')
-        for (const [name, namespace] of names) {
-            assert.ok(used[namespace], `unknown namespace ${namespace}`)
-            for (const match of content.matchAll(new RegExp(`\\b${name}\\('(\\w+)'`, 'g')))
-                used[namespace].add(match[1])
+        if (!names.size) bind('t', 'Oidc')
+        for (const [name, spaces] of names) {
+            for (const namespace of spaces) assert.ok(used[namespace], `unknown namespace ${namespace}`)
+            for (const match of content.matchAll(new RegExp(`\\b${name}\\('(\\w+)'(\\s*\\+)?`, 'g'))) {
+                // t('kpi_' + key): every text that starts with kpi_
+                const keys = space =>
+                    Object.keys(namespaces[space]?.en ?? {}).filter(key =>
+                        match[2] ? key.startsWith(match[1]) : key === match[1]
+                    )
+                const owners = [...spaces].filter(space => keys(space).length)
+                if (!owners.length) used[[...spaces][0]].add(match[1])
+                for (const space of owners) for (const key of keys(space)) used[space].add(key)
+            }
         }
     }
     // Every key, also nested ones (Audit.actions.login_succeeded), in every language
@@ -150,13 +173,14 @@ test('every text exists in all four languages, and every text the code uses exis
         // Groups of texts (Audit.actions, .details, ...) are used with a variable key: only plain texts are checked here
         const keys = Object.keys(messages.en).filter(key => typeof messages.en[key] === 'string')
         for (const key of used[namespace]) assert.ok(keys.includes(key), `missing text ${namespace}.${key}`)
-        if (!dynamic.has(namespace))
+        // The portal picks many texts by a value (the status, a step of the tour): those are not checked here
+        if (!dynamic.has(namespace) && !namespace.startsWith('Portal.'))
             for (const key of keys) assert.ok(used[namespace].has(key), `unused text ${namespace}.${key}`)
     }
 })
 
 for (const ui of [true, false]) {
-    test(`withApi with the OIDC server (${ui ? 'DafkeDD UI' : 'plain'}): login files, texts and session links`, () => {
+    test(`withApi with the OIDC server (${ui ? 'DafkeDD UI' : 'plain'}): login files, texts and the home page`, () => {
         const all = withApi({ ...files, ...(ui ? uiFiles : {}) }, API, { ui })
         assert.ok(all['src/app/api/auth/callback/route.ts'])
         assert.ok(!all['src/components/auth-links.tsx'], 'not the simple login')
@@ -171,11 +195,10 @@ for (const ui of [true, false]) {
             assert.deepEqual(messages.Shell, SHELL_MESSAGES[locale])
             assert.deepEqual(messages.Nav, NAV_MESSAGES[locale])
         }
-        // The Pasport home page: in the shell, who is logged in and the API status
+        // The home page of the login server: the portal, the superadmin panel or the login
         const page = all['src/app/[locale]/page.tsx']
-        assert.match(page, /<AppPage>/)
-        assert.match(page, /<Suspense fallback=\{null\}>\s*<SessionLinks \/>\s*<\/Suspense>/)
-        assert.match(page, /<ApiStatus \/>/)
+        assert.match(page, /<ClientRedirect to=\{!session \? '\/login'/)
+        assert.match(all['src/components/api-status.tsx'], /<Icon name="server"/)
         // DafkeDD UI always: the theme script and the language choice of the shell come with it
         assert.match(all['src/components/theme-script.tsx'], /lui-theme/)
         assert.match(all['src/components/locale-switcher.tsx'], /@\/components\/ui/)
@@ -262,8 +285,12 @@ test('index: the frontend learns that the backend is an OIDC server', async () =
 test('the API proxy only forwards members, platform and two-step calls, with the token added on the server', () => {
     const route = templates['src/app/api/backend/[...path]/route.ts']
     assert.match(route, /Authorization: 'Bearer ' \+ session\.accessToken/)
-    assert.match(route, /request\.headers\.get\('origin'\) !== new URL\(APP_URL\)\.origin/)
+    // Only a page of this app may change something (the Origin of a POST, PUT, PATCH or DELETE)
+    assert.match(route, /request\.method !== 'GET' && !fromThisApp\(request\)/)
+    assert.match(templates['src/lib/oidc.ts'], /origin === new URL\(APP_URL\)\.origin/)
     const allowed = new RegExp(/const ALLOWED =\s+\/(.+)\/$/m.exec(route)[1])
+    const notifications = new RegExp(/const NOTIFICATIONS = \/(.+)\/$/m.exec(route)[1])
+    const allows = path => allowed.test(path) || notifications.test(path)
     for (const path of [
         'tenants/current/members',
         'admin/tenants',
@@ -271,19 +298,26 @@ test('the API proxy only forwards members, platform and two-step calls, with the
         'me/mfa/recovery-codes',
         'me/notifications',
         'me/notifications/read-all',
-        'me/notifications/4b8e1f2a-6c3d-4e9f-8a7b-2d1c0e9f8a6b/read'
+        'me/notifications/4b8e1f2a-6c3d-4e9f-8a7b-2d1c0e9f8a6b/read',
+        'me/profile',
+        'me/password',
+        'me/vault',
+        'me/status',
+        'tenants/current/billing',
+        'tenants/current/tickets'
     ])
-        assert.ok(allowed.test(path), path)
+        assert.ok(allows(path), path)
     for (const path of [
         'oidc/token',
         'health',
         'tenants/other/members',
         '../admin',
-        'me/profile',
-        'me/notifications/x/read',
+        'me/vaultx',
+        'me/profile/x',
+        'me/notifications/../read',
         'me/notificationsx'
     ])
-        assert.ok(!allowed.test(path), path)
+        assert.ok(!allows(path), path)
 })
 
 test('the QR code is shown as an image, never inserted as HTML', () => {
@@ -304,29 +338,24 @@ test('the Pasport design: one layout, the shell around every page and the login 
         assert.ok(css.includes(part), part)
     // The phone: the rail becomes a drawer behind the menu button, the login panel disappears
     assert.match(css, /@media \(max-width: 860px\)/)
-    assert.ok(!/market|vault|wizard|tour-/.test(css), 'nothing of one app in the design')
+    // The pages of the portal: marketplace, wizard, vault, tickets, tour, presence
+    for (const part of ['.market-card', '.wizard-stepper', '.vault-widget', '.rte-bar', '.tour-tip', '.presence-dot'])
+        assert.ok(css.includes(part), part)
     // The bell of the topbar: its popover, also on the phone
     assert.match(css, /\.notif-pop/)
-    assert.match(templates['src/components/shell/shell-view.tsx'], /<NotificationBell accountUrl=\{accountUrl\} \/>/)
-    for (const page of ['members', 'licenses', 'admin', 'admin/catalog', 'admin/apps', 'admin/audit', 'audit'])
-        assert.match(templates[`src/app/[locale]/${page}/page.tsx`], /<AppPage/, page)
-    for (const page of ['security', 'profile'])
-        assert.match(templates[`src/app/[locale]/${page}/page.tsx`], /<AppPage>/)
-    for (const page of ['admin', 'admin/catalog', 'admin/apps', 'admin/audit'])
-        assert.match(templates[`src/app/[locale]/${page}/page.tsx`], /<AppPage wide admin>/, page)
+    // The customer portal and the superadmin panel: route groups with the shell in their layout
+    assert.match(templates['src/app/[locale]/(portal)/layout.tsx'], /<CustomerShell/)
+    assert.match(templates['src/app/[locale]/admin/(panel)/layout.tsx'], /<AdminShell/)
+    assert.match(
+        templates['src/app/[locale]/admin/(panel)/layout.tsx'],
+        /if \(!session\.superadmin\) return <ClientRedirect/
+    )
     // The auth screens draw the login screen of the design themselves
     assert.match(templates['src/components/oidc-login.tsx'], /<AuthLayout variant=\{variant\}>/)
     for (const name of ['Register', 'ForgotPassword', 'ResetPassword', 'VerifyEmail', 'AcceptInvitation'])
         assert.match(templates['src/components/account-forms.tsx'], new RegExp(`export function ${name}\\(`), name)
     assert.equal(templates['src/components/account-forms.tsx'].match(/<AuthLayout/g).length >= 5, true)
-    const shell = templates['src/components/shell/app-shell.tsx']
-    // Organisation pages for its admins, the platform for superadmins; ACCOUNT_URL is empty on the login server
-    assert.match(shell, /if \(tenantAdmin\)/)
-    assert.match(shell, /if \(session\.superadmin\)/)
-    assert.match(shell, /ACCOUNT_URL \+ path/)
-    assert.match(shell, /APP_NAV\.map/)
-    assert.match(shell, /if \(!session\) return <LoginRedirect \/>/)
-    const view = templates['src/components/shell/shell-view.tsx']
+    const shell = templates['src/components/pasport/shell.tsx']
     for (const part of [
         "className={'app-shell'",
         "className={'sidebar'",
@@ -336,11 +365,25 @@ test('the Pasport design: one layout, the shell around every page and the login 
         "className='rail-toggle'",
         "className='tb-search'",
         '<ThemeToggle',
-        '<Presence />',
-        "className='user-pop-locales'"
+        "className='user-pop-locales'",
+        "className='user-pop-flyout-wrap'",
+        '<OutOfOfficeDialog',
+        '<Tour '
     ])
-        assert.ok(view.includes(part), part)
-    assert.match(view, /action='\/api\/auth\/logout'/)
+        assert.ok(shell.includes(part), part)
+    // The pages of the organisation for its admins, the panel for superadmins
+    assert.match(shell, /\.\.\.\(admin\s+\? \[/)
+    assert.match(shell, /user\.superadmin \? \[\{ key: 'platform'/)
+    assert.match(shell, /form\.action = '\/api\/auth\/logout'/)
+    // A linked app: AppPage puts its own pages (APP_NAV) in the same shell, the rest on the login server
+    const linked = oidcFrontendFiles({ linked: true, appName: 'Planner' })
+    const appShell = linked['src/components/shell/app-shell.tsx']
+    assert.match(appShell, /APP_NAV\.map/)
+    assert.match(appShell, /ACCOUNT_URL \+ path/)
+    assert.match(appShell, /if \(!session\) return <LoginRedirect \/>/)
+    assert.match(linked['src/components/shell/shell-view.tsx'], /<PortalBell accountUrl=\{accountUrl\}/)
+    assert.match(linked['src/components/shell/shell-view.tsx'], /<Shell\b/)
+    assert.match(linked['src/lib/nav.ts'], /export const APP_NAV: NavItem\[\]/)
     assert.match(templates['src/components/presence.tsx'], /me\/heartbeat/)
     const screen = templates['src/components/pasport/auth-layout.tsx']
     assert.match(screen, /className='auth-wrap'/)
@@ -353,7 +396,6 @@ test('the Pasport design: one layout, the shell around every page and the login 
     assert.ok(login.indexOf("p('tabEid')") < login.indexOf("p('tabEmail')"), 'eID before the email tab')
     assert.match(login, /href='\/register'/)
     assert.match(templates['src/lib/brand.ts'], /export const APP_NAME: string \| null = null/)
-    assert.match(templates['src/lib/nav.ts'], /export const APP_NAV: NavItem\[\]/)
     // No hard-coded colours from Tailwind: everything comes from the tokens of the design
     for (const [rel, content] of Object.entries(templates))
         if (rel.endsWith('.tsx'))
@@ -377,8 +419,11 @@ test('every page is protected: the proxy sends a browser without a session to /l
 })
 
 test('a superadmin on the platform (no organisation) goes to /admin instead of seeing an error', () => {
-    for (const page of ['src/app/[locale]/members/page.tsx', 'src/app/[locale]/licenses/page.tsx'])
-        assert.match(templates[page], /if \(!session\.tenant && session\.superadmin\) redirect\('\/admin'\)/, page)
+    assert.match(
+        templates['src/app/[locale]/(portal)/layout.tsx'],
+        /if \(!session\.tenant && session\.superadmin\) return <ClientRedirect to='\/admin' \/>/
+    )
+    assert.match(templates['src/app/[locale]/page.tsx'], /!session\.tenant && session\.superadmin \? '\/admin'/)
 })
 
 test('with the OIDC login DafkeDD UI is always installed, whatever the answer; ESLint skips its folder', async () => {
@@ -418,16 +463,27 @@ test('the bell: every kind of notification of the backend has a text and an icon
     )
     const kinds = [
         ...store
-            .slice(store.indexOf('NOTIFICATION_KINDS'))
-            .split('] as const')[0]
-            .matchAll(/'([a-z_.]+)'/g)
+            .slice(store.indexOf('export type NotificationKind ='))
+            .split('\n\n')[0]
+            .matchAll(/\| '([a-z_.]+)'/g)
     ].map(match => match[1])
-    assert.ok(kinds.length >= 3)
-    const bell = templates['src/components/pasport/notifications.tsx']
+    assert.ok(kinds.length >= 10, kinds.join(' '))
+    const bell = templates['src/components/pasport/shell.tsx']
     for (const kind of kinds) assert.match(bell, new RegExp(`case '${kind.replace('.', '\\.')}':`), kind)
     // Polls the login server through the proxy of the frontend, and marks as read there
-    assert.match(bell, /fetch\('\/api\/backend\/me\/notifications'/)
-    assert.match(bell, /'read-all'/)
+    assert.match(bell, /api<Notification\[\]>\('me\/notifications'\)/)
+    assert.match(bell, /'me\/notifications\/read-all'/)
+    // Every screen a notification can lead to has a page
+    for (const screen of [
+        'invoices',
+        'ticket',
+        'users',
+        'admin-tenants',
+        'admin-tenant',
+        'admin-ticket',
+        'admin-codes'
+    ])
+        assert.ok(bell.includes(`'${screen}'`), screen)
 })
 
 test('the design check of every project: the generated frontends pass, a page outside the design does not', async t => {
@@ -475,4 +531,35 @@ test('the design check of every project: the generated frontends pass, a page ou
         await readFile(new URL('../src/frontends/nextjs.js', import.meta.url), 'utf8'),
         /'check:design'\] = 'node scripts\/check-design\.mjs'/
     )
+})
+
+test('security and profile: change the password, edit the profile, also in the superadmin panel, and the eID screen', () => {
+    const security = templates['src/app/[locale]/(portal)/security/page.tsx']
+    assert.match(security, /<PasswordCard \/>/)
+    assert.match(templates['src/components/pasport/password-card.tsx'], /'me\/password', 'POST'/)
+    assert.match(templates['src/app/[locale]/admin/(panel)/security/page.tsx'], /<PasswordCard \/>/)
+    assert.match(templates['src/app/[locale]/admin/(panel)/profile/page.tsx'], /<Profile variant='admin' \/>/)
+    assert.match(templates['src/app/[locale]/(portal)/profile/page.tsx'], /<Profile \/>/)
+    const profile = templates['src/components/pasport/customer/profile.tsx']
+    assert.match(profile, /'me\/profile', 'PATCH'/)
+    assert.match(profile, /'tenants\/current\/billing', 'PATCH'/)
+    // The user menu of the superadmin panel opens its own profile and security pages
+    const shell = templates['src/components/pasport/shell.tsx']
+    assert.match(shell, /href: '\/admin\/profile'/)
+    assert.match(shell, /href: '\/admin\/security'/)
+    // A linked app: its own profile page, security on the login server
+    const linked = oidcFrontendFiles({ linked: true, appName: 'Planner' })
+    assert.match(linked['src/app/[locale]/profile/page.tsx'], /<Profile \/>/)
+    assert.match(linked['src/components/pasport/profile.tsx'], /'me\/profile', 'PATCH'/)
+    // OIDC_EID_REQUIRED: GET /me/eid or a 403 oidc.EID_REQUIRED shows the eID screen instead of the page
+    assert.match(
+        templates['src/app/[locale]/(portal)/layout.tsx'],
+        /if \(eid\?\.required && !eid\.linked\) return <EidRequired/
+    )
+    assert.match(shell, /if \(eidRequired\) return <EidRequired/)
+    assert.match(linked['src/components/shell/shell-view.tsx'], /if \(eidRequired\) return <EidRequired/)
+    assert.match(templates['src/lib/account.ts'], /result\.body\.error === 'oidc\.EID_REQUIRED'\) eidRequired\(\)/)
+    assert.match(templates['src/components/pasport/eid-required.tsx'], /'\/api\/backend\/me\/eid'/)
+    // A new account of an invitation can read its eID first (required with OIDC_EID_REQUIRED)
+    assert.match(templates['src/components/account-forms.tsx'], /api\('invitation\/eid'/)
 })

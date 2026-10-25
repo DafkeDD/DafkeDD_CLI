@@ -330,6 +330,11 @@ export function backendReadme({
                       'Login with the Belgian eID: `off`, `on` (real cards, Belgian root CAs, OCSP) or `test` (also the virtual card of `npm run eid:mock`; refused in production)'
                   ],
                   [
+                      'OIDC_EID_REQUIRED',
+                      'off',
+                      '`on`: every account must have its eID linked (registering only with the eID, a new account of an invitation reads it first, the API answers 403 `oidc.EID_REQUIRED` to an account without one except the routes to link it; superadmins never need one)'
+                  ],
+                  [
                       'OIDC_EID_ORIGIN',
                       '(origin of APP_URL)',
                       'The website that asks for the PIN (the bridge signs its origin); only when it is not APP_URL'
@@ -787,11 +792,29 @@ expire.
 
 - **Disabled** members (\`tenant_members.status\`) stay members but cannot log in to that tenant or use its API; their
   sessions in that tenant end at once. An admin enables them again with one click.
+- **The own account**: \`GET\`/\`PATCH /me/profile\` (first and last name, phone, language; a new email address
+  changes only after the link sent to it is opened, \`pendingEmail\` until then) and \`POST /me/password\` (with the
+  current password, or the first one for an eID-only account; every other session ends). The billing details of the
+  organisation: \`GET\`/\`PATCH /tenants/current/billing\` (its admins change them).
 - **Who is online**: every API request (and the heartbeat \`POST /me/heartbeat\` the frontend sends every minute while a
   page is open) writes \`tenant_members.last_seen_at\`, at most once a minute. A member is online after activity in the
   last 2 minutes; the members list also shows "last seen".
+- **Status and out-of-office**: like Microsoft Teams, every account chooses its status in the menu of its avatar
+  (\`PUT /me/status\`: \`available\`, \`busy\`, \`dnd\`, \`brb\`, \`away\` or \`offline\` to appear offline). The members
+  lists show \`presence\`: the chosen status while the member is online, \`away\` instead of \`available\` when the page
+  was not used for 5 minutes (the heartbeat sends \`idle\`), \`offline\` otherwise, and \`ooo\` while its out-of-office
+  reply is on (\`PUT /me/out-of-office\`, like Outlook: from, until, an internal message for colleagues and an external
+  one for customers). The support team sees the internal message when it mentions or assigns a colleague, customers see
+  the external one on the tickets that colleague handles.
+- **Profession**: a member is \`staff\` (the default) or \`doctor\` (\`PATCH /tenants/current/members/:userId/profession\`,
+  by its admins or a superadmin). Only a doctor may use the eHealth vault and the apps that need it.
+- **Any organisation** for superadmins: \`/admin/tenants/:id/members\` and \`/admin/tenants/:id/invitations\` do what
+  \`/tenants/current/...\` does for its own admins (with \`eidLinked\` per member); a tenant has a plan, a city, a
+  contact and stays \`provisioning\` until its first admin joined.
 - **Notifications** (the bell in the topbar, \`src/notifications\`): the superadmins hear of a new organisation, the
-  other admins of an organisation of an invitation and of a new member (followed through the audit log). Other code
+  other admins of an organisation of an invitation and of a new member (followed through the audit log); the admins of
+  an invoice and of a contract that ends soon; the account that made a ticket of an answer, and the support team of new
+  tickets and replies. Other code
   injects \`NotificationsService\` and calls \`toUser\`, \`toTenantAdmins\` or \`toPlatform\` with a kind of
   \`NOTIFICATION_KINDS\` (its texts are in the \`Notifications\` messages of the frontend). The frontend reads
   \`GET /me/notifications\` every 30 seconds; notifications are kept 90 days.
@@ -862,8 +885,10 @@ the PC of the user, which talks to the card reader on http://127.0.0.1:47820.
 | --- | --- |
 | Register with eID | \`POST /oidc/account/eid/challenge\`, then \`POST /oidc/account/register-eid\` with the token, an email address and an organisation. The **name comes from the card**, the person chooses a **password** (every account has one). The email address must still be verified. One eID, one account (409 \`oidc.EID_ALREADY_LINKED\`). |
 | Link to an existing account | On \`/security\` of the frontend (\`/me/eid/challenge\` and \`POST /me/eid\`): from then on the account logs in with password **or** eID. |
-| Unlink | \`DELETE /me/eid\`; not when the account has no password (its eID is its only login: choose a password first with "forgot password"). |
-| Password later | "Forgot password" works for an eID account too; then it can log in both ways (the password login asks the authenticator code as usual). |
+| Unlink | \`DELETE /me/eid\`; not when the account has no password (its eID is its only login: choose a password first on \`/security\`), and not with \`OIDC_EID_REQUIRED=on\`. |
+| Password later | On \`/security\` (\`POST /me/password\`, no current password needed when there is none yet) or with "forgot password"; then the account can log in both ways (the password login asks the authenticator code as usual). |
+| Invitation | A new account reads its eID first when the server has eID login (\`POST /oidc/account/invitation/eid\`: the name comes from the card), required with \`OIDC_EID_REQUIRED=on\`; then it chooses a password. |
+| Every account | \`OIDC_EID_REQUIRED=on\`: an account without an eID only reaches the routes to link it (\`@EidOptional()\`: \`/me/eid\`, the profile, the sessions, the notifications); the frontend shows the eID screen instead of the page until it is linked. |
 
 - \`OIDC_EID=test\` (development, in \`.env\`) also trusts the test certificates of the virtual card
   (\`npm run eid:mock\` in the frontend: \`dafke-eid --mock --auth-origin http://localhost:3000\`, PIN 1234) and skips
@@ -874,7 +899,9 @@ the PC of the user, which talks to the card reader on http://127.0.0.1:47820.
   page shows what is missing: the program, a card reader or the card.
 - The hash in \`user_identifiers\` depends on \`OIDC_MASTER_KEY\`: another key means every eID has to be linked again.
   The national register number is personal data with legal rules for its use in Belgium: check with your DPO that
-  your application may use it as a login key.
+  your application may use it as a login key. It is also kept encrypted (\`rrn_enc\`, a key derived from
+  \`OIDC_MASTER_KEY\`) with the address of the card, and only shown to the account itself (\`GET /me/profile\`);
+  unlinking the eID forgets both.
 
 ### Another OpenID Connect server (Entra ID, Keycloak, Google, ...)
 
@@ -1135,9 +1162,9 @@ on \`/licenses\` of the frontend.
 
 | Who | Can |
 | --- | --- |
-| Superadmin | Products and prices (\`/admin/products\`), discount codes (\`/admin/discounts\`), **free seats** for one organisation (\`/admin/tenants/:id/grants\`), **extend a trial** (\`/admin/tenants/:id/trials\`). Always has access to every product. |
-| Admin of an organisation | Buy seats (\`POST /tenants/current/licenses/subscriptions\`), more or fewer seats, cancel, give and take back seats, start the trial of a member |
-| Every user | \`GET /me/licenses\`: which products may I use, through a trial or a seat; \`POST /me/licenses/:productCode/trial\`: ask a demo, once per product (409 \`billing.DEMO_USED\`) |
+| Superadmin | Products and prices, and how they look in the app catalogue (\`/admin/products\`; removing one also removes its app), discount codes (\`/admin/discounts\`), **free seats** for one organisation (\`/admin/tenants/:id/grants\`), **extend or start a trial** (\`/admin/tenants/:id/trials\`, also when the demo of the product is off) and **end one** (\`DELETE /admin/tenants/:id/trials/:productCode/:userId\`). Always has access to every product. |
+| Admin of an organisation | Buy seats (\`POST /tenants/current/licenses/subscriptions\`), more or fewer seats, cancel, give and take back seats, take a seat for themselves (\`POST /tenants/current/licenses/:productCode/seat\`), start the trial of a member, the billing details (\`/tenants/current/billing\`) and the invoices (\`/tenants/current/invoices\`: pay the open ones, download the PDF) |
+| Every user | \`GET /me/licenses\`: which products may I use, through a trial or a seat; the app catalogue (\`GET /tenants/current/catalog\`); \`POST /me/licenses/:productCode/trial\`: ask a demo, once per product (409 \`billing.DEMO_USED\`) |
 
 **Protect an endpoint** with \`@License('<product code>')\` (\`src/billing/license.guard.ts\`): it logs in like
 \`@Access('user')\` and answers 403 \`billing.LICENSE_REQUIRED\` without a running trial or a seat. The module of the
@@ -1154,6 +1181,28 @@ ${fence}
 
 When there are fewer seats than assigned members (fewer seats bought, free seats ended), the members that got a seat
 first keep access.
+
+**The app catalogue** (\`GET /tenants/current/catalog\`, every member): every product that is sold, with its icon,
+category, short text, features and colour (set by a superadmin on \`/admin/products\`), sorted by \`sort\` and name.
+Per product it says whether the organisation has it (\`owned\`), whether I may use it (\`access\`), whether I can still
+ask a demo, the seats in use, where it opens (\`launchUrl\`, \`{slug}\` becomes the slug of the organisation) and where
+it runs (the practice name and region chosen in the purchase wizard). A product with \`requiresVault\` needs a doctor
+with an eHealth certificate (see "eHealth vault").
+
+**Demo per product** (\`demoEnabled\`, default on): only then can an admin start one for a member and can a member start
+their own (409 \`billing.DEMO_USED\` once it was used, \`billing.DEMO_DISABLED\` when the demo is off). Turning it off
+does not end the trials that are running; a superadmin can always give or end one (an ended trial counts as used).
+
+**VAT and invoices.** Prices are without VAT: \`BILLING_VAT_PERCENT\` (21) is added to every payment, and the quote
+shows it (\`vatPercent\`, \`firstVatCents\`, \`firstTotalCents\`, \`renewalTotalCents\`). Every purchase, extra seats
+and renewal issues an invoice \`FAC-<year>-<number>\` (numbered per year without gaps, \`invoice_numbers\`), with the
+billing details of the organisation copied onto it: \`open\` until it is paid, \`paid\`, \`free\` (a 100% discount
+code) or \`void\` (not shown). Admins list them (\`GET /tenants/current/invoices\`), pay every open one with one
+checkout (\`POST /tenants/current/invoices/pay\`: renewals that failed, checkouts that were not finished) and download
+the PDF (\`GET /tenants/current/invoices/:id/pdf\`, A4 in the language of the request, our own PDF code, no library).
+The seller on the PDF comes from \`INVOICE_SELLER_NAME\` (in \`.env\`), and the commented \`INVOICE_SELLER_ADDRESS\`
+(lines separated by \`|\`), \`INVOICE_SELLER_VAT\`, \`INVOICE_SELLER_EMAIL\` and \`INVOICE_SELLER_IBAN\` there; fill them
+in before the first real invoice.
 
 **Payments (Mollie).** \`PAYMENTS=mollie\` with \`MOLLIE_API_KEY\` (a \`test_...\` key from the Mollie dashboard while
 testing). Buying is a first payment through the checkout of Mollie (it saves the mandate); after it the API creates a
@@ -1195,10 +1244,12 @@ failed login), **what** (\`login.succeeded\`, \`members.role_changed\`, \`licenc
 | Category | Events |
 | --- | --- |
 | \`login\` | Logged in (how: password and code, eID), failed login (unknown email, wrong password, not verified, too many attempts, eID not linked), wrong two-step code, logged out, session ended, logged out everywhere else, copied refresh token blocked |
-| \`account\` | Registered (with a new organisation), email verified, new password, two-step verification on, off, new recovery codes, reset by a superadmin, eID linked or unlinked |
-| \`members\` | Invited, invitation sent again or withdrawn, joined, role changed, disabled, enabled, removed |
-| \`platform\` | Organisation created, suspended or reactivated, superadmin granted or taken away |
-| \`licences\` | Products, discount codes, free seats, trials, seats given or taken back, purchase started, paid, more or fewer seats, renewed, renewal not paid, canceled, a late payment to refund |
+| \`account\` | Registered (with a new organisation), email verified, new password, two-step verification on, off, new recovery codes, reset by a superadmin, eID linked or unlinked, profile changed, new email address asked and confirmed, eHealth certificate uploaded, its password saved, removed, fetched by an app |
+| \`members\` | Invited, invitation sent again or withdrawn, joined, role changed, profession changed, disabled, enabled, removed |
+| \`platform\` | Organisation created, changed, suspended or reactivated, superadmin granted or taken away |
+| \`licences\` | Products, discount codes, free seats, trials (started, extended, ended), seats given or taken back, purchase started, paid, more or fewer seats, renewed, renewal not paid, canceled, a late payment to refund, billing details changed |
+| \`invoices\` | Invoice issued, paid or voided, payment of the open invoices started |
+| \`support\` | Ticket created, answered, claimed, closed, reopened, rated, internal note added |
 
 | Who | Reads |
 | --- | --- |
@@ -1232,6 +1283,52 @@ ${fence}
   log in your privacy statement.
 - Tests: override \`AUDIT_STORE\` with \`MemoryAuditStore\` in e2e tests (like \`BILLING_STORE\`).
 
+### Support tickets
+
+Members ask the support team (the superadmins) a question in a ticket: about an app or in general
+(\`/tenants/current/tickets\`, Row-Level Security: only the own organisation). The support team sees every ticket
+(\`/admin/tickets\`, filtered on status, on who handles it and a search text), takes it (\`claim\`), answers, closes and
+reopens it, opens one itself for an organisation (after a phone call), and keeps **internal notes** that the
+organisation never sees, mentioning colleagues (\`GET /admin/support-team\`). A ticket is \`TIC-<number>\` (from 1001)
+with a status (\`open\`: waits for support, \`in_progress\`, \`answered\`: waits for the customer, \`closed\`) and a
+priority (\`normal\`, \`high\`). The customer can reopen a closed ticket and **rate** it (1 to 5, with an optional
+comment; rating again overwrites it). Tickets send no emails, only notifications: the customer when support answers,
+the superadmins online for a new ticket (once one claims it, the notification disappears for the others).
+
+- **Messages are rich text**: a small Markdown subset (\`**bold**\`, \`_italic_\`, \`~~strike~~\`, inline code between backticks, links,
+  \`- \` and \`1. \` lists, paragraphs), at most 20 000 characters. Notifications and \`lastMessage\` in the lists get the
+  text without markup (\`plainText()\` in \`src/support/rich-text.ts\`).
+- **Images**: first upload (\`POST .../tickets/attachments\`, JSON with the file in base64: PNG, JPEG, GIF or WebP,
+  detected from the first bytes, at most 2 MiB; these two routes accept a body of up to 3 MB), then refer to the returned
+  id in the message as \`![name](att:<id>)\`. Every image must belong to the organisation of the ticket (400
+  \`support.ATTACHMENT_UNKNOWN\`). Images are served inline with their own type, \`nosniff\` and a private cache, and need
+  the access token like every route.
+- Tables: \`tickets\`, \`ticket_messages\` and \`ticket_attachments\` (Row-Level Security), \`ticket_notes\` (support only:
+  the tenant role has no access).
+
+### eHealth vault (doctors)
+
+A doctor keeps the **eHealth certificate** (PKCS#12, \`.p12\` or \`.pfx\`, at most 64 KiB) on \`/me/vault\`, so the apps
+that call eHealth for that doctor do not each need a copy. Only a member with profession \`doctor\` (set by an admin)
+in the organisation of the token, or a superadmin, may use it (403 \`oidc.VAULT_NOT_ALLOWED\`). The file and its password
+are stored **encrypted** in \`user_vault\` (AES-256-GCM, a key derived from \`OIDC_MASTER_KEY\`, bound to the account):
+upload it (\`PUT /me/vault\`), set its password (\`PUT /me/vault/password\`, checked by opening the file), remove it
+(\`DELETE /me/vault\`). The API only shows what the certificate says (subject, issuer, serial, thumbprint, valid until),
+never the file or the password.
+
+An app gets them with **\`POST /vault/credentials\`**, server to server: Basic authentication with its client id and
+secret (a confidential app that sells a product with \`requiresVault\`), and the access token of the doctor issued to that
+same app in the body. The doctor must be an active doctor with a licence for the product. The answer is never cached;
+keep the file and the password in memory only and do not log them. Every fetch is in the audit log
+(\`account.vault_retrieved\`, never the password).
+
+### Statistics (superadmin)
+
+\`GET /admin/stats\` (\`?range=6m\`, \`year\` or \`all\`) gives the dashboard of the platform: organisations, active
+users (seen in the last 30 days), apps bought and the revenue of the month (paid invoices, without VAT) as KPI tiles
+with the change from the month before and the last 8 months, revenue and new organisations per month, the 4 apps with
+the most environments (the rest is \`other\`) and how often each discount code was used.
+
 ### Not in this version yet
 
 Passkeys, a consent screen for external clients and back-channel logout to other clients follow in the next phases.
@@ -1262,8 +1359,8 @@ ${fence}
 | Table | Contents | Tenant (RLS) |
 | --- | --- | --- |
 | users table (database name + \`users\`) | Accounts: email (unique, case-insensitive), verified or not, name, scrypt hash (empty for an eID-only account), status, \`is_superadmin\`, two-step verification (encrypted secret, last used step, hashed recovery codes) | no: one account can be in several tenants |
-| \`tenants\` | Organisations: \`slug\`, name, status (\`active\` or \`suspended\`) | yes |
-| \`tenant_members\` | Which user is in which tenant: role (\`user\` or \`admin\`), status (\`active\` or \`disabled\`), last seen | yes |
+| \`tenants\` | Organisations: \`slug\`, name, status (\`active\` or \`suspended\`), plan, city, contact name, billing details | yes |
+| \`tenant_members\` | Which user is in which tenant: role (\`user\` or \`admin\`), status (\`active\` or \`disabled\`), profession (\`doctor\` or \`staff\`), last seen | yes |
 | \`tenant_invitations\` | Open invitations (email, role, who invited, expiry) | yes |
 | \`user_identifiers\` | Linked eIDs: an HMAC of the national register number per account (one eID per account, one account per eID), linked and last used | no |
 | \`user_passkeys\` | Passkeys: the credential id (unique), public key (SPKI), COSE algorithm, signature counter, name, synced or not, transports, added and last used; no secrets | no |
@@ -1277,7 +1374,7 @@ ${fence}
 | \`oidc_sessions\` | Browser sessions: a public id (\`sid\`), the hash of the cookie and of the login that created it, the browser (User-Agent) and when it was last used; no tenant for a platform login | yes |
 | \`oidc_codes\` | Authorization codes (hash, once, 60 seconds) | yes |
 | \`oidc_refresh_tokens\` | Refresh tokens (hash), their family, session, client and organisation; used and revoked | yes |
-| \`license_products\` | Products for sale: fixed code, name, price per seat per month and per year | no |
+| \`license_products\` | Products for sale: fixed code, name, price per seat per month and per year, how they look in the app catalogue, demo on or off, needs the vault | no |
 | \`tenant_subscriptions\` | Bought seats of an organisation per product: month or year, paid until, the Mollie subscription, discount | yes |
 | \`license_trials\` | The trial of a user per product (once), until when | yes |
 | \`license_assignments\` | Who has a seat, given by whom | yes |
@@ -1285,6 +1382,10 @@ ${fence}
 | \`discount_codes\` | Discount codes: percentage or amount, duration, how often used | no |
 | \`discount_redemptions\` | Which organisation used which code (once each) | yes |
 | \`billing_payments\` | Payments at Mollie (id, what for, status); a paid one is applied once | yes |
+| \`invoice_numbers\`, \`invoices\` | The last invoice number per year; the invoices (\`FAC-<year>-<number>\`, amounts with and without VAT, the billing details as issued, status) | \`invoices\`: yes |
+| \`user_vault\` | The eHealth certificate of an account and its password, both encrypted, and what the certificate says | no |
+| \`tickets\`, \`ticket_messages\`, \`ticket_attachments\` | Support tickets, their conversation and their images | yes |
+| \`ticket_notes\` | The internal notes of the support team (with mentions) | no: support only |
 | \`audit_events\` | The audit log: who, what, about whom, organisation, details, IP address, browser, when (append-only) | yes (\`NULL\`: platform and accounts) |
 | \`schema_migrations\` | Which migration ran, with a checksum | no |
 

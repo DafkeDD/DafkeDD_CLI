@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from 'node:crypto'
 import { AuditService } from '../audit/audit.service.js'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { HttpStatus, Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { decrypt, deriveKey, encrypt, PKCE_CHALLENGE, randomToken, safeEqual, sha256 } from './crypto.js'
 import { PasskeyService } from './passkeys/passkey.service.js'
@@ -10,6 +10,7 @@ import { type ExternalAttempt, type ExternalIdentity, ExternalService } from './
 import { type Interaction, interactionKey, openInteraction, sealInteraction } from './interaction.js'
 import { JoseError, verifyJwt } from './jose.js'
 import { AppException } from '../common/app.exception.js'
+import { presence } from '../access/presence.js'
 import { EidService } from './eid.service.js'
 import { KeysService } from './keys.service.js'
 import { MFA_AMR, MfaService, type MfaSetup, type SecondFactor } from './mfa.service.js'
@@ -123,6 +124,9 @@ export type Params = Record<string, unknown>
 
 const text = (value: unknown, fallback = ''): string => (typeof value === 'string' ? value : fallback)
 
+/** How often expired codes, sessions, refresh tokens and invitations are deleted. */
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000
+
 /** The code of a product (license_products.code): a-z, 0-9 and -, 2 to 63 characters. */
 export const PRODUCT_CODE = /^[a-z0-9][a-z0-9-]{1,62}$/
 
@@ -153,9 +157,10 @@ export function single(params: Params, name: string): string | undefined {
 
 /** The OpenID Connect server: authorization (with PKCE), login, tokens and userinfo. */
 @Injectable()
-export class OidcService implements OnApplicationBootstrap {
+export class OidcService implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly logger = new Logger(OidcService.name)
     private prepared: Promise<void> | null = null
+    private cleanup: NodeJS.Timeout | null = null
 
     constructor(
         @Inject(OIDC_STORE) private readonly store: OidcStore,
@@ -176,6 +181,22 @@ export class OidcService implements OnApplicationBootstrap {
                 'OpenID Connect is not ready yet: ' + (error instanceof Error ? error.message : String(error))
             )
         })
+        // Used codes, ended sessions, old refresh tokens and expired invitations: cleared every hour, not only at start
+        this.cleanup = setInterval(() => void this.deleteExpired(), CLEANUP_INTERVAL_MS)
+        this.cleanup.unref()
+    }
+
+    onModuleDestroy() {
+        if (this.cleanup) clearInterval(this.cleanup)
+    }
+
+    private async deleteExpired() {
+        try {
+            await this.prepare()
+            await this.store.deleteExpired(new Date())
+        } catch (error) {
+            this.logger.warn('Cleaning up expired logins failed: ' + (error instanceof Error ? error.message : error))
+        }
     }
 
     /** Registers the clients of config/oidc-clients.json, creates the signing keys and the first admin. Once. */
@@ -609,6 +630,8 @@ export class OidcService implements OnApplicationBootstrap {
         if (user.status !== 'active') return refused('oidc.ACCOUNT_DISABLED', user.id)
         if (!user.emailVerified) return refused('oidc.EMAIL_NOT_VERIFIED', user.id)
         await this.store.touchIdentifier('eid', person.valueHash)
+        // The profile shows the national register number of the card (also for eIDs linked before it was kept)
+        await this.store.setEidDetails(user.id, { rrnEncrypted: person.rrnEncrypted, address: person.address })
         return this.secondStep(id, interaction, client, user, [...OIDC.EID_AMR])
     }
 
@@ -919,6 +942,8 @@ export class OidcService implements OnApplicationBootstrap {
         const user = await this.passkeys.authenticate(form.credential, found.interaction.passkeyChallenge)
         if (typeof user === 'string') return refused(user)
         if (user.status !== 'active') return refused('oidc.ACCOUNT_DISABLED', user.id)
+        // Like the password and eID logins: no session before the email address is confirmed
+        if (!user.emailVerified) return refused('oidc.EMAIL_NOT_VERIFIED', user.id)
         return this.authenticated(
             {
                 ...interaction,
@@ -1095,6 +1120,9 @@ export class OidcService implements OnApplicationBootstrap {
         })
         // Logged in: online for the admins of the tenant
         if (membership) await this.store.touchMember(membership.tenantId, user.id).catch(() => undefined)
+        // A fresh login starts as available (green), like Microsoft Teams; not idle
+        presence.setIdle(user.id, false)
+        await this.store.setPresence(user.id, 'available').catch(() => undefined)
         const client = await this.store.findClient(interaction.params.clientId)
         if (client && (await this.needsConsent(client, user.id, interaction.params, membership?.tenantId ?? null))) {
             const next: Interaction = {

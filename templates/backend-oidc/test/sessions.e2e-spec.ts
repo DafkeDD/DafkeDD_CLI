@@ -8,8 +8,6 @@ import { BILLING_STORE } from '../src/billing/store/billing.store.js'
 import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
 import { AUDIT_STORE } from '../src/audit/audit.store.js'
 import { MemoryAuditStore } from '../src/audit/memory-audit.store.js'
-import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
-import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import { pkceChallenge, sha256 } from '../src/oidc/crypto.js'
 import { decodeUnverified } from '../src/oidc/jose.js'
@@ -18,11 +16,17 @@ import { hashPassword } from '../src/oidc/password.js'
 import { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js'
 import { OIDC_STORE } from '../src/oidc/store/oidc.store.js'
 import { configureApp } from '../src/setup.js'
+import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
+import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
+import { INVOICES_STORE } from '../src/billing/invoices/invoices.store.js'
+import { MemoryInvoicesStore } from '../src/billing/invoices/memory-invoices.store.js'
 
 process.env.OIDC_MASTER_KEY ??= randomBytes(32).toString('hex')
 process.env.OIDC_LOGIN_RATE_LIMIT = '1000'
 process.env.OIDC_LOGIN_UI_URL = ''
 process.env.OIDC_MFA = 'optional'
+// The accounts of these tests have no eID (the tests of OIDC_EID_REQUIRED are in eid.e2e-spec.ts)
+process.env.OIDC_EID_REQUIRED = 'off'
 
 const CLIENT = 'frontend'
 const REDIRECT = 'http://localhost:3000/api/auth/callback'
@@ -35,7 +39,8 @@ describe('Sessions, refresh tokens, logout, revocation and introspection (e2e)',
     let app: INestApplication<App>
     const store = new MemoryOidcStore()
     const http = () => request(app.getHttpServer())
-    const ids = { acme: '', alice: '', bob: '' }
+    const ids = { acme: '', alice: '', bob: '', carol: '' }
+    const auditStore = new MemoryAuditStore()
 
     beforeAll(async () => {
         const passwordHash = await hashPassword(PASSWORD)
@@ -43,8 +48,10 @@ describe('Sessions, refresh tokens, logout, revocation and introspection (e2e)',
         const alice = store.addUser({ email: 'alice@example.com', name: 'Alice', passwordHash })
         const bob = store.addUser({ email: 'bob@example.com', name: 'Bob', passwordHash })
         store.addMembership(acme.id, alice.id, 'admin')
+        const carol = store.addUser({ email: 'carol@example.com', name: 'Carol', passwordHash })
         store.addMembership(acme.id, bob.id, 'user')
-        Object.assign(ids, { acme: acme.id, alice: alice.id, bob: bob.id })
+        store.addMembership(acme.id, carol.id, 'user')
+        Object.assign(ids, { acme: acme.id, alice: alice.id, bob: bob.id, carol: carol.id })
         await store.upsertClient({
             clientId: 'server-app',
             name: 'Server app',
@@ -60,14 +67,24 @@ describe('Sessions, refresh tokens, logout, revocation and introspection (e2e)',
         const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
             .overrideProvider(DatabaseService)
             .useValue({ ping: vi.fn().mockResolvedValue(true), query: vi.fn().mockResolvedValue({ rows: [] }) })
+            .overrideProvider(NOTIFICATIONS_STORE)
+            .useValue(new MemoryNotificationsStore())
+            .overrideProvider(INVOICES_STORE)
+            .useValue(
+                new MemoryInvoicesStore(async () => ({
+                    tenantName: 'Test',
+                    company: null,
+                    vat: null,
+                    billingAddress: null,
+                    billingEmail: null
+                }))
+            )
             .overrideProvider(OIDC_STORE)
             .useValue(store)
             .overrideProvider(BILLING_STORE)
             .useValue(new MemoryBillingStore())
             .overrideProvider(AUDIT_STORE)
-            .useValue(new MemoryAuditStore())
-            .overrideProvider(NOTIFICATIONS_STORE)
-            .useValue(new MemoryNotificationsStore())
+            .useValue(auditStore)
             .compile()
         app = moduleRef.createNestApplication()
         configureApp(app)
@@ -96,7 +113,13 @@ describe('Sessions, refresh tokens, logout, revocation and introspection (e2e)',
     type Tokens = { access_token: string; id_token: string; refresh_token?: string; scope: string }
 
     /** A whole login through the HTML page; returns the tokens and the session cookie of the browser. */
-    async function login(email: string, client = CLIENT, redirect = REDIRECT, scope = 'openid profile email tenant') {
+    async function login(
+        email: string,
+        client = CLIENT,
+        redirect = REDIRECT,
+        scope = 'openid profile email tenant',
+        password = PASSWORD
+    ) {
         const verifier = randomBytes(32).toString('base64url')
         const query = new URLSearchParams({
             client_id: client,
@@ -118,7 +141,7 @@ describe('Sessions, refresh tokens, logout, revocation and introspection (e2e)',
             .post(location.pathname + '/login')
             .set('Cookie', first)
             .type('form')
-            .send({ csrf, email, password: PASSWORD })
+            .send({ csrf, email, password })
             .expect(303)
         const code = new URL(done.headers.location as string).searchParams.get('code') ?? ''
         const exchange = http().post('/oidc/token').type('form')
@@ -457,6 +480,80 @@ describe('Sessions, refresh tokens, logout, revocation and introspection (e2e)',
             }[]
             expect(left).toEqual([expect.objectContaining({ current: true })])
             await http().get('/me/sessions').expect(401)
+        })
+    })
+
+    describe('a new password while logged in (/me/password)', () => {
+        const NEW_PASSWORD = 'a-new-long-password'
+        const change = (token: string, body: Record<string, string>) =>
+            http().post('/me/password').set(bearer(token)).send(body)
+
+        it('needs the right current password, a long enough new one that differs, and a login', async () => {
+            const { tokens } = await login('carol@example.com')
+            const token = tokens.access_token
+            const missing = await change(token, { newPassword: NEW_PASSWORD }).expect(403)
+            expect(missing.body.error).toBe('oidc.WRONG_PASSWORD')
+            const wrong = await change(token, { currentPassword: 'not-the-password', newPassword: NEW_PASSWORD })
+                .set('Accept-Language', 'nl')
+                .expect(403)
+            expect(wrong.body).toMatchObject({
+                error: 'oidc.WRONG_PASSWORD',
+                message: 'Dit is niet je huidige wachtwoord.'
+            })
+            const same = await change(token, { currentPassword: PASSWORD, newPassword: PASSWORD }).expect(400)
+            expect(same.body.error).toBe('oidc.SAME_PASSWORD')
+            await change(token, { currentPassword: PASSWORD, newPassword: 'short' }).expect(400)
+            await http().post('/me/password').send({ newPassword: NEW_PASSWORD }).expect(401)
+            // The tokens still work, nothing changed
+            await http().get('/me/sessions').set(bearer(token)).expect(200)
+        })
+
+        it('rate limits wrong current passwords', async () => {
+            const { tokens } = await login('carol@example.com')
+            const limiter = app.get(LoginLimiter)
+            const tries = Array.from({ length: 1001 }, () => limiter.allow(['password-change:' + ids.carol]))
+            expect(tries.at(-1)).toBe(false)
+            const blocked = await change(tokens.access_token, {
+                currentPassword: PASSWORD,
+                newPassword: NEW_PASSWORD
+            }).expect(429)
+            expect(blocked.body.error).toBe('oidc.TOO_MANY_ATTEMPTS')
+        })
+
+        it('changes it: the other sessions end, this one stays, the audit log has it', async () => {
+            const current = await login('carol@example.com')
+            const other = await login('carol@example.com')
+            const bob = await login('bob@example.com')
+            const token = current.tokens.access_token
+            const before = auditStore.events.length
+
+            const changed = await change(token, { currentPassword: PASSWORD, newPassword: NEW_PASSWORD }).expect(200)
+            expect(changed.body.status).toBe('password-changed')
+            expect(changed.body.endedSessions).toBeGreaterThanOrEqual(1)
+
+            // This session stays; the other one (its access and refresh tokens) stops; other accounts are not touched
+            const left = (await http().get('/me/sessions').set(bearer(token)).expect(200)).body as {
+                current: boolean
+            }[]
+            expect(left).toEqual([expect.objectContaining({ current: true })])
+            await http().get('/me/sessions').set(bearer(other.tokens.access_token)).expect(401)
+            await refresh(other.tokens.refresh_token ?? '').expect(400)
+            await http().get('/me/sessions').set(bearer(bob.tokens.access_token)).expect(200)
+
+            const events = auditStore.events.slice(before).filter(event => event.action === 'account.password_changed')
+            expect(events).toEqual([
+                expect.objectContaining({
+                    tenantId: null,
+                    actorId: ids.carol,
+                    targetType: 'user',
+                    targetId: ids.carol,
+                    details: { first: false, endedSessions: changed.body.endedSessions }
+                })
+            ])
+
+            // The new password logs in
+            const again = await login('carol@example.com', CLIENT, REDIRECT, undefined, NEW_PASSWORD)
+            expect(again.tokens.access_token).toBeTruthy()
         })
     })
 })

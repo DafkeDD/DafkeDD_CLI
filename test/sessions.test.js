@@ -142,7 +142,7 @@ test('logging out revokes the refresh token and ends the session of the login se
     assert.match(logout, /await revokeRefreshToken\(session\.refreshToken\)/)
     assert.match(logout, /await endSessionUrl\(session\.idToken\)/)
     assert.match(logout, /response\.cookies\.delete\(SESSION_COOKIE\)/)
-    assert.match(logout, /request\.headers\.get\('origin'\) !== new URL\(APP_URL\)\.origin/)
+    assert.match(logout, /if \(!fromThisApp\(request\)\)/)
     const route = frontend['src/app/api/backend/[...path]/route.ts']
     const allowed = new RegExp(/const ALLOWED =\s+\/(.+)\/$/m.exec(route)[1])
     for (const path of ['me/sessions', 'me/sessions/0f8f8a52-55a3-4b8e-9d55-3f1f2f8b1c10'])
@@ -152,7 +152,7 @@ test('logging out revokes the refresh token and ends the session of the login se
 
 test('/security lists the sessions; every text exists in all four languages', () => {
     assert.match(frontend['src/components/security.tsx'], /export function SessionsSecurity\(\)/)
-    assert.match(frontend['src/app/[locale]/security/page.tsx'], /<SessionsSecurity \/>/)
+    assert.match(frontend['src/app/[locale]/(portal)/security/page.tsx'], /<SessionsSecurity \/>/)
     for (const locale of ['en', 'nl', 'fr', 'de'])
         for (const key of [
             'sessionsTitle',

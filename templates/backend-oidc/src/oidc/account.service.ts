@@ -16,13 +16,15 @@ import { sha256 } from './crypto.js'
 import { EidService } from './eid.service.js'
 import { LoginLimiter } from './login-limiter.js'
 import { OIDC, OidcConfig, slugify } from './oidc.config.js'
-import { hashPassword } from './password.js'
+import { hashPassword, verifyPassword } from './password.js'
 import { type Invitation, OIDC_STORE, type OidcStore, type StoredUser, type TenantRole } from './store/oidc.store.js'
 
 /** Pages of the frontend that the links in emails open. */
 const PAGES: Record<AccountTokenKind, string> = {
     verify: '/verify-email',
     reset: '/reset-password',
+    // A new email address is confirmed on the same page as a first one
+    email: '/verify-email',
     invite: '/invite'
 }
 
@@ -88,13 +90,23 @@ export class AccountService {
 
     /** A new account and a new organisation (the account is its admin). The account must verify its email first. */
     async register(
-        input: { name: string; email: string; password: string; organisation: string },
-        lang: string,
+        input: {
+            name: string
+            email: string
+            password: string
+            organisation: string
+            phone?: string
+            locale?: string
+        },
+        requestLang: string,
         ip: string
     ) {
         if (this.config.registration !== 'open' || this.config.externalOnly)
             throw new AppException('oidc.REGISTRATION_CLOSED', HttpStatus.FORBIDDEN)
+        // Every account must have its eID (OIDC_EID_REQUIRED): registering is only possible with it
+        if (this.config.eidRequired) throw new AppException('oidc.EID_REQUIRED', HttpStatus.FORBIDDEN)
         const email = normalize(input.email)
+        const lang = input.locale ?? requestLang
         this.limit(ip, email)
         const created = await this.store.register(
             {
@@ -102,7 +114,8 @@ export class AccountService {
                 name: input.name.trim(),
                 passwordHash: await hashPassword(input.password),
                 emailVerified: false,
-                locale: lang
+                locale: lang,
+                phone: input.phone?.trim() || null
             },
             { name: input.organisation.trim(), slug: slugify(input.organisation) }
         )
@@ -143,15 +156,17 @@ export class AccountService {
             })
     }
 
-    /** Which ways of registering are open (for the registration page). */
+    /** Which ways of registering are open (for the registration page); eidRequired: only with the eID. */
     registrationOptions() {
+        const eidRequired = this.config.eidRequired
         return {
-            password: this.config.registration === 'open' && !this.config.externalOnly,
-            eid: this.config.registrationOpen && this.eid.enabled
+            password: this.config.registration === 'open' && !this.config.externalOnly && !eidRequired,
+            eid: this.config.registrationOpen && this.eid.enabled,
+            eidRequired
         }
     }
 
-    /** A challenge for registering with the eID (the nonce goes to the bridge). */
+    /** A challenge for registering with the eID, or for the eID of an invitation (the nonce goes to the bridge). */
     eidChallenge(ip: string) {
         this.eid.assertEnabled()
         if (!this.limiter.allow(['eid-challenge:' + ip]))
@@ -162,17 +177,27 @@ export class AccountService {
     /**
      * A new account with the eID: the name comes from the card and the person chooses a password (the eID is read for
      * who they are; the login is the password, or the eID, and always the authenticator app after it). The email
-     * address must still be verified. An eID can belong to one account only (409 oidc.EID_ALREADY_LINKED); an email address that has an account gets the same answer as with
+     * address must still be verified. An eID can belong to one
+     * account only (409 oidc.EID_ALREADY_LINKED); an email address that has an account gets the same answer as with
      * a password (its owner gets an email).
      */
     async registerWithEid(
-        input: { challenge: string; token: unknown; email: string; password: string; organisation: string },
-        lang: string,
+        input: {
+            challenge: string
+            token: unknown
+            email: string
+            password: string
+            organisation: string
+            phone?: string
+            locale?: string
+        },
+        requestLang: string,
         ip: string
     ) {
         if (!this.config.registrationOpen) throw new AppException('oidc.REGISTRATION_CLOSED', HttpStatus.FORBIDDEN)
         this.eid.assertEnabled()
         const email = normalize(input.email)
+        const lang = input.locale ?? requestLang
         this.limit(ip, email)
         const nonce = this.eid.openChallenge(input.challenge, 'register')
         const person = await this.eid.verify(input.token, nonce)
@@ -182,13 +207,20 @@ export class AccountService {
                 name: person.name,
                 passwordHash: await hashPassword(input.password),
                 emailVerified: false,
-                locale: lang
+                locale: lang,
+                firstName: person.firstNames || null,
+                lastName: person.lastName || null,
+                phone: input.phone?.trim() || null
             },
             { name: input.organisation.trim(), slug: slugify(input.organisation) },
             { type: 'eid', valueHash: person.valueHash }
         )
         if (created === 'identifier-taken') throw new AppException('oidc.EID_ALREADY_LINKED', HttpStatus.CONFLICT)
         if (created) {
+            await this.store.setEidDetails(created.user.id, {
+                rrnEncrypted: person.rrnEncrypted,
+                address: person.address
+            })
             await this.registered(created, 'eid')
             await this.memberJoined(created.tenant.id, created.user.id)
             await this.sendVerification(created.user, lang)
@@ -209,7 +241,9 @@ export class AccountService {
             linkedAt: identifier?.createdAt ?? null,
             lastUsedAt: identifier?.lastUsedAt ?? null,
             // Without a password the eID is the only way to log in: it cannot be unlinked
-            hasPassword: Boolean(user?.passwordHash)
+            hasPassword: Boolean(user?.passwordHash),
+            // OIDC_EID_REQUIRED: this account must have an eID linked (never a superadmin); the API refuses it otherwise
+            required: this.config.eidRequired && user?.isSuperadmin !== true
         }
     }
 
@@ -227,6 +261,7 @@ export class AccountService {
         const result = await this.store.linkIdentifier(userId, 'eid', person.valueHash)
         if (result === 'taken') throw new AppException('oidc.EID_ALREADY_LINKED', HttpStatus.CONFLICT)
         if (result === 'exists') throw new AppException('oidc.EID_OTHER_LINKED', HttpStatus.CONFLICT)
+        await this.store.setEidDetails(userId, { rrnEncrypted: person.rrnEncrypted, address: person.address })
         await this.own('account.eid_linked', userId)
         return this.eidStatus(userId)
     }
@@ -234,7 +269,12 @@ export class AccountService {
     async unlinkEid(userId: string) {
         const user = await this.store.findUserById(userId)
         if (!user?.passwordHash) throw new AppException('oidc.EID_ONLY_LOGIN', HttpStatus.CONFLICT)
+        // Every account must keep its eID (OIDC_EID_REQUIRED); a new card of the same person links without unlinking
+        if (this.config.eidRequired && !user.isSuperadmin)
+            throw new AppException('oidc.EID_REQUIRED', HttpStatus.FORBIDDEN)
         await this.store.unlinkIdentifier(userId, 'eid')
+        // The national register number is only kept while the eID is linked
+        await this.store.setEidDetails(userId, { rrnEncrypted: null, address: null })
         await this.own('account.eid_unlinked', userId)
         return this.eidStatus(userId)
     }
@@ -255,13 +295,69 @@ export class AccountService {
         return { status: 'check-email' as const }
     }
 
+    /**
+     * Confirms an email address: the first one (the link after registering) or a new one (the link after changing it
+     * on the profile; the address changes only now). 409 oidc.EMAIL_TAKEN when another account took it meanwhile.
+     */
     async verifyEmail(input: { token: string }) {
+        const change = openAccountToken('email', input.token, this.key)
+        if (change) return this.confirmEmailChange(change)
         const data = openAccountToken('verify', input.token, this.key)
         const user = data ? await this.store.findUserById(data.userId) : null
         if (!data || !user || user.email.toLowerCase() !== data.email.toLowerCase()) this.invalidLink()
         await this.store.setEmailVerified(user.id)
         await this.own('account.email_verified', user.id)
         return { status: 'verified' as const, email: user.email }
+    }
+
+    // ---------------------------------------------------------------- a new email address
+
+    /**
+     * The account wants another email address: it changes only when the link sent to the new address is opened. The
+     * same address as now withdraws a pending change. 409 oidc.EMAIL_TAKEN when another account has it.
+     */
+    async requestEmailChange(userId: string, newEmail: string, lang: string) {
+        const user = await this.store.findUserById(userId)
+        if (!user) throw new AppException('errors.NOT_FOUND', HttpStatus.NOT_FOUND)
+        const email = normalize(newEmail)
+        if (email === user.email.toLowerCase()) {
+            await this.store.setPendingEmail(userId, null)
+            return
+        }
+        if (!this.limiter.allow(['email-change:' + userId]))
+            throw new AppException('oidc.TOO_MANY_ATTEMPTS', HttpStatus.TOO_MANY_REQUESTS)
+        if (await this.store.findUserByEmail(email)) throw new AppException('oidc.EMAIL_TAKEN', HttpStatus.CONFLICT)
+        await this.store.setPendingEmail(userId, email)
+        await this.send('confirm', email, user.locale ?? lang, {
+            name: user.name,
+            app: this.config.appName,
+            link: this.link('email', { userId, email }, OIDC.VERIFY_EMAIL_SECONDS)
+        })
+        await this.audit.record('account.email_change_requested', {
+            tenantId: null,
+            actorId: userId,
+            target: { type: 'user', id: userId },
+            details: { to: email }
+        })
+    }
+
+    private async confirmEmailChange(data: { userId: string; email: string }) {
+        const [user, profile] = await Promise.all([
+            this.store.findUserById(data.userId),
+            this.store.findProfile(data.userId)
+        ])
+        // Only the address that is still pending: a newer change (or a withdrawn one) makes older links invalid
+        if (user?.status !== 'active' || profile?.pendingEmail?.toLowerCase() !== data.email.toLowerCase())
+            this.invalidLink()
+        if (!(await this.store.changeEmail(user.id, data.email)))
+            throw new AppException('oidc.EMAIL_TAKEN', HttpStatus.CONFLICT)
+        await this.audit.record('account.email_changed', {
+            tenantId: null,
+            actorId: user.id,
+            target: { type: 'user', id: user.id },
+            details: { from: user.email, to: data.email }
+        })
+        return { status: 'email-changed' as const, email: data.email }
     }
 
     // ---------------------------------------------------------------- forgotten password
@@ -296,7 +392,57 @@ export class AccountService {
         return { status: 'password-changed' as const }
     }
 
+    // ---------------------------------------------------------------- a new password while logged in
+
+    /**
+     * The logged in account chooses a new password. With a password it needs the one of now (403 oidc.WRONG_PASSWORD,
+     * attempts are rate limited per account); without one (eID only) this sets the first. The new one must differ
+     * (400 oidc.SAME_PASSWORD). Every other session of the account ends, `keepSessionId` (this one) stays. No email.
+     */
+    async changePassword(
+        userId: string,
+        input: { currentPassword?: string; newPassword: string },
+        keepSessionId: string | null
+    ) {
+        const user = await this.store.findUserById(userId)
+        if (user?.status !== 'active') throw new AppException('errors.UNAUTHORIZED', HttpStatus.UNAUTHORIZED)
+        const first = !user.passwordHash
+        if (user.passwordHash) {
+            if (!this.limiter.allow(['password-change:' + userId]))
+                throw new AppException('oidc.TOO_MANY_ATTEMPTS', HttpStatus.TOO_MANY_REQUESTS)
+            const current = input.currentPassword ?? ''
+            if (!current || !(await verifyPassword(current, user.passwordHash)))
+                throw new AppException('oidc.WRONG_PASSWORD', HttpStatus.FORBIDDEN)
+            if (input.newPassword === current) throw new AppException('oidc.SAME_PASSWORD', HttpStatus.BAD_REQUEST)
+        }
+        await this.store.setPassword(userId, await hashPassword(input.newPassword))
+        const endedSessions = await this.store.endOtherUserSessions(userId, keepSessionId)
+        await this.audit.record('account.password_changed', {
+            tenantId: null,
+            actorId: userId,
+            target: { type: 'user', id: userId },
+            details: { first, endedSessions }
+        })
+        return { status: 'password-changed' as const, endedSessions }
+    }
+
     // ---------------------------------------------------------------- invitations
+
+    /**
+     * The one who creates a tenant makes themselves its admin (a superadmin on /admin with their own email): no
+     * invitation to themselves, a member at once, so the next login offers the organisation.
+     */
+    async addSelfAsAdmin(userId: string, tenantId: string) {
+        if (await this.store.findMember(tenantId, userId)) return
+        await this.store.addMember(tenantId, userId, 'admin')
+        await this.audit.record('members.joined', {
+            tenantId,
+            actorId: userId,
+            target: { type: 'user', id: userId },
+            details: { role: 'admin', newAccount: false }
+        })
+        await this.memberJoined(tenantId, userId)
+    }
 
     /**
      * Invites someone to a tenant (or renews the open invitation for that address). `inviter` must be admin of that
@@ -411,30 +557,69 @@ export class AccountService {
             role: data.role,
             inviterName: inviter.name,
             accountExists: Boolean(account),
+            // A new account reads the eID first: possible (eid), or needed (eidRequired, OIDC_EID_REQUIRED)
+            eid: this.eid.enabled,
+            eidRequired: this.config.eidRequired,
             // The apps it gives access to: name, address, the roles that come with it, and whether a seat does
             apps: await this.appRoles.describeInvitationApps(invitation.apps)
         }
     }
 
     /**
-     * Accepts an invitation. With an account: it joins the tenant (the link proves the email address). Without one:
-     * `name` and `password` create it, already verified.
+     * The eID of the invitee (a new account), before the name and the password: checks the token of the bridge and
+     * answers the name on the card with `eid`, the verified eID encrypted for this invitation (15 minutes), to send
+     * along with POST invitation/accept. 409 oidc.EID_ALREADY_LINKED when the eID belongs to an account already.
      */
-    async acceptInvitation(input: { token: string; name?: string; password?: string }, lang: string) {
+    async invitationEid(input: { invitation: string; challenge: string; token: unknown }, ip: string) {
+        this.eid.assertEnabled()
+        const { data } = await this.openInvitation(input.invitation)
+        if (!this.limiter.allow(['eid-invite:' + ip, 'eid-invite:' + data.invitationId]))
+            throw new AppException('oidc.TOO_MANY_ATTEMPTS', HttpStatus.TOO_MANY_REQUESTS)
+        const nonce = this.eid.openChallenge(input.challenge, 'register')
+        const person = await this.eid.verify(input.token, nonce)
+        if (await this.store.findUserByIdentifier('eid', person.valueHash))
+            throw new AppException('oidc.EID_ALREADY_LINKED', HttpStatus.CONFLICT)
+        return {
+            name: person.name,
+            firstName: person.firstNames || null,
+            lastName: person.lastName || null,
+            eid: this.eid.sealPerson(person, 'invite:' + data.invitationId)
+        }
+    }
+
+    /**
+     * Accepts an invitation. With an account: it joins the tenant (the link proves the email address); one without an
+     * eID links it after its next login (OIDC_EID_REQUIRED). Without one: `name` and `password` create it, already
+     * verified, with the eID of POST invitation/eid linked (`eid`; needed when OIDC_EID_REQUIRED is on, else 403
+     * oidc.EID_REQUIRED; 409 oidc.EID_ALREADY_LINKED when it belongs to another account).
+     */
+    async acceptInvitation(input: { token: string; name?: string; password?: string; eid?: string }, lang: string) {
         const { data, tenant, invitation } = await this.openInvitation(input.token)
         let user = await this.store.findUserByEmail(data.email)
         const accountExists = Boolean(user)
         if (!user) {
             if (!input.name || !input.password)
                 throw new AppException('oidc.ACCOUNT_DETAILS_NEEDED', HttpStatus.BAD_REQUEST)
-            user = await this.store.createUser({
+            if (!input.eid && this.config.eidRequired) throw new AppException('oidc.EID_REQUIRED', HttpStatus.FORBIDDEN)
+            const person = input.eid ? this.eid.openPerson(input.eid, 'invite:' + data.invitationId) : null
+            const account = {
                 email: data.email,
                 name: input.name.trim(),
                 passwordHash: await hashPassword(input.password),
                 emailVerified: true,
-                locale: lang
-            })
-            if (!user) throw new AppException('errors.CONFLICT', HttpStatus.CONFLICT)
+                locale: lang,
+                ...(person ? { firstName: person.firstNames || null, lastName: person.lastName || null } : {})
+            }
+            const created = person
+                ? await this.store.createUserWithIdentifier(account, { type: 'eid', valueHash: person.valueHash })
+                : await this.store.createUser(account)
+            if (created === 'identifier-taken') throw new AppException('oidc.EID_ALREADY_LINKED', HttpStatus.CONFLICT)
+            if (!created) throw new AppException('errors.CONFLICT', HttpStatus.CONFLICT)
+            user = created
+            if (person) {
+                await this.store.setEidDetails(user.id, { rrnEncrypted: person.rrnEncrypted, address: person.address })
+                await this.own('account.eid_linked', user.id)
+            }
         } else {
             if (user.status !== 'active') this.invalidLink()
             await this.store.setEmailVerified(user.id)

@@ -5,6 +5,8 @@ import { AppException } from '../common/app.exception.js'
 import { AppLicenses, type LicenseClaim } from '../oidc/app-licenses.js'
 import { OIDC_STORE, type OidcStore } from '../oidc/store/oidc.store.js'
 import { BillingConfig } from './billing.config.js'
+import { type CatalogInput, cleanCatalog } from './catalog.js'
+import { InvoicesService, splitVat, withVat } from './invoices/invoices.service.js'
 import { PAYMENT_PROVIDER, type PaymentProvider, type ProviderPayment } from './payments/payment-provider.js'
 import {
     BILLING_STORE,
@@ -25,6 +27,21 @@ const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
 /** A paid subscription stays valid this long after its period while the renewal is on its way (SEPA takes days). */
 const GRACE_MS = 7 * DAY
+/** A payment of open invoices is asked at the provider at most this often (the invoices page, without a webhook). */
+const INVOICE_REFRESH_MS = 30 * 1000
+
+/** How the customer wants to pay (the purchase wizard), as Mollie names it. QR: the Bancontact checkout shows one. */
+export const PAYMENT_METHODS = { card: 'creditcard', bancontact: 'bancontact', qr: 'bancontact' } as const
+export type PaymentMethod = keyof typeof PAYMENT_METHODS
+
+/** The extras of a purchase (the wizard): where the app runs, how to pay and where to come back after the checkout. */
+export interface PurchaseExtras {
+    environmentName?: string
+    region?: string
+    method?: PaymentMethod
+    /** A page of the frontend (starts with one /), default /licenses/return. */
+    returnPath?: string
+}
 
 /**
  * The end of `periods` months or years after `from` (UTC), like Mollie counts: 31 January + 1 month is 28 (or 29)
@@ -101,6 +118,7 @@ export class BillingService implements OnModuleInit {
         @Inject(OIDC_STORE) private readonly oidc: OidcStore,
         private readonly config: BillingConfig,
         private readonly audit: AuditService,
+        private readonly invoices: InvoicesService,
         private readonly appLicenses: AppLicenses,
         @Optional() @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider | null
     ) {}
@@ -163,15 +181,18 @@ export class BillingService implements OnModuleInit {
         return activeOnly ? products.filter(product => product.active) : products
     }
 
-    async createProduct(input: {
-        code: string
-        name: string
-        description?: string
-        priceMonthCents: number
-        priceYearCents: number
-    }) {
+    async createProduct(
+        input: {
+            code: string
+            name: string
+            description?: string
+            priceMonthCents: number
+            priceYearCents: number
+        } & CatalogInput
+    ) {
         this.assertPrices(input.priceMonthCents, input.priceYearCents)
         const created = await this.store.createProduct({
+            ...cleanCatalog(input),
             code: input.code,
             name: input.name.trim(),
             description: input.description?.trim() ?? '',
@@ -200,7 +221,7 @@ export class BillingService implements OnModuleInit {
             priceMonthCents?: number
             priceYearCents?: number
             active?: boolean
-        }
+        } & CatalogInput
     ) {
         const product = await this.product(code, false)
         this.assertPrices(
@@ -209,6 +230,7 @@ export class BillingService implements OnModuleInit {
         )
         const updated = await this.store.updateProduct(product.id, {
             ...change,
+            ...cleanCatalog(change),
             name: change.name?.trim(),
             description: change.description?.trim()
         })
@@ -225,6 +247,18 @@ export class BillingService implements OnModuleInit {
         return updated
     }
 
+    async deleteProduct(code: string) {
+        const product = await this.product(code, false)
+        const result = await this.store.deleteProduct(product.id)
+        if (result === 'in_use') throw new AppException('billing.PRODUCT_IN_USE', HttpStatus.CONFLICT)
+        if (result === 'missing') throw new AppException('billing.PRODUCT_NOT_FOUND', HttpStatus.NOT_FOUND)
+        await this.audit.record('licences.product_deleted', {
+            tenantId: null,
+            target: { type: 'product', id: product.id },
+            details: { product: product.code }
+        })
+    }
+
     // ---------------------------------------------------------------- trials
 
     private async assertMember(tenantId: string, userId: string) {
@@ -232,9 +266,13 @@ export class BillingService implements OnModuleInit {
             throw new AppException('billing.NOT_A_MEMBER', HttpStatus.NOT_FOUND)
     }
 
-    /** An admin starts the trial of a member (for a member that joined before the product existed). Once per product. */
+    /**
+     * An admin starts the trial of a member (for a member that joined before the product existed). Once per product,
+     * and only when the demo of the product is on.
+     */
     async startTrial(tenantId: string, productCode: string, userId: string) {
         const product = await this.product(productCode)
+        if (!product.demoEnabled) throw new AppException('billing.DEMO_DISABLED', HttpStatus.CONFLICT)
         await this.assertMember(tenantId, userId)
         const endsAt = new Date(Date.now() + this.config.trialDays * DAY)
         if (!(await this.store.startTrial(tenantId, product.id, userId, endsAt)))
@@ -247,7 +285,7 @@ export class BillingService implements OnModuleInit {
         return { userId, endsAt }
     }
 
-    /** A member asks a demo of a product: their own trial, once per product (409 billing.DEMO_USED after it). */
+    /** A member asks a demo of a product: their own trial, once per product. */
     async requestDemo(tenantId: string, productCode: string, userId: string) {
         try {
             return await this.startTrial(tenantId, productCode, userId)
@@ -258,7 +296,10 @@ export class BillingService implements OnModuleInit {
         }
     }
 
-    /** A superadmin extends a trial by `days` (from its end, or from now when it ended); starts one when there is none. */
+    /**
+     * A superadmin extends a trial by `days` (from its end, or from now when it ended); starts one when there is none.
+     * Also when the demo of the product is turned off: a superadmin can always give one.
+     */
     async extendTrial(tenantId: string, productCode: string, userId: string, days: number) {
         const product = await this.product(productCode, false)
         await this.assertMember(tenantId, userId)
@@ -271,6 +312,21 @@ export class BillingService implements OnModuleInit {
             tenantId,
             target: { type: 'user', id: userId },
             details: { product: product.code, days, endsAt: endsAt.toISOString() }
+        })
+        return { userId, endsAt }
+    }
+
+    /** A superadmin ends the running trial of a member now. The trial stays (it counts as used). */
+    async endTrial(tenantId: string, productCode: string, userId: string) {
+        const product = await this.product(productCode, false)
+        const trial = await this.store.findTrial(tenantId, product.id, userId)
+        const endsAt = new Date()
+        if (!trial || trial.endsAt <= endsAt) throw new AppException('billing.TRIAL_NOT_FOUND', HttpStatus.NOT_FOUND)
+        await this.store.setTrialEnd(tenantId, product.id, userId, endsAt)
+        await this.audit.record('licences.trial_ended', {
+            tenantId,
+            target: { type: 'user', id: userId },
+            details: { product: product.code, endsAt: endsAt.toISOString() }
         })
         return { userId, endsAt }
     }
@@ -411,16 +467,20 @@ export class BillingService implements OnModuleInit {
         return { code, percentOff, amountOffCents, duration, durationPeriods }
     }
 
-    /** A discount code that this organisation may use for this product, or billing.DISCOUNT_INVALID. */
+    /**
+     * A discount code that this organisation may use for this product. Otherwise 400 with why: billing.DISCOUNT_INVALID
+     * (unknown, switched off or for another product), DISCOUNT_EXPIRED, DISCOUNT_ALREADY_USED (by this organisation)
+     * or DISCOUNT_USED_UP (no redemptions left).
+     */
     private async usableDiscount(code: string, product: Product, tenantId: string) {
         const discount = await this.store.findDiscountByCode(code.trim().toUpperCase())
-        const usable =
-            discount?.active &&
-            (discount.productId === null || discount.productId === product.id) &&
-            (discount.expiresAt === null || discount.expiresAt > new Date()) &&
-            (discount.maxRedemptions === null || discount.redemptions < discount.maxRedemptions) &&
-            !(await this.store.hasRedeemed(discount.id, tenantId))
-        if (!usable || !discount) throw new AppException('billing.DISCOUNT_INVALID', HttpStatus.BAD_REQUEST)
+        const refuse = (key: string) => new AppException('billing.' + key, HttpStatus.BAD_REQUEST)
+        if (!discount?.active || (discount.productId !== null && discount.productId !== product.id))
+            throw refuse('DISCOUNT_INVALID')
+        if (discount.expiresAt !== null && discount.expiresAt <= new Date()) throw refuse('DISCOUNT_EXPIRED')
+        if (await this.store.hasRedeemed(discount.id, tenantId)) throw refuse('DISCOUNT_ALREADY_USED')
+        if (discount.maxRedemptions !== null && discount.redemptions >= discount.maxRedemptions)
+            throw refuse('DISCOUNT_USED_UP')
         return discount
     }
 
@@ -546,6 +606,21 @@ export class BillingService implements OnModuleInit {
         return discountActive(subscription) && discount ? discounted(base, discount) : base
     }
 
+    /** What is charged for an amount without VAT (prices are without VAT; BILLING_VAT_PERCENT is added). */
+    private gross(netCents: number) {
+        return withVat(netCents, this.config.vatPercent).totalCents
+    }
+
+    /** Where the checkout sends the browser back to: a page of the frontend (never another site). */
+    private returnUrl(path: string | undefined, query: Record<string, string>) {
+        const app = this.config.appUrl
+        const safe = path && /^\/(?![/\\])/.test(path) ? path : '/licenses/return'
+        let url = new URL(app + safe)
+        if (url.origin !== new URL(app).origin) url = new URL(app + '/licenses/return')
+        for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value)
+        return url.toString()
+    }
+
     private async loadDiscount(subscription: Subscription) {
         return subscription.discountCodeId ? this.store.findDiscount(subscription.discountCodeId) : null
     }
@@ -560,23 +635,29 @@ export class BillingService implements OnModuleInit {
         const base = unitPrice(product, input.interval) * input.seats
         const first = discounted(base, discount)
         const after = discount && discount.duration !== 'once' ? first : base
+        const vat = this.config.vatPercent
+        // The prices are without VAT; the *TotalCents are what is charged
         return {
             currency: product.currency,
             unitCents: unitPrice(product, input.interval),
             baseCents: base,
             firstCents: first,
             renewalCents: after,
+            vatPercent: vat,
+            firstVatCents: withVat(first, vat).vatCents,
+            firstTotalCents: withVat(first, vat).totalCents,
+            renewalTotalCents: withVat(after, vat).totalCents,
             discount: discount ? this.publicDiscount(discount) : null
         }
     }
 
     /**
      * Buys seats of a product for the organisation, per month or per year. Answers the checkout of the payment provider;
-     * when a discount code makes it free, the seats are there at once (no payment).
+     * when it is free (no price, or a discount code), the seats are there at once (no payment).
      */
     async subscribe(
         actor: Actor,
-        input: { productCode: string; interval: Interval; seats: number; discountCode?: string }
+        input: { productCode: string; interval: Interval; seats: number; discountCode?: string } & PurchaseExtras
     ): Promise<{ status: 'active' | 'pending'; checkoutUrl: string | null; subscriptionId: string }> {
         const product = await this.product(input.productCode)
         const found = await this.store.findSubscription(actor.tenantId, product.id)
@@ -589,17 +670,19 @@ export class BillingService implements OnModuleInit {
             : null
         // The code is reserved now (also for a payment that is still open), and given back when it is not paid
         if (discount && !(await this.store.redeemDiscount(discount.id, actor.tenantId)))
-            throw new AppException('billing.DISCOUNT_INVALID', HttpStatus.BAD_REQUEST)
+            throw new AppException('billing.DISCOUNT_USED_UP', HttpStatus.BAD_REQUEST)
         const first = discounted(unitPrice(product, input.interval) * input.seats, discount)
+        const environment = { environmentName: input.environmentName?.trim() || null, region: input.region ?? null }
 
-        if (first === 0 && discount) {
-            // Free thanks to the code: no payment, for the periods of the code
-            const periods =
-                discount.duration === 'forever'
-                    ? null
-                    : discount.duration === 'repeating'
-                      ? discount.durationPeriods
-                      : 1
+        if (first === 0) {
+            // Free (a product without a price, or thanks to the code): no payment; with a code for its periods
+            const periods = !discount
+                ? null
+                : discount.duration === 'forever'
+                  ? null
+                  : discount.duration === 'repeating'
+                    ? discount.durationPeriods
+                    : 1
             const saved = await this.store.saveSubscription({
                 tenantId: actor.tenantId,
                 productId: product.id,
@@ -609,8 +692,9 @@ export class BillingService implements OnModuleInit {
                 providerSubscriptionId: null,
                 currentPeriodEnd: periods === null ? null : addPeriods(new Date(), input.interval, periods ?? 1),
                 cancelAtPeriodEnd: periods !== null,
-                discountCodeId: discount.id,
-                discountPeriodsLeft: null
+                discountCodeId: discount?.id ?? null,
+                discountPeriodsLeft: null,
+                ...environment
             })
             await this.audit.record('licences.subscription_started', {
                 tenantId: actor.tenantId,
@@ -620,10 +704,20 @@ export class BillingService implements OnModuleInit {
                     product: product.code,
                     interval: input.interval,
                     seats: input.seats,
-                    code: discount.code,
+                    code: discount?.code ?? null,
                     free: true
                 }
             })
+            await this.invoices.safely('issue the invoice of a free purchase', () =>
+                this.invoices.issue({
+                    subscription: saved,
+                    product,
+                    line: 'free',
+                    seats: input.seats,
+                    amounts: withVat(0, this.config.vatPercent),
+                    payment: null
+                })
+            )
             return { status: 'active', checkoutUrl: null, subscriptionId: saved.id }
         }
 
@@ -646,17 +740,20 @@ export class BillingService implements OnModuleInit {
                       ? 1
                       : discount.duration === 'repeating'
                         ? discount.durationPeriods
-                        : null
+                        : null,
+                ...environment
             })
+            const amounts = withVat(first, this.config.vatPercent)
             const payment = await provider.createPayment({
                 customerId,
-                amountCents: first,
+                amountCents: amounts.totalCents,
                 currency: product.currency,
                 description: `${product.name}: ${input.seats} × ${input.interval === 'year' ? '1 year' : '1 month'}`,
                 sequenceType: 'first',
-                redirectUrl: `${this.config.appUrl}/licenses/return?subscription=${saved.id}`,
+                redirectUrl: this.returnUrl(input.returnPath, { subscription: saved.id }),
                 webhookUrl: this.config.webhookUrl,
-                metadata: { subscriptionId: saved.id, kind: 'first' }
+                metadata: { subscriptionId: saved.id, kind: 'first' },
+                method: input.method ? PAYMENT_METHODS[input.method] : null
             })
             // The newest payment of a pending subscription is the only one that can activate it
             await this.store.createPayment({
@@ -665,10 +762,20 @@ export class BillingService implements OnModuleInit {
                 subscriptionId: saved.id,
                 kind: 'first',
                 seats: input.seats,
-                amountCents: first,
+                amountCents: amounts.totalCents,
                 status: 'open',
                 periodEnd: null
             })
+            await this.invoices.safely('issue the invoice of a purchase', () =>
+                this.invoices.issue({
+                    subscription: saved,
+                    product,
+                    line: 'subscription',
+                    seats: input.seats,
+                    amounts,
+                    payment: { id: payment.id, checkoutUrl: payment.checkoutUrl }
+                })
+            )
             await this.audit.record('licences.subscription_started', {
                 tenantId: actor.tenantId,
                 actorId: actor.userId,
@@ -678,7 +785,9 @@ export class BillingService implements OnModuleInit {
                     interval: input.interval,
                     seats: input.seats,
                     code: discount?.code ?? null,
-                    amountCents: first
+                    amountCents: first,
+                    totalCents: amounts.totalCents,
+                    region: environment.region
                 }
             })
             return { status: 'pending', checkoutUrl: payment.checkoutUrl, subscriptionId: saved.id }
@@ -696,6 +805,11 @@ export class BillingService implements OnModuleInit {
     private async replace(old: Subscription) {
         if (old.status === 'pending' && old.discountCodeId)
             await this.store.releaseDiscount(old.discountCodeId, old.tenantId)
+        // Its checkout can no longer buy anything: its invoice is void
+        if (old.status === 'pending')
+            await this.invoices.safely('void the invoice of a replaced purchase', () =>
+                this.invoices.voidPurchase(old.id)
+            )
         if (old.providerSubscriptionId && !old.cancelAtPeriodEnd && this.provider) {
             const customerId = await this.store.getCustomerId(old.tenantId)
             if (customerId) await this.provider.cancelSubscription(customerId, old.providerSubscriptionId)
@@ -716,12 +830,43 @@ export class BillingService implements OnModuleInit {
         return id
     }
 
+    /** The seats of a product without a price: changed at once (fewer only when they are not in use). */
+    private async changeFreeSeats(
+        actor: Actor,
+        product: { id: string; code: string },
+        subscription: { id: string; seats: number },
+        seats: number
+    ) {
+        if (seats === subscription.seats) return { status: 'unchanged' as const, checkoutUrl: null }
+        if (seats < subscription.seats) {
+            const { free } = await this.seats(actor.tenantId, product.id)
+            const used = (await this.store.listAssignments(actor.tenantId)).filter(
+                item => item.productId === product.id
+            ).length
+            if (used > seats + free) throw new AppException('billing.SEATS_IN_USE', HttpStatus.CONFLICT)
+        }
+        await this.store.updateSubscription(subscription.id, { seats })
+        await this.audit.record('licences.subscription_seats_changed', {
+            tenantId: actor.tenantId,
+            actorId: actor.userId,
+            target: { type: 'subscription', id: subscription.id },
+            details: { product: product.code, from: subscription.seats, to: seats }
+        })
+        return { status: 'updated' as const, checkoutUrl: null }
+    }
+
     /** More or fewer paid seats. More: a payment for the rest of the period. Fewer: at once (no refund). */
     async changeSeats(actor: Actor, productCode: string, seats: number) {
         const product = await this.product(productCode)
         const subscription = await this.store.findSubscription(actor.tenantId, product.id)
         if (!isValid(subscription) || subscription.cancelAtPeriodEnd)
             throw new AppException('billing.NO_SUBSCRIPTION', HttpStatus.CONFLICT)
+        if (
+            !subscription.providerSubscriptionId &&
+            subscription.currentPeriodEnd === null &&
+            unitPrice(product, subscription.interval) === 0
+        )
+            return this.changeFreeSeats(actor, product, subscription, seats)
         if (!subscription.providerSubscriptionId || subscription.currentPeriodEnd === null)
             throw new AppException('billing.FREE_SUBSCRIPTION', HttpStatus.CONFLICT)
         // The period ended and its renewal is on its way: change the seats once it is paid
@@ -740,7 +885,7 @@ export class BillingService implements OnModuleInit {
             await this.requireProvider().updateSubscriptionAmount(
                 await this.customer(actor),
                 subscription.providerSubscriptionId,
-                this.recurringAmount(product, subscription, discount, seats),
+                this.gross(this.recurringAmount(product, subscription, discount, seats)),
                 product.currency
             )
             await this.store.updateSubscription(subscription.id, { seats })
@@ -761,9 +906,10 @@ export class BillingService implements OnModuleInit {
         const full = unitPrice(product, subscription.interval) * added
         const percent = discountActive(subscription) && discount?.percentOff ? discount : null
         const amount = Math.max(1, Math.ceil(discounted(full, percent) * fraction))
+        const amounts = withVat(amount, this.config.vatPercent)
         const payment = await this.requireProvider().createPayment({
             customerId: await this.customer(actor),
-            amountCents: amount,
+            amountCents: amounts.totalCents,
             currency: product.currency,
             description: `${product.name}: +${added}`,
             sequenceType: 'oneoff',
@@ -777,11 +923,21 @@ export class BillingService implements OnModuleInit {
             subscriptionId: subscription.id,
             kind: 'seats',
             seats: added,
-            amountCents: amount,
+            amountCents: amounts.totalCents,
             status: 'open',
             // Only for this period: paid after the renewal, it adds nothing
             periodEnd: subscription.currentPeriodEnd
         })
+        await this.invoices.safely('issue the invoice of more seats', () =>
+            this.invoices.issue({
+                subscription,
+                product,
+                line: 'seats',
+                seats: added,
+                amounts,
+                payment: { id: payment.id, checkoutUrl: payment.checkoutUrl }
+            })
+        )
         return { status: 'pending' as const, checkoutUrl: payment.checkoutUrl }
     }
 
@@ -825,7 +981,11 @@ export class BillingService implements OnModuleInit {
         if (last) await this.handlePayment(last.id)
         const after = await this.store.lastPayment(subscriptionId)
         const current = await this.store.findSubscriptionById(subscriptionId)
-        return { payment: after?.status ?? null, subscription: current?.status ?? null, seats: current?.seats ?? 0 }
+        return {
+            payment: after?.status ?? (current?.status === 'active' ? 'free' : null),
+            subscription: current?.status ?? null,
+            seats: current?.seats ?? 0
+        }
     }
 
     /**
@@ -837,15 +997,25 @@ export class BillingService implements OnModuleInit {
         if (!provider) return
         const remote = await provider.getPayment(id)
         if (!remote) return
-        let payment = await this.store.findPayment(id)
-        if (!payment && remote.subscriptionId) payment = await this.recordRenewal(remote)
-        if (!payment) return
-        const subscription = await this.store.findSubscriptionById(payment.subscriptionId)
+        let found = await this.store.findPayment(id)
+        if (!found && remote.subscriptionId) found = await this.recordRenewal(remote)
+        if (!found) return
+        const payment = found
+        if (payment.kind === 'invoices') return this.invoicesPaymentChanged(payment, remote.status)
+        const subscription = await this.store.findSubscriptionById(payment.subscriptionId ?? '')
         if (!subscription) return
         await this.store.setPaymentStatus(id, remote.status)
+        const ended = ['failed', 'expired', 'canceled'].includes(remote.status)
+        if (payment.kind === 'recurring' && (remote.status === 'paid' || ended))
+            await this.renewalInvoice(subscription, payment, remote.status === 'paid')
         if (remote.status === 'paid') {
             // Applied once: only one caller claims it (webhook and return page at once); a failure can be tried again
-            if (!(await this.store.claimPayment(id))) return
+            if (!(await this.store.claimPayment(id))) {
+                // Applied before, but its invoice was not marked (the database failed in between)
+                if (payment.appliedAt)
+                    await this.invoices.safely('mark an invoice paid', () => this.invoices.paid(payment))
+                return
+            }
             try {
                 await this.applyPaid(subscription, payment)
                 await this.store.finishPayment(id)
@@ -853,15 +1023,137 @@ export class BillingService implements OnModuleInit {
                 await this.store.releasePayment(id)
                 throw error
             }
-        } else if (['failed', 'expired', 'canceled'].includes(remote.status)) {
+            await this.invoices.safely('mark an invoice paid', async () => {
+                await this.invoices.paid(payment)
+                await this.invoices.received(payment)
+            })
+        } else if (ended) {
             if (payment.kind === 'recurring') {
+                // The invoice of the renewal stays open: it can still be paid (POST /tenants/current/invoices/pay)
                 await this.store.updateSubscription(subscription.id, { status: 'past_due' })
                 await this.paymentEvent('licences.subscription_past_due', subscription, payment)
-            } else if (payment.kind === 'first' && (await this.isCurrentFirst(subscription, payment)))
-                // Not bought: the discount code can be used again
-                if (subscription.discountCodeId)
-                    await this.store.releaseDiscount(subscription.discountCodeId, subscription.tenantId)
+            } else {
+                // Nothing was bought: its invoice is void
+                await this.invoices.safely('void an invoice', () => this.invoices.voidFor(payment.id))
+                if (payment.kind === 'first' && (await this.isCurrentFirst(subscription, payment)))
+                    if (subscription.discountCodeId)
+                        // Not bought: the discount code can be used again
+                        await this.store.releaseDiscount(subscription.discountCodeId, subscription.tenantId)
+            }
         }
+    }
+
+    /** The invoice of a renewal the provider made, once it is paid or failed (a failed one stays open: it is owed). */
+    private async renewalInvoice(subscription: Subscription, payment: Payment, paid: boolean) {
+        await this.invoices.safely('issue the invoice of a renewal', async () => {
+            if (await this.invoices.findByPayment(payment.id)) return
+            const product = await this.store.findProduct(subscription.productId)
+            if (!product) return
+            await this.invoices.issue({
+                subscription,
+                product,
+                line: 'renewal',
+                seats: payment.seats,
+                amounts: splitVat(payment.amountCents, this.config.vatPercent),
+                payment: { id: payment.id, checkoutUrl: null, paid }
+            })
+        })
+    }
+
+    // ---------------------------------------------------------------- open invoices
+
+    /**
+     * One payment for every open invoice of the organisation (renewals that failed, checkouts that were not finished).
+     * When it is paid, each invoice is paid and what it was for is applied (the purchase, the seats, the renewal).
+     */
+    async payInvoices(actor: Actor, returnPath?: string) {
+        const provider = this.requireProvider()
+        const open = await this.invoices.listOpen(actor.tenantId)
+        if (open.length === 0) throw new AppException('invoices.NOTHING_TO_PAY', HttpStatus.CONFLICT)
+        const total = open.reduce((sum, invoice) => sum + invoice.totalCents, 0)
+        const payment = await provider.createPayment({
+            customerId: await this.customer(actor),
+            amountCents: total,
+            currency: 'EUR',
+            description: ('Invoices ' + open.map(invoice => invoice.number).join(', ')).slice(0, 250),
+            // Also the mandate for the renewals (a purchase in it creates its subscription)
+            sequenceType: 'first',
+            redirectUrl: this.returnUrl(returnPath ?? '/invoices', { payment: 'invoices' }),
+            webhookUrl: this.config.webhookUrl,
+            metadata: { tenantId: actor.tenantId, kind: 'invoices' }
+        })
+        await this.store.createPayment({
+            id: payment.id,
+            tenantId: actor.tenantId,
+            subscriptionId: null,
+            kind: 'invoices',
+            seats: 0,
+            amountCents: total,
+            status: 'open',
+            periodEnd: null
+        })
+        await this.invoices.settle(
+            open.map(invoice => invoice.id),
+            payment.id,
+            payment.checkoutUrl
+        )
+        await this.audit.record('invoices.checkout_started', {
+            tenantId: actor.tenantId,
+            actorId: actor.userId,
+            target: { type: 'payment', id: payment.id },
+            details: { invoices: open.length, totalCents: total }
+        })
+        return { checkoutUrl: payment.checkoutUrl }
+    }
+
+    private readonly invoicePaymentsAsked = new Map<string, number>()
+
+    /**
+     * Asks the provider how the payments of the open invoices of an organisation went (the invoices page; works
+     * without a webhook). At most once every 30 seconds per payment; never fails the page.
+     */
+    async refreshInvoicePayments(tenantId: string) {
+        if (!this.provider) return
+        const ids = [...new Set((await this.invoices.listOpen(tenantId)).map(invoice => invoice.settledBy))]
+        for (const id of ids.filter((item): item is string => item !== null).slice(0, 3)) {
+            if (Date.now() - (this.invoicePaymentsAsked.get(id) ?? 0) < INVOICE_REFRESH_MS) continue
+            if (this.invoicePaymentsAsked.size > 1000) this.invoicePaymentsAsked.clear()
+            this.invoicePaymentsAsked.set(id, Date.now())
+            await this.handlePayment(id).catch((error: unknown) =>
+                this.logger.warn(
+                    'Could not fetch the payment of the invoices: ' +
+                        (error instanceof Error ? error.message : String(error))
+                )
+            )
+        }
+    }
+
+    /** A payment of open invoices: when paid, what every invoice in it was for is applied (once), and they are paid. */
+    private async invoicesPaymentChanged(payment: Payment, status: string) {
+        await this.store.setPaymentStatus(payment.id, status)
+        if (status !== 'paid' || !(await this.store.claimPayment(payment.id))) return
+        try {
+            for (const invoice of await this.invoices.listSettledBy(payment.id)) {
+                if (invoice.status !== 'open' && invoice.status !== 'void') continue
+                const original = invoice.paymentId ? await this.store.findPayment(invoice.paymentId) : null
+                const subscription = invoice.subscriptionId
+                    ? await this.store.findSubscriptionById(invoice.subscriptionId)
+                    : null
+                // Applied once: its own checkout can no longer apply it afterwards
+                if (original && subscription && !original.appliedAt) {
+                    await this.applyPaid(subscription, original)
+                    await this.store.finishPayment(original.id)
+                }
+            }
+            await this.store.finishPayment(payment.id)
+        } catch (error) {
+            await this.store.releasePayment(payment.id)
+            throw error
+        }
+        await this.invoices.safely('mark invoices paid', async () => {
+            await this.invoices.paid(payment)
+            await this.invoices.received(payment)
+        })
     }
 
     /** Is this the payment that can activate the subscription (it is pending, and this is its newest payment)? */
@@ -942,7 +1234,7 @@ export class BillingService implements OnModuleInit {
         const customerId = await this.store.getCustomerId(subscription.tenantId)
         const providerSubscriptionId = await this.requireProvider().createSubscription({
             customerId: customerId ?? '',
-            amountCents: Math.max(1, this.recurringAmount(product, next, discount)),
+            amountCents: Math.max(1, this.gross(this.recurringAmount(product, next, discount))),
             currency: product.currency,
             interval: subscription.interval,
             startDate: periodEnd.toISOString().slice(0, 10),
@@ -977,7 +1269,7 @@ export class BillingService implements OnModuleInit {
             await this.requireProvider().updateSubscriptionAmount(
                 customerId,
                 subscription.providerSubscriptionId,
-                this.recurringAmount(product, subscription, await this.loadDiscount(subscription), seats),
+                this.gross(this.recurringAmount(product, subscription, await this.loadDiscount(subscription), seats)),
                 product.currency
             )
         await this.store.updateSubscription(subscription.id, { seats })
@@ -995,7 +1287,7 @@ export class BillingService implements OnModuleInit {
             await this.requireProvider().updateSubscriptionAmount(
                 customerId,
                 subscription.providerSubscriptionId,
-                unitPrice(product, subscription.interval) * subscription.seats,
+                this.gross(unitPrice(product, subscription.interval) * subscription.seats),
                 product.currency
             )
         await this.store.updateSubscription(subscription.id, {

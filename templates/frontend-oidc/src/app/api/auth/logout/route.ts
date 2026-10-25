@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { APP_URL, endSessionUrl, revokeRefreshToken, type Session, SESSION_COOKIE, unseal } from '@/lib/oidc'
+import { endSessionUrl, fromThisApp, revokeRefreshToken, type Session, SESSION_COOKIE, unseal } from '@/lib/oidc'
 
 /**
  * Logs out (POST, from the log out button): forgets the session of this app, revokes its refresh token, and sends the
@@ -8,8 +8,7 @@ import { APP_URL, endSessionUrl, revokeRefreshToken, type Session, SESSION_COOKI
  */
 export async function POST(request: NextRequest) {
     // Only from a page of this app: another site cannot log the user out
-    if (request.headers.get('origin') !== new URL(APP_URL).origin)
-        return NextResponse.json({ error: 'origin' }, { status: 403 })
+    if (!fromThisApp(request)) return NextResponse.json({ error: 'origin' }, { status: 403 })
     const session = unseal<Session>(request.cookies.get(SESSION_COOKIE)?.value, SESSION_COOKIE)
     let location = new URL('/', request.url).toString()
     if (session) {

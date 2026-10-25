@@ -93,7 +93,15 @@ test('every action has a text in all four languages, and so have the details, re
             actions.map(action => action.replace('.', '_')).sort(),
             locale
         )
-        assert.deepEqual(Object.keys(messages.categories), ['login', 'account', 'members', 'platform', 'licences'])
+        assert.deepEqual(Object.keys(messages.categories), [
+            'login',
+            'account',
+            'members',
+            'platform',
+            'licences',
+            'support',
+            'invoices'
+        ])
         for (const group of ['details', 'reasons', 'methods'])
             assert.deepEqual(Object.keys(messages[group]).sort(), Object.keys(AUDIT_MESSAGES.en[group]).sort(), locale)
     }
@@ -115,12 +123,15 @@ test('.env: retention and trusted proxies; documented endpoints and README', () 
 })
 
 test('the frontend: /audit, recent activity on /security, and the IP address and browser passed to the API', () => {
-    assert.ok(frontend['src/app/[locale]/audit/page.tsx'])
+    assert.match(frontend['src/app/[locale]/(portal)/audit/page.tsx'], /<AuditLog scope='tenant' \/>/)
+    assert.match(frontend['src/app/[locale]/admin/(panel)/audit/page.tsx'], /<AuditLog scope='platform' \/>/)
     assert.ok(frontend['src/components/audit.tsx'])
-    assert.match(frontend['src/app/[locale]/security/page.tsx'], /<AuditLog scope='me' \/>/)
-    assert.match(frontend['src/components/shell/app-shell.tsx'], /account\('\/audit'\)/)
+    assert.match(frontend['src/app/[locale]/(portal)/security/page.tsx'], /<AuditLog scope='me' \/>/)
+    // In the user's menu of the portal, for the admins of the organisation
+    assert.match(frontend['src/components/pasport/shell.tsx'], /href: '\/audit'/)
     const route = frontend['src/app/api/backend/[...path]/route.ts']
-    assert.match(route, /me\\\/audit\$/)
+    const allowed = new RegExp(/^const ALLOWED =\s+\/(.+)\/$/m.exec(route)[1])
+    for (const path of ['me/audit', 'tenants/current/audit', 'admin/audit']) assert.ok(allowed.test(path), path)
     assert.match(route, /'X-Forwarded-For': forwardedFor\(request\)/)
     assert.match(route, /'User-Agent': request\.headers\.get\('user-agent'\)/)
     const readme = frontendReadme({ api: { port: 4000, oidc: true } })

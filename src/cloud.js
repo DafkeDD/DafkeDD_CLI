@@ -67,6 +67,8 @@ function backendEnv(project) {
             // The clients with the addresses on Cloud Run (made from config/oidc-clients.json by the workflow)
             OIDC_CLIENTS_FILE: '"config/oidc-clients.cloud.json"',
             OIDC_EID: '"on"',
+            // Every account must have its eID linked: on or off (var.eid_required)
+            OIDC_EID_REQUIRED: 'var.eid_required',
             // The superadmin made at the first start (the hash of its password: BACKEND_SECRETS)
             OIDC_BOOTSTRAP_ADMIN_EMAIL: 'var.admin_email',
             APP_NAME: hcl(project.name)
@@ -240,6 +242,12 @@ variable "force_destroy" {
 variable "admin_email" {
   description = "The superadmin made at the first start (its password hash: OIDC_BOOTSTRAP_ADMIN_PASSWORD_HASH in BACKEND_SECRETS)"
   type        = string
+}
+
+variable "eid_required" {
+  description = "Every account must have its Belgian eID linked (OIDC_EID_REQUIRED): on or off"
+  type        = string
+  default     = "off"
 }
 `
             : ''

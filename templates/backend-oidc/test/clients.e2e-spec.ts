@@ -6,25 +6,29 @@ import type { App } from 'supertest/types.js'
 import { AppModule } from '../src/app.module.js'
 import { AUDIT_STORE } from '../src/audit/audit.store.js'
 import { MemoryAuditStore } from '../src/audit/memory-audit.store.js'
-import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
-import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
 import { BILLING_STORE } from '../src/billing/store/billing.store.js'
 import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import type { Mail } from '../src/mail/mail.service.js'
 import { MailService } from '../src/mail/mail.service.js'
-import { pkceChallenge, sha256 } from '../src/oidc/crypto.js'
+import { pkceChallenge } from '../src/oidc/crypto.js'
 import { LoginLimiter } from '../src/oidc/login-limiter.js'
 import { OidcService } from '../src/oidc/oidc.service.js'
 import { hashPassword } from '../src/oidc/password.js'
 import { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js'
 import { OIDC_STORE } from '../src/oidc/store/oidc.store.js'
 import { configureApp } from '../src/setup.js'
+import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
+import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
+import { INVOICES_STORE } from '../src/billing/invoices/invoices.store.js'
+import { MemoryInvoicesStore } from '../src/billing/invoices/memory-invoices.store.js'
 
 process.env.OIDC_MASTER_KEY ??= randomBytes(32).toString('hex')
 process.env.OIDC_LOGIN_RATE_LIMIT = '1000'
 process.env.OIDC_LOGIN_UI_URL = ''
 process.env.OIDC_MFA = 'optional'
+// The accounts of these tests have no eID (the tests of OIDC_EID_REQUIRED are in eid.e2e-spec.ts)
+process.env.OIDC_EID_REQUIRED = 'off'
 
 const PASSWORD = 'correct-horse-battery'
 const FRONTEND = { id: 'frontend', redirect: 'http://localhost:3000/api/auth/callback' }
@@ -58,14 +62,24 @@ describe('Apps on /admin (e2e)', () => {
         const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
             .overrideProvider(DatabaseService)
             .useValue({ ping: vi.fn().mockResolvedValue(true), query: vi.fn().mockResolvedValue({ rows: [] }) })
+            .overrideProvider(NOTIFICATIONS_STORE)
+            .useValue(new MemoryNotificationsStore())
+            .overrideProvider(INVOICES_STORE)
+            .useValue(
+                new MemoryInvoicesStore(async () => ({
+                    tenantName: 'Test',
+                    company: null,
+                    vat: null,
+                    billingAddress: null,
+                    billingEmail: null
+                }))
+            )
             .overrideProvider(OIDC_STORE)
             .useValue(store)
             .overrideProvider(BILLING_STORE)
             .useValue(billing)
             .overrideProvider(AUDIT_STORE)
             .useValue(audit)
-            .overrideProvider(NOTIFICATIONS_STORE)
-            .useValue(new MemoryNotificationsStore())
             .overrideProvider(MailService)
             .useValue({
                 send: async (mail: Mail) => {
@@ -313,14 +327,41 @@ describe('Apps on /admin (e2e)', () => {
             details: { client: 'partner.planner', name: 'Planner' }
         })
     })
+    it('changing an app, rotating its secret or switching it off removes its link codes', async () => {
+        await create({ clientId: 'revoked.app', type: 'confidential', firstParty: true }).expect(201)
+        const code = async () =>
+            (await http().post('/admin/clients/revoked.app/link-code').set(bearer(tokens.root)).expect(200)).body
+                .code as string
+        const usable = async (value: string) => (await http().post('/oidc/link').send({ code: value })).status === 200
+
+        const afterUpdate = await code()
+        await http()
+            .put('/admin/clients/revoked.app')
+            .set(bearer(tokens.root))
+            .send({ ...APP, name: 'Renamed' })
+            .expect(200)
+        expect(await usable(afterUpdate)).toBe(false)
+
+        const afterRotate = await code()
+        await http().post('/admin/clients/revoked.app/secret').set(bearer(tokens.root)).expect(200)
+        expect(await usable(afterRotate)).toBe(false)
+
+        const afterSwitch = await code()
+        await http().patch('/admin/clients/revoked.app').set(bearer(tokens.root)).send({ enabled: false }).expect(200)
+        await http().patch('/admin/clients/revoked.app').set(bearer(tokens.root)).send({ enabled: true }).expect(200)
+        expect(await usable(afterSwitch)).toBe(false)
+
+        // A code that was not touched by a change still works once
+        expect(await usable(await code())).toBe(true)
+    })
+
     it('a link code links a new project once: its addresses are added, a confidential app gets a new secret', async () => {
         const made = await create({ clientId: 'linked.app', name: 'Linked', firstParty: true }).expect(201)
         expect(made.body.client.redirectUris).toEqual(APP.redirectUris)
         await http().post('/admin/clients/linked.app/link-code').set(bearer(tokens.alice)).expect(403)
         await http().post('/admin/clients/frontend/link-code').set(bearer(tokens.root)).expect(409)
         const first = await http().post('/admin/clients/linked.app/link-code').set(bearer(tokens.root)).expect(200)
-        // 24 characters in 6 groups (120 random bits)
-        expect(first.body.code).toMatch(/^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){5}$/)
+        expect(first.body.code).toMatch(/^([A-HJ-NP-Z2-9]{4}-){5}[A-HJ-NP-Z2-9]{4}$/)
         expect(first.body.issuer).toMatch(/\/oidc$/)
         // A new code: the earlier one stops
         const second = await http().post('/admin/clients/linked.app/link-code').set(bearer(tokens.root)).expect(200)
@@ -359,12 +400,6 @@ describe('Apps on /admin (e2e)', () => {
             .post('/oidc/link')
             .send({ code: second.body.code, ...project })
             .expect(400)
-        // A short code of 12 characters (servers before 0.39.1) still works
-        await store.createLinkCode(sha256('K7QM2XPD9HRT'), 'linked.app', aliceId, new Date(Date.now() + 60_000))
-        await http()
-            .post('/oidc/link')
-            .send({ code: 'K7QM-2XPD-9HRT', ...project })
-            .expect(200)
         // The new project logs in at once with its own redirect URI
         await login('alice@example.com', { id: 'linked.app', redirect: 'http://localhost:3001/api/auth/callback' })
         expect(audit.events.findLast(event => event.action === 'platform.client_linked')).toMatchObject({

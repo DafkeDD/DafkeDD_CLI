@@ -6,8 +6,8 @@ import { NOTIFICATIONS_STORE } from './notifications.store.js'
 import { PgNotificationsStore } from './pg-notifications.store.js'
 
 /**
- * Notifications of accounts (src/notifications), the bell of the frontend. Global: every service can inject
- * NotificationsService to notify one account, the admins of an organisation or the superadmins.
+ * Notifications of accounts (src/notifications). Global: every service can inject NotificationsService to notify the
+ * admins of an organisation, one account or the superadmins, or register a source of computed notifications.
  */
 @Global()
 @Module({

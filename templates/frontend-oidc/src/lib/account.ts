@@ -42,8 +42,8 @@ export function useAccountApi() {
  */
 export function useBackend() {
     const locale = useLocale()
-    return async (path: string, method = 'GET', body?: object): Promise<Answer> =>
-        answer(
+    return async (path: string, method = 'GET', body?: object): Promise<Answer> => {
+        const result = await answer(
             await fetch(`/api/backend/${path}`, {
                 method,
                 headers: {
@@ -54,4 +54,20 @@ export function useBackend() {
                 body: body ? JSON.stringify(body) : undefined
             })
         )
+        // Every account must have its eID (OIDC_EID_REQUIRED) and this one has none yet: the shell shows the eID screen
+        if (result.status === 403 && result.body.error === 'oidc.EID_REQUIRED') eidRequired()
+        return result
+    }
+}
+
+const EID_REQUIRED_EVENT = 'pp-eid-required'
+
+/** An API call answered 403 oidc.EID_REQUIRED: tells the shell (useEidRequired). */
+export function eidRequired() {
+    window.dispatchEvent(new Event(EID_REQUIRED_EVENT))
+}
+
+export function onEidRequired(handler: () => void) {
+    window.addEventListener(EID_REQUIRED_EVENT, handler)
+    return () => window.removeEventListener(EID_REQUIRED_EVENT, handler)
 }

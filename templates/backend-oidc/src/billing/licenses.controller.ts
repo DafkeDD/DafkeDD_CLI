@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common'
 import {
+    ApiBadRequestResponse,
     ApiConflictResponse,
     ApiNotFoundResponse,
     ApiOkResponse,
@@ -8,7 +9,7 @@ import {
     ApiTags
 } from '@nestjs/swagger'
 import { Access, Auth, type AuthContext } from '../access/access.js'
-import { PurchaseDto, SeatsDto } from './billing.dto.js'
+import { PurchaseDto, SeatsDto, SubscribeDto } from './billing.dto.js'
 import { BillingService } from './billing.service.js'
 import { ProductCodePipe } from './product-code.pipe.js'
 
@@ -34,7 +35,14 @@ export class LicensesController {
     @Post('quote')
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'What a purchase costs (with a discount code): the first payment and every renewal' })
-    @ApiOkResponse({ description: '{ currency, unitCents, baseCents, firstCents, renewalCents, discount }' })
+    @ApiOkResponse({
+        description:
+            '{ currency, unitCents, baseCents, firstCents, renewalCents, vatPercent, firstVatCents, firstTotalCents, renewalTotalCents, discount } (cents without VAT; *TotalCents with VAT)'
+    })
+    @ApiBadRequestResponse({
+        description:
+            'billing.DISCOUNT_INVALID (unknown, off, other product), billing.DISCOUNT_EXPIRED, billing.DISCOUNT_USED_UP or billing.DISCOUNT_ALREADY_USED'
+    })
     quote(@Auth() auth: AuthContext, @Body() body: PurchaseDto) {
         return this.billing.quote(auth.tenantId, body)
     }
@@ -44,10 +52,17 @@ export class LicensesController {
         summary:
             'Buy seats of a product, per month or per year: answers the checkout of Mollie (or nothing when a discount code makes it free)'
     })
-    @ApiOkResponse({ description: '{ status: "pending" | "active", checkoutUrl, subscriptionId }' })
+    @ApiOkResponse({
+        description:
+            '{ status: "pending" | "active", checkoutUrl, subscriptionId }: active (checkoutUrl null) when a discount code makes it free'
+    })
     @ApiConflictResponse({ description: 'billing.SUBSCRIPTION_EXISTS: change the seats instead' })
+    @ApiBadRequestResponse({
+        description:
+            'billing.DISCOUNT_INVALID, billing.DISCOUNT_EXPIRED, billing.DISCOUNT_USED_UP or billing.DISCOUNT_ALREADY_USED'
+    })
     @ApiServiceUnavailableResponse({ description: 'billing.PAYMENTS_DISABLED (PAYMENTS=off)' })
-    subscribe(@Auth() auth: AuthContext, @Body() body: PurchaseDto) {
+    subscribe(@Auth() auth: AuthContext, @Body() body: SubscribeDto) {
         return this.billing.subscribe(auth, body)
     }
 
@@ -81,13 +96,25 @@ export class LicensesController {
     @Post(':productCode/trials/:userId')
     @ApiOperation({ summary: 'Start the trial of a member (once per product)' })
     @ApiOkResponse({ description: '{ userId, endsAt }' })
-    @ApiConflictResponse({ description: 'billing.TRIAL_USED' })
+    @ApiConflictResponse({
+        description: 'billing.TRIAL_USED, or billing.DEMO_DISABLED: the demo of this product is off'
+    })
     trial(
         @Auth() auth: AuthContext,
         @Param('productCode', ProductCodePipe) code: string,
         @Param('userId', ParseUUIDPipe) userId: string
     ) {
         return this.billing.startTrial(auth.tenantId, code, userId)
+    }
+
+    @Post(':productCode/seat')
+    @ApiOperation({
+        summary: 'Take a seat yourself (the admin that bought the product); nothing changes when you have one'
+    })
+    @ApiOkResponse({ description: '{ userId, assigned: true }' })
+    @ApiConflictResponse({ description: 'billing.NO_FREE_SEAT: buy more seats, or take one back' })
+    takeSeat(@Auth() auth: AuthContext, @Param('productCode', ProductCodePipe) code: string) {
+        return this.billing.assign(auth, code, auth.userId)
     }
 
     @Post(':productCode/seats/:userId')

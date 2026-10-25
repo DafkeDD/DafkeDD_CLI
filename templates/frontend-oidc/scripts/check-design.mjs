@@ -74,7 +74,7 @@ for (const file of code.filter(file => /\.(tsx|jsx)$/.test(file) && !DESIGN.some
             `${rel(file)}: the colour ${match[1]}. Use a token of the design: var(--accent), var(--text-2), var(--red), ...`
         )
 
-// 3. Every page sits in the shell (AppPage) or, when it is public, in the login screen (AuthLayout)
+// 3. Every page sits in the shell (AppPage, or the CustomerShell/AdminShell of its layout), only redirects, or, when it is public, in the login screen (AuthLayout)
 const proxy = path.join(src, 'proxy.ts')
 const publicPaths = existsSync(proxy)
     ? [...(/PUBLIC_PATHS\s*=\s*\[([^\]]*)\]/.exec(read(proxy))?.[1] ?? '').matchAll(/'([^']+)'/g)].map(
@@ -95,6 +95,16 @@ const withComponents = file => {
     return parts.join('\n')
 }
 const pages = files(path.join(src, 'app')).filter(file => path.basename(file) === 'page.tsx')
+/** A page that only sends the browser on (redirect, ClientRedirect) shows nothing itself. */
+const REDIRECT = /^(?![\s\S]*<(?!ClientRedirect|Suspense|Content|Route)[A-Z])[\s\S]*(?:\bredirect\(|<ClientRedirect\b)/
+/** A layout.tsx between the page and src/app renders the shell (the route groups of the login server). */
+const inShellLayout = file => {
+    for (let dir = path.dirname(file); dir.startsWith(path.join(src, 'app')); dir = path.dirname(dir)) {
+        const layout = path.join(dir, 'layout.tsx')
+        if (existsSync(layout) && /<(?:CustomerShell|AdminShell|AppPage)[\s>]/.test(read(layout))) return true
+    }
+    return false
+}
 for (const file of pages) {
     const route =
         '/' +
@@ -110,9 +120,9 @@ for (const file of pages) {
             problems.push(
                 `${rel(file)}: a public page (${route}) shows the login screen of the design: AuthLayout (src/components/pasport/auth-layout.tsx).`
             )
-    } else if (!/<AppPage[\s>]/.test(content)) {
+    } else if (!/<AppPage[\s>]/.test(content) && !inShellLayout(file) && !REDIRECT.test(read(file))) {
         problems.push(
-            `${rel(file)}: every page sits in the shell: <AppPage> (src/components/shell/app-shell.tsx). A public page belongs in PUBLIC_PATHS of src/proxy.ts.`
+            `${rel(file)}: every page sits in the shell: <AppPage> (src/components/shell/app-shell.tsx), or a layout.tsx above it with <CustomerShell> or <AdminShell> (src/components/pasport/shell.tsx). A public page belongs in PUBLIC_PATHS of src/proxy.ts.`
         )
     }
 }

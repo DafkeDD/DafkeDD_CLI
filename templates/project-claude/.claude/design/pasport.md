@@ -83,21 +83,26 @@ never has a login or registration form of its own.
 
 ### The shell
 
-Every app, the login server's own portal included, uses the same shell (`frontend/src/components/shell/`):
+Every app, the login server's own portal included, uses the same shell (`Shell` in
+`frontend/src/components/pasport/shell.tsx`):
 
 - The **icon rail** on the left (`.sidebar`): the shield mark with the product name and a subtitle ("Klantenportaal",
   the app's name, or "Superadmin" in the dark variant of the platform), the pages as `rail-item`s with an icon, section
   labels per organisation. Collapsed to icons by default, expanded by the button in the topbar (remembered).
-- The **topbar** (`.topbar`): the menu button, the search for a page (⌘K), the notifications bell (`NotificationBell`, a
-  red count of unread ones, a popover with "mark all as read"), the theme button and the user's name, the organisation
-  and the `Avatar` (with the online dot) opening the menu: profile, security, language, log out. Something new to tell
-  users is a kind in `backend/src/notifications/notifications.store.ts` with its texts and icon in the bell, never an
-  alert of its own.
-- The **content** (`.content`): a `PageHead` (title, description, one primary action), then the page.
+- The **topbar** (`.topbar`): the menu button, the search (⌘K: a page, else the apps or the tenants), the notifications
+  bell (a red count of unread ones, a popover with "mark all as read", toasts and a chime for tickets), the theme button
+  and the user's name, the organisation and the `Avatar` (with the status dot) opening the menu: its pages (profile,
+  security, activity, tour), the status and the out-of-office reply, language, log out. Something new to tell users is a
+  kind in `backend/src/notifications/notifications.store.ts` with its texts and icon in the bell, never an alert of its
+  own.
+- The **content** (`.content`): a page head (`page-head`: title, description, one primary action; `PageHead` in a linked
+  app), then the page.
 - **On the phone** (≤ 860px) the rail is a drawer behind the menu button with a backdrop, the topbar keeps the menu
   button, the bell and the user, and the content gets smaller padding; forms and grids go to one column.
-- Only the rail items and the content belong to the app. Account pages (profile, security, members, licences) live on
-  the login server; an app links there.
+- Only the rail items and the content belong to the app. Account and organisation pages (profile, security, users,
+  invoices, support) live on the login server; an app links there. On the login server the customer portal
+  (`src/app/[locale]/(portal)`, `CustomerShell`) and the superadmin panel (`src/app/[locale]/admin/(panel)`,
+  `AdminShell`, the dark mark) are route groups whose layout draws the shell.
 
 ### The login screens
 
@@ -120,8 +125,9 @@ language buttons at the bottom right. On the phone only the form.
   linked app; `npx --allow-git=all github:DafkeDD/DafkeDD_CLI update` keeps them in step (the styles, the components,
   the shell, the protected routes and their texts; a file you changed gets the new version next to it as
   `<file>.dafkedd-new`).
-- `npm run check:design` in `./frontend` (also in the CI) checks the rules a machine can check: every page in `AppPage`,
-  or in the login screen (`AuthLayout`) when it is in `PUBLIC_PATHS`; no other component library, icon set or CSS
+- `npm run check:design` in `./frontend` (also in the CI) checks the rules a machine can check: every page in `AppPage`
+  or in a route group whose `layout.tsx` draws `CustomerShell` or `AdminShell` (a page that only redirects is fine), or
+  in the login screen (`AuthLayout`) when it is in `PUBLIC_PATHS`; no other component library, icon set or CSS
   framework; no colour written in a page or component (only the tokens). What it cannot see (spacing, the phone, both
   themes) the reviewer and qa check on screenshots.
 - The DafkeDD UI components (`@/components/ui`) are installed too (the theme provider, charts); on screen the classes

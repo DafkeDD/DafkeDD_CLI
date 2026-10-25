@@ -34,6 +34,54 @@ export interface MfaState {
 export type TenantRole = 'user' | 'admin'
 export const TENANT_ROLES: readonly TenantRole[] = ['user', 'admin']
 
+/** The status an account chose (like Microsoft Teams); offline: looks offline while online. */
+export type Presence = 'available' | 'busy' | 'dnd' | 'brb' | 'away' | 'offline'
+export const PRESENCES: readonly Presence[] = ['available', 'busy', 'dnd', 'brb', 'away', 'offline']
+
+/** An out-of-office reply (like Outlook): on, optionally only from/until a moment, a message for colleagues and one for customers. */
+export interface OutOfOffice {
+    enabled: boolean
+    from: Date | null
+    until: Date | null
+    /** For colleagues (the support team), e.g. who takes over. */
+    internalMessage: string | null
+    /** For customers, on the tickets the account handles. */
+    externalMessage: string | null
+}
+
+/** Whether the out-of-office reply is on at this moment (on, and inside its period). */
+export function outOfOfficeActive(ooo: OutOfOffice | null | undefined, now = new Date()): ooo is OutOfOffice {
+    return (
+        !!ooo &&
+        ooo.enabled &&
+        (ooo.from === null || ooo.from.getTime() <= now.getTime()) &&
+        (ooo.until === null || ooo.until.getTime() > now.getTime())
+    )
+}
+
+/** doctor: may use the eHealth vault (and the apps that need it) in this tenant; staff: everyone else. */
+export type Profession = 'doctor' | 'staff'
+export const PROFESSIONS: readonly Profession[] = ['doctor', 'staff']
+
+/** The own profile of an account, besides StoredUser. */
+export interface UserProfile {
+    firstName: string | null
+    lastName: string | null
+    phone: string | null
+    /** A new email address that still has to be confirmed (the link in the email). */
+    pendingEmail: string | null
+    /** The national register number, encrypted (only from the eID). */
+    rrnEncrypted: string | null
+    /** From the eID, when it gives one. */
+    address: string | null
+}
+
+/** What the account changes of its own profile (name is the display name, kept in sync by the service). */
+export type ProfileChanges = Partial<Pick<UserProfile, 'firstName' | 'lastName' | 'phone'>> & {
+    name?: string
+    locale?: string | null
+}
+
 export interface Membership {
     tenantId: string
     slug: string
@@ -51,6 +99,30 @@ export interface Tenant {
     members?: number
 }
 
+/** The billing details of a tenant (on its invoices), where it is and its plan. */
+export interface TenantDetails {
+    company: string | null
+    vat: string | null
+    billingAddress: string | null
+    billingEmail: string | null
+    city: string | null
+    /** Free text: Starter, Pro, Enterprise. */
+    plan: string
+    /** The contact given when a superadmin created the tenant (until its first admin joined). */
+    contactName: string | null
+}
+
+/** A tenant as superadmins see it on /admin. */
+export interface TenantSummary extends Tenant, TenantDetails {
+    members: number
+    /** Open invitations that did not expire. */
+    invitations: number
+    /** The first admin (oldest membership), or else the newest open admin invitation (name: contactName). */
+    contact: { name: string | null; email: string } | null
+}
+
+export type TenantChanges = Partial<Omit<TenantDetails, 'plan'>> & { name?: string; plan?: string }
+
 export type MemberStatus = 'active' | 'disabled'
 
 export interface TenantMember {
@@ -60,8 +132,11 @@ export interface TenantMember {
     emailVerified: boolean
     role: TenantRole
     status: MemberStatus
+    profession: Profession
     /** The last request of this member in this tenant (null: never). */
     lastSeenAt: Date | null
+    /** The status the member chose (shown only while online). */
+    presence: Presence
 }
 
 /** A role of an app, as its developer defines it: a key for the code, a name per language for the screens. */
@@ -146,6 +221,9 @@ export interface NewAccount {
     passwordHash: string | null
     emailVerified: boolean
     locale: string | null
+    firstName?: string | null
+    lastName?: string | null
+    phone?: string | null
 }
 
 export interface OidcClient {
@@ -349,6 +427,14 @@ export interface OidcStore {
     ): Promise<{ user: StoredUser; tenant: Tenant } | null | 'identifier-taken'>
     /** A new account without a tenant (an accepted invitation). Null when the email address is taken. */
     createUser(account: NewAccount): Promise<StoredUser | null>
+    /**
+     * Like createUser, and the identifier (the eID) is linked in the same transaction. `identifier-taken` (nothing
+     * changed) when it belongs to an account already.
+     */
+    createUserWithIdentifier(
+        account: NewAccount,
+        identifier: { type: IdentifierType; valueHash: string }
+    ): Promise<StoredUser | null | 'identifier-taken'>
     setEmailVerified(userId: string): Promise<void>
     setPassword(userId: string, passwordHash: string): Promise<void>
     /** Grants or revokes superadmin. The last superadmin cannot be revoked (checked under a lock). */
@@ -357,10 +443,34 @@ export interface OidcStore {
     /** Ends every session of a user (after a password reset, or turning on two-factor authentication). */
     endUserSessions(userId: string): Promise<void>
 
+    // ---------------------------------------------------------------- the own profile
+
+    findProfile(userId: string): Promise<UserProfile | null>
+    /** Changes the given fields (undefined stays as it is). */
+    updateProfile(userId: string, changes: ProfileChanges): Promise<void>
+    /** The status the account chose, or null when there is no such account. */
+    findPresence(userId: string): Promise<Presence | null>
+    setPresence(userId: string, presence: Presence): Promise<void>
+    /** The out-of-office reply of an account, or null when there is no such account. */
+    findOutOfOffice(userId: string): Promise<OutOfOffice | null>
+    setOutOfOffice(userId: string, ooo: OutOfOffice): Promise<void>
+    /** The out-of-office replies that are on (maybe outside their period) of these accounts, by user id. */
+    listOutOfOffice(userIds: string[]): Promise<Map<string, OutOfOffice>>
+    setPendingEmail(userId: string, email: string | null): Promise<void>
+    /** The confirmed new address: verified, no longer pending. False (nothing changed) when another account has it. */
+    changeEmail(userId: string, email: string): Promise<boolean>
+    /**
+     * What the eID told about the person: its national register number (encrypted) and address (null keeps the one
+     * known). rrnEncrypted null forgets both (the eID was unlinked).
+     */
+    setEidDetails(userId: string, details: { rrnEncrypted: string | null; address: string | null }): Promise<void>
+
     // ---------------------------------------------------------------- identifiers (eID)
 
     findUserByIdentifier(type: IdentifierType, valueHash: string): Promise<StoredUser | null>
     findIdentifier(userId: string, type: IdentifierType): Promise<UserIdentifier | null>
+    /** Which of these accounts have an identifier of this type (for example a linked eID). */
+    listLinkedUsers(type: IdentifierType, userIds: string[]): Promise<string[]>
     linkIdentifier(userId: string, type: IdentifierType, valueHash: string): Promise<LinkResult>
     unlinkIdentifier(userId: string, type: IdentifierType): Promise<boolean>
     /** Records a login with the identifier. */
@@ -383,6 +493,23 @@ export interface OidcStore {
     // ---------------------------------------------------------------- two-factor authentication
 
     getMfa(userId: string): Promise<MfaState | null>
+    /**
+     * The roles given to the members of a tenant in an app (only members that got roles). PgOidcStore runs this with
+     * Row-Level Security.
+     */
+    listAppRoles(tenantId: string, clientId: string): Promise<{ userId: string; roles: string[] }[]>
+    /** The roles given to one member in an app, or null when none were given (then the default roles apply). */
+    findAppRoles(tenantId: string, clientId: string, userId: string): Promise<string[] | null>
+    /** Gives a member these roles in an app (an empty list is "no roles"); null goes back to the default roles. */
+    setAppRoles(
+        tenantId: string,
+        clientId: string,
+        userId: string,
+        roles: string[] | null,
+        by: string | null
+    ): Promise<void>
+    /** The roles an app defines (its developer pushes them with a link code). Only apps made on /admin. */
+    setClientRoles(clientId: string, roles: AppRole[]): Promise<boolean>
     /** Stores a new secret that still has to be confirmed (two-factor authentication stays off until enableMfa). */
     setMfaSecret(userId: string, encryptedSecret: string): Promise<void>
     enableMfa(userId: string, recoveryCodeHashes: string[], step: number): Promise<void>
@@ -401,10 +528,19 @@ export interface OidcStore {
     /** A new tenant; the slug gets a suffix when it exists already. */
     createTenant(name: string, slug: string): Promise<Tenant>
     setTenantStatus(id: string, status: Tenant['status']): Promise<boolean>
+    findTenantDetails(id: string): Promise<TenantDetails | null>
+    /** Changes the given fields (undefined stays as it is, null clears); false when the tenant does not exist. */
+    updateTenant(id: string, changes: TenantChanges): Promise<boolean>
+    /** Every tenant with its details, members, open invitations and contact (for superadmins). */
+    listTenantSummaries(): Promise<TenantSummary[]>
+    findTenantSummary(id: string): Promise<TenantSummary | null>
     /** The role of an active member of a tenant (only rows in tenant_members), or null (no member, or disabled). */
     findMemberRole(tenantId: string, userId: string): Promise<TenantRole | null>
     /** The membership row (also when disabled), or null. */
-    findMember(tenantId: string, userId: string): Promise<{ role: TenantRole; status: MemberStatus } | null>
+    findMember(
+        tenantId: string,
+        userId: string
+    ): Promise<{ role: TenantRole; status: MemberStatus; profession: Profession } | null>
     /** Adds a member; an existing member keeps the higher of both roles. */
     addMember(tenantId: string, userId: string, role: TenantRole): Promise<void>
     /** The members of one tenant. PgOidcStore runs this with Row-Level Security (DatabaseService.withTenant). */
@@ -415,23 +551,8 @@ export interface OidcStore {
     removeMember(tenantId: string, userId: string): Promise<ChangeResult>
     /** Disables or enables a member. A tenant always keeps at least one active admin. */
     setMemberStatus(tenantId: string, userId: string, status: MemberStatus): Promise<ChangeResult>
-    /**
-     * The roles given to the members of a tenant in an app (only members that got roles). PgOidcStore runs this with
-     * Row-Level Security.
-     */
-    listAppRoles(tenantId: string, clientId: string): Promise<{ userId: string; roles: string[] }[]>
-    /** The roles given to one member in an app, or null when none were given (then the default roles apply). */
-    findAppRoles(tenantId: string, clientId: string, userId: string): Promise<string[] | null>
-    /** Gives a member these roles in an app (an empty list is "no roles"); null goes back to the default roles. */
-    setAppRoles(
-        tenantId: string,
-        clientId: string,
-        userId: string,
-        roles: string[] | null,
-        by: string | null
-    ): Promise<void>
-    /** The roles an app defines (its developer pushes them with a link code). Only apps made on /admin. */
-    setClientRoles(clientId: string, roles: AppRole[]): Promise<boolean>
+    /** Doctor or staff (Row-Level Security); false when not a member. */
+    setMemberProfession(tenantId: string, userId: string, profession: Profession): Promise<boolean>
     /** Records that a member is active right now (who is online). */
     touchMember(tenantId: string, userId: string): Promise<void>
     /** Ends the sessions of a user in one tenant (after disabling or removing the member). */
@@ -471,6 +592,8 @@ export interface OidcStore {
     deleteClient(clientId: string): Promise<boolean>
     /** A one-time link code (sha256) for an app made on /admin; earlier unused codes of that app stop. */
     createLinkCode(codeHash: string, clientId: string, createdBy: string, expiresAt: Date): Promise<void>
+    /** Removes every link code of an app (used or not): the app was changed. */
+    deleteLinkCodes(clientId: string): Promise<void>
     /** Uses a link code once: its client id, or null when unknown, used, expired or the app is disabled. */
     useLinkCode(codeHash: string): Promise<string | null>
     /** Adds addresses to an app made on /admin (kept unique); the back-channel URI only when it has none yet. */

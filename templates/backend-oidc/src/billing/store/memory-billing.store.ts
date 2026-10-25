@@ -1,17 +1,19 @@
 import { randomUUID } from 'node:crypto'
-import type {
-    Assignment,
+import {
+    CATALOG_DEFAULTS,
+    type Assignment,
     AssignResult,
-    BillingStore,
-    DiscountCode,
-    Grant,
-    NewDiscountCode,
-    NewProduct,
-    NewPayment,
-    Payment,
-    Product,
-    Subscription,
-    Trial
+    type BillingStore,
+    type DiscountCode,
+    type Environment,
+    type Grant,
+    type NewDiscountCode,
+    type NewProduct,
+    type NewPayment,
+    type Payment,
+    type Product,
+    type Subscription,
+    type Trial
 } from './billing.store.js'
 
 /** In-memory store with the same behaviour as PgBillingStore. Used by the tests; never in production. */
@@ -42,7 +44,14 @@ export class MemoryBillingStore implements BillingStore {
 
     async createProduct(product: NewProduct) {
         if (this.products.some(existing => existing.code === product.code)) return null
-        const created: Product = { ...product, id: randomUUID(), currency: 'EUR', createdAt: new Date() }
+        const created: Product = {
+            ...CATALOG_DEFAULTS,
+            ...product,
+            features: [...(product.features ?? [])],
+            id: randomUUID(),
+            currency: 'EUR',
+            createdAt: new Date()
+        }
         this.products.push(created)
         return { ...created }
     }
@@ -52,6 +61,17 @@ export class MemoryBillingStore implements BillingStore {
         if (!product) return null
         Object.assign(product, Object.fromEntries(Object.entries(change).filter(([, value]) => value !== undefined)))
         return { ...product }
+    }
+
+    async deleteProduct(id: string) {
+        if (!this.products.some(product => product.id === id)) return 'missing'
+        if (this.subscriptions.some(sub => sub.productId === id && sub.status !== 'canceled')) return 'in_use'
+        this.products = this.products.filter(product => product.id !== id)
+        this.subscriptions = this.subscriptions.filter(sub => sub.productId !== id)
+        this.grants = this.grants.filter(grant => grant.productId !== id)
+        this.trials = this.trials.filter(trial => trial.productId !== id)
+        this.assignments = this.assignments.filter(assignment => assignment.productId !== id)
+        return 'deleted'
     }
 
     // ---------------------------------------------------------------- discount codes
@@ -113,6 +133,28 @@ export class MemoryBillingStore implements BillingStore {
 
     async setCustomerId(tenantId: string, customerId: string) {
         this.customers.set(tenantId, customerId)
+    }
+
+    async listEnvironments(tenantId: string): Promise<Environment[]> {
+        return this.subscriptions
+            .filter(item => item.tenantId === tenantId)
+            .map(item => {
+                // The purchase may store the environment on the subscription (name and region)
+                const extra = item as Subscription & { environmentName?: string | null; region?: string | null }
+                return {
+                    productId: item.productId,
+                    name: extra.environmentName ?? null,
+                    region: extra.region ?? null,
+                    since: null
+                }
+            })
+    }
+
+    async listAllOwnership() {
+        return {
+            subscriptions: this.subscriptions.map(item => ({ ...item })),
+            grants: this.grants.map(item => ({ ...item }))
+        }
     }
 
     async listSubscriptions(tenantId: string) {

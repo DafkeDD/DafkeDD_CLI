@@ -50,4 +50,28 @@ export class BillingConfig {
     get production(): boolean {
         return this.oidc.production
     }
+
+    /** Prices are without VAT: BILLING_VAT_PERCENT (21) is added to every payment and shown on the invoices. */
+    get vatPercent(): number {
+        const percent = Number(this.config.get<string>('BILLING_VAT_PERCENT') ?? 21)
+        return Number.isInteger(percent) && percent >= 0 && percent <= 100 ? percent : 21
+    }
+
+    /**
+     * Who sends the invoices: INVOICE_SELLER_NAME (Pasport), INVOICE_SELLER_ADDRESS (lines separated by "|"),
+     * INVOICE_SELLER_VAT, INVOICE_SELLER_EMAIL and INVOICE_SELLER_IBAN (for a bank transfer).
+     */
+    get seller() {
+        const value = (name: string) => this.config.get<string>(name)?.trim() || null
+        return {
+            name: value('INVOICE_SELLER_NAME') ?? 'Pasport',
+            address: (value('INVOICE_SELLER_ADDRESS') ?? '')
+                .split('|')
+                .map(line => line.trim())
+                .filter(Boolean),
+            vat: value('INVOICE_SELLER_VAT'),
+            email: value('INVOICE_SELLER_EMAIL'),
+            iban: value('INVOICE_SELLER_IBAN')
+        }
+    }
 }

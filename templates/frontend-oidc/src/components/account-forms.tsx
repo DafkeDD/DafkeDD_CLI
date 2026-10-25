@@ -6,10 +6,11 @@ import { Link } from '@/i18n/navigation'
 import { roleLabel } from '@/components/account-ui'
 import { EidBridge, EidPin, type EidToken } from '@/components/eid'
 import { AuthHeading, AuthLayout, Divider, StepBar } from '@/components/pasport/auth-layout'
-import { Badge, Btn, ErrorNote, Field, Icon, Input } from '@/components/pasport/ui'
+import { Badge, Btn, ErrorNote, Field, Icon, Input, Select } from '@/components/pasport/ui'
 import { useAccountApi } from '@/lib/account'
 
 const PASSWORD_MIN = 12
+const LOCALES = ['nl', 'fr', 'en', 'de'] as const
 
 /** "Log in" as a full page load: /api/auth/login is a route handler. */
 function LoginAction({ label, icon = 'arrowRight' }: { label: string; icon?: string }) {
@@ -61,15 +62,19 @@ function CheckEmail({ email, title, text }: { email: string; title?: string; tex
 type Phase = 'idle' | 'eid' | 'details' | 'review' | 'done'
 
 /**
- * /register: a new account and a new organisation; the account becomes its admin. With the Belgian eID (name from the
- * card, plus a chosen password) or with email and password, as the login server allows (GET /oidc/account/registration).
- * Every account has a password; two-step verification (authenticator app) is set up at the first login.
+ * /register: a new account and a new organisation; the account becomes its admin. With the Belgian
+ * eID (name from the card, plus a chosen password) or with email and password, as the login server allows
+ * (GET /oidc/account/registration). When every account must have its eID (eidRequired) only with the eID: the page
+ * goes straight to it. Every account has a password; two-step verification (authenticator app) is set up at the
+ * first login (mandatory, also after the eID).
  */
 export function Register() {
     const t = useTranslations('Oidc')
     const p = useTranslations('Register')
+    const locale = useLocale()
+    const languages = { nl: p('lang_nl'), fr: p('lang_fr'), en: p('lang_en'), de: p('lang_de') }
     const api = useAccountApi()
-    const [options, setOptions] = useState({ password: true, eid: false })
+    const [options, setOptions] = useState({ password: true, eid: false, eidRequired: false })
     const [tab, setTab] = useState<'eid' | 'email'>('email')
     const [phase, setPhase] = useState<Phase>('idle')
     const [error, setError] = useState('')
@@ -79,6 +84,8 @@ export function Register() {
         name: '',
         email: '',
         organisation: '',
+        phone: '',
+        locale: (LOCALES as readonly string[]).includes(locale) ? locale : 'en',
         password: '',
         repeat: ''
     })
@@ -89,11 +96,15 @@ export function Register() {
         api('registration')
             .then(result => {
                 if (result.status !== 200) return
-                const open = { password: result.body.password !== false, eid: result.body.eid === true }
+                const open = {
+                    password: result.body.password !== false,
+                    eid: result.body.eid === true,
+                    eidRequired: result.body.eidRequired === true
+                }
                 setOptions(open)
                 setTab(open.eid ? 'eid' : 'email')
-                // Only with the eID (no email and password): no choice to make
-                if (open.eid && !open.password) setPhase('eid')
+                // Only with the eID: no choice to make
+                if (open.eid && open.eidRequired) setPhase('eid')
             })
             .catch(() => undefined)
         // once when the page opens
@@ -102,6 +113,8 @@ export function Register() {
 
     const set = (k: keyof typeof form, v: string) => setForm(f => ({ ...f, [k]: v }))
     const emailValid = /^\S+@\S+\.\S+$/.test(form.email.trim())
+    // The phone number is optional; when it is filled in it must look like one
+    const phoneValid = !form.phone.trim() || /^\+?[\d][\d\s./-]{7,}$/.test(form.phone.trim())
     const orgValid = form.organisation.trim().length >= 2
     const nameValid = form.name.trim().length >= 2
     const pwValid = form.password.length >= PASSWORD_MIN
@@ -133,7 +146,9 @@ export function Register() {
                 token: token.current,
                 email: form.email.trim(),
                 password: form.password,
-                organisation: form.organisation.trim()
+                organisation: form.organisation.trim(),
+                phone: form.phone.trim(),
+                locale: form.locale
             })
             if (result.status === 202) setPhase('done')
             else {
@@ -158,7 +173,9 @@ export function Register() {
                 name: form.name.trim(),
                 email: form.email.trim(),
                 organisation: form.organisation.trim(),
-                password: form.password
+                password: form.password,
+                ...(form.phone.trim() ? { phone: form.phone.trim() } : {}),
+                locale: form.locale
             })
             if (result.status === 202) setPhase('done')
             else setError(result.message)
@@ -172,6 +189,17 @@ export function Register() {
         ? [p('stepIdentity'), p('stepDetails'), p('stepReview')]
         : [p('stepDetails'), p('stepConfirm')]
     const index = viaEid ? (phase === 'idle' || phase === 'eid' ? 0 : phase === 'details' ? 1 : 2) : 0
+    const langSelect = (
+        <Field label={p('language')}>
+            <Select className='select' value={form.locale} onChange={e => set('locale', e.target.value)}>
+                {LOCALES.map(l => (
+                    <option key={l} value={l}>
+                        {languages[l]}
+                    </option>
+                ))}
+            </Select>
+        </Field>
+    )
     const orgField = (
         <Field
             label={p('organisation')}
@@ -255,7 +283,7 @@ export function Register() {
 
             {phase === 'idle' && (
                 <div className='fade-in' style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {options.eid && options.password && (
+                    {options.eid && options.password && !options.eidRequired && (
                         <div className='seg' style={{ display: 'flex' }} role='tablist'>
                             <button
                                 type='button'
@@ -294,7 +322,7 @@ export function Register() {
                                 {p('eidHint')}
                             </p>
                         </div>
-                    ) : !options.password ? null : (
+                    ) : options.eidRequired ? null : (
                         <form
                             className='fade-in'
                             style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
@@ -338,6 +366,16 @@ export function Register() {
                             </Field>
                             {orgField}
                             {passwordFields}
+                            <Field label={p('phone')} hint={p('phoneOptional')}>
+                                <Input
+                                    icon='phone'
+                                    placeholder='+32 4xx xx xx xx'
+                                    value={form.phone}
+                                    onChange={e => set('phone', e.target.value)}
+                                    autoComplete='tel'
+                                />
+                            </Field>
+                            {langSelect}
                             <ErrorNote>{error}</ErrorNote>
                             <Btn
                                 type='submit'
@@ -382,7 +420,7 @@ export function Register() {
                     onSubmit={e => {
                         e.preventDefault()
                         setTouched(true)
-                        if (emailValid && orgValid && pwValid && pwMatch) setPhase('review')
+                        if (phoneValid && emailValid && orgValid && pwValid && pwMatch) setPhase('review')
                     }}
                 >
                     <div className='card card-pad' style={{ background: 'var(--surface-2)' }}>
@@ -394,6 +432,21 @@ export function Register() {
                         </div>
                         <p style={{ fontSize: 13.5, marginTop: 8 }}>{p('identityText')}</p>
                     </div>
+                    <Field
+                        label={p('phone')}
+                        hint={touched && !phoneValid ? p('phoneInvalid') : p('phoneOptional')}
+                        error={touched && !phoneValid}
+                    >
+                        <Input
+                            icon='phone'
+                            placeholder='+32 4xx xx xx xx'
+                            value={form.phone}
+                            onChange={e => set('phone', e.target.value)}
+                            autoComplete='tel'
+                            style={bad(!phoneValid)}
+                            autoFocus
+                        />
+                    </Field>
                     <Field label={p('email')} required hint={touched && !emailValid ? p('emailInvalid') : null} error>
                         <Input
                             icon='mail'
@@ -407,6 +460,7 @@ export function Register() {
                     </Field>
                     {orgField}
                     {passwordFields}
+                    {langSelect}
                     <Btn type='submit' variant='primary' size='lg' className='btn-block' iconRight='arrowRight'>
                         {p('toReview')}
                     </Btn>
@@ -435,8 +489,13 @@ export function Register() {
                         <div style={{ display: 'grid', gap: 8 }}>
                             {(
                                 [
+                                    [p('reviewPhone'), form.phone.trim() || '—'],
                                     [p('reviewEmail'), form.email],
-                                    [p('reviewOrganisation'), form.organisation]
+                                    [p('reviewOrganisation'), form.organisation],
+                                    [
+                                        p('reviewLanguage'),
+                                        languages[form.locale as (typeof LOCALES)[number]] ?? form.locale
+                                    ]
                                 ] as const
                             ).map(([k, v]) => (
                                 <div
@@ -711,6 +770,10 @@ type Invitation = {
     role: 'user' | 'admin'
     inviterName: string
     accountExists: boolean
+    /** A new account can read its eID first (the eID login is on). */
+    eid?: boolean
+    /** A new account must read its eID first (OIDC_EID_REQUIRED). */
+    eidRequired?: boolean
     /** The apps it gives access to: the roles that come with them (named per language) and whether a licence does. */
     apps?: {
         clientId: string
@@ -753,20 +816,27 @@ function InvitationApps({ apps }: { apps: NonNullable<Invitation['apps']> }) {
 }
 
 /**
- * /invite?token=...: joins an organisation; without an account it creates one (already verified) with a name and a
- * password. The apps of the invitation (roles, licence) are shown, and can be opened right after accepting.
+ * /invite?token=...: joins an organisation; without an account it creates one (already verified). A new account reads
+ * its eID first when the login server has the eID (required with OIDC_EID_REQUIRED, else it can be skipped): the name
+ * comes from the card (it can be changed) and the eID is linked; then a password (to log in with the email address).
  */
 export function AcceptInvitation({ token }: { token: string }) {
     const t = useTranslations('Oidc')
+    const p = useTranslations('Register')
     const v = useTranslations('Invite')
     const api = useAccountApi()
     const [invitation, setInvitation] = useState<Invitation | null>(null)
     const [form, setForm] = useState({ name: '', password: '', repeat: '' })
+    // start: the invitation (and the choice of the eID), eid: the PIN, details: name and password
+    const [step, setStep] = useState<'start' | 'eid' | 'details'>('details')
+    // The read eID: the name on the card and the verified eID (encrypted by the server) for the accept
+    const [card, setCard] = useState<{ name: string; eid: string } | null>(null)
     const [error, setError] = useState('')
     const [busy, setBusy] = useState(false)
     const [done, setDone] = useState(false)
     const [accepted, setAccepted] = useState<AcceptedApp[]>([])
     const started = useRef(false)
+    const challenge = useRef('')
 
     useEffect(() => {
         if (started.current) return
@@ -774,12 +844,34 @@ export function AcceptInvitation({ token }: { token: string }) {
         api('invitation?token=' + encodeURIComponent(token))
             .then(result => {
                 if (result.status !== 200) return setError(result.message)
-                setInvitation(result.body as unknown as Invitation)
+                const found = result.body as unknown as Invitation
+                setInvitation(found)
+                if (!found.accountExists && found.eid) setStep('start')
             })
             .catch(() => setError(t('offline')))
         // once per token
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token])
+
+    /** eID, step 1: a challenge of the login server; its nonce goes to the card. */
+    async function eidNonce(): Promise<string | { error: string }> {
+        const result = await api('eid/challenge', {})
+        if (result.status !== 200) return { error: result.message || t('offline') }
+        challenge.current = String(result.body.challenge)
+        return String(result.body.nonce)
+    }
+
+    /** eID, step 2: the server checks the token (and that no other account has this eID) and answers the name. */
+    async function eidSigned(signed: EidToken): Promise<string | null> {
+        const result = await api('invitation/eid', { invitation: token, challenge: challenge.current, token: signed })
+        if (result.status !== 200) return result.message || t('eidFailed')
+        const name = String(result.body.name ?? '')
+        setCard({ name, eid: String(result.body.eid) })
+        setForm(f => ({ ...f, name: name || f.name }))
+        setError('')
+        setStep('details')
+        return null
+    }
 
     async function accept() {
         if (!invitation?.accountExists && form.password !== form.repeat) return setError(t('passwordMismatch'))
@@ -788,12 +880,19 @@ export function AcceptInvitation({ token }: { token: string }) {
         try {
             const result = await api(
                 'invitation/accept',
-                invitation?.accountExists ? { token } : { token, name: form.name.trim(), password: form.password }
+                invitation?.accountExists
+                    ? { token }
+                    : { token, name: form.name.trim(), password: form.password, ...(card ? { eid: card.eid } : {}) }
             )
             if (result.status === 200) {
                 // The apps of the invitation that can be opened right away
                 setAccepted(((result.body as { apps?: AcceptedApp[] }).apps ?? []).filter(app => app.url))
                 setDone(true)
+            } else if (result.body.error === 'oidc.EID_EXPIRED' || result.body.error === 'oidc.EID_REQUIRED') {
+                // The read eID expired (or is needed): read the card again
+                setCard(null)
+                setStep('start')
+                setError(v('eidAgain'))
             } else setError(result.message)
         } catch {
             setError(t('offline'))
@@ -850,6 +949,7 @@ export function AcceptInvitation({ token }: { token: string }) {
                 </Done>
             </AuthLayout>
         )
+    const withEid = !invitation.accountExists && invitation.eid === true
     const inviteText = t('inviteText', {
         inviter: invitation.inviterName,
         tenant: invitation.tenantName,
@@ -857,68 +957,127 @@ export function AcceptInvitation({ token }: { token: string }) {
     })
     return (
         <AuthLayout>
-            <AuthHeading title={t('inviteTitle')} text={inviteText} />
+            {withEid && <StepBar labels={[v('stepIdentity'), v('stepAccount')]} index={step === 'details' ? 1 : 0} />}
+            <AuthHeading
+                title={step === 'eid' ? v('eidTitle') : t('inviteTitle')}
+                text={step === 'eid' ? v('eidText') : inviteText}
+            />
 
-            <InvitationApps apps={invitation.apps ?? []} />
+            {step !== 'eid' && <InvitationApps apps={invitation.apps ?? []} />}
 
-            <form
-                className='fade-in'
-                style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
-                onSubmit={e => {
-                    e.preventDefault()
-                    void accept()
-                }}
-            >
-                <div className='card card-pad' style={{ background: 'var(--surface-2)', fontSize: 13.5 }}>
-                    {invitation.accountExists
-                        ? t('inviteExisting', { email: invitation.email, tenant: invitation.tenantName })
-                        : t('inviteNewAccount', { email: invitation.email })}
+            {step === 'start' && (
+                <div className='fade-in' style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div className='card card-pad' style={{ background: 'var(--surface-2)', fontSize: 13.5 }}>
+                        {t('inviteNewAccount', { email: invitation.email })}
+                        {invitation.eidRequired && <p style={{ marginTop: 8 }}>{v('eidRequired')}</p>}
+                    </div>
+                    <ErrorNote>{error}</ErrorNote>
+                    <Btn
+                        variant='primary'
+                        size='lg'
+                        className='btn-block'
+                        icon='eid'
+                        onClick={() => {
+                            setError('')
+                            setStep('eid')
+                        }}
+                    >
+                        {v('withEid')}
+                    </Btn>
+                    {!invitation.eidRequired && (
+                        <Btn variant='ghost' size='sm' onClick={() => setStep('details')}>
+                            {v('skipEid')}
+                        </Btn>
+                    )}
                 </div>
-                {!invitation.accountExists && (
-                    <>
-                        <Field label={t('name')}>
-                            <Input
-                                icon='user'
-                                required
-                                minLength={2}
-                                maxLength={100}
-                                autoComplete='name'
-                                value={form.name}
-                                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                                autoFocus
-                            />
-                        </Field>
-                        <Field label={t('password')} hint={t('passwordHint')}>
-                            <Input
-                                icon='lock'
-                                type='password'
-                                required
-                                minLength={PASSWORD_MIN}
-                                maxLength={128}
-                                autoComplete='new-password'
-                                value={form.password}
-                                onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                            />
-                        </Field>
-                        <Field label={t('passwordRepeat')}>
-                            <Input
-                                icon='lock'
-                                type='password'
-                                required
-                                minLength={PASSWORD_MIN}
-                                maxLength={128}
-                                autoComplete='new-password'
-                                value={form.repeat}
-                                onChange={e => setForm(f => ({ ...f, repeat: e.target.value }))}
-                            />
-                        </Field>
-                    </>
-                )}
-                <ErrorNote>{error}</ErrorNote>
-                <Btn type='submit' variant='primary' size='lg' className='btn-block' icon='check' disabled={busy}>
-                    {busy ? t('busy') : t('inviteAccept')}
-                </Btn>
-            </form>
+            )}
+
+            {step === 'eid' && (
+                <div className='fade-in' style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <EidBridge>
+                        <EidPin submitLabel={p('readCard')} getNonce={eidNonce} onToken={eidSigned} />
+                    </EidBridge>
+                    <Btn variant='ghost' size='sm' icon='arrowLeft' onClick={() => setStep('start')}>
+                        {p('back')}
+                    </Btn>
+                </div>
+            )}
+
+            {step === 'details' && (
+                <form
+                    className='fade-in'
+                    style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+                    onSubmit={e => {
+                        e.preventDefault()
+                        void accept()
+                    }}
+                >
+                    {card ? (
+                        <div className='card card-pad' style={{ background: 'var(--surface-2)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div className='t-eyebrow'>{p('identity')}</div>
+                                <Badge tone='accent' icon='shieldCheck'>
+                                    {p('verified')}
+                                </Badge>
+                            </div>
+                            <p style={{ fontSize: 13.5, marginTop: 8 }}>
+                                {t('inviteNewAccount', { email: invitation.email })}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className='card card-pad' style={{ background: 'var(--surface-2)', fontSize: 13.5 }}>
+                            {invitation.accountExists
+                                ? t('inviteExisting', { email: invitation.email, tenant: invitation.tenantName })
+                                : t('inviteNewAccount', { email: invitation.email })}
+                        </div>
+                    )}
+                    {!invitation.accountExists && (
+                        <>
+                            <Field label={t('name')} hint={card ? v('nameFromCard') : null}>
+                                <Input
+                                    icon='user'
+                                    required
+                                    minLength={2}
+                                    maxLength={100}
+                                    autoComplete='name'
+                                    value={form.name}
+                                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                                    autoFocus={!card}
+                                />
+                            </Field>
+                            <Field label={t('password')} hint={t('passwordHint')}>
+                                <Input
+                                    icon='lock'
+                                    type='password'
+                                    required
+                                    minLength={PASSWORD_MIN}
+                                    maxLength={128}
+                                    autoComplete='new-password'
+                                    value={form.password}
+                                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                                    autoFocus={Boolean(card)}
+                                />
+                            </Field>
+                            <Field label={t('passwordRepeat')}>
+                                <Input
+                                    icon='lock'
+                                    type='password'
+                                    required
+                                    minLength={PASSWORD_MIN}
+                                    maxLength={128}
+                                    autoComplete='new-password'
+                                    value={form.repeat}
+                                    onChange={e => setForm(f => ({ ...f, repeat: e.target.value }))}
+                                />
+                            </Field>
+                        </>
+                    )}
+                    <ErrorNote>{error}</ErrorNote>
+                    <Btn type='submit' variant='primary' size='lg' className='btn-block' icon='check' disabled={busy}>
+                        {busy ? t('busy') : t('inviteAccept')}
+                    </Btn>
+                </form>
+            )}
         </AuthLayout>
     )
 }

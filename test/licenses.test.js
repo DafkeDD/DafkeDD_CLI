@@ -162,24 +162,37 @@ test('every billing route is documented, and the README explains licences, Molli
 
 // ---------------------------------------------------------------- frontend
 
-test('the frontend has /licenses, the return page and the admin of products and codes', () => {
+test('the frontend: the marketplace, the purchase wizard, the return page and the admin of products and codes', () => {
     for (const rel of [
-        'src/app/[locale]/licenses/page.tsx',
-        'src/app/[locale]/licenses/return/page.tsx',
-        'src/components/licenses.tsx',
-        'src/components/billing-admin.tsx'
+        'src/app/[locale]/(portal)/marketplace/page.tsx',
+        'src/app/[locale]/(portal)/wizard/page.tsx',
+        'src/app/[locale]/(portal)/licenses/return/page.tsx',
+        'src/components/pasport/customer/marketplace.tsx',
+        'src/components/pasport/customer/wizard.tsx',
+        'src/components/pasport/admin/catalog.tsx'
     ])
         assert.ok(frontend[rel], rel)
-    assert.match(frontend['src/app/[locale]/admin/catalog/page.tsx'], /<BillingAdmin \/>/)
+    // Back from the checkout: the wizard shows the result
+    assert.match(frontend['src/app/[locale]/(portal)/licenses/return/page.tsx'], /\/wizard\?subscription=/)
+    assert.match(frontend['src/app/[locale]/admin/(panel)/catalog/page.tsx'], /<AppCatalog \/>/)
+    assert.match(frontend['src/app/[locale]/admin/(panel)/codes/page.tsx'], /<DiscountCodes \/>/)
+    const catalog = frontend['src/components/pasport/admin/catalog.tsx']
+    assert.match(catalog, /useData<Product\[\]>\('admin\/products'\)/)
+    assert.match(catalog, /useData<Discount\[\]>\('admin\/discounts'\)/)
     // The own licences, and asking a demo of one product
+    const proxy = frontend['src/app/api/backend/[...path]/route.ts']
+    const allowed = new RegExp(/^const ALLOWED =\s+\/(.+)\/$/m.exec(proxy)[1])
+    for (const path of ['me/licenses', 'me/licenses/planner/trial']) assert.ok(allowed.test(path), path)
     assert.match(
-        frontend['src/app/api/backend/[...path]/route.ts'],
-        /me\\\/licenses\(\?:\\\/\[a-z0-9-\]\+\\\/trial\)\?\$/
+        frontend['src/components/pasport/customer/marketplace.tsx'],
+        /me\/licenses\/\$\{encodeURIComponent\(app\.code\)\}\/trial/
     )
-    assert.match(frontend['src/app/[locale]/profile/page.tsx'], /<AskDemo code=\{license\.code\} \/>/)
+    // A linked app: its profile lists the own licences, with "Ask a demo"
+    const linked = oidcFrontendFiles({ linked: true, appName: 'Planner' })
+    assert.match(linked['src/app/[locale]/profile/page.tsx'], /<AskDemo code=\{license\.code\} \/>/)
     for (const locale of ['en', 'nl', 'fr', 'de']) assert.ok(LICENSE_MESSAGES[locale].askDemo, locale)
     // The status after the checkout comes from the API, never from the URL
-    assert.match(frontend['src/components/licenses.tsx'], /\/sync`/)
+    assert.match(frontend['src/components/pasport/customer/wizard.tsx'], /\/sync`/)
 })
 
 test('the licence texts are in the messages of every language, and the frontend README lists the pages', () => {

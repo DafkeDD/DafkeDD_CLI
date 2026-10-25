@@ -1,4 +1,7 @@
-/** The users table: the name of the database followed by "users". */
+/**
+ * The users table. Fixed, not derived from DATABASE_NAME: the migrations, the migration lock and
+ * scripts/oidc-user.mjs all use this exact name.
+ */
 export const USERS_TABLE = '__USERS_TABLE__'
 
 /**
@@ -22,6 +25,10 @@ export const TENANT_TABLES = [
     'license_assignments',
     'billing_payments',
     'audit_events',
-    'app_role_assignments',
-    'notifications'
+    'tickets',
+    'ticket_messages',
+    'ticket_attachments',
+    'invoices',
+    'notifications',
+    'app_role_assignments'
 ] as const

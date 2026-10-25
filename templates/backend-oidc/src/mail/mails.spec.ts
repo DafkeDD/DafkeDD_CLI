@@ -8,7 +8,7 @@ const t: MailTranslate = (key, args) =>
 
 describe('account emails', () => {
     it('have a subject, the link in the text and in the HTML, and the right texts per kind', () => {
-        for (const kind of ['verify', 'exists', 'reset', 'invite'] as const) {
+        for (const kind of ['verify', 'exists', 'reset', 'invite', 'confirm'] as const) {
             const mail = buildMail(t, kind, 'ada@example.com', {
                 name: 'Ada',
                 app: 'Shop',

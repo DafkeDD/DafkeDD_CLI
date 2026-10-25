@@ -99,7 +99,7 @@ test('the frontend: the consent step, "Applications with access" and the back-ch
     assert.match(login, /submit\('\/consent', \{ csrf: state\.csrf, decision: 'allow' \}\)/)
     assert.match(login, /submit\('\/consent', \{ csrf: state\.csrf, decision: 'deny' \}\)/)
     assert.match(frontend['src/components/consents.tsx'], /'DELETE'/)
-    assert.match(frontend['src/app/[locale]/security/page.tsx'], /<ConsentsSecurity \/>/)
+    assert.match(frontend['src/app/[locale]/(portal)/security/page.tsx'], /<ConsentsSecurity \/>/)
     const route = frontend['src/app/api/auth/backchannel-logout/route.ts']
     assert.match(route, /verifyLogoutToken/)
     assert.match(route, /export async function POST/)

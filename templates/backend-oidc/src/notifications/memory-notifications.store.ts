@@ -4,6 +4,7 @@ import type { NewNotification, NotificationsStore, StoredNotification } from './
 /** In-memory notifications with the same behaviour as PgNotificationsStore. Used by the tests; never in production. */
 export class MemoryNotificationsStore implements NotificationsStore {
     notifications: StoredNotification[] = []
+    reads: { userId: string; key: string }[] = []
     private last = 0
 
     async add(notifications: NewNotification[]) {
@@ -11,6 +12,7 @@ export class MemoryNotificationsStore implements NotificationsStore {
             this.notifications.push({
                 ...item,
                 params: { ...item.params },
+                nav: { ...item.nav },
                 id: randomUUID(),
                 // Strictly increasing, so the order is stable within one millisecond
                 createdAt: new Date((this.last = Math.max(Date.now(), this.last + 1))),
@@ -41,9 +43,14 @@ export class MemoryNotificationsStore implements NotificationsStore {
         for (const item of this.notifications) if (this.inScope(item, userId, scopes)) item.readAt ??= new Date()
     }
 
-    async purge(before: Date) {
-        const count = this.notifications.length
-        this.notifications = this.notifications.filter(item => item.createdAt >= before)
-        return count - this.notifications.length
+    async readKeys(userId: string, keys: string[]) {
+        return new Set(
+            this.reads.filter(item => item.userId === userId && keys.includes(item.key)).map(item => item.key)
+        )
+    }
+
+    async addReads(userId: string, keys: string[]) {
+        for (const key of keys)
+            if (!this.reads.some(item => item.userId === userId && item.key === key)) this.reads.push({ userId, key })
     }
 }

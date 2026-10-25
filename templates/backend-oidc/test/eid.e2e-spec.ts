@@ -9,8 +9,6 @@ import { BILLING_STORE } from '../src/billing/store/billing.store.js'
 import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js'
 import { AUDIT_STORE } from '../src/audit/audit.store.js'
 import { MemoryAuditStore } from '../src/audit/memory-audit.store.js'
-import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
-import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
 import { DatabaseService } from '../src/database/database.service.js'
 import type { Mail } from '../src/mail/mail.service.js'
 import { MailService } from '../src/mail/mail.service.js'
@@ -21,12 +19,18 @@ import { hashPassword } from '../src/oidc/password.js'
 import { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js'
 import { OIDC_STORE } from '../src/oidc/store/oidc.store.js'
 import { configureApp } from '../src/setup.js'
+import { MemoryNotificationsStore } from '../src/notifications/memory-notifications.store.js'
+import { NOTIFICATIONS_STORE } from '../src/notifications/notifications.store.js'
+import { INVOICES_STORE } from '../src/billing/invoices/invoices.store.js'
+import { MemoryInvoicesStore } from '../src/billing/invoices/memory-invoices.store.js'
 
 process.env.OIDC_MASTER_KEY ??= randomBytes(32).toString('hex')
 process.env.OIDC_LOGIN_RATE_LIMIT = '1000'
 process.env.OIDC_LOGIN_UI_URL = ''
 process.env.OIDC_REGISTRATION = 'open'
 process.env.OIDC_MFA = 'optional'
+// Off for most tests here; the tests of OIDC_EID_REQUIRED turn it on
+process.env.OIDC_EID_REQUIRED = 'off'
 // The virtual card of the DafkeDD eID bridge (npx dafke-eid --mock) is signed by a test PKI: only with OIDC_EID=test
 process.env.OIDC_EID = 'test'
 process.env.APP_URL = 'http://localhost:3000'
@@ -45,7 +49,7 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
     const store = new MemoryOidcStore()
     const outbox: Mail[] = []
     const http = () => request(app.getHttpServer())
-    const ids = { acme: '', alice: '', bob: '' }
+    const ids = { acme: '', alice: '', bob: '', carol: '' }
 
     beforeAll(async () => {
         const passwordHash = await hashPassword(PASSWORD)
@@ -59,14 +63,24 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
         const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
             .overrideProvider(DatabaseService)
             .useValue({ ping: vi.fn().mockResolvedValue(true), query: vi.fn().mockResolvedValue({ rows: [] }) })
+            .overrideProvider(NOTIFICATIONS_STORE)
+            .useValue(new MemoryNotificationsStore())
+            .overrideProvider(INVOICES_STORE)
+            .useValue(
+                new MemoryInvoicesStore(async () => ({
+                    tenantName: 'Test',
+                    company: null,
+                    vat: null,
+                    billingAddress: null,
+                    billingEmail: null
+                }))
+            )
             .overrideProvider(OIDC_STORE)
             .useValue(store)
             .overrideProvider(BILLING_STORE)
             .useValue(new MemoryBillingStore())
             .overrideProvider(AUDIT_STORE)
             .useValue(new MemoryAuditStore())
-            .overrideProvider(NOTIFICATIONS_STORE)
-            .useValue(new MemoryNotificationsStore())
             .overrideProvider(MailService)
             .useValue({
                 send: async (mail: Mail) => {
@@ -177,8 +191,8 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
     }
 
     /** An access token through the password login (two-step verification is optional in these tests). */
-    async function passwordToken(email: string) {
-        const login = await startLogin()
+    async function passwordToken(email: string, extra: Record<string, string> = {}) {
+        const login = await startLogin(extra)
         const response = await http()
             .post(login.base + '/login')
             .set('Cookie', login.cookie)
@@ -199,7 +213,11 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
         const discovery = await http().get('/oidc/.well-known/openid-configuration').expect(200)
         expect(discovery.body.acr_values_supported).not.toContain('loa4')
         expect((await startLogin()).details).toMatchObject({ eid: true, registration: true })
-        expect((await http().get('/oidc/account/registration').expect(200)).body).toEqual({ password: true, eid: true })
+        expect((await http().get('/oidc/account/registration').expect(200)).body).toEqual({
+            password: true,
+            eid: true,
+            eidRequired: false
+        })
     })
 
     describe('registration', () => {
@@ -449,7 +467,8 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
                 .expect(404)
             expect((await http().get('/oidc/account/registration').expect(200)).body).toEqual({
                 password: true,
-                eid: false
+                eid: false,
+                eidRequired: false
             })
         } finally {
             process.env.OIDC_EID = 'test'
@@ -461,7 +480,8 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
         try {
             expect((await http().get('/oidc/account/registration').expect(200)).body).toEqual({
                 password: false,
-                eid: true
+                eid: true,
+                eidRequired: false
             })
             const response = await http()
                 .post('/oidc/account/register')
@@ -471,5 +491,209 @@ describe('Login and registration with the Belgian eID (e2e)', () => {
         } finally {
             process.env.OIDC_REGISTRATION = 'open'
         }
+    })
+
+    describe('OIDC_EID_REQUIRED=on: every account must have its eID', () => {
+        let superadmin = ''
+
+        beforeAll(async () => {
+            process.env.OIDC_EID_REQUIRED = 'on'
+            const carol = store.addUser({
+                email: 'carol@example.com',
+                name: 'Carol',
+                passwordHash: await hashPassword(PASSWORD),
+                isSuperadmin: true
+            })
+            ids.carol = carol.id
+            // The virtual card is free at this point (unlinked above)
+            for (const user of store.users) await store.unlinkIdentifier(user.id, 'eid')
+        })
+
+        afterAll(() => {
+            process.env.OIDC_EID_REQUIRED = 'off'
+        })
+
+        /** Invites `email` to Acme (by the superadmin: it needs no eID) and returns the token of the link. */
+        async function invite(email: string, tenantId = ids.acme) {
+            superadmin ||= await passwordToken('carol@example.com', { tenant_hint: ids.acme })
+            await http()
+                .post(`/admin/tenants/${tenantId}/invitations`)
+                .set(bearer(superadmin))
+                .send({ email, role: 'user' })
+                .expect(202)
+            const mail = outbox.filter(item => item.to === email).at(-1)
+            const link = /(http:\/\/localhost:3000\/invite\?token=[^\s]+)/.exec(mail?.text ?? '')?.[1] ?? ''
+            return new URL(link).searchParams.get('token') ?? ''
+        }
+
+        /** Reads the virtual card for an invitation (POST invitation/eid). */
+        async function invitationEid(invitation: string) {
+            const { challenge, nonce } = await registerChallenge()
+            return http()
+                .post('/oidc/account/invitation/eid')
+                .send({ invitation, challenge, token: await sign(nonce) })
+        }
+
+        it('registers only with the eID; with OIDC_EID_REQUIRED=off a password works again', async () => {
+            expect((await http().get('/oidc/account/registration').expect(200)).body).toEqual({
+                password: false,
+                eid: true,
+                eidRequired: true
+            })
+            const body = { name: 'Eve', email: 'eve@example.com', password: PASSWORD, organisation: 'Eve BV' }
+            const refused = await http()
+                .post('/oidc/account/register')
+                .set('Accept-Language', 'nl')
+                .send(body)
+                .expect(403)
+            expect(refused.body.error).toBe('oidc.EID_REQUIRED')
+            expect(refused.body.message).toBe('Je moet je aanmelden met je eID: lees je identiteitskaart in.')
+            expect(await store.findUserByEmail('eve@example.com')).toBeNull()
+
+            process.env.OIDC_EID_REQUIRED = 'off'
+            try {
+                await http().post('/oidc/account/register').send(body).expect(202)
+                expect(await store.findUserByEmail('eve@example.com')).not.toBeNull()
+            } finally {
+                process.env.OIDC_EID_REQUIRED = 'on'
+            }
+        })
+
+        it('refuses the API to an account without an eID, except the routes to link it', async () => {
+            const token = await passwordToken('bob@example.com')
+            for (const path of ['/me/licenses', '/tenants/current/catalog']) {
+                const response = await http().get(path).set(bearer(token)).expect(403)
+                expect(response.body.error).toBe('oidc.EID_REQUIRED')
+            }
+            const patch = await http().patch('/me/profile').set(bearer(token)).send({ phone: '+32 470 00 00 00' })
+            expect(patch.status).toBe(403)
+            expect(patch.body.error).toBe('oidc.EID_REQUIRED')
+
+            expect((await http().get('/me/eid').set(bearer(token)).expect(200)).body).toMatchObject({
+                enabled: true,
+                linked: false,
+                required: true
+            })
+            expect((await http().get('/me/profile').set(bearer(token)).expect(200)).body).toMatchObject({
+                email: 'bob@example.com',
+                eid: { linked: false }
+            })
+            await http().post('/me/heartbeat').set(bearer(token)).expect(204)
+            await http().get('/me/sessions').set(bearer(token)).expect(200)
+            await http().post('/me/eid/challenge').set(bearer(token)).expect(200)
+        })
+
+        it('needs no eID for a superadmin', async () => {
+            superadmin ||= await passwordToken('carol@example.com', { tenant_hint: ids.acme })
+            await http().get('/tenants/current/catalog').set(bearer(superadmin)).expect(200)
+            await http().get('/me/licenses').set(bearer(superadmin)).expect(200)
+            expect((await http().get('/me/eid').set(bearer(superadmin)).expect(200)).body).toMatchObject({
+                linked: false,
+                required: false
+            })
+        })
+
+        it('lets the account through once the eID is linked; it cannot be unlinked while required', async () => {
+            const token = await passwordToken('bob@example.com')
+            const { challenge, nonce } = (await http().post('/me/eid/challenge').set(bearer(token)).expect(200)).body
+            await http()
+                .post('/me/eid')
+                .set(bearer(token))
+                .send({ challenge, token: await sign(nonce) })
+                .expect(200)
+            await http().get('/me/licenses').set(bearer(token)).expect(200)
+            await http().get('/tenants/current/catalog').set(bearer(token)).expect(200)
+            const unlink = await http().delete('/me/eid').set(bearer(token)).expect(403)
+            expect(unlink.body.error).toBe('oidc.EID_REQUIRED')
+            expect(await store.findIdentifier(ids.bob, 'eid')).not.toBeNull()
+        })
+
+        it('lists for superadmins whether each member has an eID', async () => {
+            superadmin ||= await passwordToken('carol@example.com', { tenant_hint: ids.acme })
+            const members = (await http().get(`/admin/tenants/${ids.acme}/members`).set(bearer(superadmin)).expect(200))
+                .body as { userId: string; eidLinked: boolean }[]
+            expect(members.find(member => member.userId === ids.bob)?.eidLinked).toBe(true)
+            expect(members.find(member => member.userId === ids.alice)?.eidLinked).toBe(false)
+        })
+
+        describe('accepting an invitation', () => {
+            it('a new account reads the eID first: refused without it and for an eID of another account', async () => {
+                const token = await invite('ivy@example.com')
+                expect((await http().get('/oidc/account/invitation').query({ token }).expect(200)).body).toMatchObject({
+                    accountExists: false,
+                    eid: true,
+                    eidRequired: true
+                })
+                const without = await http()
+                    .post('/oidc/account/invitation/accept')
+                    .send({ token, name: 'Ivy', password: PASSWORD })
+                    .expect(403)
+                expect(without.body.error).toBe('oidc.EID_REQUIRED')
+                // The virtual card belongs to Bob now
+                const taken = await invitationEid(token)
+                expect(taken.status).toBe(409)
+                expect(taken.body.error).toBe('oidc.EID_ALREADY_LINKED')
+                expect(await store.findUserByEmail('ivy@example.com')).toBeNull()
+            })
+
+            it('creates the account with the eID linked and the password chosen after it', async () => {
+                await store.unlinkIdentifier(ids.bob, 'eid')
+                const token = await invite('ivy@example.com')
+                const other = await invite('joe@example.com')
+                const read = await invitationEid(token)
+                expect(read.status).toBe(200)
+                expect(read.body).toMatchObject({ name: NAME, lastName: SAMPLE_IDENTITY.lastName })
+                const proof = read.body.eid as string
+                // The read eID of one invitation is not valid for another
+                const misused = await http()
+                    .post('/oidc/account/invitation/accept')
+                    .send({ token: other, name: 'Joe', password: PASSWORD, eid: proof })
+                    .expect(400)
+                expect(misused.body.error).toBe('oidc.EID_EXPIRED')
+                // Read while the card was still free: refused at the end when Ivy took it meanwhile
+                const joeProof = (await invitationEid(other).then(r => r.body as { eid: string })).eid
+
+                // The password rules stay
+                await http()
+                    .post('/oidc/account/invitation/accept')
+                    .send({ token, name: NAME, password: 'short', eid: proof })
+                    .expect(400)
+                const accepted = await http()
+                    .post('/oidc/account/invitation/accept')
+                    .send({ token, name: NAME, password: PASSWORD, eid: proof })
+                    .expect(200)
+                expect(accepted.body).toMatchObject({ status: 'accepted', tenantName: 'Acme', accountExists: false })
+                const ivy = await store.findUserByEmail('ivy@example.com')
+                expect(ivy).toMatchObject({ name: NAME, emailVerified: true })
+                expect(await store.findIdentifier(ivy?.id ?? '', 'eid')).not.toBeNull()
+                expect(await store.findProfile(ivy?.id ?? '')).toMatchObject({
+                    lastName: SAMPLE_IDENTITY.lastName,
+                    rrnEncrypted: expect.any(String)
+                })
+                // Logs in with the password and passes the API
+                const access = await passwordToken('ivy@example.com')
+                await http().get('/me/licenses').set(bearer(access)).expect(200)
+
+                const late = await http()
+                    .post('/oidc/account/invitation/accept')
+                    .send({ token: other, name: 'Joe', password: PASSWORD, eid: joeProof })
+                    .expect(409)
+                expect(late.body.error).toBe('oidc.EID_ALREADY_LINKED')
+                expect(await store.findUserByEmail('joe@example.com')).toBeNull()
+            })
+
+            it('an existing account without an eID joins without it (it links it after logging in)', async () => {
+                const beta = store.addTenant('beta', 'Beta')
+                const token = await invite('alice@example.com', beta.id)
+                expect((await http().get('/oidc/account/invitation').query({ token }).expect(200)).body).toMatchObject({
+                    accountExists: true
+                })
+                await http().post('/oidc/account/invitation/accept').send({ token }).expect(200)
+                expect(await store.findMemberRole(beta.id, ids.alice)).toBe('user')
+                const access = await passwordToken('alice@example.com', { tenant_hint: beta.id })
+                const refused = await http().get('/me/licenses').set(bearer(access)).expect(403)
+                expect(refused.body.error).toBe('oidc.EID_REQUIRED')
+            })
+        })
     })
 })

@@ -21,8 +21,16 @@ export const APP_URL = 'http://localhost:3000'
 export const SESSION_COOKIE = 'oidc_session'
 
 export const PACKAGES = {
-    dependencies: ['cookie-parser@latest', 'nodemailer@latest', 'qrcode@latest', EID_PACKAGE],
-    devDependencies: ['@types/cookie-parser@latest', '@types/nodemailer@latest', '@types/qrcode@latest']
+    // express: the larger JSON body of the image uploads of the tickets (src/setup.ts)
+    dependencies: ['cookie-parser@latest', 'nodemailer@latest', 'qrcode@latest', 'express@latest', EID_PACKAGE],
+    // node-forge only makes the certificates of the tests: the vault reads PKCS#12 with node:crypto (src/vault/pkcs12.ts)
+    devDependencies: [
+        '@types/cookie-parser@latest',
+        '@types/nodemailer@latest',
+        '@types/qrcode@latest',
+        'node-forge@latest',
+        '@types/node-forge@latest'
+    ]
 }
 
 /** Mailpit catches every mail during development: SMTP on port 1025, the mailbox on http://localhost:8025. */
@@ -63,7 +71,14 @@ export const BILLING_MESSAGES = {
         FAKE_TITLE: 'Test payment',
         FAKE_TEXT: 'This is not a real payment (PAYMENTS=fake, for development). Choose how it ends.',
         FAKE_PAY: 'Pay',
-        FAKE_CANCEL: 'Cancel'
+        FAKE_CANCEL: 'Cancel',
+        PRODUCT_IN_USE:
+            'This app still has a running subscription at an organisation. Hide it instead, or wait until the subscription ends.',
+        DISCOUNT_EXPIRED: 'This discount code has expired.',
+        DISCOUNT_USED_UP: 'This discount code has been used up: it cannot be used any more.',
+        DISCOUNT_ALREADY_USED: 'Your organisation has used this discount code already.',
+        DEMO_DISABLED: 'There is no demo of this app.',
+        TRIAL_NOT_FOUND: 'This member has no running trial of this product.'
     },
     nl: {
         PRODUCT_NOT_FOUND: 'Dit product werd niet gevonden.',
@@ -91,7 +106,14 @@ export const BILLING_MESSAGES = {
         FAKE_TITLE: 'Testbetaling',
         FAKE_TEXT: 'Dit is geen echte betaling (PAYMENTS=fake, voor ontwikkeling). Kies hoe ze afloopt.',
         FAKE_PAY: 'Betalen',
-        FAKE_CANCEL: 'Annuleren'
+        FAKE_CANCEL: 'Annuleren',
+        PRODUCT_IN_USE:
+            'Deze app heeft nog een lopend abonnement bij een organisatie. Zet ze op onzichtbaar of wacht tot het abonnement stopt.',
+        DISCOUNT_EXPIRED: 'Deze kortingscode is verlopen.',
+        DISCOUNT_USED_UP: 'Deze kortingscode is opgebruikt: ze kan niet meer gebruikt worden.',
+        DISCOUNT_ALREADY_USED: 'Je organisatie heeft deze kortingscode al gebruikt.',
+        DEMO_DISABLED: 'Voor deze app is er geen demo beschikbaar.',
+        TRIAL_NOT_FOUND: 'Dit lid heeft geen lopende proefperiode voor dit product.'
     },
     fr: {
         PRODUCT_NOT_FOUND: 'Ce produit est introuvable.',
@@ -123,7 +145,14 @@ export const BILLING_MESSAGES = {
         FAKE_TEXT:
             "Ce n'est pas un vrai paiement (PAYMENTS=fake, pour le développement). Choisissez comment il se termine.",
         FAKE_PAY: 'Payer',
-        FAKE_CANCEL: 'Annuler'
+        FAKE_CANCEL: 'Annuler',
+        PRODUCT_IN_USE:
+            "Cette application a encore un abonnement en cours dans une organisation. Masquez-la ou attendez la fin de l'abonnement.",
+        DISCOUNT_EXPIRED: 'Ce code de réduction a expiré.',
+        DISCOUNT_USED_UP: 'Ce code de réduction est épuisé : il ne peut plus être utilisé.',
+        DISCOUNT_ALREADY_USED: 'Votre organisation a déjà utilisé ce code de réduction.',
+        DEMO_DISABLED: "Aucune démo n'est disponible pour cette application.",
+        TRIAL_NOT_FOUND: "Ce membre n'a pas de période d'essai en cours pour ce produit."
     },
     de: {
         PRODUCT_NOT_FOUND: 'Dieses Produkt wurde nicht gefunden.',
@@ -152,7 +181,14 @@ export const BILLING_MESSAGES = {
         FAKE_TITLE: 'Testzahlung',
         FAKE_TEXT: 'Dies ist keine echte Zahlung (PAYMENTS=fake, für die Entwicklung). Wähle, wie sie endet.',
         FAKE_PAY: 'Bezahlen',
-        FAKE_CANCEL: 'Abbrechen'
+        FAKE_CANCEL: 'Abbrechen',
+        PRODUCT_IN_USE:
+            'Diese App hat noch ein laufendes Abonnement bei einer Organisation. Blende sie aus oder warte, bis das Abonnement endet.',
+        DISCOUNT_EXPIRED: 'Dieser Rabattcode ist abgelaufen.',
+        DISCOUNT_USED_UP: 'Dieser Rabattcode ist aufgebraucht: Er kann nicht mehr verwendet werden.',
+        DISCOUNT_ALREADY_USED: 'Deine Organisation hat diesen Rabattcode bereits verwendet.',
+        DEMO_DISABLED: 'Für diese App ist keine Demo verfügbar.',
+        TRIAL_NOT_FOUND: 'Dieses Mitglied hat keine laufende Testphase für dieses Produkt.'
     }
 }
 
@@ -175,6 +211,11 @@ export const MAIL_MESSAGES = {
         RESET_BUTTON: 'Choose a new password',
         RESET_NOTE:
             'The link works for 1 hour and only once. Did you not ask for this? Then ignore this email: your password stays the same.',
+        CONFIRM_SUBJECT: 'Confirm your new email address for {app}',
+        CONFIRM_TEXT: 'You asked to use this email address for your account. Confirm it to make the change.',
+        CONFIRM_BUTTON: 'Confirm new email address',
+        CONFIRM_NOTE:
+            'The link works for 24 hours. Until then your current address stays in use. Did you not ask for this? Then you can ignore this email.',
         INVITE_SUBJECT: '{inviter} invites you to {tenant}',
         INVITE_TEXT: '{inviter} invites you to join {tenant} on {app} as {role}.',
         INVITE_BUTTON: 'Accept the invitation',
@@ -200,6 +241,12 @@ export const MAIL_MESSAGES = {
         RESET_BUTTON: 'Nieuw wachtwoord kiezen',
         RESET_NOTE:
             'De link werkt 1 uur en maar één keer. Heb je dit niet gevraagd? Negeer dan deze e-mail: je wachtwoord blijft hetzelfde.',
+        CONFIRM_SUBJECT: 'Bevestig je nieuwe e-mailadres voor {app}',
+        CONFIRM_TEXT:
+            'Je vroeg om dit e-mailadres voor je account te gebruiken. Bevestig het om de wijziging door te voeren.',
+        CONFIRM_BUTTON: 'Nieuw e-mailadres bevestigen',
+        CONFIRM_NOTE:
+            'De link werkt 24 uur. Tot dan blijft je huidige adres in gebruik. Vroeg je dit niet? Dan mag je deze e-mail negeren.',
         INVITE_SUBJECT: '{inviter} nodigt je uit voor {tenant}',
         INVITE_TEXT: '{inviter} nodigt je uit om lid te worden van {tenant} op {app} als {role}.',
         INVITE_BUTTON: 'Uitnodiging aanvaarden',
@@ -226,6 +273,12 @@ export const MAIL_MESSAGES = {
         RESET_BUTTON: 'Choisir un nouveau mot de passe',
         RESET_NOTE:
             "Le lien fonctionne pendant 1 heure et une seule fois. Vous n'avez rien demandé ? Ignorez cet e-mail : votre mot de passe reste le même.",
+        CONFIRM_SUBJECT: 'Confirmez votre nouvelle adresse e-mail pour {app}',
+        CONFIRM_TEXT:
+            'Vous avez demandé à utiliser cette adresse e-mail pour votre compte. Confirmez-la pour effectuer le changement.',
+        CONFIRM_BUTTON: 'Confirmer la nouvelle adresse e-mail',
+        CONFIRM_NOTE:
+            "Le lien fonctionne pendant 24 heures. D'ici là, votre adresse actuelle reste utilisée. Vous n'avez rien demandé ? Ignorez simplement cet e-mail.",
         INVITE_SUBJECT: '{inviter} vous invite à rejoindre {tenant}',
         INVITE_TEXT: '{inviter} vous invite à rejoindre {tenant} sur {app} en tant que {role}.',
         INVITE_BUTTON: "Accepter l'invitation",
@@ -253,6 +306,12 @@ export const MAIL_MESSAGES = {
         RESET_BUTTON: 'Neues Passwort wählen',
         RESET_NOTE:
             'Der Link funktioniert 1 Stunde und nur einmal. Du hast nichts angefordert? Dann ignoriere diese E-Mail: Dein Passwort bleibt gleich.',
+        CONFIRM_SUBJECT: 'Bestätige deine neue E-Mail-Adresse für {app}',
+        CONFIRM_TEXT:
+            'Du möchtest diese E-Mail-Adresse für dein Konto verwenden. Bestätige sie, um die Änderung durchzuführen.',
+        CONFIRM_BUTTON: 'Neue E-Mail-Adresse bestätigen',
+        CONFIRM_NOTE:
+            'Der Link funktioniert 24 Stunden. Bis dahin bleibt deine bisherige Adresse in Gebrauch. Du hast nichts angefordert? Dann ignoriere diese E-Mail einfach.',
         INVITE_SUBJECT: '{inviter} lädt dich zu {tenant} ein',
         INVITE_TEXT: '{inviter} lädt dich ein, {tenant} auf {app} als {role} beizutreten.',
         INVITE_BUTTON: 'Einladung annehmen',
@@ -327,6 +386,10 @@ export const MESSAGES = {
             'No account is linked to this eID. Register with your eID, or log in with your password and link it under Security.',
         EID_UNAVAILABLE: 'The validity of the eID cannot be checked right now. Please try again in a moment.',
         EID_ALREADY_LINKED: 'This eID is already linked to an account.',
+        EID_REQUIRED: 'You must sign in with your eID: read your identity card.',
+        EMAIL_TAKEN: 'Another account uses this email address already.',
+        SAME_PASSWORD: 'The new password must differ from your current one.',
+        WRONG_PASSWORD: 'This is not your current password.',
         EID_OTHER_LINKED: 'Another eID is linked to your account. Unlink it first.',
         EID_ONLY_LOGIN: 'Your eID is your only way to log in. Choose a password first (forgot password).',
         PLATFORM_CHOICE: 'Platform management (no organisation)',
@@ -374,7 +437,17 @@ export const MESSAGES = {
         LAST_SUPERADMIN: 'The platform needs at least one superadmin.',
         TENANT_NOT_FOUND: 'This organisation was not found.',
         USER_NOT_FOUND: 'No account was found with this email address.',
-        ACCOUNT_DETAILS_NEEDED: 'Fill in your name and a password to create your account.'
+        ACCOUNT_DETAILS_NEEDED: 'Fill in your name and a password to create your account.',
+        VAULT_NOT_ALLOWED:
+            'Only doctors can use the eHealth vault. Ask an admin of your organisation to set your profession to doctor.',
+        VAULT_INVALID_FILE: 'Upload an eHealth certificate: a .p12 or .pfx file of at most 64 KB.',
+        VAULT_WRONG_PASSWORD: 'This password does not open the certificate (or the file is not a valid certificate).',
+        VAULT_EMPTY: 'Upload your eHealth certificate first.',
+        VAULT_NO_PASSWORD: 'Save the password of your eHealth certificate first.',
+        VAULT_EXPIRED: 'Your eHealth certificate has expired. Upload a new certificate.',
+        VAULT_APP_UNAUTHORIZED: 'The application or the access token of the doctor is not valid.',
+        VAULT_APP_NOT_ALLOWED:
+            'This application may not use the eHealth vault, or your organisation has no licence for it.'
     },
     nl: {
         LOGOUT_TITLE: 'Uitloggen?',
@@ -440,6 +513,10 @@ export const MESSAGES = {
             'Er is geen account gekoppeld aan deze eID. Registreer met je eID, of log in met je wachtwoord en koppel ze bij Beveiliging.',
         EID_UNAVAILABLE: 'De geldigheid van de eID kan nu niet gecontroleerd worden. Probeer het zo meteen opnieuw.',
         EID_ALREADY_LINKED: 'Deze eID is al aan een account gekoppeld.',
+        EID_REQUIRED: 'Je moet je aanmelden met je eID: lees je identiteitskaart in.',
+        EMAIL_TAKEN: 'Een ander account gebruikt dit e-mailadres al.',
+        SAME_PASSWORD: 'Het nieuwe wachtwoord moet verschillen van je huidige.',
+        WRONG_PASSWORD: 'Dit is niet je huidige wachtwoord.',
         EID_OTHER_LINKED: 'Er is al een andere eID aan je account gekoppeld. Ontkoppel die eerst.',
         EID_ONLY_LOGIN: 'Je eID is je enige manier om in te loggen. Kies eerst een wachtwoord (wachtwoord vergeten).',
         PLATFORM_CHOICE: 'Platformbeheer (geen organisatie)',
@@ -487,7 +564,17 @@ export const MESSAGES = {
         LAST_SUPERADMIN: 'Het platform heeft minstens één superadmin nodig.',
         TENANT_NOT_FOUND: 'Deze organisatie werd niet gevonden.',
         USER_NOT_FOUND: 'Er is geen account met dit e-mailadres.',
-        ACCOUNT_DETAILS_NEEDED: 'Vul je naam en een wachtwoord in om je account aan te maken.'
+        ACCOUNT_DETAILS_NEEDED: 'Vul je naam en een wachtwoord in om je account aan te maken.',
+        VAULT_NOT_ALLOWED:
+            'Alleen artsen kunnen de eHealth-kluis gebruiken. Vraag een beheerder van je organisatie om je beroep op arts te zetten.',
+        VAULT_INVALID_FILE: 'Upload een eHealth-certificaat: een .p12- of .pfx-bestand van hoogstens 64 KB.',
+        VAULT_WRONG_PASSWORD: 'Dit wachtwoord opent het certificaat niet (of het bestand is geen geldig certificaat).',
+        VAULT_EMPTY: 'Upload eerst je eHealth-certificaat.',
+        VAULT_NO_PASSWORD: 'Sla eerst het wachtwoord van je eHealth-certificaat op.',
+        VAULT_EXPIRED: 'Je eHealth-certificaat is verlopen. Upload een nieuw certificaat.',
+        VAULT_APP_UNAUTHORIZED: 'De applicatie of het token van de arts is ongeldig.',
+        VAULT_APP_NOT_ALLOWED:
+            'Deze applicatie mag de eHealth-kluis niet gebruiken, of je organisatie heeft er geen licentie voor.'
     },
     fr: {
         LOGOUT_TITLE: 'Se déconnecter ?',
@@ -554,6 +641,10 @@ export const MESSAGES = {
         EID_UNAVAILABLE:
             "La validité de l'eID ne peut pas être vérifiée pour le moment. Veuillez réessayer dans un instant.",
         EID_ALREADY_LINKED: 'Cette eID est déjà liée à un compte.',
+        EID_REQUIRED: "Vous devez vous identifier avec votre eID : lisez votre carte d'identité.",
+        EMAIL_TAKEN: 'Un autre compte utilise déjà cette adresse e-mail.',
+        SAME_PASSWORD: "Le nouveau mot de passe doit être différent de l'actuel.",
+        WRONG_PASSWORD: "Ce n'est pas votre mot de passe actuel.",
         EID_OTHER_LINKED: "Une autre eID est liée à votre compte. Déliez-la d'abord.",
         EID_ONLY_LOGIN:
             "Votre eID est votre seul moyen de connexion. Choisissez d'abord un mot de passe (mot de passe oublié).",
@@ -607,7 +698,18 @@ export const MESSAGES = {
         LAST_SUPERADMIN: "La plateforme a besoin d'au moins un superadmin.",
         TENANT_NOT_FOUND: 'Cette organisation est introuvable.',
         USER_NOT_FOUND: "Aucun compte n'existe avec cette adresse e-mail.",
-        ACCOUNT_DETAILS_NEEDED: 'Indiquez votre nom et un mot de passe pour créer votre compte.'
+        ACCOUNT_DETAILS_NEEDED: 'Indiquez votre nom et un mot de passe pour créer votre compte.',
+        VAULT_NOT_ALLOWED:
+            "Seuls les médecins peuvent utiliser le coffre eHealth. Demandez à un administrateur de votre organisation d'indiquer médecin comme profession.",
+        VAULT_INVALID_FILE: 'Téléversez un certificat eHealth : un fichier .p12 ou .pfx de 64 Ko au maximum.',
+        VAULT_WRONG_PASSWORD:
+            "Ce mot de passe n'ouvre pas le certificat (ou le fichier n'est pas un certificat valide).",
+        VAULT_EMPTY: "Téléversez d'abord votre certificat eHealth.",
+        VAULT_NO_PASSWORD: "Enregistrez d'abord le mot de passe de votre certificat eHealth.",
+        VAULT_EXPIRED: 'Votre certificat eHealth a expiré. Téléversez un nouveau certificat.',
+        VAULT_APP_UNAUTHORIZED: "L'application ou le jeton d'accès du médecin n'est pas valide.",
+        VAULT_APP_NOT_ALLOWED:
+            "Cette application ne peut pas utiliser le coffre eHealth, ou votre organisation n'a pas de licence pour celle-ci."
     },
     de: {
         LOGOUT_TITLE: 'Abmelden?',
@@ -675,6 +777,10 @@ export const MESSAGES = {
         EID_UNAVAILABLE:
             'Die Gültigkeit der eID kann gerade nicht geprüft werden. Bitte versuche es gleich noch einmal.',
         EID_ALREADY_LINKED: 'Diese eID ist bereits mit einem Konto verknüpft.',
+        EID_REQUIRED: 'Du musst dich mit deiner eID anmelden: Lies deinen Personalausweis ein.',
+        EMAIL_TAKEN: 'Ein anderes Konto verwendet diese E-Mail-Adresse bereits.',
+        SAME_PASSWORD: 'Das neue Passwort muss sich von deinem aktuellen unterscheiden.',
+        WRONG_PASSWORD: 'Das ist nicht dein aktuelles Passwort.',
         EID_OTHER_LINKED: 'Mit deinem Konto ist bereits eine andere eID verknüpft. Hebe diese Verknüpfung zuerst auf.',
         EID_ONLY_LOGIN:
             'Deine eID ist deine einzige Anmeldemöglichkeit. Wähle zuerst ein Passwort (Passwort vergessen).',
@@ -725,7 +831,18 @@ export const MESSAGES = {
         LAST_SUPERADMIN: 'Die Plattform braucht mindestens einen Superadmin.',
         TENANT_NOT_FOUND: 'Diese Organisation wurde nicht gefunden.',
         USER_NOT_FOUND: 'Es gibt kein Konto mit dieser E-Mail-Adresse.',
-        ACCOUNT_DETAILS_NEEDED: 'Gib deinen Namen und ein Passwort ein, um dein Konto zu erstellen.'
+        ACCOUNT_DETAILS_NEEDED: 'Gib deinen Namen und ein Passwort ein, um dein Konto zu erstellen.',
+        VAULT_NOT_ALLOWED:
+            'Nur Ärzte können den eHealth-Tresor verwenden. Bitte einen Administrator deiner Organisation, deinen Beruf auf Arzt zu setzen.',
+        VAULT_INVALID_FILE: 'Lade ein eHealth-Zertifikat hoch: eine .p12- oder .pfx-Datei von höchstens 64 KB.',
+        VAULT_WRONG_PASSWORD:
+            'Dieses Passwort öffnet das Zertifikat nicht (oder die Datei ist kein gültiges Zertifikat).',
+        VAULT_EMPTY: 'Lade zuerst dein eHealth-Zertifikat hoch.',
+        VAULT_NO_PASSWORD: 'Speichere zuerst das Passwort deines eHealth-Zertifikats.',
+        VAULT_EXPIRED: 'Dein eHealth-Zertifikat ist abgelaufen. Lade ein neues Zertifikat hoch.',
+        VAULT_APP_UNAUTHORIZED: 'Die Anwendung oder das Zugriffstoken des Arztes ist ungültig.',
+        VAULT_APP_NOT_ALLOWED:
+            'Diese Anwendung darf den eHealth-Tresor nicht verwenden, oder deine Organisation hat dafür keine Lizenz.'
     }
 }
 
@@ -884,6 +1001,10 @@ export function envLines(oidc, { port, example = false }) {
         '# Login with the Belgian eID (through the DafkeDD eID bridge on the PC of the user): off, on (real cards,',
         '# with OCSP) or test (also the virtual card of the bridge: npm run eid:mock in the frontend; never in production)',
         `OIDC_EID=${example ? 'on' : 'test'}`,
+        '# Every account must have its eID linked: on or off. On: registering only with the eID, a new account of an',
+        '# invitation reads its eID first, and the API refuses (403 oidc.EID_REQUIRED) an account without one until it is',
+        '# linked (superadmins never need one). Only when OIDC_EID is on or test.',
+        'OIDC_EID_REQUIRED=off',
         '# Passkeys (fingerprint, face or PIN of the device, or a security key; counts as two-step verification): on or off',
         'OIDC_PASSKEYS=on',
         '# The domain the passkeys belong to (default: the host name of APP_URL) and the websites that may use them (default:',
@@ -931,6 +1052,14 @@ export function envLines(oidc, { port, example = false }) {
         '# The public address of this API, where Mollie calls /billing/webhook (default: the origin of OIDC_ISSUER).',
         '# Mollie cannot call localhost: use a tunnel (ngrok) here to test renewals; the return page works without it.',
         '# PUBLIC_API_URL=https://api.example.com',
+        '# Prices are without VAT: this percentage is added to every payment and shown on the invoices',
+        'BILLING_VAT_PERCENT=21',
+        '# Who sends the invoices (the PDF): name, address (lines separated by |), VAT number, email and IBAN',
+        `INVOICE_SELLER_NAME=${quote(oidc.appName ?? 'Pasport')}`,
+        '# INVOICE_SELLER_ADDRESS=Dorpsstraat 2|2000 Antwerpen',
+        '# INVOICE_SELLER_VAT=BE0123456789',
+        '# INVOICE_SELLER_EMAIL=billing@example.com',
+        '# INVOICE_SELLER_IBAN=BE71 0961 2345 6769',
         '',
         '# Audit log (who did what, when, from where): days an event is kept (0 keeps everything)',
         'AUDIT_RETENTION_DAYS=365',
@@ -955,6 +1084,170 @@ const DISCOVERY_EXAMPLE = port => ({
 const TENANT = { id: '6b1d7c4e-0f1a-4c55-9e1e-2b9c1f3d8a10', name: 'Acme', role: 'admin' }
 const USER_ID = '1fb82908-476c-4460-951a-0fae1f01fcc6'
 const INVITATION_ID = '9d2c4e7a-3b1f-4c8e-a5d6-0e7f8a9b1c2d'
+const PROFILE_EXAMPLE = {
+    id: USER_ID,
+    name: 'Ada Lovelace',
+    firstName: 'Ada',
+    lastName: 'Lovelace',
+    email: 'ada@example.com',
+    emailVerified: true,
+    pendingEmail: null,
+    phone: '+32 470 12 34 56',
+    locale: 'en',
+    superadmin: false,
+    eid: { linked: true, rrn: '85.07.31-003.23', address: 'Dorpsstraat 1, 2000 Antwerpen' },
+    tenant: { id: TENANT.id, name: 'Acme', slug: 'acme', role: 'admin', profession: 'doctor' }
+}
+const BILLING_DETAILS_EXAMPLE = {
+    company: 'Acme BV',
+    vat: 'BE0123456789',
+    billingAddress: 'Kerkstraat 1, 9000 Gent',
+    billingEmail: 'finance@acme.example'
+}
+/** A tenant as the superadmin pages show it (GET /admin/tenants and /admin/tenants/:id). */
+const ADMIN_TENANT = {
+    id: TENANT.id,
+    slug: 'acme',
+    name: 'Acme',
+    status: 'active',
+    provisioning: false,
+    createdAt: '2026-10-13T09:00:00.000Z',
+    members: 3,
+    apps: 2,
+    plan: 'Pro',
+    city: 'Gent',
+    contact: { name: 'Ada Lovelace', email: 'ada@example.com' },
+    billing: BILLING_DETAILS_EXAMPLE
+}
+/** A member of a tenant (GET /tenants/current/members). */
+const MEMBER = {
+    userId: USER_ID,
+    name: 'Ada Lovelace',
+    email: 'ada@example.com',
+    emailVerified: true,
+    role: 'admin',
+    status: 'active',
+    profession: 'doctor',
+    lastSeenAt: '2026-10-13T09:41:00.000Z',
+    online: true,
+    presence: 'busy'
+}
+/** The own status and out-of-office reply (GET /me/status). */
+const PRESENCE_STATUS = {
+    status: 'available',
+    outOfOffice: {
+        enabled: true,
+        from: null,
+        until: '2026-10-27T08:00:00.000Z',
+        internalMessage: 'Ask Sofie for urgent tickets.',
+        externalMessage: 'I am away until Monday; a colleague helps you in the meantime.',
+        active: true
+    }
+}
+/** The eHealth certificate in the vault of the logged in account (GET /me/vault). */
+const VAULT_CERT = {
+    filename: 'ehealth.p12',
+    sizeBytes: 6144,
+    uploadedAt: '2026-10-14T09:00:00.000Z',
+    thumbprint: '3F:A1:…:9C',
+    subject: 'CN=SSIN=85073003328, OU=eHealth-platform Belgium, O=Federal Government, C=BE',
+    issuer: 'CN=eHealth-platform Belgium CA, O=Federal Government, C=BE',
+    serial: '0A3F6C21',
+    validUntil: '2029-10-14T09:00:00.000Z',
+    passwordSaved: true
+}
+const VAULT_STATUS = {
+    allowed: true,
+    cert: VAULT_CERT,
+    apps: [{ code: 'planner', name: 'Planner', icon: 'calendar', color: '#4f46e5', owned: true }]
+}
+const VAULT_ACCESS = [
+    [401, 'errors.UNAUTHORIZED'],
+    [403, 'errors.FORBIDDEN', 'the account is blocked'],
+    [403, 'oidc.EID_REQUIRED', 'OIDC_EID_REQUIRED and no eID linked yet']
+]
+const INVOICE_ID = '8f7e6d5c-4b3a-4c2d-9e1f-0a1b2c3d4e5f'
+/** A support ticket as its organisation sees it (GET /tenants/current/tickets/:id). */
+const TICKET_ID = '3c9e1a52-7d4b-4f0e-9a61-5b2d8c7e4f10'
+const SUPPORT_ID = '8a4f2c1e-5b6d-4e7f-9a0b-1c2d3e4f5a6b'
+const ATTACHMENT = {
+    id: '5e8f0a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b',
+    filename: 'screenshot.png',
+    contentType: 'image/png',
+    size: 48213
+}
+const TICKET_HEAD = {
+    id: TICKET_ID,
+    number: 'TIC-1042',
+    subject: 'Appointments missing',
+    tenant: { id: TENANT.id, name: 'Acme' },
+    customer: { id: USER_ID, name: 'Ada Lovelace' },
+    app: 'Planner',
+    appCode: 'planner',
+    status: 'answered',
+    priority: 'normal',
+    assignee: { id: SUPPORT_ID, name: 'Sam Support' }
+}
+const TICKET = {
+    ...TICKET_HEAD,
+    assigneeOutOfOffice: null,
+    createdAt: '2026-10-14T08:12:00.000Z',
+    updatedAt: '2026-10-14T09:30:00.000Z',
+    rating: null,
+    messages: [
+        {
+            id: '0b7a6c5d-4e3f-4a2b-9c1d-8e7f6a5b4c3d',
+            from: { id: USER_ID, name: 'Ada Lovelace' },
+            role: 'customer',
+            text: `The planner does **not** show my appointments:\n\n![screenshot.png](att:${ATTACHMENT.id})`,
+            createdAt: '2026-10-14T08:12:00.000Z'
+        },
+        {
+            id: '7f1e2d3c-4b5a-4968-8776-655443322110',
+            from: { id: SUPPORT_ID, name: 'Sam Support' },
+            role: 'support',
+            text: 'Fixed: the planner shows them again.',
+            createdAt: '2026-10-14T09:30:00.000Z'
+        }
+    ]
+}
+/** The same ticket for the support team: with the internal notes. */
+const ADMIN_TICKET = {
+    ...TICKET,
+    notes: [
+        {
+            id: '2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a',
+            from: { id: SUPPORT_ID, name: 'Sam Support' },
+            text: 'Same problem as TIC-1038, see the release notes.',
+            mentions: [{ id: '4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e7f', name: 'Lee Dev' }],
+            createdAt: '2026-10-14T09:10:00.000Z'
+        }
+    ]
+}
+/** A ticket in a list (GET /tenants/current/tickets, GET /admin/tickets). */
+const TICKET_ITEM = {
+    ...TICKET_HEAD,
+    createdAt: '2026-10-14T08:12:00.000Z',
+    updatedAt: '2026-10-14T09:30:00.000Z',
+    lastMessage: { role: 'support', text: 'Fixed: the planner shows them again.' },
+    rating: null
+}
+const TICKET_TEXT = ['text', 'string', 'required, 1 to 20 000 characters, rich text (see "Support tickets")']
+const TICKET_NOT_FOUND = [404, 'support.TICKET_NOT_FOUND']
+const ATTACHMENT_UNKNOWN = [400, 'support.ATTACHMENT_UNKNOWN', 'an image that is not of the organisation']
+const IMAGE_FIELDS = [
+    ['filename', 'string', 'required, 1 to 200 characters (only its base name is kept)'],
+    [
+        'dataBase64',
+        'string',
+        'required, the image in base64 (a `data:` URL prefix is allowed): PNG, JPEG, GIF or WebP, at most 2 MiB'
+    ]
+]
+const IMAGE_ERRORS = [
+    [400, 'support.IMAGE_INVALID'],
+    [413, 'support.IMAGE_TOO_LARGE'],
+    [413, 'errors.PAYLOAD_TOO_LARGE']
+]
 const NOTIFICATION_ID = '4b8e1f2a-6c3d-4e9f-8a7b-2d1c0e9f8a6b'
 const TOKEN = 'v1.Qm9u…'
 const BAD_REQUEST = [400, 'errors.BAD_REQUEST']
@@ -1026,8 +1319,59 @@ const PRODUCT = {
     priceYearCents: 9000,
     currency: 'EUR',
     active: true,
+    icon: 'calendar',
+    category: 'Planning',
+    short: 'Appointments online, 24/7',
+    features: ['Online booking', 'SMS reminders'],
+    color: '#2563eb',
+    requiresVault: false,
+    demoEnabled: true,
+    launchUrl: 'https://{slug}.agenda.example.com',
+    sort: 10,
     createdAt: '2026-10-01T08:00:00.000Z'
 }
+/** How a product looks in the app catalogue (POST /admin/products; all optional). */
+const CATALOG_FIELDS = [
+    [
+        'icon',
+        'string',
+        'optional, an icon key (`checklist`, `calendar`, `roster`, `invoice`, `users`, `idcard`, `euro`, `box`, ...): lowercase letters, digits and dashes, up to 40 (default `box`)'
+    ],
+    ['category', 'string', 'optional, up to 60 characters'],
+    ['short', 'string', 'optional, up to 200 characters: the line on its card'],
+    ['features', 'string[]', 'optional, at most 20, each up to 200 characters'],
+    ['color', 'string | null', 'optional, a hex colour (`#2563eb`), or `null`'],
+    ['requiresVault', 'boolean', 'optional: needs the eHealth vault (a doctor with a certificate)'],
+    [
+        'demoEnabled',
+        'boolean',
+        'optional, default `true`: customers can try it for free (a trial of 14 days that a member asks). Turning it off does not end running trials; a superadmin can always give one'
+    ],
+    [
+        'launchUrl',
+        'string | null',
+        'optional, `http(s)://...` up to 500 characters, or `null`: where the app opens; `{slug}` becomes the slug of the organisation'
+    ],
+    ['sort', 'number', 'optional, -100000 to 100000: lower first in the catalogue (then by name)']
+]
+const CATALOG_EXAMPLE = {
+    icon: 'calendar',
+    category: 'Planning',
+    short: 'Appointments online, 24/7',
+    features: ['Online booking', 'SMS reminders'],
+    color: '#2563eb',
+    requiresVault: false,
+    demoEnabled: true,
+    launchUrl: 'https://{slug}.agenda.example.com',
+    sort: 10
+}
+/** The errors of a discount code in a purchase. */
+const DISCOUNT_ERRORS = [
+    [400, 'billing.DISCOUNT_INVALID'],
+    [400, 'billing.DISCOUNT_EXPIRED'],
+    [400, 'billing.DISCOUNT_ALREADY_USED'],
+    [400, 'billing.DISCOUNT_USED_UP']
+]
 const DISCOUNT = {
     id: '7e6d5c4b-3a2f-4e1d-9c8b-7a6f5e4d3c2b',
     code: 'WELCOME-50',
@@ -1064,6 +1408,8 @@ const OVERVIEW = {
         currentPeriodEnd: '2027-10-14T08:00:00.000Z',
         cancelAtPeriodEnd: false,
         discountPeriodsLeft: null,
+        environmentName: 'Praktijk De Linde',
+        region: 'eu-west-1',
         paid: true,
         valid: true,
         renewalCents: 45000,
@@ -1082,6 +1428,31 @@ const PURCHASE = {
         ['interval', 'string', '`month` or `year` (cheaper)'],
         ['seats', 'number', 'required, 1 to 10000: one per user'],
         ['discountCode', 'string', 'optional']
+    ]
+}
+/** The body of a purchase with the choices of the wizard of the frontend. */
+const SUBSCRIBE = {
+    example: {
+        ...PURCHASE.example,
+        environmentName: 'Praktijk De Linde',
+        region: 'eu-west-1',
+        method: 'bancontact',
+        returnPath: '/apps/planner/welcome'
+    },
+    fields: [
+        ...PURCHASE.fields,
+        ['environmentName', 'string', 'optional, up to 100 characters: the name of the practice (environment)'],
+        ['region', 'string', 'optional: `eu-west-1`, `eu-west-3` or `eu-central-1`'],
+        [
+            'method',
+            'string',
+            'optional: opens the checkout on `card`, `bancontact` or `qr` (Bancontact with its QR code)'
+        ],
+        [
+            'returnPath',
+            'string',
+            'optional, up to 200 characters: a page of the frontend (starts with one `/`), default `/licenses/return`'
+        ]
     ]
 }
 const CHECK_EMAIL = { status: 202, example: { status: 'check-email' } }
@@ -1240,7 +1611,16 @@ export const endpoints = ({ port = 4000 } = {}) => [
             ]
         },
         response: { status: 200, example: { status: 'redirect', location: FRONTEND_CALLBACK + '?code=…&state=…' } },
-        errors: [EID_DISABLED]
+        errors: [
+            [400, 'oidc.EID_EXPIRED', 'as `error: "EID_EXPIRED"`'],
+            [401, 'oidc.EID_INVALID', 'as `error: "EID_INVALID"`'],
+            [403, 'oidc.EMAIL_NOT_VERIFIED', 'as `error: "EMAIL_NOT_VERIFIED"`'],
+            [403, 'oidc.ACCOUNT_DISABLED', 'as `error: "ACCOUNT_DISABLED"`'],
+            [404, 'oidc.EID_NOT_LINKED', 'as `error: "EID_NOT_LINKED"`'],
+            EID_DISABLED,
+            TOO_MANY,
+            [503, 'oidc.EID_UNAVAILABLE', 'as `error: "EID_UNAVAILABLE"`']
+        ]
     },
     {
         method: 'POST',
@@ -1328,13 +1708,14 @@ export const endpoints = ({ port = 4000 } = {}) => [
         },
         response: {
             status: 200,
-            example: { status: 'redirect', location: 'http://localhost:3000/auth/callback?code=...' }
+            example: { status: 'redirect', location: FRONTEND_CALLBACK + '?code=…&state=…' }
         },
         errors: [
             [400, 'oidc.PASSKEY_EXPIRED'],
             [401, 'oidc.PASSKEY_INVALID'],
             [401, 'oidc.PASSKEY_UNKNOWN'],
             [403, 'oidc.ACCOUNT_DISABLED'],
+            [403, 'oidc.EMAIL_NOT_VERIFIED'],
             [404, 'oidc.PASSKEYS_DISABLED'],
             [429, 'oidc.TOO_MANY_ATTEMPTS']
         ]
@@ -1633,15 +2014,20 @@ export const endpoints = ({ port = 4000 } = {}) => [
             ]
         },
         response: CHECK_EMAIL,
-        errors: [BAD_REQUEST, [403, 'oidc.REGISTRATION_CLOSED'], TOO_MANY]
+        errors: [
+            BAD_REQUEST,
+            [403, 'oidc.REGISTRATION_CLOSED'],
+            [403, 'oidc.EID_REQUIRED', 'OIDC_EID_REQUIRED: registering only with the eID'],
+            TOO_MANY
+        ]
     },
     {
         method: 'GET',
         path: '/oidc/account/registration',
         tag: 'account',
         summary:
-            'Which ways of registering are open: with a password (OIDC_REGISTRATION=open) and with the Belgian eID (OIDC_EID on or test, registration not closed).',
-        response: { status: 200, example: { password: true, eid: true } },
+            'Which ways of registering are open: with a password (OIDC_REGISTRATION=open and OIDC_EID_REQUIRED off) and with the Belgian eID (OIDC_EID on or test, registration not closed). `eidRequired`: every account must have its eID (OIDC_EID_REQUIRED); `POST /oidc/account/register` then answers 403 `oidc.EID_REQUIRED`.',
+        response: { status: 200, example: { password: true, eid: true, eidRequired: false } },
         errors: []
     },
     {
@@ -1665,13 +2051,17 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 token: EID_TOKEN,
                 email: 'jan@example.com',
                 password: 'correct-horse-battery',
-                organisation: 'Acme'
+                organisation: 'Acme',
+                phone: '+32 470 12 34 56',
+                locale: 'nl'
             },
             fields: [
                 ...EID_TOKEN_FIELDS,
                 ['email', 'string', 'required, a valid email address (at most 254)'],
                 ['password', 'string', PASSWORD_RULE],
-                ['organisation', 'string', 'required, 2 to 100 characters: the name of the new tenant']
+                ['organisation', 'string', 'required, 2 to 100 characters: the name of the new tenant'],
+                ['phone', 'string', 'optional, digits, spaces and `+ ( ) . / -`, at most 30 characters'],
+                ['locale', 'string', 'optional, `en`, `nl`, `fr` or `de` (default: the language of the request)']
             ]
         },
         response: { status: 202, example: { status: 'check-email', name: 'Jan Specimen' } },
@@ -1691,10 +2081,10 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/oidc/account/verify-email',
         tag: 'account',
         summary:
-            'Confirm the email address with the token of the link in the verification email. Then the account can log in.',
+            'Confirm an email address with the token of the link in the email: the first address after registering (`status: "verified"`, then the account can log in), or a new address chosen on the profile (`PATCH /me/profile`): the address of the account changes now (`status: "email-changed"`). Only the newest pending address counts: an older link is invalid.',
         body: { example: { token: TOKEN }, fields: [['token', 'string', 'required, from the link']] },
         response: { status: 200, example: { status: 'verified', email: 'ada@example.com' } },
-        errors: [BAD_REQUEST, INVALID_LINK]
+        errors: [BAD_REQUEST, INVALID_LINK, [409, 'oidc.EMAIL_TAKEN', 'another account took the new address meanwhile']]
     },
     {
         method: 'POST',
@@ -1742,7 +2132,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/oidc/account/invitation',
         tag: 'account',
         summary:
-            'The details of an invitation, for the page that accepts it: also the apps it gives access to (name, address, the roles that come with it, and whether a seat does).',
+            'The details of an invitation, for the page that accepts it. `eid`: a new account can read its eID first (`POST /oidc/account/invitation/eid`); `eidRequired`: a new account must (OIDC_EID_REQUIRED). `apps`: the apps it gives access to (name, address, the roles that come with it, and whether a seat does).',
         curl: `curl 'http://localhost:${port}/oidc/account/invitation?token=TOKEN'`,
         query: [['token', 'required', 'The token from the link in the invitation email']],
         response: {
@@ -1753,7 +2143,9 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 role: 'user',
                 inviterName: 'Ada Lovelace',
                 accountExists: false,
-                apps: INVITATION_APPS
+                apps: INVITATION_APPS,
+                eid: true,
+                eidRequired: false
             }
         },
         errors: [INVALID_LINK]
@@ -1763,13 +2155,18 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/oidc/account/invitation/accept',
         tag: 'account',
         summary:
-            'Accept an invitation. An existing account joins the organisation; otherwise name and password create a (verified) account. The inviter must still be admin and the tenant active. The member gets the roles chosen for each app of the invitation and, when asked, a free seat (`seat: false` when none was free: the member joins without a licence); `url` opens the app.',
+            'Accept an invitation. An existing account joins the organisation; otherwise name and password create a (verified) account, with the eID read by `POST /oidc/account/invitation/eid` linked to it (its first and last name come from the card; required when OIDC_EID_REQUIRED is on). The inviter must still be admin and the tenant active. The member gets the roles chosen for each app of the invitation and, when asked, a free seat (`seat: false` when none was free: the member joins without a licence); `url` opens the app.',
         body: {
-            example: { token: TOKEN, name: 'Bob', password: 'correct-horse-battery' },
+            example: { token: TOKEN, name: 'Bob', password: 'correct-horse-battery', eid: 'v1.eid-person…' },
             fields: [
                 ['token', 'string', 'required, from the link'],
                 ['name', 'string', 'only for a new account, 2 to 100 characters'],
-                ['password', 'string', 'only for a new account, 12 to 128 characters']
+                ['password', 'string', 'only for a new account, 12 to 128 characters'],
+                [
+                    'eid',
+                    'string',
+                    'only for a new account: the `eid` answered by `POST /oidc/account/invitation/eid` (valid 15 minutes, at most 4000 characters); required when OIDC_EID_REQUIRED is on'
+                ]
             ]
         },
         response: {
@@ -1781,7 +2178,154 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 apps: [{ clientId: 'planner', name: 'Planner', url: 'http://localhost:3001', seat: true }]
             }
         },
-        errors: [BAD_REQUEST, INVALID_LINK, [400, 'oidc.ACCOUNT_DETAILS_NEEDED']]
+        errors: [
+            BAD_REQUEST,
+            INVALID_LINK,
+            [400, 'oidc.ACCOUNT_DETAILS_NEEDED'],
+            [400, 'oidc.EID_EXPIRED'],
+            [403, 'oidc.EID_REQUIRED', 'a new account needs the eID (OIDC_EID_REQUIRED=on)'],
+            [409, 'errors.CONFLICT', 'an account with this email address was made meanwhile'],
+            [409, 'oidc.EID_ALREADY_LINKED']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/oidc/account/invitation/eid',
+        tag: 'account',
+        summary:
+            'Read the eID of the invitee before a new account is created (`GET /oidc/account/invitation` says `eid` and `eidRequired`): first `POST /oidc/account/eid/challenge`, then the PIN in the bridge, then this call with the token. Answers the name on the card and `eid`: the verified eID, encrypted for this invitation (valid 15 minutes), to send along with `POST /oidc/account/invitation/accept`. Rate limited per IP address and per invitation.',
+        body: {
+            example: { invitation: TOKEN, challenge: EID_CHALLENGE.challenge, token: EID_TOKEN },
+            fields: [
+                ['invitation', 'string', 'required, the token from the link in the invitation email (at most 2000)'],
+                ...EID_TOKEN_FIELDS
+            ]
+        },
+        response: {
+            status: 200,
+            example: { name: 'Jan Specimen', firstName: 'Jan', lastName: 'Specimen', eid: 'v1.eid-person…' }
+        },
+        errors: [
+            BAD_REQUEST,
+            INVALID_LINK,
+            [400, 'oidc.EID_EXPIRED'],
+            [401, 'oidc.EID_INVALID'],
+            [404, 'oidc.EID_DISABLED'],
+            [409, 'oidc.EID_ALREADY_LINKED'],
+            [429, 'oidc.TOO_MANY_ATTEMPTS'],
+            [503, 'oidc.EID_UNAVAILABLE']
+        ]
+    },
+    // ---------------------------------------------------------------- the own password and profile
+    {
+        method: 'POST',
+        path: '/me/password',
+        tag: 'account',
+        summary:
+            'Choose a new password for the logged in account (also a superadmin without an organisation). Needs the current password, except when the account has none yet (eID only: `GET /me/eid` says `hasPassword`). Every **other** session of the account ends (`endedSessions`: how many); this one stays. Rate limited per account. Recorded in the audit log (`account.password_changed`).',
+        bearer: true,
+        body: {
+            example: { currentPassword: 'correct-horse-battery', newPassword: 'a-new-long-password' },
+            fields: [
+                [
+                    'currentPassword',
+                    'string',
+                    'required when the account has a password (at most 128 characters); not needed when it has none yet'
+                ],
+                ['newPassword', 'string', 'required, 12 to 128 characters, not the current one']
+            ]
+        },
+        response: { status: 200, example: { status: 'password-changed', endedSessions: 2 } },
+        errors: [
+            BAD_REQUEST,
+            [400, 'oidc.SAME_PASSWORD'],
+            [401, 'errors.UNAUTHORIZED'],
+            [403, 'errors.FORBIDDEN', 'the account is blocked'],
+            [403, 'oidc.EID_REQUIRED', 'OIDC_EID_REQUIRED and no eID linked yet'],
+            [403, 'oidc.WRONG_PASSWORD', 'the current password is missing or not correct'],
+            [429, 'oidc.TOO_MANY_ATTEMPTS']
+        ]
+    },
+    {
+        method: 'GET',
+        path: '/me/profile',
+        tag: 'account',
+        summary:
+            'The own profile of the logged in account: name, first and last name, email (and `pendingEmail`, a new address waiting for its confirmation link), phone, language, superadmin, what the eID says (`rrn`: the national register number, only ever shown to the account itself; `address`) and, with an organisation in the token, the role and profession (`doctor` or `staff`; a superadmin without a membership counts as `staff`) there. `tenant` is `null` for a platform login. Also works without a linked eID (`OIDC_EID_REQUIRED`): the frontend reads it before it shows the eID screen.',
+        bearer: true,
+        response: { status: 200, example: PROFILE_EXAMPLE },
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [403, 'errors.FORBIDDEN', 'the account is blocked'],
+            [404, 'errors.NOT_FOUND']
+        ]
+    },
+    {
+        method: 'PATCH',
+        path: '/me/profile',
+        tag: 'account',
+        summary:
+            'Change the own profile; only the fields that are sent change. The display name `name` follows first and last name when both are known. A new email address only changes after the link sent to it was opened (`POST /oidc/account/verify-email` answers `email-changed`); until then it is `pendingEmail`, and sending the current address withdraws a pending change. The national register number and the address come from the eID (read-only). Answers the whole profile, like `GET /me/profile`. Recorded in the audit log (`account.profile_changed`, `account.email_change_requested`).',
+        bearer: true,
+        body: {
+            example: {
+                firstName: 'Ada',
+                lastName: 'Lovelace',
+                phone: '+32 470 12 34 56',
+                locale: 'nl',
+                email: 'ada@example.org'
+            },
+            fields: [
+                ['firstName', 'string', 'optional, 1 to 60 characters'],
+                ['lastName', 'string', 'optional, 1 to 60 characters'],
+                ['phone', 'string', 'optional, digits, spaces and `+ ( ) . / -`, at most 30 characters; empty: none'],
+                ['locale', 'string', 'optional, `en`, `nl`, `fr` or `de`'],
+                ['email', 'string', 'optional, a valid email address (at most 254): a link goes to it first']
+            ]
+        },
+        response: { status: 200, example: { ...PROFILE_EXAMPLE, pendingEmail: 'ada@example.org', locale: 'nl' } },
+        errors: [
+            BAD_REQUEST,
+            [401, 'errors.UNAUTHORIZED'],
+            [403, 'errors.FORBIDDEN', 'the account is blocked'],
+            [403, 'oidc.EID_REQUIRED', 'OIDC_EID_REQUIRED and no eID linked yet'],
+            [409, 'oidc.EMAIL_TAKEN'],
+            [429, 'oidc.TOO_MANY_ATTEMPTS']
+        ]
+    },
+    // ---------------------------------------------------------------- billing details of the own tenant
+    {
+        method: 'GET',
+        path: '/tenants/current/billing',
+        tag: 'tenant members',
+        summary:
+            'The billing details of the organisation of the token, printed on its invoices: company name, VAT number, address and the email address for invoices (`null` when not filled in). Every member reads them.',
+        bearer: true,
+        response: { status: 200, example: BILLING_DETAILS_EXAMPLE },
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [403, 'errors.FORBIDDEN', 'not a member'],
+            [404, 'oidc.TENANT_NOT_FOUND']
+        ]
+    },
+    {
+        method: 'PATCH',
+        path: '/tenants/current/billing',
+        tag: 'tenant members',
+        summary:
+            'Change the billing details (admins). Only the fields that are sent change; an empty string or `null` clears a field. New invoices use them (an invoice keeps the details it was issued with). In the audit log as `licences.billing_details_changed`.',
+        bearer: true,
+        body: {
+            example: BILLING_DETAILS_EXAMPLE,
+            fields: [
+                ['company', 'string | null', 'optional, up to 200 characters'],
+                ['vat', 'string | null', 'optional, up to 32 characters'],
+                ['billingAddress', 'string | null', 'optional, up to 500 characters'],
+                ['billingEmail', 'string | null', 'optional, a valid email address (at most 254), or empty']
+            ]
+        },
+        response: { status: 200, example: BILLING_DETAILS_EXAMPLE },
+        errors: [BAD_REQUEST, ...ACCESS('admin'), [404, 'oidc.TENANT_NOT_FOUND']]
     },
     // ---------------------------------------------------------------- members of the own tenant (admins)
     {
@@ -1789,23 +2333,9 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/tenants/current/members',
         tag: 'tenant members',
         summary:
-            'The members of the tenant of the access token: role, status (active or disabled), online (a request in the last 2 minutes) and last seen. For admins of that tenant (and superadmins).',
+            'The members of the tenant of the access token: role, status (active or disabled), profession (`doctor` may use the eHealth vault and the apps that need it, `staff`), online (a request in the last 2 minutes), `presence` (see `PUT /me/status`) and last seen. For admins of that tenant (and superadmins). The same list for any tenant, with `eidLinked`, is `GET /admin/tenants/:id/members`.',
         bearer: true,
-        response: {
-            status: 200,
-            example: [
-                {
-                    userId: USER_ID,
-                    name: 'Ada Lovelace',
-                    email: 'ada@example.com',
-                    emailVerified: true,
-                    role: 'admin',
-                    status: 'active',
-                    lastSeenAt: '2026-10-13T09:41:00.000Z',
-                    online: true
-                }
-            ]
-        },
+        response: { status: 200, example: [MEMBER] },
         errors: ACCESS('admin')
     },
     {
@@ -1940,6 +2470,18 @@ export const endpoints = ({ port = 4000 } = {}) => [
         errors: [BAD_REQUEST, ...ACCESS('admin'), [404, 'oidc.MEMBER_NOT_FOUND'], [409, 'oidc.LAST_ADMIN']]
     },
     {
+        method: 'PATCH',
+        path: '/tenants/current/members/:userId/profession',
+        tag: 'tenant members',
+        summary:
+            'The profession of a member: `doctor` (may use the eHealth vault, `/me/vault`, and the apps that need it) or `staff` (the default). Recorded in the audit log (`members.profession_changed`).',
+        bearer: true,
+        pathExample: `/tenants/current/members/${USER_ID}/profession`,
+        body: { example: { profession: 'doctor' }, fields: [['profession', 'string', '`doctor` or `staff`']] },
+        response: { status: 200, example: { userId: USER_ID, profession: 'doctor' } },
+        errors: [BAD_REQUEST, ...ACCESS('admin'), [404, 'oidc.MEMBER_NOT_FOUND']]
+    },
+    {
         method: 'GET',
         path: '/tenants/current/invitations',
         tag: 'tenant members',
@@ -1988,12 +2530,71 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/me/heartbeat',
         tag: 'tenant members',
         summary:
-            'The logged in member is active: online for the admins of the tenant (the frontend sends it every minute while a page is open). Answers 204.',
+            'The logged in member is active: online for the admins of the tenant (the frontend sends it every minute while a page is open, also in a hidden tab). Answers 204. Optional body `{ "idle": true }`: nobody used the page (mouse, keyboard, scrolling, touch) for 5 minutes; a chosen `available` then shows as `away` (like Microsoft Teams; a chosen `busy` stays). The next heartbeat with `{ "idle": false }` (sent at once when the page is used again) makes it `available` again.',
         bearer: true,
+        body: {
+            example: { idle: false },
+            fields: [['idle', 'boolean', 'optional: true when nobody used the page for 5 minutes']]
+        },
         response: null,
+        errors: [BAD_REQUEST, [401, 'errors.UNAUTHORIZED'], [403, 'errors.FORBIDDEN', 'the account is blocked']]
+    },
+    {
+        method: 'GET',
+        path: '/me/status',
+        tag: 'tenant members',
+        summary:
+            'The status the logged in account chose in the menu of its avatar (like Microsoft Teams): `available` (default), `busy`, `dnd` (do not disturb), `brb` (be right back), `away` or `offline` (appear offline), and its out-of-office reply (`active`: on, and inside its period). Also works without a linked eID.',
+        bearer: true,
+        response: { status: 200, example: PRESENCE_STATUS },
         errors: [
             [401, 'errors.UNAUTHORIZED'],
-            [403, 'errors.FORBIDDEN', 'not a member']
+            [403, 'errors.FORBIDDEN', 'the account is blocked']
+        ]
+    },
+    {
+        method: 'PUT',
+        path: '/me/status',
+        tag: 'tenant members',
+        summary:
+            'Change the own status; answers like `GET /me/status`. The members lists show `presence`: the chosen status while the account is online (a request in the last 2 minutes), `away` instead of `available` after 5 minutes without use (see `POST /me/heartbeat`), `offline` when not online or with `offline`, and `ooo` while the out-of-office reply is active (also when offline).',
+        bearer: true,
+        body: {
+            example: { status: 'busy' },
+            fields: [['status', 'string', 'required: `available`, `busy`, `dnd`, `brb`, `away` or `offline`']]
+        },
+        response: { status: 200, example: { ...PRESENCE_STATUS, status: 'busy' } },
+        errors: [BAD_REQUEST, [401, 'errors.UNAUTHORIZED'], [403, 'errors.FORBIDDEN', 'the account is blocked']]
+    },
+    {
+        method: 'PUT',
+        path: '/me/out-of-office',
+        tag: 'tenant members',
+        summary:
+            'Turn the own out-of-office reply (like Outlook) on or off; answers like `GET /me/status`. While it is active others see `ooo` (out of office). Colleagues (the support team) get the internal message when they mention the account in an internal note or assign it a ticket (`outOfOffice` of `GET /admin/support-team`), and on the tickets it handles (`assigneeOutOfOffice` of `GET /admin/tickets/:id`); customers get the external message on the tickets it handles (`assigneeOutOfOffice` of `GET /tenants/current/tickets/:id`).',
+        bearer: true,
+        body: {
+            example: {
+                enabled: true,
+                from: null,
+                until: '2026-10-27T08:00:00.000Z',
+                internalMessage: 'Ask Sofie for urgent tickets.',
+                externalMessage: 'I am away until Monday; a colleague helps you in the meantime.'
+            },
+            fields: [
+                ['enabled', 'boolean', 'required'],
+                ['from', 'string | null', 'optional, ISO 8601; `null` or left out: from now'],
+                ['until', 'string | null', 'optional, ISO 8601, after `from`; `null`: until it is turned off'],
+                ['internalMessage', 'string | null', 'optional, at most 1000 characters: for colleagues'],
+                ['externalMessage', 'string | null', 'optional, at most 1000 characters: for customers']
+            ]
+        },
+        response: { status: 200, example: PRESENCE_STATUS },
+        errors: [
+            BAD_REQUEST,
+            [400, 'errors.OUT_OF_OFFICE_DATES'],
+            [401, 'errors.UNAUTHORIZED'],
+            [403, 'errors.FORBIDDEN', 'the account is blocked']
         ]
     },
     // ---------------------------------------------------------------- notifications (the bell)
@@ -2002,17 +2603,17 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/me/notifications',
         tag: 'notifications',
         summary:
-            'The newest notifications of the logged in account (at most 40): of the organisation of the token, and the platform ones for superadmins. The frontend makes the text from `kind` and `params`; `link` is the page it opens.',
+            'The notifications of the logged in account (the bell), newest first, at most 40: those of the organisation of the token and, for superadmins, those of the platform. Stored ones (`id` a uuid) and computed ones (a contract or a discount code that ends soon: `contract:<id>:<YYYY-MM-DD>`, `discount:<id>:<YYYY-MM-DD>`) come together. The frontend makes the translated text from `kind` and `params`; `nav` says which screen it opens (`invoices`, `ticket`, `dashboard`, `users`, `admin-tenants`, `admin-tenant`, `admin-ticket`, `admin-codes`, `admin-users`, with the `id` of what it is about). Kinds: for the admins of the organisation `invoice.created`, `contract.expiring` and `member.joined` (someone joined); for the account that made a ticket `ticket.reply`; for the superadmin handling a ticket `ticket.customer_reply` (or the superadmins online when nobody does) and `ticket.closed`; for the superadmins `ticket.created` (those online), `tenant.created`, `payment.received`, `discount.expiring` and `member.invited`. Also works without a linked eID (`OIDC_EID_REQUIRED`).',
         bearer: true,
         response: {
             status: 200,
             example: [
                 {
                     id: NOTIFICATION_ID,
-                    kind: 'member.joined',
-                    params: { name: 'Bob', email: 'bob@example.com' },
-                    link: '/members',
-                    createdAt: '2026-01-15T09:30:00.000Z',
+                    kind: 'invoice.created',
+                    params: { number: 'FAC-2026-0001', app: 'Planner', totalCents: 12100, status: 'paid' },
+                    nav: { screen: 'invoices' },
+                    createdAt: '2026-10-14T09:00:00.000Z',
                     read: false
                 }
             ]
@@ -2026,7 +2627,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
         method: 'POST',
         path: '/me/notifications/read-all',
         tag: 'notifications',
-        summary: 'Mark every notification of the logged in account as read. Answers 204.',
+        summary:
+            'Mark every notification of the account as read (of the organisation of the token, the platform ones for superadmins, and the computed ones it sees now). Answers 204.',
         bearer: true,
         response: null,
         errors: [
@@ -2038,7 +2640,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
         method: 'POST',
         path: '/me/notifications/:id/read',
         tag: 'notifications',
-        summary: 'Mark one notification as read. Answers 204.',
+        summary:
+            'Mark one notification as read: a uuid, or the id of a computed one (`contract:<id>:<YYYY-MM-DD>`) that the account sees right now. Answers 204.',
         bearer: true,
         pathExample: `/me/notifications/${NOTIFICATION_ID}/read`,
         response: null,
@@ -2280,47 +2883,60 @@ export const endpoints = ({ port = 4000 } = {}) => [
         method: 'GET',
         path: '/admin/tenants',
         tag: 'platform (superadmin)',
-        summary: 'Every tenant with its status and number of members. Superadmins only.',
+        summary:
+            'Every tenant: status, `provisioning` (created by a superadmin and nobody joined yet: at most an open invitation), number of members, `apps` (products with a valid subscription or free seats), plan (free text: `Starter` by default, `Pro`, `Enterprise`), city, contact (the first admin, or else the newest open admin invitation with the contact name given at creation; `null` without either) and the billing details of its invoices. Superadmins only.',
         bearer: true,
-        response: {
-            status: 200,
-            example: [
-                {
-                    id: TENANT.id,
-                    slug: 'acme',
-                    name: 'Acme',
-                    status: 'active',
-                    createdAt: '2026-10-13T09:00:00.000Z',
-                    members: 3
-                }
-            ]
-        },
+        response: { status: 200, example: [ADMIN_TENANT] },
         errors: ACCESS('superadmin')
+    },
+    {
+        method: 'GET',
+        path: '/admin/tenants/:id',
+        tag: 'platform (superadmin)',
+        summary: 'One tenant: the same item as in `GET /admin/tenants`. Superadmins only.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}`,
+        response: { status: 200, example: ADMIN_TENANT },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), [404, 'oidc.TENANT_NOT_FOUND']]
     },
     {
         method: 'POST',
         path: '/admin/tenants',
         tag: 'platform (superadmin)',
-        summary: 'Create a tenant. With adminEmail that person gets an invitation to become its admin.',
+        summary:
+            'Create a tenant. With adminEmail that person gets an invitation to become its admin; until someone joined, the tenant is `provisioning` and `contactName` is shown as its contact. Your own email makes you its admin at once (`joined: true`, no invitation).',
         bearer: true,
         body: {
-            example: { name: 'Globex', adminEmail: 'boss@globex.com' },
+            example: {
+                name: 'Globex',
+                adminEmail: 'boss@globex.com',
+                contactName: 'Jan Peeters',
+                city: 'Gent',
+                plan: 'Pro'
+            },
             fields: [
                 ['name', 'string', 'required, 2 to 100 characters'],
-                ['adminEmail', 'string', 'optional, gets an invitation as admin']
+                ['adminEmail', 'string', 'optional, a valid email address (at most 254): gets an invitation as admin'],
+                ['contactName', 'string', 'optional, at most 100 characters: the contact until the first admin joined'],
+                ['city', 'string', 'optional, at most 100 characters'],
+                ['plan', 'string', 'optional, 1 to 40 characters, free text (default `Starter`)']
             ]
         },
         response: {
             status: 201,
             example: {
                 tenant: {
-                    id: TENANT.id,
+                    ...ADMIN_TENANT,
                     slug: 'globex',
                     name: 'Globex',
-                    status: 'active',
-                    createdAt: '2026-10-13T09:00:00.000Z'
+                    provisioning: true,
+                    members: 0,
+                    apps: 0,
+                    contact: { name: 'Jan Peeters', email: 'boss@globex.com' },
+                    billing: { company: null, vat: null, billingAddress: null, billingEmail: null }
                 },
-                invited: 'boss@globex.com'
+                invited: 'boss@globex.com',
+                joined: false
             }
         },
         errors: [BAD_REQUEST, ...ACCESS('superadmin')]
@@ -2329,12 +2945,182 @@ export const endpoints = ({ port = 4000 } = {}) => [
         method: 'PATCH',
         path: '/admin/tenants/:id',
         tag: 'platform (superadmin)',
-        summary: 'Suspend or reactivate a tenant. Members of a suspended tenant cannot log in to it or use the API.',
+        summary:
+            'Suspend or reactivate a tenant, rename it, change its plan or city. Every field is optional; only what changes is saved and written to the audit log (`platform.tenant_suspended`, `platform.tenant_activated`, `platform.tenant_changed`). Members of a suspended tenant cannot log in to it or use the API. Answers the whole tenant, like `GET /admin/tenants/:id`.',
         bearer: true,
         pathExample: `/admin/tenants/${TENANT.id}`,
-        body: { example: { status: 'suspended' }, fields: [['status', 'string', '`active` or `suspended`']] },
-        response: { status: 200, example: { id: TENANT.id, status: 'suspended' } },
+        body: {
+            example: { status: 'suspended', name: 'Acme', plan: 'Enterprise', city: 'Gent' },
+            fields: [
+                ['status', 'string', 'optional, `active` or `suspended`'],
+                ['name', 'string', 'optional, 2 to 100 characters'],
+                ['plan', 'string', 'optional, 1 to 40 characters'],
+                ['city', 'string | null', 'optional, at most 100 characters; empty or `null`: no city']
+            ]
+        },
+        response: { status: 200, example: { ...ADMIN_TENANT, status: 'suspended', plan: 'Enterprise' } },
         errors: [BAD_REQUEST, ...ACCESS('superadmin'), [404, 'oidc.TENANT_NOT_FOUND']]
+    },
+    {
+        method: 'GET',
+        path: '/admin/tenants/:id/members',
+        tag: 'platform (superadmin)',
+        summary:
+            'The members of any tenant, for superadmins: the same as `GET /tenants/current/members`, plus `eidLinked` (whether the member has its Belgian eID linked, see `OIDC_EID_REQUIRED`). The routes below under `/admin/tenants/:id` do for any tenant what `/tenants/current/...` does for its own admins; a tenant that does not exist is 404 `oidc.TENANT_NOT_FOUND`.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/members`,
+        response: { status: 200, example: [{ ...MEMBER, eidLinked: true }] },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), [404, 'oidc.TENANT_NOT_FOUND']]
+    },
+    {
+        method: 'PATCH',
+        path: '/admin/tenants/:id/members/:userId',
+        tag: 'platform (superadmin)',
+        summary:
+            'Change the role of a member of any tenant, like `PATCH /tenants/current/members/:userId`. The tenant always keeps at least one admin.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/members/${USER_ID}`,
+        body: { example: { role: 'admin' }, fields: [['role', 'string', '`user` or `admin`']] },
+        response: { status: 200, example: { userId: USER_ID, role: 'admin' } },
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('superadmin'),
+            [404, 'oidc.TENANT_NOT_FOUND'],
+            [404, 'oidc.MEMBER_NOT_FOUND'],
+            [409, 'oidc.LAST_ADMIN']
+        ]
+    },
+    {
+        method: 'PATCH',
+        path: '/admin/tenants/:id/members/:userId/status',
+        tag: 'platform (superadmin)',
+        summary:
+            'Disable a member of any tenant (its sessions in that tenant end at once) or enable it again. The tenant always keeps an active admin.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/members/${USER_ID}/status`,
+        body: { example: { status: 'disabled' }, fields: [['status', 'string', '`active` or `disabled`']] },
+        response: { status: 200, example: { userId: USER_ID, status: 'disabled' } },
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('superadmin'),
+            [404, 'oidc.TENANT_NOT_FOUND'],
+            [404, 'oidc.MEMBER_NOT_FOUND'],
+            [409, 'oidc.LAST_ADMIN']
+        ]
+    },
+    {
+        method: 'PATCH',
+        path: '/admin/tenants/:id/members/:userId/profession',
+        tag: 'platform (superadmin)',
+        summary: 'The profession of a member of any tenant: `doctor` (may use the eHealth vault) or `staff`.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/members/${USER_ID}/profession`,
+        body: { example: { profession: 'doctor' }, fields: [['profession', 'string', '`doctor` or `staff`']] },
+        response: { status: 200, example: { userId: USER_ID, profession: 'doctor' } },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), [404, 'oidc.TENANT_NOT_FOUND'], [404, 'oidc.MEMBER_NOT_FOUND']]
+    },
+    {
+        method: 'DELETE',
+        path: '/admin/tenants/:id/members/:userId',
+        tag: 'platform (superadmin)',
+        summary:
+            'Remove a member from any tenant (the account stays; its sessions in that tenant end). Not the last admin. Answers 204.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/members/${USER_ID}`,
+        response: null,
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('superadmin'),
+            [404, 'oidc.TENANT_NOT_FOUND'],
+            [404, 'oidc.MEMBER_NOT_FOUND'],
+            [409, 'oidc.LAST_ADMIN']
+        ]
+    },
+    {
+        method: 'GET',
+        path: '/admin/tenants/:id/invitations',
+        tag: 'platform (superadmin)',
+        summary:
+            'The open invitations of any tenant (not accepted, not withdrawn, not expired), newest first: the same items as `GET /tenants/current/invitations`.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/invitations`,
+        response: {
+            status: 200,
+            example: [
+                {
+                    id: INVITATION_ID,
+                    tenantId: TENANT.id,
+                    email: 'boss@globex.com',
+                    role: 'admin',
+                    invitedBy: USER_ID,
+                    invitedByName: 'Ada Lovelace',
+                    apps: [],
+                    createdAt: '2026-10-13T09:00:00.000Z',
+                    expiresAt: '2026-10-20T09:00:00.000Z'
+                }
+            ]
+        },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), [404, 'oidc.TENANT_NOT_FOUND']]
+    },
+    {
+        method: 'POST',
+        path: '/admin/tenants/:id/invitations',
+        tag: 'platform (superadmin)',
+        summary:
+            'Invite someone to any tenant by email as user or admin (the link is valid 7 days); the superadmin is the inviter. Like `POST /tenants/current/invitations`, optionally with apps.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/invitations`,
+        body: {
+            example: { email: 'boss@globex.com', role: 'admin', apps: [] },
+            fields: [
+                ['email', 'string', 'required, a valid email address'],
+                ['role', 'string', '`user` or `admin`'],
+                [
+                    'apps',
+                    'object[]',
+                    'optional, as for `POST /tenants/current/invitations`: `{ clientId, roles, seat }`'
+                ]
+            ]
+        },
+        response: { status: 202, example: { status: 'invited', email: 'boss@globex.com', id: INVITATION_ID } },
+        errors: [
+            BAD_REQUEST,
+            [400, 'oidc.INVITATION_APP_UNKNOWN'],
+            [400, 'oidc.ROLE_UNKNOWN'],
+            ...ACCESS('superadmin'),
+            [404, 'oidc.TENANT_NOT_FOUND'],
+            [409, 'oidc.ALREADY_MEMBER']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/admin/tenants/:id/invitations/:invId/resend',
+        tag: 'platform (superadmin)',
+        summary: 'Send an open invitation of any tenant again: a new link, valid for 7 more days.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/invitations/${INVITATION_ID}/resend`,
+        response: { status: 202, example: { status: 'invited', email: 'boss@globex.com', id: INVITATION_ID } },
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('superadmin'),
+            [404, 'oidc.TENANT_NOT_FOUND'],
+            [404, 'oidc.INVITATION_NOT_FOUND']
+        ]
+    },
+    {
+        method: 'DELETE',
+        path: '/admin/tenants/:id/invitations/:invId',
+        tag: 'platform (superadmin)',
+        summary: 'Withdraw an open invitation of any tenant: the link in the email stops working. Answers 204.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/invitations/${INVITATION_ID}`,
+        response: null,
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('superadmin'),
+            [404, 'oidc.TENANT_NOT_FOUND'],
+            [404, 'oidc.INVITATION_NOT_FOUND']
+        ]
     },
     {
         method: 'GET',
@@ -2375,6 +3161,48 @@ export const endpoints = ({ port = 4000 } = {}) => [
         pathExample: `/admin/users/${USER_ID}/mfa`,
         response: null,
         errors: [...ACCESS('superadmin'), [404, 'oidc.USER_NOT_FOUND']]
+    },
+    {
+        method: 'GET',
+        path: '/admin/stats',
+        tag: 'platform (superadmin)',
+        summary:
+            'Statistics of the whole platform, for superadmins: organisations, active users, apps bought and revenue (paid invoices, without VAT, in cents) as KPI tiles (`value`, `deltaPct`: the change from the month before in percent, `spark`: the last 8 months), revenue and new organisations per month of the range, the 4 apps with the most environments (the rest is `other`) and how often each discount code was used. `activeUsers.value` counts the members seen in the last 30 days.',
+        bearer: true,
+        curl: `curl -H 'Accept-Language: nl' -H "Authorization: Bearer $ACCESS_TOKEN" 'http://localhost:${port}/admin/stats?range=6m'`,
+        query: [
+            [
+                'range',
+                'optional',
+                '`6m`: the last 6 months (default); `year`: January until now; `all`: since the first organisation (24 months at most)'
+            ]
+        ],
+        response: {
+            status: 200,
+            example: {
+                months: ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'],
+                kpis: {
+                    tenants: { value: 12, deltaPct: 9.1, spark: [4, 5, 6, 8, 9, 10, 11, 12] },
+                    activeUsers: { value: 37, deltaPct: 5.4, spark: [10, 14, 18, 22, 27, 31, 37, 39] },
+                    purchasedApps: { value: 15, deltaPct: 7.1, spark: [3, 5, 6, 8, 10, 12, 14, 15] },
+                    revenueMonthCents: {
+                        value: 48400,
+                        deltaPct: 33.3,
+                        spark: [0, 6050, 12100, 18150, 24200, 30250, 36300, 48400]
+                    }
+                },
+                revenueCents: [12100, 18150, 24200, 30250, 36300, 48400],
+                signups: [2, 1, 2, 1, 1, 1],
+                appBreakdown: [
+                    { code: 'planner', name: 'Planner', color: '#4f46e5', count: 9 },
+                    { code: 'other', name: 'other', color: null, count: 6 }
+                ],
+                codes: [{ code: 'WELCOME', redemptions: 4 }],
+                codesRedeemedTotal: 4,
+                codesTotal: 1
+            }
+        },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin')]
     },
     // ---------------------------------------------------------------- two-step verification of the own account
     {
@@ -2463,7 +3291,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/me/eid',
         tag: 'eID',
         summary:
-            'Is a Belgian eID linked to the logged in account? `enabled`: the server has eID login; `hasPassword`: false when the eID is the only login.',
+            'Is a Belgian eID linked to the logged in account? `enabled`: the server has eID login; `hasPassword`: false when the eID is the only login; `required`: this account must have its eID linked (OIDC_EID_REQUIRED, never for a superadmin): until it is, the API answers 403 `oidc.EID_REQUIRED` outside the `@EidOptional()` routes, and it cannot be unlinked.',
         bearer: true,
         response: {
             status: 200,
@@ -2472,7 +3300,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 linked: true,
                 linkedAt: '2026-10-14T09:00:00.000Z',
                 lastUsedAt: null,
-                hasPassword: true
+                hasPassword: true,
+                required: false
             }
         },
         errors: [[401, 'errors.UNAUTHORIZED']]
@@ -2502,7 +3331,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 linked: true,
                 linkedAt: '2026-10-14T09:00:00.000Z',
                 lastUsedAt: null,
-                hasPassword: true
+                hasPassword: true,
+                required: false
             }
         },
         errors: [
@@ -2525,11 +3355,136 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         response: {
             status: 200,
-            example: { enabled: true, linked: false, linkedAt: null, lastUsedAt: null, hasPassword: true }
+            example: {
+                enabled: true,
+                linked: false,
+                linkedAt: null,
+                lastUsedAt: null,
+                hasPassword: true,
+                required: false
+            }
         },
         errors: [
             [401, 'errors.UNAUTHORIZED'],
+            [403, 'oidc.EID_REQUIRED', 'every account must keep its eID (OIDC_EID_REQUIRED)'],
             [409, 'oidc.EID_ONLY_LOGIN']
+        ]
+    },
+    // ---------------------------------------------------------------- the eHealth vault of the own account (doctors)
+    {
+        method: 'GET',
+        path: '/me/vault',
+        tag: 'eHealth vault',
+        summary:
+            'The eHealth vault of the logged in account: whether it may use it (`allowed`: a member with profession `doctor` in the organisation of the token, or a superadmin), what its eHealth certificate says (never the file or its password; `passwordSaved`: it can be opened) and the active products that need the vault (`owned`: the organisation has the app). `cert` is `null` without a certificate; its fields are `null` until it could be opened (its password is set).',
+        bearer: true,
+        response: { status: 200, example: VAULT_STATUS },
+        errors: VAULT_ACCESS
+    },
+    {
+        method: 'PUT',
+        path: '/me/vault',
+        tag: 'eHealth vault',
+        summary:
+            'Upload the own eHealth certificate (PKCS#12, `.p12` or `.pfx`, at most 64 KiB). It replaces the old one and its password. The file is first opened with an empty password: when that works it is ready, otherwise set its password next (`PUT /me/vault/password`). The file and its password are stored encrypted (AES-256-GCM, a key derived from `OIDC_MASTER_KEY`, bound to the account) and only leave the API to an app that calls eHealth for this doctor (`POST /vault/credentials`). Answers the vault, like `GET /me/vault`. Recorded in the audit log (`account.vault_uploaded`).',
+        bearer: true,
+        body: {
+            example: { filename: 'ehealth.p12', dataBase64: 'MIIQ…' },
+            fields: [
+                ['filename', 'string', 'required, 5 to 200 characters, ends in `.p12` or `.pfx`'],
+                [
+                    'dataBase64',
+                    'string',
+                    'required, the file in base64 (at most 64 KiB; a `data:` URL prefix is allowed)'
+                ]
+            ]
+        },
+        response: {
+            status: 200,
+            example: {
+                allowed: true,
+                cert: {
+                    ...VAULT_CERT,
+                    thumbprint: null,
+                    subject: null,
+                    issuer: null,
+                    serial: null,
+                    validUntil: null,
+                    passwordSaved: false
+                },
+                apps: []
+            }
+        },
+        errors: [
+            BAD_REQUEST,
+            [400, 'oidc.VAULT_INVALID_FILE'],
+            ...VAULT_ACCESS,
+            [403, 'oidc.VAULT_NOT_ALLOWED', 'not a doctor in this organisation']
+        ]
+    },
+    {
+        method: 'PUT',
+        path: '/me/vault/password',
+        tag: 'eHealth vault',
+        summary:
+            'The password of the own certificate: checked by opening the file, then stored (encrypted). Fills in what the certificate says. Answers the vault, like `GET /me/vault`. Recorded in the audit log (`account.vault_password_saved`).',
+        bearer: true,
+        body: {
+            example: { password: 'my-certificate-password' },
+            fields: [['password', 'string', 'required, the password of the file (at most 256 characters)']]
+        },
+        response: { status: 200, example: { ...VAULT_STATUS, apps: [] } },
+        errors: [
+            BAD_REQUEST,
+            ...VAULT_ACCESS,
+            [403, 'oidc.VAULT_NOT_ALLOWED', 'not a doctor in this organisation'],
+            [404, 'oidc.VAULT_EMPTY', 'upload the certificate first'],
+            [422, 'oidc.VAULT_WRONG_PASSWORD']
+        ]
+    },
+    {
+        method: 'DELETE',
+        path: '/me/vault',
+        tag: 'eHealth vault',
+        summary:
+            'Remove the own certificate and its password (always allowed: it is the own data of the account). Answers 204. Recorded in the audit log (`account.vault_removed`).',
+        bearer: true,
+        response: null,
+        errors: VAULT_ACCESS
+    },
+    {
+        method: 'POST',
+        path: '/vault/credentials',
+        tag: 'eHealth vault',
+        summary:
+            'For an app that calls eHealth for a doctor (server to server, never from a browser): the certificate and its password in the clear. Three things must be true at once. **The app proves itself**: Basic authentication with its `client_id` and `client_secret`; the app must be confidential and sell a product that needs the vault (`requiresVault` on the product, linked to the app by its `product`). **The doctor is logged in to that very app**: the body holds an access token issued to that app (its `client_id` claim must match), so a leaked secret alone gives nothing; the token also says the organisation. **The doctor may use it**: an active member with profession `doctor` of an active organisation (or a superadmin), with a licence for the product of the app (a seat, a running demo, or a superadmin). Limited per IP address and per app (`OIDC_LOGIN_RATE_LIMIT` a minute). Never cached (`Cache-Control: no-store`): keep the file and the password in memory only, and do not log them. Each fetch is in the audit log (`account.vault_retrieved`, with the app and the thumbprint, never the password).',
+        basic: '$CLIENT_ID',
+        body: {
+            example: { accessToken: 'eyJhbGciOiJFUzI1NiIs…' },
+            fields: [['accessToken', 'string', 'required, the access token of the doctor, issued to this app']]
+        },
+        response: {
+            status: 200,
+            example: {
+                filename: 'ehealth.p12',
+                p12Base64: 'MIIQ…',
+                password: 'my-certificate-password',
+                thumbprint: VAULT_CERT.thumbprint,
+                subject: VAULT_CERT.subject,
+                issuer: VAULT_CERT.issuer,
+                serial: VAULT_CERT.serial,
+                validUntil: VAULT_CERT.validUntil
+            }
+        },
+        errors: [
+            BAD_REQUEST,
+            [401, 'oidc.VAULT_APP_UNAUTHORIZED', 'wrong secret, or the token is not for this app'],
+            [403, 'oidc.VAULT_APP_NOT_ALLOWED', 'the app needs no vault, or the organisation has no licence'],
+            [403, 'oidc.VAULT_NOT_ALLOWED', 'not a doctor'],
+            [404, 'oidc.VAULT_EMPTY'],
+            [409, 'oidc.VAULT_NO_PASSWORD'],
+            [409, 'oidc.VAULT_EXPIRED'],
+            TOO_MANY
         ]
     },
     // ---------------------------------------------------------------- the sessions of the own account
@@ -2806,7 +3761,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/tenants/current/licenses',
         tag: 'licences (admin)',
         summary:
-            'Per product: the subscription (seats, month or year, paid until, the next renewal), the free seats of a superadmin, the trials of the members and who has a seat. `assignments[].active` is false for the newest assignments when there are fewer seats than assignments.',
+            'Per product: the subscription (seats, month or year, paid until, the next renewal without VAT, the practice name and region chosen at the purchase), the free seats of a superadmin, the trials of the members and who has a seat. `assignments[].active` is false for the newest assignments when there are fewer seats than assignments. Products that are no longer sold are only listed when the organisation still has a subscription or free seats of them.',
         bearer: true,
         response: { status: 200, example: [OVERVIEW] },
         errors: ACCESS('admin')
@@ -2816,7 +3771,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/tenants/current/licenses/quote',
         tag: 'licences (admin)',
         summary:
-            'What a purchase costs, with a discount code: the price of one seat, the first payment and every renewal after it (in cents). Nothing is bought.',
+            'What a purchase costs, with a discount code: the price of one seat, the first payment and every renewal after it (in cents). The prices are **without VAT**; `vatPercent` (`BILLING_VAT_PERCENT`, 21) is added to what is charged: `firstVatCents` is the VAT of the first payment, `firstTotalCents` and `renewalTotalCents` are what is charged. Nothing is bought.',
         bearer: true,
         body: PURCHASE,
         response: {
@@ -2827,6 +3782,10 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 baseCents: 45000,
                 firstCents: 22500,
                 renewalCents: 45000,
+                vatPercent: 21,
+                firstVatCents: 4725,
+                firstTotalCents: 27225,
+                renewalTotalCents: 54450,
                 discount: {
                     code: 'WELCOME-50',
                     percentOff: 50,
@@ -2836,16 +3795,16 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 }
             }
         },
-        errors: [BAD_REQUEST, ...ACCESS('admin'), [404, 'billing.PRODUCT_NOT_FOUND'], [400, 'billing.DISCOUNT_INVALID']]
+        errors: [BAD_REQUEST, ...ACCESS('admin'), [404, 'billing.PRODUCT_NOT_FOUND'], ...DISCOUNT_ERRORS]
     },
     {
         method: 'POST',
         path: '/tenants/current/licenses/subscriptions',
         tag: 'licences (admin)',
         summary:
-            'Buy seats of a product per month or per year (a year is cheaper). Answers the checkout URL of Mollie: send the browser there; it comes back on /licenses/return of the frontend. A discount code that makes it free activates at once (`status: active`, no checkout).',
+            'Buy seats of a product per month or per year (a year is cheaper). Answers the checkout URL of Mollie: send the browser there; it comes back on `returnPath` of the frontend (default `/licenses/return`) with `?subscription=<id>`. The amount charged includes VAT (`BILLING_VAT_PERCENT`), and an open invoice is issued at once (paid when the payment comes in). A discount code that makes it free activates at once (`status: active`, no checkout, a `free` invoice). The wizard of the frontend also sends the practice name (`environmentName`), the region and the payment method.',
         bearer: true,
-        body: PURCHASE,
+        body: SUBSCRIBE,
         response: {
             status: 201,
             example: {
@@ -2858,7 +3817,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
             BAD_REQUEST,
             ...ACCESS('admin'),
             [404, 'billing.PRODUCT_NOT_FOUND'],
-            [400, 'billing.DISCOUNT_INVALID'],
+            ...DISCOUNT_ERRORS,
             [409, 'billing.SUBSCRIPTION_EXISTS'],
             [503, 'billing.PAYMENTS_DISABLED']
         ]
@@ -2913,7 +3872,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/tenants/current/licenses/:productCode/trials/:userId',
         tag: 'licences (admin)',
         summary:
-            'Start the 14-day trial (BILLING_TRIAL_DAYS) of a member, for a member that has none yet (a demo never starts by itself). Once per member and product.',
+            'Start the 14-day trial (BILLING_TRIAL_DAYS) of a member, for a member that has none yet (a demo never starts by itself). Once per member and product, and only when the demo of the product is on (`demoEnabled`).',
         bearer: true,
         pathExample: `/tenants/current/licenses/planner/trials/${USER_ID}`,
         response: { status: 201, example: { userId: USER_ID, endsAt: '2026-10-28T08:00:00.000Z' } },
@@ -2921,7 +3880,24 @@ export const endpoints = ({ port = 4000 } = {}) => [
             ...ACCESS('admin'),
             [404, 'billing.PRODUCT_NOT_FOUND'],
             [404, 'billing.NOT_A_MEMBER'],
-            [409, 'billing.TRIAL_USED']
+            [409, 'billing.TRIAL_USED'],
+            [409, 'billing.DEMO_DISABLED']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/licenses/:productCode/seat',
+        tag: 'licences (admin)',
+        summary:
+            'Take one of the seats yourself (the admin that bought the product). Nothing changes when you have one already.',
+        bearer: true,
+        pathExample: '/tenants/current/licenses/planner/seat',
+        response: { status: 201, example: { userId: USER_ID, assigned: true } },
+        errors: [
+            ...ACCESS('admin'),
+            [404, 'billing.PRODUCT_NOT_FOUND'],
+            [404, 'billing.NOT_A_MEMBER'],
+            [409, 'billing.NO_FREE_SEAT']
         ]
     },
     {
@@ -2972,16 +3948,117 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/me/licenses/:productCode/trial',
         tag: 'licences',
         summary:
-            'Ask a demo: a trial of the product for yourself (BILLING_TRIAL_DAYS, 14 days), once per product, in the organisation of the token. For every member. A demo never starts by itself (not when joining, not at the first login to an app); an admin can also start one for a member.',
+            'Ask a demo: a trial of the product for yourself (BILLING_TRIAL_DAYS, 14 days), once per product, in the organisation of the token. For every member (not only admins), only for products with `demoEnabled`. A demo never starts by itself (not when joining, not at the first login to an app); it is the same trial an admin can start for a member: a member that had one already gets `billing.DEMO_USED`.',
         bearer: true,
         pathExample: '/me/licenses/planner/trial',
         response: { status: 201, example: { userId: USER_ID, endsAt: '2026-11-03T08:00:00.000Z' } },
         errors: [
             [401, 'errors.UNAUTHORIZED'],
+            [403, 'errors.FORBIDDEN', 'not a member'],
             [404, 'billing.PRODUCT_NOT_FOUND'],
             [404, 'billing.NOT_A_MEMBER'],
-            [409, 'billing.DEMO_USED']
+            [409, 'billing.DEMO_USED'],
+            [409, 'billing.DEMO_DISABLED']
         ]
+    },
+    // ---------------------------------------------------------------- the app catalogue of the own organisation
+    {
+        method: 'GET',
+        path: '/tenants/current/catalog',
+        tag: 'licences',
+        summary:
+            'The app catalogue of the organisation, for every member: every product that is sold, sorted by `sort` and then name. Per product: does the organisation have it (`owned`: a valid subscription or free seats), may I use it (`access`), my own demo (`trialEndsAt` while it runs; `trialAvailable` when I can still ask one), the seats in use and in total, where it opens (`launchUrl`, with `{slug}` filled in with the slug of the organisation) and where it runs (`environment`: the practice name and region of the purchase; `null` when the organisation does not have it).',
+        bearer: true,
+        response: {
+            status: 200,
+            example: [
+                {
+                    code: 'planner',
+                    name: 'Planner',
+                    description: 'Plan the week of your team',
+                    short: 'Appointments online, 24/7',
+                    icon: 'calendar',
+                    category: 'Planning',
+                    features: ['Online booking', 'SMS reminders'],
+                    color: '#2563eb',
+                    requiresVault: false,
+                    demoEnabled: true,
+                    priceMonthCents: 900,
+                    priceYearCents: 9000,
+                    currency: 'EUR',
+                    owned: true,
+                    access: true,
+                    trialEndsAt: null,
+                    trialAvailable: false,
+                    seatsUsed: 2,
+                    seatsTotal: 5,
+                    launchUrl: 'https://acme.agenda.example.com',
+                    environment: { name: 'Praktijk De Linde', region: 'eu-west-1', since: '2026-10-14T08:00:00.000Z' }
+                }
+            ]
+        },
+        errors: ACCESS('a member')
+    },
+    // ---------------------------------------------------------------- invoices of the own organisation (admins)
+    {
+        method: 'GET',
+        path: '/tenants/current/invoices',
+        tag: 'invoices (admin)',
+        summary:
+            'The invoices of the organisation (admins), newest first. One is issued for every payment of a subscription (the first payment, more seats, every renewal) and a `free` one for a purchase without payment; numbered `FAC-YYYY-NNNN` per year without gaps. Amounts in cents: `amountCents` without VAT, `vatCents`, and `totalCents`, what is charged. `status`: `open` (with the `checkoutUrl` to pay it), `paid` or `free`; void invoices (a purchase that was replaced or not paid) are not listed. The API first asks the payment provider about open payments (at most every 30 seconds per payment), so the list is right without a webhook.',
+        bearer: true,
+        response: {
+            status: 200,
+            example: [
+                {
+                    id: INVOICE_ID,
+                    number: 'FAC-2026-0007',
+                    issuedAt: '2026-10-14T08:00:00.000Z',
+                    paidAt: '2026-10-14T08:02:00.000Z',
+                    app: 'Planner',
+                    productCode: 'planner',
+                    period: 'year',
+                    seats: 5,
+                    amountCents: 22500,
+                    vatCents: 4725,
+                    totalCents: 27225,
+                    status: 'paid',
+                    checkoutUrl: null
+                }
+            ]
+        },
+        errors: ACCESS('admin')
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/invoices/pay',
+        tag: 'invoices (admin)',
+        summary:
+            'One checkout for every open invoice of the organisation (renewals that failed, checkouts that were not finished). When it is paid, every invoice is paid and what it was for is applied (the purchase, the seats, the renewal). The browser comes back on `returnPath` (default `/invoices`) with `?payment=invoices`.',
+        bearer: true,
+        body: {
+            example: { returnPath: '/invoices' },
+            fields: [
+                [
+                    'returnPath',
+                    'string',
+                    'optional, up to 200 characters: a page of the frontend (starts with one `/`), default `/invoices`'
+                ]
+            ]
+        },
+        response: { status: 200, example: { checkoutUrl: 'https://www.mollie.com/checkout/select-method/4RtYp8Wq' } },
+        errors: [BAD_REQUEST, ...ACCESS('admin'), [409, 'invoices.NOTHING_TO_PAY'], [503, 'billing.PAYMENTS_DISABLED']]
+    },
+    {
+        method: 'GET',
+        path: '/tenants/current/invoices/:id/pdf',
+        tag: 'invoices (admin)',
+        summary:
+            'The invoice as a PDF (A4), in the language of the request: the seller (`INVOICE_SELLER_*`), the billing details of the organisation as they were when it was issued, the line, the VAT and the total. Sent as an attachment `FAC-YYYY-NNNN.pdf` (`Content-Type: application/pdf`).',
+        bearer: true,
+        curl: `curl -H 'Accept-Language: nl' -H "Authorization: Bearer $ACCESS_TOKEN" -o FAC-2026-0007.pdf http://localhost:${port}/tenants/current/invoices/${INVOICE_ID}/pdf`,
+        response: null,
+        errors: [BAD_REQUEST, ...ACCESS('admin'), [404, 'invoices.NOT_FOUND']]
     },
     // ---------------------------------------------------------------- the payment provider
     {
@@ -3000,7 +4077,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
         method: 'GET',
         path: '/admin/products',
         tag: 'licences (superadmin)',
-        summary: 'Every product, also the ones that are no longer sold (`active: false`).',
+        summary:
+            'Every product, also the ones that are no longer sold (`active: false`), with how it looks in the app catalogue.',
         bearer: true,
         response: { status: 200, example: [PRODUCT] },
         errors: ACCESS('superadmin')
@@ -3010,7 +4088,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/admin/products',
         tag: 'licences (superadmin)',
         summary:
-            'A new product, sold per user (seat): a price per month and a price per year that must be cheaper than twelve months. The code is fixed: the backend checks it with @License(code).',
+            'A new product, sold per user (seat): a price per month and a price per year that must be cheaper than twelve months (prices without VAT, in cents). The code is fixed: the backend checks it with @License(code). The catalogue fields are optional (defaults: icon `box`, empty category, short text and features, no colour, no vault, demo on, no link, sort 0).',
         bearer: true,
         body: {
             example: {
@@ -3018,14 +4096,16 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 name: 'Planner',
                 description: 'Plan the week of your team',
                 priceMonthCents: 900,
-                priceYearCents: 9000
+                priceYearCents: 9000,
+                ...CATALOG_EXAMPLE
             },
             fields: [
                 ['code', 'string', 'required, lowercase letters, digits and dashes (2 to 63)'],
                 ['name', 'string', 'required, 2 to 100 characters'],
-                ['description', 'string', 'optional, up to 500 characters'],
+                ['description', 'string', 'optional, up to 500 characters: the long text'],
                 ['priceMonthCents', 'number', 'required, per seat per month, in cents'],
-                ['priceYearCents', 'number', 'required, per seat per year, in cents: less than 12 × priceMonthCents']
+                ['priceYearCents', 'number', 'required, per seat per year, in cents: less than 12 × priceMonthCents'],
+                ...CATALOG_FIELDS
             ]
         },
         response: { status: 201, example: PRODUCT },
@@ -3041,7 +4121,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/admin/products/:code',
         tag: 'licences (superadmin)',
         summary:
-            'Change a product: name, description, prices (for new purchases and seats) or stop selling it (`active: false`: no new purchases or trials, bought seats keep working until they end).',
+            'Change a product: name, description, prices (for new purchases and seats), how it looks in the catalogue, its demo, or stop selling it (`active: false`: no new purchases or trials, bought seats keep working until they end). Only the fields that are sent change.',
         bearer: true,
         pathExample: '/admin/products/planner',
         body: {
@@ -3050,22 +4130,41 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 description: 'Plan the week of your team',
                 priceMonthCents: 900,
                 priceYearCents: 9500,
-                active: true
+                active: true,
+                ...CATALOG_EXAMPLE,
+                demoEnabled: false
             },
             fields: [
-                ['name', 'string', 'optional'],
-                ['description', 'string', 'optional'],
+                ['name', 'string', 'optional, 2 to 100 characters'],
+                ['description', 'string', 'optional, up to 500 characters'],
                 ['priceMonthCents', 'number', 'optional'],
                 ['priceYearCents', 'number', 'optional, still less than 12 months'],
-                ['active', 'boolean', 'optional']
+                ['active', 'boolean', 'optional'],
+                ...CATALOG_FIELDS
             ]
         },
-        response: { status: 200, example: { ...PRODUCT, priceYearCents: 9500 } },
+        response: { status: 200, example: { ...PRODUCT, priceYearCents: 9500, demoEnabled: false } },
         errors: [
             BAD_REQUEST,
             ...ACCESS('superadmin'),
             [404, 'billing.PRODUCT_NOT_FOUND'],
             [400, 'billing.YEAR_NOT_CHEAPER']
+        ]
+    },
+    {
+        method: 'DELETE',
+        path: '/admin/products/:code',
+        tag: 'licences (superadmin)',
+        summary:
+            'Remove a product from the catalogue, with its free seats and trials, and the OIDC app with the same client id (so no app is left behind that can still log in). Not while an organisation still has a running subscription of it. Answers 204. In the audit log as `licences.product_deleted`.',
+        bearer: true,
+        pathExample: '/admin/products/planner',
+        response: null,
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('superadmin'),
+            [404, 'billing.PRODUCT_NOT_FOUND'],
+            [409, 'billing.PRODUCT_IN_USE']
         ]
     },
     {
@@ -3174,7 +4273,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/admin/tenants/:id/trials',
         tag: 'licences (superadmin)',
         summary:
-            'Extend the trial of a member by a number of days: from its end, or from today when it ended. Starts one when there is none.',
+            'Extend the trial of a member by a number of days: from its end, or from today when it ended. Starts one when there is none. Also when the demo of the product is off (`demoEnabled: false`): a superadmin can always give one.',
         bearer: true,
         pathExample: `/admin/tenants/${TENANT.id}/trials`,
         body: {
@@ -3192,5 +4291,597 @@ export const endpoints = ({ port = 4000 } = {}) => [
             [404, 'billing.PRODUCT_NOT_FOUND'],
             [404, 'billing.NOT_A_MEMBER']
         ]
+    },
+    {
+        method: 'DELETE',
+        path: '/admin/tenants/:id/trials/:productCode/:userId',
+        tag: 'licences (superadmin)',
+        summary:
+            'End the running trial of a member now. The trial stays (it counts as used: no new demo for that member). In the audit log as `licences.trial_ended`.',
+        bearer: true,
+        pathExample: `/admin/tenants/${TENANT.id}/trials/planner/${USER_ID}`,
+        response: { status: 200, example: { userId: USER_ID, endsAt: '2026-10-18T09:30:00.000Z' } },
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('superadmin'),
+            [404, 'billing.PRODUCT_NOT_FOUND'],
+            [404, 'billing.TRIAL_NOT_FOUND']
+        ]
+    },
+    // ---------------------------------------------------------------- support tickets of the own organisation
+    {
+        method: 'GET',
+        path: '/tenants/current/tickets',
+        tag: 'support',
+        summary:
+            'The support tickets of the organisation of the access token (Row-Level Security), the newest activity first. `status` is `open` (waits for the support team), `in_progress`, `answered` (waits for the customer) or `closed`; `priority` is `normal` or `high`; `app` and `appCode` are `null` for a general question. `lastMessage.text` is the last message without markup, at most 200 characters. For every member.',
+        bearer: true,
+        response: { status: 200, example: [TICKET_ITEM] },
+        errors: ACCESS('a member')
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/tickets/attachments',
+        tag: 'support',
+        summary:
+            'Upload an image to put in a message (`![name](att:<id>)`). JSON with the file in base64; this route accepts a body of up to 3 MB. The type is detected from the first bytes (PNG, JPEG, GIF or WebP); only the base name of `filename` is kept.',
+        bearer: true,
+        body: {
+            example: { filename: 'screenshot.png', dataBase64: 'iVBORw0KGgoAAAANSUhEUgAA…' },
+            fields: IMAGE_FIELDS
+        },
+        response: { status: 201, example: ATTACHMENT },
+        errors: [BAD_REQUEST, ...ACCESS('a member'), ...IMAGE_ERRORS]
+    },
+    {
+        method: 'GET',
+        path: '/tenants/current/tickets/attachments/:id',
+        tag: 'support',
+        summary:
+            'An image of the own organisation, inline with its own `Content-Type` (`image/png`, `image/jpeg`, `image/gif` or `image/webp`), `Content-Disposition: inline; filename="..."`, `X-Content-Type-Options: nosniff` and `Cache-Control: private, max-age=86400`.',
+        bearer: true,
+        curl: `curl -H 'Accept-Language: nl' -H "Authorization: Bearer $ACCESS_TOKEN" -o screenshot.png http://localhost:${port}/tenants/current/tickets/attachments/${ATTACHMENT.id}`,
+        response: null,
+        errors: [BAD_REQUEST, ...ACCESS('a member'), [404, 'support.ATTACHMENT_NOT_FOUND']]
+    },
+    {
+        method: 'GET',
+        path: '/tenants/current/tickets/:id',
+        tag: 'support',
+        summary:
+            'One ticket of the own organisation with its conversation (`role`: `customer` or `support`; `text` with its markup; `from` is `null` when the account of the writer was removed). The internal notes of the support team are never shown here. `assigneeOutOfOffice`: `{ until, message }` while the superadmin handling it is out of office (its message for customers), otherwise null. `rating` is `{ score, comment, ratedAt }` once the ticket is rated.',
+        bearer: true,
+        pathExample: `/tenants/current/tickets/${TICKET_ID}`,
+        response: { status: 200, example: TICKET },
+        errors: [BAD_REQUEST, ...ACCESS('a member'), TICKET_NOT_FOUND]
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/tickets',
+        tag: 'support',
+        summary:
+            'Ask the support team a question, about an app or in general: a new ticket, `open`, priority `normal`. The superadmins that are online get a notification (no email). Every image in the text must be an uploaded image of the organisation. Answers the ticket with its conversation, like `GET /tenants/current/tickets/:id`.',
+        bearer: true,
+        body: {
+            example: {
+                subject: 'Appointments missing',
+                appCode: 'planner',
+                text: 'The planner does **not** show my appointments.'
+            },
+            fields: [
+                ['subject', 'string', 'required, 3 to 200 characters'],
+                ['appCode', 'string | null', 'optional, the code of a product; `null` or left out: a general question'],
+                TICKET_TEXT
+            ]
+        },
+        response: {
+            status: 201,
+            example: {
+                ...TICKET,
+                status: 'open',
+                assignee: null,
+                updatedAt: TICKET.createdAt,
+                messages: [{ ...TICKET.messages[0], text: 'The planner does **not** show my appointments.' }]
+            }
+        },
+        errors: [BAD_REQUEST, ATTACHMENT_UNKNOWN, ...ACCESS('a member'), [404, 'support.APP_NOT_FOUND']]
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/tickets/:id/messages',
+        tag: 'support',
+        summary:
+            'Write in a ticket of the own organisation: it is `open` again (it needs the support team). The superadmin handling it gets a notification, or the superadmins that are online when nobody handles it. Not on a closed ticket: reopen it first. Answers the ticket with its conversation.',
+        bearer: true,
+        pathExample: `/tenants/current/tickets/${TICKET_ID}/messages`,
+        body: { example: { text: 'Still missing on Friday.' }, fields: [TICKET_TEXT] },
+        response: { status: 201, example: { ...TICKET, status: 'open' } },
+        errors: [
+            BAD_REQUEST,
+            ATTACHMENT_UNKNOWN,
+            ...ACCESS('a member'),
+            TICKET_NOT_FOUND,
+            [409, 'support.TICKET_CLOSED', 'reopen it first']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/tickets/:id/close',
+        tag: 'support',
+        summary:
+            'Close a ticket of the own organisation (the question is answered). Closing a closed ticket changes nothing. The superadmin handling it gets a notification.',
+        bearer: true,
+        pathExample: `/tenants/current/tickets/${TICKET_ID}/close`,
+        response: { status: 200, example: { ...TICKET, status: 'closed' } },
+        errors: [BAD_REQUEST, ...ACCESS('a member'), TICKET_NOT_FOUND]
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/tickets/:id/reopen',
+        tag: 'support',
+        summary:
+            'Reopen a closed ticket of the own organisation: `open` again (a ticket that is not closed is left as it is). The rating stays.',
+        bearer: true,
+        pathExample: `/tenants/current/tickets/${TICKET_ID}/reopen`,
+        response: { status: 200, example: { ...TICKET, status: 'open' } },
+        errors: [BAD_REQUEST, ...ACCESS('a member'), TICKET_NOT_FOUND]
+    },
+    {
+        method: 'POST',
+        path: '/tenants/current/tickets/:id/rating',
+        tag: 'support',
+        summary:
+            'Rate how a closed ticket went: 1 (bad) to 5 (very good), with an optional comment. Rating again overwrites it.',
+        bearer: true,
+        pathExample: `/tenants/current/tickets/${TICKET_ID}/rating`,
+        body: {
+            example: { score: 5, comment: 'Quick and friendly help.' },
+            fields: [
+                ['score', 'number', 'required, a whole number 1 to 5'],
+                [
+                    'comment',
+                    'string | null',
+                    'optional, at most 1000 characters, trimmed; empty, `null` or left out: no comment'
+                ]
+            ]
+        },
+        response: {
+            status: 200,
+            example: {
+                ...TICKET,
+                status: 'closed',
+                rating: { score: 5, comment: 'Quick and friendly help.', ratedAt: '2026-10-14T10:02:00.000Z' }
+            }
+        },
+        errors: [
+            BAD_REQUEST,
+            ...ACCESS('a member'),
+            TICKET_NOT_FOUND,
+            [409, 'support.TICKET_NOT_CLOSED', 'only a closed ticket can be rated']
+        ]
+    },
+    // ---------------------------------------------------------------- support tickets of the platform (superadmins)
+    {
+        method: 'GET',
+        path: '/admin/tickets',
+        tag: 'support (superadmin)',
+        summary:
+            'Every ticket of the platform, for the support team (superadmins), the newest activity first. Same items as `GET /tenants/current/tickets`, of every organisation.',
+        bearer: true,
+        curl: `curl -H 'Accept-Language: nl' -H "Authorization: Bearer $ACCESS_TOKEN" 'http://localhost:${port}/admin/tickets?status=open&assignee=none'`,
+        query: [
+            ['status', 'optional', '`open`, `in_progress`, `answered` or `closed`'],
+            ['assignee', 'optional', '`me`: assigned to me; `none`: nobody handles it yet'],
+            ['q', 'optional', 'Search in number, subject, organisation or customer (at most 100 characters)']
+        ],
+        response: { status: 200, example: [TICKET_ITEM] },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin')]
+    },
+    {
+        method: 'POST',
+        path: '/admin/tickets/attachments',
+        tag: 'support (superadmin)',
+        summary:
+            'Upload an image for a message of support to an organisation (the organisation must exist). As `POST /tenants/current/tickets/attachments`, with the organisation in the body.',
+        bearer: true,
+        body: {
+            example: { tenantId: TENANT.id, filename: 'settings.png', dataBase64: 'iVBORw0KGgoAAAANSUhEUgAA…' },
+            fields: [['tenantId', 'string', 'required, the id (uuid) of the organisation'], ...IMAGE_FIELDS]
+        },
+        response: {
+            status: 201,
+            example: {
+                id: '9a8b7c6d-5e4f-4321-8fed-cba987654321',
+                filename: 'settings.png',
+                contentType: 'image/png',
+                size: 31877
+            }
+        },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), [404, 'oidc.TENANT_NOT_FOUND'], ...IMAGE_ERRORS]
+    },
+    {
+        method: 'GET',
+        path: '/admin/tickets/attachments/:id',
+        tag: 'support (superadmin)',
+        summary:
+            'An image of any organisation, with the same headers as `GET /tenants/current/tickets/attachments/:id`.',
+        bearer: true,
+        curl: `curl -H 'Accept-Language: nl' -H "Authorization: Bearer $ACCESS_TOKEN" -o screenshot.png http://localhost:${port}/admin/tickets/attachments/${ATTACHMENT.id}`,
+        response: null,
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), [404, 'support.ATTACHMENT_NOT_FOUND']]
+    },
+    {
+        method: 'GET',
+        path: '/admin/tickets/:id',
+        tag: 'support (superadmin)',
+        summary:
+            'One ticket with its conversation **and the internal notes** of the support team (never shown to the organisation). `assigneeOutOfOffice`: `{ until, message }` while the superadmin handling it is out of office (its message for colleagues), otherwise null.',
+        bearer: true,
+        pathExample: `/admin/tickets/${TICKET_ID}`,
+        response: { status: 200, example: ADMIN_TICKET },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), TICKET_NOT_FOUND]
+    },
+    {
+        method: 'POST',
+        path: '/admin/tickets',
+        tag: 'support (superadmin)',
+        summary:
+            'Open a ticket for an organisation as support (for example after a phone call): written by the superadmin as `support`, assigned to them and `in_progress`. The admins of the organisation get the message as a notification, like a reply. Answers the ticket with its conversation and notes, like `GET /admin/tickets/:id`.',
+        bearer: true,
+        body: {
+            example: {
+                tenantId: TENANT.id,
+                subject: 'Your call about the planner',
+                priority: 'high',
+                appCode: 'planner',
+                text: 'As discussed on the phone: we are looking into it.'
+            },
+            fields: [
+                ['tenantId', 'string', 'required, the id (uuid) of the organisation'],
+                ['subject', 'string', 'required, 3 to 200 characters'],
+                ['priority', 'string', 'required, `normal` or `high`'],
+                ['appCode', 'string | null', 'optional, the code of a product; `null` or left out: a general question'],
+                TICKET_TEXT
+            ]
+        },
+        response: {
+            status: 201,
+            example: {
+                ...ADMIN_TICKET,
+                subject: 'Your call about the planner',
+                status: 'in_progress',
+                priority: 'high',
+                customer: null,
+                updatedAt: TICKET.createdAt,
+                messages: [{ ...TICKET.messages[1], text: 'As discussed on the phone: we are looking into it.' }],
+                notes: []
+            }
+        },
+        errors: [
+            BAD_REQUEST,
+            ATTACHMENT_UNKNOWN,
+            ...ACCESS('superadmin'),
+            [404, 'oidc.TENANT_NOT_FOUND'],
+            [404, 'support.APP_NOT_FOUND']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/admin/tickets/:id/claim',
+        tag: 'support (superadmin)',
+        summary:
+            'Take a ticket: assigned to me (also when another superadmin had it), and `in_progress` when it was `open`. Not in the audit log of the organisation. The notifications about the ticket disappear from the bell of the other superadmins.',
+        bearer: true,
+        pathExample: `/admin/tickets/${TICKET_ID}/claim`,
+        response: { status: 200, example: { ...ADMIN_TICKET, status: 'in_progress' } },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), TICKET_NOT_FOUND]
+    },
+    {
+        method: 'POST',
+        path: '/admin/tickets/:id/messages',
+        tag: 'support (superadmin)',
+        summary:
+            'Answer as support: the ticket is `answered` (and mine when nobody had it). The member who made the ticket gets a notification (for a ticket support made: the admins of the organisation). Not on a closed ticket.',
+        bearer: true,
+        pathExample: `/admin/tickets/${TICKET_ID}/messages`,
+        body: { example: { text: 'Fixed: the planner shows them again.' }, fields: [TICKET_TEXT] },
+        response: { status: 201, example: ADMIN_TICKET },
+        errors: [
+            BAD_REQUEST,
+            ATTACHMENT_UNKNOWN,
+            ...ACCESS('superadmin'),
+            TICKET_NOT_FOUND,
+            [409, 'support.TICKET_CLOSED', 'reopen it first']
+        ]
+    },
+    {
+        method: 'POST',
+        path: '/admin/tickets/:id/close',
+        tag: 'support (superadmin)',
+        summary: 'Close a ticket. When another superadmin handles it, they get a notification.',
+        bearer: true,
+        pathExample: `/admin/tickets/${TICKET_ID}/close`,
+        response: { status: 200, example: { ...ADMIN_TICKET, status: 'closed' } },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), TICKET_NOT_FOUND]
+    },
+    {
+        method: 'POST',
+        path: '/admin/tickets/:id/reopen',
+        tag: 'support (superadmin)',
+        summary: 'Reopen a closed ticket: `in_progress` again.',
+        bearer: true,
+        pathExample: `/admin/tickets/${TICKET_ID}/reopen`,
+        response: { status: 200, example: { ...ADMIN_TICKET, status: 'in_progress' } },
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), TICKET_NOT_FOUND]
+    },
+    {
+        method: 'POST',
+        path: '/admin/tickets/:id/notes',
+        tag: 'support (superadmin)',
+        summary:
+            'An internal note of the support team (never shown to the organisation, not in its audit log), optionally mentioning members of the support team. A mentioned superadmin that is out of office shows its internal message.',
+        bearer: true,
+        pathExample: `/admin/tickets/${TICKET_ID}/notes`,
+        body: {
+            example: {
+                text: 'Same problem as TIC-1038, see the release notes.',
+                mentions: ['4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e7f']
+            },
+            fields: [
+                TICKET_TEXT,
+                [
+                    'mentions',
+                    'string[]',
+                    'optional, at most 20 ids (uuid) of active superadmins (`GET /admin/support-team`)'
+                ]
+            ]
+        },
+        response: { status: 201, example: ADMIN_TICKET },
+        errors: [BAD_REQUEST, [400, 'support.MENTION_NOT_SUPPORT'], ...ACCESS('superadmin'), TICKET_NOT_FOUND]
+    },
+    {
+        method: 'GET',
+        path: '/admin/support-team',
+        tag: 'support (superadmin)',
+        summary:
+            'The support team: every active superadmin (to assign tickets and to mention in notes). `outOfOffice`: `{ until, message }` while that superadmin is out of office (its message for colleagues), otherwise null.',
+        bearer: true,
+        response: {
+            status: 200,
+            example: [{ id: SUPPORT_ID, name: 'Sam Support', email: 'sam@example.com', outOfOffice: null }]
+        },
+        errors: ACCESS('superadmin')
     }
 ]
+
+/** Texts of the invoices and their PDF (namespace "invoices"). Every language needs the same keys. */
+export const INVOICE_MESSAGES = {
+    en: {
+        NOT_FOUND: 'This invoice was not found.',
+        NOTHING_TO_PAY: 'There are no open invoices to pay.',
+        PDF_TITLE: 'Invoice',
+        PDF_VAT_NUMBER: 'VAT {vat}',
+        PDF_STATUS_open: 'OPEN',
+        PDF_STATUS_paid: 'PAID',
+        PDF_STATUS_free: 'FREE',
+        PDF_STATUS_void: 'VOID',
+        PDF_BILLED_TO: 'Billed to',
+        PDF_DATE: 'Invoice date',
+        PDF_PAID_ON: 'Paid on',
+        PDF_PERIOD: 'Period',
+        PDF_PERIOD_month: '1 month',
+        PDF_PERIOD_year: '1 year',
+        PDF_DESCRIPTION: 'Description',
+        PDF_QUANTITY: 'Quantity',
+        PDF_AMOUNT: 'Amount',
+        PDF_SEATS: '{seats} × user',
+        PDF_LINE_subscription: 'Subscription, {period}',
+        PDF_LINE_seats: 'Extra users for the rest of the period',
+        PDF_LINE_renewal: 'Renewal, {period}',
+        PDF_LINE_free: 'Subscription, {period} (discount code)',
+        PDF_SUBTOTAL: 'Subtotal',
+        PDF_VAT: 'VAT {percent}%',
+        PDF_TOTAL: 'Total',
+        PDF_NOTE_PAID: 'Paid on {date}. Thank you!',
+        PDF_NOTE_FREE: 'Nothing to pay: this purchase is free thanks to a discount code.',
+        PDF_NOTE_VOID: 'This invoice is void: the purchase was not completed.',
+        PDF_NOTE_OPEN: 'Please pay this invoice online in your account.',
+        PDF_NOTE_OPEN_IBAN:
+            'Please pay this invoice online in your account, or transfer the total to {iban} with reference {number}.'
+    },
+    nl: {
+        NOT_FOUND: 'Deze factuur werd niet gevonden.',
+        NOTHING_TO_PAY: 'Er zijn geen openstaande facturen om te betalen.',
+        PDF_TITLE: 'Factuur',
+        PDF_VAT_NUMBER: 'Btw {vat}',
+        PDF_STATUS_open: 'OPEN',
+        PDF_STATUS_paid: 'BETAALD',
+        PDF_STATUS_free: 'GRATIS',
+        PDF_STATUS_void: 'VERVALLEN',
+        PDF_BILLED_TO: 'Factuur aan',
+        PDF_DATE: 'Factuurdatum',
+        PDF_PAID_ON: 'Betaald op',
+        PDF_PERIOD: 'Periode',
+        PDF_PERIOD_month: '1 maand',
+        PDF_PERIOD_year: '1 jaar',
+        PDF_DESCRIPTION: 'Omschrijving',
+        PDF_QUANTITY: 'Aantal',
+        PDF_AMOUNT: 'Bedrag',
+        PDF_SEATS: '{seats} × gebruiker',
+        PDF_LINE_subscription: 'Abonnement, {period}',
+        PDF_LINE_seats: 'Extra gebruikers voor de rest van de periode',
+        PDF_LINE_renewal: 'Verlenging, {period}',
+        PDF_LINE_free: 'Abonnement, {period} (kortingscode)',
+        PDF_SUBTOTAL: 'Subtotaal',
+        PDF_VAT: 'Btw {percent}%',
+        PDF_TOTAL: 'Totaal',
+        PDF_NOTE_PAID: 'Betaald op {date}. Bedankt!',
+        PDF_NOTE_FREE: 'Niets te betalen: deze aankoop is gratis dankzij een kortingscode.',
+        PDF_NOTE_VOID: 'Deze factuur is vervallen: de aankoop werd niet afgerond.',
+        PDF_NOTE_OPEN: 'Betaal deze factuur online in je account.',
+        PDF_NOTE_OPEN_IBAN:
+            'Betaal deze factuur online in je account, of schrijf het totaal over naar {iban} met mededeling {number}.'
+    },
+    fr: {
+        NOT_FOUND: 'Cette facture est introuvable.',
+        NOTHING_TO_PAY: "Il n'y a aucune facture ouverte à payer.",
+        PDF_TITLE: 'Facture',
+        PDF_VAT_NUMBER: 'TVA {vat}',
+        PDF_STATUS_open: 'OUVERTE',
+        PDF_STATUS_paid: 'PAYÉE',
+        PDF_STATUS_free: 'GRATUITE',
+        PDF_STATUS_void: 'ANNULÉE',
+        PDF_BILLED_TO: 'Facturé à',
+        PDF_DATE: 'Date de facture',
+        PDF_PAID_ON: 'Payée le',
+        PDF_PERIOD: 'Période',
+        PDF_PERIOD_month: '1 mois',
+        PDF_PERIOD_year: '1 an',
+        PDF_DESCRIPTION: 'Description',
+        PDF_QUANTITY: 'Quantité',
+        PDF_AMOUNT: 'Montant',
+        PDF_SEATS: '{seats} × utilisateur',
+        PDF_LINE_subscription: 'Abonnement, {period}',
+        PDF_LINE_seats: 'Utilisateurs supplémentaires pour le reste de la période',
+        PDF_LINE_renewal: 'Renouvellement, {period}',
+        PDF_LINE_free: 'Abonnement, {period} (code de réduction)',
+        PDF_SUBTOTAL: 'Sous-total',
+        PDF_VAT: 'TVA {percent} %',
+        PDF_TOTAL: 'Total',
+        PDF_NOTE_PAID: 'Payée le {date}. Merci !',
+        PDF_NOTE_FREE: 'Rien à payer : cet achat est gratuit grâce à un code de réduction.',
+        PDF_NOTE_VOID: "Cette facture est annulée : l'achat n'a pas été finalisé.",
+        PDF_NOTE_OPEN: 'Veuillez payer cette facture en ligne dans votre compte.',
+        PDF_NOTE_OPEN_IBAN:
+            'Veuillez payer cette facture en ligne dans votre compte, ou virer le total sur {iban} avec la communication {number}.'
+    },
+    de: {
+        NOT_FOUND: 'Diese Rechnung wurde nicht gefunden.',
+        NOTHING_TO_PAY: 'Es gibt keine offenen Rechnungen zu bezahlen.',
+        PDF_TITLE: 'Rechnung',
+        PDF_VAT_NUMBER: 'USt-IdNr. {vat}',
+        PDF_STATUS_open: 'OFFEN',
+        PDF_STATUS_paid: 'BEZAHLT',
+        PDF_STATUS_free: 'KOSTENLOS',
+        PDF_STATUS_void: 'STORNIERT',
+        PDF_BILLED_TO: 'Rechnung an',
+        PDF_DATE: 'Rechnungsdatum',
+        PDF_PAID_ON: 'Bezahlt am',
+        PDF_PERIOD: 'Zeitraum',
+        PDF_PERIOD_month: '1 Monat',
+        PDF_PERIOD_year: '1 Jahr',
+        PDF_DESCRIPTION: 'Beschreibung',
+        PDF_QUANTITY: 'Menge',
+        PDF_AMOUNT: 'Betrag',
+        PDF_SEATS: '{seats} × Benutzer',
+        PDF_LINE_subscription: 'Abonnement, {period}',
+        PDF_LINE_seats: 'Zusätzliche Benutzer für den Rest des Zeitraums',
+        PDF_LINE_renewal: 'Verlängerung, {period}',
+        PDF_LINE_free: 'Abonnement, {period} (Rabattcode)',
+        PDF_SUBTOTAL: 'Zwischensumme',
+        PDF_VAT: 'MwSt. {percent} %',
+        PDF_TOTAL: 'Gesamt',
+        PDF_NOTE_PAID: 'Bezahlt am {date}. Vielen Dank!',
+        PDF_NOTE_FREE: 'Nichts zu bezahlen: Dieser Kauf ist dank eines Rabattcodes kostenlos.',
+        PDF_NOTE_VOID: 'Diese Rechnung ist storniert: Der Kauf wurde nicht abgeschlossen.',
+        PDF_NOTE_OPEN: 'Bitte bezahle diese Rechnung online in deinem Konto.',
+        PDF_NOTE_OPEN_IBAN:
+            'Bitte bezahle diese Rechnung online in deinem Konto oder überweise den Gesamtbetrag auf {iban} mit dem Verwendungszweck {number}.'
+    }
+}
+
+/** Texts of the support tickets and their emails (namespace "support"). Every language needs the same keys. */
+export const SUPPORT_MESSAGES = {
+    en: {
+        TICKET_NOT_FOUND: 'This ticket was not found.',
+        TICKET_CLOSED: 'This ticket is closed. Reopen it to write a message.',
+        TICKET_NOT_CLOSED: 'Only a closed ticket can be rated.',
+        APP_NOT_FOUND: 'There is no app with this code.',
+        MENTION_NOT_SUPPORT: 'Only members of the support team (superadmins) can be mentioned.',
+        IMAGE_INVALID: 'This file is not a PNG, JPEG, GIF or WebP image.',
+        IMAGE_TOO_LARGE: 'This image is too large (at most 2 MB).',
+        ATTACHMENT_NOT_FOUND: 'This image was not found.',
+        ATTACHMENT_UNKNOWN: 'The message contains an image that was not found.',
+        MAIL_REPLY_SUBJECT: '[{number}] {subject}',
+        MAIL_REPLY_TEXT: 'The support team of {app} answered your ticket {number}:',
+        MAIL_REPLY_BUTTON: 'Open the ticket',
+        MAIL_REPLY_NOTE: 'Answer in {app}: replies to this email are not read.',
+        MAIL_NEW_SUBJECT: 'New ticket {number} of {tenant}: {subject}',
+        MAIL_NEW_TEXT: '{customer} of {tenant} opened a support ticket:',
+        MAIL_NEW_BUTTON: 'Open the ticket',
+        MAIL_NEW_NOTE: 'You get this email because you are in the support team of {app}.'
+    },
+    nl: {
+        TICKET_NOT_FOUND: 'Dit ticket werd niet gevonden.',
+        TICKET_CLOSED: 'Dit ticket is gesloten. Heropen het om een bericht te schrijven.',
+        TICKET_NOT_CLOSED: 'Alleen een gesloten ticket kan beoordeeld worden.',
+        APP_NOT_FOUND: 'Er is geen app met deze code.',
+        MENTION_NOT_SUPPORT: 'Alleen leden van het supportteam (superadmins) kunnen vermeld worden.',
+        IMAGE_INVALID: 'Dit bestand is geen PNG-, JPEG-, GIF- of WebP-afbeelding.',
+        IMAGE_TOO_LARGE: 'Deze afbeelding is te groot (maximaal 2 MB).',
+        ATTACHMENT_NOT_FOUND: 'Deze afbeelding werd niet gevonden.',
+        ATTACHMENT_UNKNOWN: 'Het bericht bevat een afbeelding die niet gevonden werd.',
+        MAIL_REPLY_SUBJECT: '[{number}] {subject}',
+        MAIL_REPLY_TEXT: 'Het supportteam van {app} heeft je ticket {number} beantwoord:',
+        MAIL_REPLY_BUTTON: 'Ticket openen',
+        MAIL_REPLY_NOTE: 'Antwoord in {app}: antwoorden op deze e-mail worden niet gelezen.',
+        MAIL_NEW_SUBJECT: 'Nieuw ticket {number} van {tenant}: {subject}',
+        MAIL_NEW_TEXT: '{customer} van {tenant} heeft een supportticket geopend:',
+        MAIL_NEW_BUTTON: 'Ticket openen',
+        MAIL_NEW_NOTE: 'Je krijgt deze e-mail omdat je in het supportteam van {app} zit.'
+    },
+    fr: {
+        TICKET_NOT_FOUND: 'Ce ticket est introuvable.',
+        TICKET_CLOSED: 'Ce ticket est fermé. Rouvrez-le pour écrire un message.',
+        TICKET_NOT_CLOSED: 'Seul un ticket fermé peut être évalué.',
+        APP_NOT_FOUND: "Il n'existe pas d'application avec ce code.",
+        MENTION_NOT_SUPPORT: "Seuls les membres de l'équipe de support (superadmins) peuvent être mentionnés.",
+        IMAGE_INVALID: "Ce fichier n'est pas une image PNG, JPEG, GIF ou WebP.",
+        IMAGE_TOO_LARGE: 'Cette image est trop grande (2 Mo au maximum).',
+        ATTACHMENT_NOT_FOUND: 'Cette image est introuvable.',
+        ATTACHMENT_UNKNOWN: 'Le message contient une image introuvable.',
+        MAIL_REPLY_SUBJECT: '[{number}] {subject}',
+        MAIL_REPLY_TEXT: "L'équipe de support de {app} a répondu à votre ticket {number} :",
+        MAIL_REPLY_BUTTON: 'Ouvrir le ticket',
+        MAIL_REPLY_NOTE: 'Répondez dans {app} : les réponses à cet e-mail ne sont pas lues.',
+        MAIL_NEW_SUBJECT: 'Nouveau ticket {number} de {tenant} : {subject}',
+        MAIL_NEW_TEXT: '{customer} de {tenant} a ouvert un ticket de support :',
+        MAIL_NEW_BUTTON: 'Ouvrir le ticket',
+        MAIL_NEW_NOTE: "Vous recevez cet e-mail parce que vous faites partie de l'équipe de support de {app}."
+    },
+    de: {
+        TICKET_NOT_FOUND: 'Dieses Ticket wurde nicht gefunden.',
+        TICKET_CLOSED: 'Dieses Ticket ist geschlossen. Öffne es erneut, um eine Nachricht zu schreiben.',
+        TICKET_NOT_CLOSED: 'Nur ein geschlossenes Ticket kann bewertet werden.',
+        APP_NOT_FOUND: 'Es gibt keine App mit diesem Code.',
+        MENTION_NOT_SUPPORT: 'Nur Mitglieder des Support-Teams (Superadmins) können erwähnt werden.',
+        IMAGE_INVALID: 'Diese Datei ist kein PNG-, JPEG-, GIF- oder WebP-Bild.',
+        IMAGE_TOO_LARGE: 'Dieses Bild ist zu groß (höchstens 2 MB).',
+        ATTACHMENT_NOT_FOUND: 'Dieses Bild wurde nicht gefunden.',
+        ATTACHMENT_UNKNOWN: 'Die Nachricht enthält ein Bild, das nicht gefunden wurde.',
+        MAIL_REPLY_SUBJECT: '[{number}] {subject}',
+        MAIL_REPLY_TEXT: 'Das Support-Team von {app} hat dein Ticket {number} beantwortet:',
+        MAIL_REPLY_BUTTON: 'Ticket öffnen',
+        MAIL_REPLY_NOTE: 'Antworte in {app}: Antworten auf diese E-Mail werden nicht gelesen.',
+        MAIL_NEW_SUBJECT: 'Neues Ticket {number} von {tenant}: {subject}',
+        MAIL_NEW_TEXT: '{customer} von {tenant} hat ein Support-Ticket eröffnet:',
+        MAIL_NEW_BUTTON: 'Ticket öffnen',
+        MAIL_NEW_NOTE: 'Du erhältst diese E-Mail, weil du zum Support-Team von {app} gehörst.'
+    }
+}
+
+/** Errors of the OIDC server besides those of every API (namespace "errors"). */
+export const ERROR_MESSAGES = {
+    en: {
+        OUT_OF_OFFICE_DATES: 'The end of the out-of-office period must be after its start.'
+    },
+    nl: {
+        OUT_OF_OFFICE_DATES: 'Het einde van de afwezigheid moet na het begin liggen.'
+    },
+    fr: {
+        OUT_OF_OFFICE_DATES: 'La fin de la période d’absence doit être après son début.'
+    },
+    de: {
+        OUT_OF_OFFICE_DATES: 'Das Ende der Abwesenheit muss nach ihrem Beginn liegen.'
+    }
+}

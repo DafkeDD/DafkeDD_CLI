@@ -21,6 +21,14 @@ import type {
     NewAccount,
     OidcClient,
     OidcStore,
+    OutOfOffice,
+    Presence,
+    Profession,
+    ProfileChanges,
+    TenantChanges,
+    TenantDetails,
+    TenantSummary,
+    UserProfile,
     Session,
     SessionSummary,
     StoredKey,
@@ -31,12 +39,26 @@ import type {
     UserIdentifier
 } from './oidc.store.js'
 
+/** No out-of-office reply (the defaults of the columns). */
+const OFF: OutOfOffice = { enabled: false, from: null, until: null, internalMessage: null, externalMessage: null }
+
 /** In-memory store with the same behaviour as PgOidcStore. Used by the tests; never in production. */
 export class MemoryOidcStore implements OidcStore {
     users: StoredUser[] = []
     tenants: Tenant[] = []
-    members: { tenantId: string; userId: string; role: TenantRole; status: MemberStatus; lastSeenAt: Date | null }[] =
-        []
+    members: {
+        tenantId: string
+        userId: string
+        role: TenantRole
+        status: MemberStatus
+        profession: Profession
+        lastSeenAt: Date | null
+        createdAt: Date
+    }[] = []
+    profiles = new Map<string, UserProfile>()
+    presences = new Map<string, Presence>()
+    outOfOffice = new Map<string, OutOfOffice>()
+    tenantDetails = new Map<string, TenantDetails>()
     invitations: Invitation[] = []
     clients = new Map<string, OidcClient>()
     clientInfo = new Map<string, { source: 'file' | 'admin'; disabled: boolean; createdAt: Date; updatedAt: Date }>()
@@ -97,7 +119,15 @@ export class MemoryOidcStore implements OidcStore {
 
     /** Test helper: makes a user a member of a tenant. */
     addMembership(tenantId: string, userId: string, role: TenantRole = 'user') {
-        this.members.push({ tenantId, userId, role, status: 'active', lastSeenAt: null })
+        this.members.push({
+            tenantId,
+            userId,
+            role,
+            status: 'active',
+            profession: 'staff',
+            lastSeenAt: null,
+            createdAt: new Date()
+        })
     }
 
     async findUserByEmail(email: string) {
@@ -210,6 +240,10 @@ export class MemoryOidcStore implements OidcStore {
         for (const [hash, code] of this.linkCodes)
             if (code.clientId === clientId && !code.usedAt) this.linkCodes.delete(hash)
         this.linkCodes.set(codeHash, { clientId, expiresAt, usedAt: null })
+    }
+
+    async deleteLinkCodes(clientId: string) {
+        for (const [hash, code] of this.linkCodes) if (code.clientId === clientId) this.linkCodes.delete(hash)
     }
 
     async useLinkCode(codeHash: string) {
@@ -495,7 +529,7 @@ export class MemoryOidcStore implements OidcStore {
 
     async register(account: NewAccount, tenant: { name: string; slug: string }) {
         if (await this.findUserByEmail(account.email)) return null
-        const user = this.addUser({ ...account })
+        const user = this.newUser(account)
         const created = this.addTenant(this.freeSlug(tenant.slug), tenant.name)
         this.addMembership(created.id, user.id, 'admin')
         return { user, tenant: created }
@@ -518,6 +552,10 @@ export class MemoryOidcStore implements OidcStore {
     async findUserByIdentifier(type: IdentifierType, valueHash: string) {
         const row = this.identifiers.find(item => item.type === type && item.valueHash === valueHash)
         return row ? ((await this.findUserById(row.userId)) ?? null) : null
+    }
+
+    async listLinkedUsers(type: IdentifierType, userIds: string[]) {
+        return userIds.filter(id => this.identifiers.some(item => item.userId === id && item.type === type))
     }
 
     async findIdentifier(userId: string, type: IdentifierType) {
@@ -585,7 +623,104 @@ export class MemoryOidcStore implements OidcStore {
 
     async createUser(account: NewAccount) {
         if (await this.findUserByEmail(account.email)) return null
-        return this.addUser({ ...account })
+        return this.newUser(account)
+    }
+
+    async createUserWithIdentifier(account: NewAccount, identifier: { type: IdentifierType; valueHash: string }) {
+        if (this.identifiers.some(row => row.type === identifier.type && row.valueHash === identifier.valueHash))
+            return 'identifier-taken' as const
+        const user = await this.createUser(account)
+        if (user) await this.linkIdentifier(user.id, identifier.type, identifier.valueHash)
+        return user
+    }
+
+    /** A new account with the profile fields of NewAccount. */
+    private newUser(account: NewAccount) {
+        const { firstName, lastName, phone, ...rest } = account
+        const user = this.addUser({ ...rest })
+        this.profiles.set(user.id, {
+            ...this.emptyProfile(),
+            firstName: firstName ?? null,
+            lastName: lastName ?? null,
+            phone: phone ?? null
+        })
+        return user
+    }
+
+    private emptyProfile(): UserProfile {
+        return { firstName: null, lastName: null, phone: null, pendingEmail: null, rrnEncrypted: null, address: null }
+    }
+
+    // ---------------------------------------------------------------- the own profile
+
+    private profile(userId: string) {
+        let profile = this.profiles.get(userId)
+        if (!profile) {
+            profile = this.emptyProfile()
+            this.profiles.set(userId, profile)
+        }
+        return profile
+    }
+
+    async findProfile(userId: string) {
+        return this.user(userId) ? { ...this.profile(userId) } : null
+    }
+
+    async updateProfile(userId: string, changes: ProfileChanges) {
+        const user = this.user(userId)
+        if (!user) return
+        const { name, locale, ...profile } = changes
+        if (name !== undefined) user.name = name
+        if (locale !== undefined) user.locale = locale
+        const stored = this.profile(userId)
+        for (const [key, value] of Object.entries(profile) as [keyof typeof profile, string | null | undefined][])
+            if (value !== undefined) stored[key] = value
+    }
+
+    async findPresence(userId: string) {
+        return this.user(userId) ? (this.presences.get(userId) ?? 'available') : null
+    }
+
+    async setPresence(userId: string, presence: Presence) {
+        if (this.user(userId)) this.presences.set(userId, presence)
+    }
+
+    async findOutOfOffice(userId: string) {
+        if (!this.user(userId)) return null
+        return this.outOfOffice.get(userId) ?? OFF
+    }
+
+    async setOutOfOffice(userId: string, ooo: OutOfOffice) {
+        if (this.user(userId)) this.outOfOffice.set(userId, { ...ooo })
+    }
+
+    async listOutOfOffice(userIds: string[]) {
+        const result = new Map<string, OutOfOffice>()
+        for (const id of userIds) {
+            const ooo = this.outOfOffice.get(id)
+            if (ooo?.enabled) result.set(id, ooo)
+        }
+        return result
+    }
+
+    async setPendingEmail(userId: string, email: string | null) {
+        if (this.user(userId)) this.profile(userId).pendingEmail = email
+    }
+
+    async changeEmail(userId: string, email: string) {
+        const user = this.user(userId)
+        const owner = await this.findUserByEmail(email)
+        if (!user || (owner && owner.id !== userId)) return false
+        Object.assign(user, { email, emailVerified: true })
+        this.profile(userId).pendingEmail = null
+        return true
+    }
+
+    async setEidDetails(userId: string, details: { rrnEncrypted: string | null; address: string | null }) {
+        if (!this.user(userId)) return
+        const profile = this.profile(userId)
+        profile.rrnEncrypted = details.rrnEncrypted
+        profile.address = details.rrnEncrypted === null ? null : (details.address ?? profile.address)
     }
 
     async setEmailVerified(userId: string) {
@@ -695,6 +830,70 @@ export class MemoryOidcStore implements OidcStore {
         return Boolean(tenant)
     }
 
+    private details(id: string): TenantDetails {
+        let details = this.tenantDetails.get(id)
+        if (!details) {
+            details = {
+                company: null,
+                vat: null,
+                billingAddress: null,
+                billingEmail: null,
+                city: null,
+                plan: 'Starter',
+                contactName: null
+            }
+            this.tenantDetails.set(id, details)
+        }
+        return details
+    }
+
+    async findTenantDetails(id: string) {
+        return (await this.findTenant(id)) ? { ...this.details(id) } : null
+    }
+
+    async updateTenant(id: string, changes: TenantChanges) {
+        const tenant = this.tenants.find(candidate => candidate.id === id)
+        if (!tenant) return false
+        const { name, ...details } = changes
+        if (name !== undefined) tenant.name = name
+        const stored = this.details(id) as unknown as Record<string, unknown>
+        for (const [key, value] of Object.entries(details)) if (value !== undefined) stored[key] = value
+        return true
+    }
+
+    private tenantSummary(tenant: Tenant): TenantSummary {
+        const now = new Date()
+        const details = this.details(tenant.id)
+        const admin = this.members
+            .filter(member => member.tenantId === tenant.id && member.role === 'admin')
+            .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+            .map(member => this.user(member.userId))
+            .find(Boolean)
+        const invitation = this.invitations
+            .filter(item => item.tenantId === tenant.id && item.role === 'admin' && item.expiresAt > now)
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
+        return {
+            ...tenant,
+            ...details,
+            members: this.members.filter(member => member.tenantId === tenant.id).length,
+            invitations: this.invitations.filter(item => item.tenantId === tenant.id && item.expiresAt > now).length,
+            contact: admin
+                ? { name: admin.name, email: admin.email }
+                : invitation
+                  ? { name: details.contactName, email: invitation.email }
+                  : null
+        }
+    }
+
+    async listTenantSummaries() {
+        return [...this.tenants].sort((a, b) => a.name.localeCompare(b.name)).map(tenant => this.tenantSummary(tenant))
+    }
+
+    async findTenantSummary(id: string) {
+        const tenant = await this.findTenant(id)
+        return tenant ? this.tenantSummary(tenant) : null
+    }
+
     private member(tenantId: string, userId: string) {
         return this.members.find(member => member.tenantId === tenantId && member.userId === userId)
     }
@@ -706,7 +905,7 @@ export class MemoryOidcStore implements OidcStore {
 
     async findMember(tenantId: string, userId: string) {
         const member = this.member(tenantId, userId)
-        return member ? { role: member.role, status: member.status } : null
+        return member ? { role: member.role, status: member.status, profession: member.profession } : null
     }
 
     /** The roles of members in apps: tenant|client|user → roles. */
@@ -748,6 +947,12 @@ export class MemoryOidcStore implements OidcStore {
         const now = new Date()
         for (const session of this.sessions.values())
             if (session.tenantId === tenantId && session.userId === userId) this.end(session, now)
+    }
+
+    async setMemberProfession(tenantId: string, userId: string, profession: Profession) {
+        const member = this.member(tenantId, userId)
+        if (member) member.profession = profession
+        return Boolean(member)
     }
 
     async setMemberStatus(tenantId: string, userId: string, status: MemberStatus) {
@@ -826,7 +1031,9 @@ export class MemoryOidcStore implements OidcStore {
                               emailVerified: user.emailVerified,
                               role: member.role,
                               status: member.status,
-                              lastSeenAt: member.lastSeenAt
+                              profession: member.profession,
+                              lastSeenAt: member.lastSeenAt,
+                              presence: this.presences.get(user.id) ?? 'available'
                           }
                       ]
                     : []
@@ -872,6 +1079,7 @@ export class MemoryOidcStore implements OidcStore {
         this.logoutQueue = this.logoutQueue.filter(job => job.createdAt > now.getTime() - 24 * 60 * 60 * 1000)
         for (const [id, code] of this.codes) if (code.expiresAt <= now) this.codes.delete(id)
         for (const [hash, token] of this.refreshTokens) if (token.expiresAt <= now) this.refreshTokens.delete(hash)
+        for (const [hash, until] of this.usedInteractions) if (until <= now) this.usedInteractions.delete(hash)
         this.invitations = this.invitations.filter(item => item.expiresAt > now)
     }
 }

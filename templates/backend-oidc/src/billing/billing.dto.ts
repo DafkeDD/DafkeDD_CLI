@@ -14,6 +14,8 @@ import {
     MinLength
 } from 'class-validator'
 import { i18nValidationMessage } from 'nestjs-i18n'
+import { PAYMENT_METHODS, type PaymentMethod } from './billing.service.js'
+import { CatalogDto } from './catalog.dto.js'
 import { INTERVALS, type Interval, type DiscountDuration } from './store/billing.store.js'
 
 const message = (key: string) => ({ message: i18nValidationMessage('validation.' + key) })
@@ -23,7 +25,7 @@ const DURATIONS: readonly DiscountDuration[] = ['once', 'repeating', 'forever']
 const MAX_SEATS = 10_000
 const MAX_CENTS = 10_000_000
 
-export class ProductDto {
+export class ProductDto extends CatalogDto {
     @ApiProperty({
         example: 'planner',
         description: 'Fixed code (lowercase letters, digits, dashes): used in @License()'
@@ -56,7 +58,7 @@ export class ProductDto {
     priceYearCents!: number
 }
 
-export class UpdateProductDto {
+export class UpdateProductDto extends CatalogDto {
     @ApiPropertyOptional({ example: 'Planner Pro' })
     @IsOptional()
     @IsString(message('IS_STRING'))
@@ -109,6 +111,53 @@ export class PurchaseDto {
     @IsOptional()
     @Matches(DISCOUNT_CODE, message('MATCHES'))
     discountCode?: string
+}
+
+export const REGIONS = ['eu-west-1', 'eu-west-3', 'eu-central-1'] as const
+/** A page of the frontend: one / at the start (never //), letters, digits and the usual URL characters. */
+export const RETURN_PATH = /^\/(?![/\\])[A-Za-z0-9\-._~%/]*(\?[A-Za-z0-9\-._~%=&]*)?$/
+
+/** A purchase from the wizard: also where the app runs, how to pay and where to come back after the checkout. */
+export class SubscribeDto extends PurchaseDto {
+    @ApiPropertyOptional({ example: 'Praktijk De Linde', description: 'The name of the practice (environment)' })
+    @IsOptional()
+    @IsString(message('IS_STRING'))
+    @MaxLength(100, message('MAX_LENGTH'))
+    environmentName?: string
+
+    @ApiPropertyOptional({ enum: REGIONS, example: 'eu-west-1' })
+    @IsOptional()
+    @IsIn(REGIONS, message('IS_IN'))
+    region?: (typeof REGIONS)[number]
+
+    @ApiPropertyOptional({
+        enum: Object.keys(PAYMENT_METHODS),
+        description: 'Opens the checkout on this method (card, bancontact; qr: Bancontact with its QR code)'
+    })
+    @IsOptional()
+    @IsIn(Object.keys(PAYMENT_METHODS), message('IS_IN'))
+    method?: PaymentMethod
+
+    @ApiPropertyOptional({
+        example: '/apps/planner/welcome',
+        description:
+            'The page of the frontend after the checkout (default /licenses/return); ?subscription=<id> is added'
+    })
+    @IsOptional()
+    @MaxLength(200, message('MAX_LENGTH'))
+    @Matches(RETURN_PATH, message('MATCHES'))
+    returnPath?: string
+}
+
+export class PayInvoicesDto {
+    @ApiPropertyOptional({
+        example: '/invoices',
+        description: 'The page of the frontend after the checkout (default /invoices); ?payment=invoices is added'
+    })
+    @IsOptional()
+    @MaxLength(200, message('MAX_LENGTH'))
+    @Matches(RETURN_PATH, message('MATCHES'))
+    returnPath?: string
 }
 
 export class SeatsDto {

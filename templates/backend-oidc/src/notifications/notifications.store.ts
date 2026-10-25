@@ -1,19 +1,41 @@
 /** Storage of the notifications. PgNotificationsStore keeps them in PostgreSQL, MemoryNotificationsStore in memory (tests). */
 export const NOTIFICATIONS_STORE = Symbol('NOTIFICATIONS_STORE')
 
-/**
- * Every kind of notification. The frontend makes the text from the kind and its params, in every language (checked by
- * the tests of the CLI). Add one here when you send something new, with its texts in the Notifications messages.
- */
-export const NOTIFICATION_KINDS = [
-    // the superadmins (the platform)
-    'tenant.created',
+/** What happened: the frontend makes the (translated) text from the kind and its params. */
+export type NotificationKind =
     // the admins of an organisation
-    'member.invited',
-    'member.joined'
-] as const
+    | 'invoice.created'
+    | 'contract.expiring'
+    // the account that made a ticket
+    | 'ticket.reply'
+    | 'ticket.customer_reply'
+    // the superadmin handling a ticket
+    | 'ticket.closed'
+    // every superadmin (the platform)
+    | 'tenant.created'
+    | 'ticket.created'
+    | 'payment.received'
+    | 'discount.expiring'
+    | 'member.invited'
+    // the other admins of an organisation: someone joined it
+    | 'member.joined'
 
-export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]
+/** The screen of the frontend a notification opens (with the id of what it is about). */
+export type NavScreen =
+    | 'invoices'
+    | 'ticket'
+    | 'dashboard'
+    | 'admin-tenants'
+    | 'admin-tenant'
+    | 'admin-ticket'
+    | 'admin-codes'
+    | 'admin-users'
+    | 'users'
+
+export interface Nav {
+    screen: NavScreen
+    id?: string
+}
 
 /** Short plain values only. */
 export type NotificationParams = Record<string, string | number | boolean | null>
@@ -25,8 +47,7 @@ export interface StoredNotification {
     tenantId: string | null
     kind: NotificationKind
     params: NotificationParams
-    /** The page of the frontend it opens (a path like /members), or null. */
-    link: string | null
+    nav: Nav
     createdAt: Date
     readAt: Date | null
 }
@@ -43,6 +64,7 @@ export interface NotificationsStore {
     /** False when the account has no notification with this id. */
     markRead(userId: string, id: string): Promise<boolean>
     markAllRead(userId: string, scopes: (string | null)[]): Promise<void>
-    /** Removes the notifications older than this date. Returns how many. */
-    purge(before: Date): Promise<number>
+    /** Which of these keys (computed notifications) the account has read. */
+    readKeys(userId: string, keys: string[]): Promise<Set<string>>
+    addReads(userId: string, keys: string[]): Promise<void>
 }

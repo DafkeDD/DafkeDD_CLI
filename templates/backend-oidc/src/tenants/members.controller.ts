@@ -1,17 +1,4 @@
-import { AuditService } from '../audit/audit.service.js'
-import {
-    Body,
-    Controller,
-    Delete,
-    Get,
-    HttpCode,
-    HttpStatus,
-    Inject,
-    Param,
-    ParseUUIDPipe,
-    Patch,
-    Post
-} from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common'
 import {
     ApiAcceptedResponse,
     ApiConflictResponse,
@@ -23,38 +10,32 @@ import {
 } from '@nestjs/swagger'
 import { I18n, I18nContext } from 'nestjs-i18n'
 import { Access, Auth, type AuthContext } from '../access/access.js'
-import { InviteDto, MemberStatusDto, RoleDto } from '../oidc/account.dto.js'
-import { AccountService } from '../oidc/account.service.js'
-import { OIDC_STORE, type OidcStore } from '../oidc/store/oidc.store.js'
-import { AppException } from '../common/app.exception.js'
-import { assertChanged } from './change-result.js'
+import { InviteDto, MemberStatusDto, ProfessionDto, RoleDto } from '../oidc/account.dto.js'
+import { MembersService } from './members.service.js'
 
-/** A member counts as online after a request in the last 2 minutes (the frontend sends a heartbeat every minute). */
-export const ONLINE_SECONDS = 120
+export { ONLINE_SECONDS } from './members.service.js'
 
 /** The tenant of the access token ("current"): its members, for its admins (and superadmins). */
 @ApiTags('tenant members')
 @Controller('tenants/current')
 @Access('admin')
 export class MembersController {
-    constructor(
-        @Inject(OIDC_STORE) private readonly store: OidcStore,
-        private readonly accounts: AccountService,
-        private readonly audit: AuditService
-    ) {}
+    constructor(private readonly members: MembersService) {}
+
+    private tenant(auth: AuthContext) {
+        return { id: auth.tenantId, name: auth.tenantName }
+    }
 
     @Get('members')
     @ApiOperation({
         summary:
-            'The members of the current tenant: role, status (active or disabled), online (a request in the last 2 minutes) and last seen'
+            'The members of the current tenant: role, status (active or disabled), profession, online (a request in the last 2 minutes) and last seen'
     })
-    @ApiOkResponse({ description: '[{ userId, name, email, emailVerified, role, status, online, lastSeenAt }]' })
-    async members(@Auth() auth: AuthContext) {
-        const since = Date.now() - ONLINE_SECONDS * 1000
-        return (await this.store.listMembers(auth.tenantId)).map(member => ({
-            ...member,
-            online: member.status === 'active' && member.lastSeenAt !== null && member.lastSeenAt.getTime() > since
-        }))
+    @ApiOkResponse({
+        description: '[{ userId, name, email, emailVerified, role, status, profession, online, presence, lastSeenAt }]'
+    })
+    list(@Auth() auth: AuthContext) {
+        return this.members.members(auth.tenantId)
     }
 
     @Post('invitations')
@@ -62,15 +43,8 @@ export class MembersController {
     @ApiOperation({ summary: 'Invite someone by email as user or admin (the link is valid for 7 days)' })
     @ApiAcceptedResponse({ description: '{ status: "invited", email, id }' })
     @ApiConflictResponse({ description: 'oidc.ALREADY_MEMBER' })
-    async invite(@Auth() auth: AuthContext, @Body() body: InviteDto, @I18n() i18n: I18nContext) {
-        // The answer also holds the id of the invitation: { status, email, id }
-        const inviter = await this.store.findUserById(auth.userId)
-        return this.accounts.invite(
-            { userId: auth.userId, name: inviter?.name ?? '' },
-            { id: auth.tenantId, name: auth.tenantName },
-            body,
-            i18n.lang
-        )
+    invite(@Auth() auth: AuthContext, @Body() body: InviteDto, @I18n() i18n: I18nContext) {
+        return this.members.invite(auth.userId, this.tenant(auth), body, i18n.lang)
     }
 
     @Patch('members/:userId')
@@ -78,24 +52,8 @@ export class MembersController {
     @ApiOkResponse({ description: '{ userId, role }' })
     @ApiNotFoundResponse({ description: 'oidc.MEMBER_NOT_FOUND' })
     @ApiConflictResponse({ description: 'oidc.LAST_ADMIN' })
-    async setRole(
-        @Auth() auth: AuthContext,
-        @Param('userId', new ParseUUIDPipe()) userId: string,
-        @Body() body: RoleDto
-    ) {
-        const before = await this.store.findMemberRole(auth.tenantId, userId)
-        assertChanged(
-            await this.store.setMemberRole(auth.tenantId, userId, body.role),
-            'oidc.MEMBER_NOT_FOUND',
-            'oidc.LAST_ADMIN'
-        )
-        if (before !== body.role)
-            await this.audit.record('members.role_changed', {
-                tenantId: auth.tenantId,
-                target: { type: 'user', id: userId },
-                details: { from: before, to: body.role }
-            })
-        return { userId, role: body.role }
+    setRole(@Auth() auth: AuthContext, @Param('userId', new ParseUUIDPipe()) userId: string, @Body() body: RoleDto) {
+        return this.members.setRole(auth.tenantId, userId, body.role)
     }
 
     @Delete('members/:userId')
@@ -104,10 +62,8 @@ export class MembersController {
     @ApiNoContentResponse({ description: 'Removed' })
     @ApiNotFoundResponse({ description: 'oidc.MEMBER_NOT_FOUND' })
     @ApiConflictResponse({ description: 'oidc.LAST_ADMIN' })
-    async remove(@Auth() auth: AuthContext, @Param('userId', new ParseUUIDPipe()) userId: string) {
-        assertChanged(await this.store.removeMember(auth.tenantId, userId), 'oidc.MEMBER_NOT_FOUND', 'oidc.LAST_ADMIN')
-        await this.store.endTenantSessions(auth.tenantId, userId)
-        await this.audit.record('members.removed', { tenantId: auth.tenantId, target: { type: 'user', id: userId } })
+    remove(@Auth() auth: AuthContext, @Param('userId', new ParseUUIDPipe()) userId: string) {
+        return this.members.remove(auth.tenantId, userId)
     }
 
     @Patch('members/:userId/status')
@@ -118,29 +74,31 @@ export class MembersController {
     @ApiOkResponse({ description: '{ userId, status }' })
     @ApiNotFoundResponse({ description: 'oidc.MEMBER_NOT_FOUND' })
     @ApiConflictResponse({ description: 'oidc.LAST_ADMIN' })
-    async setStatus(
+    setStatus(
         @Auth() auth: AuthContext,
         @Param('userId', new ParseUUIDPipe()) userId: string,
         @Body() body: MemberStatusDto
     ) {
-        assertChanged(
-            await this.store.setMemberStatus(auth.tenantId, userId, body.status),
-            'oidc.MEMBER_NOT_FOUND',
-            'oidc.LAST_ADMIN'
-        )
-        if (body.status === 'disabled') await this.store.endTenantSessions(auth.tenantId, userId)
-        await this.audit.record(body.status === 'disabled' ? 'members.disabled' : 'members.enabled', {
-            tenantId: auth.tenantId,
-            target: { type: 'user', id: userId }
-        })
-        return { userId, status: body.status }
+        return this.members.setStatus(auth.tenantId, userId, body.status)
+    }
+
+    @Patch('members/:userId/profession')
+    @ApiOperation({ summary: 'Doctor (may use the eHealth vault and the apps that need it) or staff' })
+    @ApiOkResponse({ description: '{ userId, profession }' })
+    @ApiNotFoundResponse({ description: 'oidc.MEMBER_NOT_FOUND' })
+    setProfession(
+        @Auth() auth: AuthContext,
+        @Param('userId', new ParseUUIDPipe()) userId: string,
+        @Body() body: ProfessionDto
+    ) {
+        return this.members.setProfession(auth.tenantId, userId, body.profession)
     }
 
     @Get('invitations')
     @ApiOperation({ summary: 'The open invitations of the current tenant (not accepted, not expired), newest first' })
     @ApiOkResponse({ description: '[{ id, email, role, invitedBy, invitedByName, createdAt, expiresAt }]' })
     invitations(@Auth() auth: AuthContext) {
-        return this.store.listInvitations(auth.tenantId)
+        return this.members.invitations(auth.tenantId)
     }
 
     @Post('invitations/:id/resend')
@@ -148,14 +106,8 @@ export class MembersController {
     @ApiOperation({ summary: 'Send an open invitation again (valid for 7 more days from now)' })
     @ApiAcceptedResponse({ description: '{ status: "invited", email, id }' })
     @ApiNotFoundResponse({ description: 'oidc.INVITATION_NOT_FOUND' })
-    async resend(@Auth() auth: AuthContext, @Param('id', new ParseUUIDPipe()) id: string, @I18n() i18n: I18nContext) {
-        const inviter = await this.store.findUserById(auth.userId)
-        return this.accounts.resendInvitation(
-            inviter?.name ?? '',
-            { id: auth.tenantId, name: auth.tenantName },
-            id,
-            i18n.lang
-        )
+    resend(@Auth() auth: AuthContext, @Param('id', new ParseUUIDPipe()) id: string, @I18n() i18n: I18nContext) {
+        return this.members.resend(auth.userId, this.tenant(auth), id, i18n.lang)
     }
 
     @Delete('invitations/:id')
@@ -163,12 +115,7 @@ export class MembersController {
     @ApiOperation({ summary: 'Withdraw an open invitation: the link in the email stops working' })
     @ApiNoContentResponse({ description: 'Withdrawn' })
     @ApiNotFoundResponse({ description: 'oidc.INVITATION_NOT_FOUND' })
-    async withdraw(@Auth() auth: AuthContext, @Param('id', new ParseUUIDPipe()) id: string) {
-        if (!(await this.store.deleteInvitation(auth.tenantId, id)))
-            throw new AppException('oidc.INVITATION_NOT_FOUND', HttpStatus.NOT_FOUND)
-        await this.audit.record('members.invitation_withdrawn', {
-            tenantId: auth.tenantId,
-            target: { type: 'invitation', id }
-        })
+    withdraw(@Auth() auth: AuthContext, @Param('id', new ParseUUIDPipe()) id: string) {
+        return this.members.withdraw(auth.tenantId, id)
     }
 }

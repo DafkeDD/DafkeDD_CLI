@@ -1,25 +1,20 @@
 import { Suspense } from 'react'
-import { getTranslations, setRequestLocale } from 'next-intl/server'
-import { ApiStatus } from '@/components/api-status'
-import { SessionLinks } from '@/components/session-links'
-import { AppPage } from '@/components/shell/app-shell'
-import { PageHead } from '@/components/pasport/page-head'
+import { ClientRedirect } from '@/components/pasport/page-state'
+import { getSession } from '@/lib/session'
 
-/** The home page of this app, in the shell: who is logged in, and the connection with the API. */
-export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
-    const { locale } = await params
-    setRequestLocale(locale)
-    const t = await getTranslations('HomePage')
+/** Reads the session to choose where to go: may block on the server. */
+export const instant = false
 
+/** The home page: the portal when logged in (the superadmin panel on the platform), else the login. */
+export default function HomePage() {
     return (
-        <AppPage>
-            <PageHead title={t('title')} text={t('description')} />
-            <div className='flex flex-col gap-4'>
-                <Suspense fallback={null}>
-                    <SessionLinks />
-                </Suspense>
-                <ApiStatus />
-            </div>
-        </AppPage>
+        <Suspense fallback={null}>
+            <Route />
+        </Suspense>
     )
+}
+
+async function Route() {
+    const session = await getSession()
+    return <ClientRedirect to={!session ? '/login' : !session.tenant && session.superadmin ? '/admin' : '/dashboard'} />
 }

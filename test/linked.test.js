@@ -217,7 +217,7 @@ test('the linked frontend: login, session, profile and the notes of its own API;
         assert.ok(!Object.keys(own).some(rel => rel.includes(`/${page}/`)), page)
     // The same shell as the login server: its account pages through OIDC_ACCOUNT_URL, this app's name in the sidebar
     assert.match(own['src/components/shell/app-shell.tsx'], /ACCOUNT_URL \+ path/)
-    assert.match(own['src/components/shell/app-shell.tsx'], /account\('\/members'\)/)
+    assert.match(own['src/components/shell/app-shell.tsx'], /account\('\/users'\)/)
     assert.match(own['src/lib/brand.ts'], /export const APP_NAME: string \| null = "Planner"/)
     // No login form of its own: /login starts the login at the login server at once
     const login = own['src/app/[locale]/login/page.tsx']
@@ -275,7 +275,7 @@ test('the linked frontend: login, session, profile and the notes of its own API;
     assert.match(all['src/lib/refresh.ts'], /\blicense,\n[^}]*\broles\n/)
     assert.match(page, /<AppLicense license=\{license\} admin=\{admin\} \/>/)
     assert.match(page, /license\?\.status !== 'none' && \(\s+<Notes/)
-    assert.match(all['src/components/app-license.tsx'], /ACCOUNT_URL \+ '\/licenses'/)
+    assert.match(all['src/components/app-license.tsx'], /ACCOUNT_URL \+ '\/users'/)
     for (const locale of ['en', 'nl', 'fr', 'de']) {
         const messages = JSON.parse(all[`messages/${locale}.json`])
         assert.deepEqual(

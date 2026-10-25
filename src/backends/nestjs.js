@@ -804,6 +804,12 @@ describe('API (e2e)', () => {\n`
             result[`src/i18n/${locale}/oidc.json`] = json(oidc.MESSAGES[locale])
             result[`src/i18n/${locale}/mail.json`] = json(oidc.MAIL_MESSAGES[locale])
             result[`src/i18n/${locale}/billing.json`] = json(oidc.BILLING_MESSAGES[locale])
+            result[`src/i18n/${locale}/invoices.json`] = json(oidc.INVOICE_MESSAGES[locale])
+            result[`src/i18n/${locale}/support.json`] = json(oidc.SUPPORT_MESSAGES[locale])
+            result[`src/i18n/${locale}/errors.json`] = json({
+                ...JSON.parse(result[`src/i18n/${locale}/errors.json`]),
+                ...oidc.ERROR_MESSAGES[locale]
+            })
             result[`src/i18n/${locale}/validation.json`] = json({
                 ...TRANSLATIONS[locale].validation,
                 ...login.VALIDATION[locale]
@@ -819,16 +825,36 @@ describe('API (e2e)', () => {\n`
             replaceOnce(
                 result['src/app.module.ts'],
                 "import { HealthController } from './health/health.controller.js';\n",
-                "import { HealthController } from './health/health.controller.js';\nimport { OidcModule } from './oidc/oidc.module.js';\nimport { TenantsModule } from './tenants/tenants.module.js';\nimport { BillingModule } from './billing/billing.module.js';\nimport { NotificationsModule } from './notifications/notifications.module.js';\n"
+                "import { HealthController } from './health/health.controller.js';\nimport { OidcModule } from './oidc/oidc.module.js';\nimport { TenantsModule } from './tenants/tenants.module.js';\nimport { BillingModule } from './billing/billing.module.js';\nimport { VaultModule } from './vault/vault.module.js';\nimport { NotificationsModule } from './notifications/notifications.module.js';\nimport { SupportModule } from './support/support.module.js';\nimport { StatsModule } from './stats/stats.module.js';\n"
             ),
             '    DatabaseModule,\n',
-            '    DatabaseModule,\n    OidcModule,\n    TenantsModule,\n    BillingModule,\n    NotificationsModule,\n'
+            '    DatabaseModule,\n    OidcModule,\n    TenantsModule,\n    BillingModule,\n    VaultModule,\n    NotificationsModule,\n    SupportModule,\n    StatsModule,\n'
         )
         result['src/setup.ts'] = replaceOnce(
             replaceOnce(
-                files['src/setup.ts'],
-                "import { INestApplication } from '@nestjs/common';\n",
-                "import { INestApplication } from '@nestjs/common';\nimport cookieParser from 'cookie-parser';\n"
+                replaceOnce(
+                    replaceOnce(
+                        files['src/setup.ts'],
+                        "import { INestApplication } from '@nestjs/common';\n",
+                        "import { INestApplication } from '@nestjs/common';\nimport cookieParser from 'cookie-parser';\n"
+                    ),
+                    "import { I18nValidationPipe } from 'nestjs-i18n';\n",
+                    "import { json, type NextFunction, type Request, type Response } from 'express';\nimport { I18nValidationPipe } from 'nestjs-i18n';\n"
+                ),
+                'export function configureApp(app: INestApplication) {\n  const config = app.get(ConfigService);\n',
+                `/** Uploads of images in base64 (at most 2 MiB, a third more in base64): they get a larger JSON body than 100 kB. */
+export const UPLOAD_PATHS = ['/tenants/current/tickets/attachments', '/admin/tickets/attachments'];
+
+export function configureApp(app: INestApplication) {
+  const config = app.get(ConfigService);
+
+  // Before the parser of Nest (registered in app.init()), which then skips the body that is read already. Wrapped:
+  // Nest leaves out its own parser for every route when it finds a middleware named jsonParser.
+  const uploads = json({ limit: '3mb' });
+  app.use(UPLOAD_PATHS, function uploadParser(request: Request, response: Response, next: NextFunction) {
+    uploads(request, response, next);
+  });
+`
             ),
             '  app.enableCors({',
             '  app.use(cookieParser());\n  app.enableCors({'

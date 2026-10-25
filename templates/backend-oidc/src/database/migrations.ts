@@ -566,23 +566,277 @@ ALTER TABLE tenant_invitations ADD COLUMN apps jsonb NOT NULL DEFAULT '[]';
     },
     {
         id: 14,
-        name: 'notifications',
+        name: 'profiles, billing details, professions, app catalogue and the eHealth vault',
         sql: `
--- Notifications of an account (the bell): in one organisation, or tenant_id NULL: the platform, for superadmins. The
--- text is made by the frontend from kind and params; link is the page it opens. Kept 90 days.
+-- The own profile. name stays the display name (first_name + ' ' + last_name when both are set). pending_email: a
+-- new address that is not confirmed yet (the link in the email is an encrypted token, see account-token.ts).
+-- rrn_enc: the national register number, encrypted with a key derived from OIDC_MASTER_KEY, only filled from the eID
+-- and only ever shown to the account itself. address: from the eID when it gives one.
+ALTER TABLE ${users} ADD COLUMN first_name text;
+ALTER TABLE ${users} ADD COLUMN last_name text;
+ALTER TABLE ${users} ADD COLUMN phone text;
+ALTER TABLE ${users} ADD COLUMN pending_email text;
+ALTER TABLE ${users} ADD COLUMN rrn_enc text;
+ALTER TABLE ${users} ADD COLUMN address text;
+
+-- Billing details of an organisation (on its invoices), where it is and its plan (free text, set by superadmins)
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS company text;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS vat text;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS billing_address text;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS billing_email text;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS city text;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan text NOT NULL DEFAULT 'Starter';
+-- The contact a superadmin gave when creating the organisation (shown until its first admin joined)
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS contact_name text;
+
+-- doctor: may use the eHealth vault (and the apps that need it) in this organisation
+ALTER TABLE tenant_members ADD COLUMN profession text NOT NULL DEFAULT 'staff' CHECK (profession IN ('doctor', 'staff'));
+
+-- How a product looks in the app catalogue. description is the long text, short_description the line on its card.
+-- launch_url may contain {slug}: the slug of the organisation.
+ALTER TABLE license_products ADD COLUMN icon text NOT NULL DEFAULT 'box';
+ALTER TABLE license_products ADD COLUMN category text NOT NULL DEFAULT '';
+ALTER TABLE license_products ADD COLUMN short_description text NOT NULL DEFAULT '';
+ALTER TABLE license_products ADD COLUMN features jsonb NOT NULL DEFAULT '[]';
+ALTER TABLE license_products ADD COLUMN color text;
+ALTER TABLE license_products ADD COLUMN requires_vault boolean NOT NULL DEFAULT false;
+ALTER TABLE license_products ADD COLUMN launch_url text;
+ALTER TABLE license_products ADD COLUMN sort integer NOT NULL DEFAULT 0;
+
+-- The environment of a purchase (the practice name and the region it runs in)
+ALTER TABLE tenant_subscriptions ADD COLUMN IF NOT EXISTS environment_name text;
+ALTER TABLE tenant_subscriptions ADD COLUMN IF NOT EXISTS region text;
+
+-- The eHealth certificate (PKCS#12) of an account: the file and its password encrypted (AES-256-GCM, a key derived
+-- from OIDC_MASTER_KEY), and what the certificate says (filled in once it could be opened). Belongs to the account,
+-- not to an organisation: no Row-Level Security; the tenant role has no access.
+CREATE TABLE user_vault (
+  user_id uuid PRIMARY KEY REFERENCES ${users} (id) ON DELETE CASCADE,
+  filename text NOT NULL,
+  size_bytes integer NOT NULL,
+  p12_enc bytea NOT NULL,
+  password_enc bytea,
+  thumbprint text,
+  subject text,
+  issuer text,
+  serial text,
+  valid_until timestamptz,
+  uploaded_at timestamptz NOT NULL DEFAULT now()
+);
+`
+    },
+    {
+        id: 15,
+        name: 'support tickets, invoices and notifications',
+        sql: `
+-- Support tickets of an organisation: shown as TIC-<number> (from 1001). app_code: the product it is about (NULL:
+-- a general question). assignee_id: the superadmin who handles it.
+CREATE SEQUENCE ticket_numbers START WITH 1001;
+CREATE TABLE tickets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  number integer NOT NULL UNIQUE DEFAULT nextval('ticket_numbers'),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  created_by uuid REFERENCES ${users} (id) ON DELETE SET NULL,
+  subject text NOT NULL,
+  app_code text,
+  status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'answered', 'closed')),
+  priority text NOT NULL DEFAULT 'normal' CHECK (priority IN ('normal', 'high')),
+  assignee_id uuid REFERENCES ${users} (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER SEQUENCE ticket_numbers OWNED BY tickets.number;
+CREATE INDEX tickets_tenant ON tickets (tenant_id, updated_at DESC);
+CREATE INDEX tickets_updated ON tickets (updated_at DESC);
+
+-- The conversation: customer (a member) or support (a superadmin)
+CREATE TABLE ticket_messages (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id uuid NOT NULL REFERENCES tickets (id) ON DELETE CASCADE,
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  author_id uuid REFERENCES ${users} (id) ON DELETE SET NULL,
+  role text NOT NULL CHECK (role IN ('customer', 'support')),
+  body text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX ticket_messages_ticket ON ticket_messages (ticket_id, created_at);
+
+-- Internal notes of the support team (never shown to the organisation: the tenant role has no access)
+CREATE TABLE ticket_notes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id uuid NOT NULL REFERENCES tickets (id) ON DELETE CASCADE,
+  author_id uuid REFERENCES ${users} (id) ON DELETE SET NULL,
+  body text NOT NULL,
+  mentions uuid[] NOT NULL DEFAULT '{}',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX ticket_notes_ticket ON ticket_notes (ticket_id, created_at);
+
+-- A payment for several open invoices at once has no subscription
+ALTER TABLE billing_payments ALTER COLUMN subscription_id DROP NOT NULL;
+ALTER TABLE billing_payments DROP CONSTRAINT billing_payments_kind_check;
+ALTER TABLE billing_payments ADD CONSTRAINT billing_payments_kind_check
+  CHECK (kind IN ('first', 'seats', 'recurring', 'invoices'));
+ALTER TABLE billing_payments ADD CONSTRAINT billing_payments_subscription_check
+  CHECK ((kind = 'invoices') = (subscription_id IS NULL));
+
+-- Invoices: FAC-<year>-<number>, numbered per year without gaps (invoice_numbers, in the same transaction). Amounts
+-- in cents: amount (without VAT) + vat = total. The billing details of the organisation are copied when it is issued.
+-- payment_id: the payment it was made for; settled_by: a later payment of all open invoices at once.
+CREATE TABLE invoice_numbers (
+  year integer PRIMARY KEY,
+  last integer NOT NULL
+);
+CREATE TABLE invoices (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  number text NOT NULL UNIQUE,
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  payment_id text REFERENCES billing_payments (id) ON DELETE SET NULL,
+  settled_by text REFERENCES billing_payments (id) ON DELETE SET NULL,
+  subscription_id uuid REFERENCES tenant_subscriptions (id) ON DELETE SET NULL,
+  product_code text NOT NULL,
+  product_name text NOT NULL,
+  description text NOT NULL,
+  period text NOT NULL CHECK (period IN ('month', 'year')),
+  seats integer NOT NULL,
+  vat_percent integer NOT NULL CHECK (vat_percent BETWEEN 0 AND 100),
+  amount_cents integer NOT NULL CHECK (amount_cents >= 0),
+  vat_cents integer NOT NULL CHECK (vat_cents >= 0),
+  total_cents integer NOT NULL CHECK (total_cents = amount_cents + vat_cents),
+  status text NOT NULL CHECK (status IN ('open', 'paid', 'free', 'void')),
+  checkout_url text,
+  issued_at timestamptz NOT NULL DEFAULT now(),
+  paid_at timestamptz,
+  tenant_name text NOT NULL,
+  company text,
+  vat text,
+  billing_address text,
+  billing_email text
+);
+CREATE INDEX invoices_tenant ON invoices (tenant_id, issued_at DESC);
+-- One invoice per payment (a webhook that comes twice)
+CREATE UNIQUE INDEX invoices_payment_key ON invoices (payment_id);
+
+-- Notifications of an account (in one organisation, or tenant_id NULL: the platform, for superadmins). The text is
+-- made by the frontend from kind and params; nav says which screen it opens.
 CREATE TABLE notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
   tenant_id uuid REFERENCES tenants (id) ON DELETE CASCADE,
   kind text NOT NULL CHECK (kind ~ '^[a-z]+\\.[a-z_]+$'),
   params jsonb NOT NULL DEFAULT '{}',
-  link text,
+  nav jsonb NOT NULL DEFAULT '{}',
   created_at timestamptz NOT NULL DEFAULT now(),
   read_at timestamptz
 );
 CREATE INDEX notifications_user ON notifications (user_id, created_at DESC);
-CREATE INDEX notifications_created ON notifications (created_at);
+-- Read notifications that are computed when asked (a contract that ends soon): their stable id per account
+CREATE TABLE notification_reads (
+  user_id uuid NOT NULL REFERENCES ${users} (id) ON DELETE CASCADE,
+  key text NOT NULL,
+  read_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, key)
+);
+
+-- The environment of a purchase (also in migration 14; here for databases that ran an older version of it)
+ALTER TABLE tenant_subscriptions ADD COLUMN IF NOT EXISTS environment_name text;
+ALTER TABLE tenant_subscriptions ADD COLUMN IF NOT EXISTS region text;
+
+${isolate('tickets', 'tenant_id')}
+${isolate('ticket_messages', 'tenant_id')}
+${isolate('invoices', 'tenant_id')}
 ${isolate('notifications', 'tenant_id')}
+
+-- Members read and write the tickets of their organisation inside DatabaseService.withTenant(); they can only change
+-- the status (close, reopen). Admins read its invoices there.
+GRANT SELECT, INSERT ON tickets TO ${role};
+GRANT UPDATE (status, updated_at) ON tickets TO ${role};
+GRANT USAGE ON SEQUENCE ticket_numbers TO ${role};
+GRANT SELECT, INSERT ON ticket_messages TO ${role};
+GRANT SELECT ON invoices TO ${role};
+`
+    },
+    {
+        id: 16,
+        name: 'ratings of support tickets',
+        sql: `
+-- How satisfied the customer was with a closed ticket: 1 (bad) to 5 (very good), an optional comment. Rating again
+-- overwrites it; reopening the ticket keeps it.
+ALTER TABLE tickets ADD COLUMN rating smallint CHECK (rating BETWEEN 1 AND 5);
+ALTER TABLE tickets ADD COLUMN rating_comment text;
+ALTER TABLE tickets ADD COLUMN rated_at timestamptz;
+
+-- Members rate the tickets of their organisation (inside DatabaseService.withTenant())
+GRANT UPDATE (rating, rating_comment, rated_at) ON tickets TO ${role};
+`
+    },
+    {
+        id: 17,
+        name: 'images of support tickets',
+        sql: `
+-- Images in the messages of the tickets (![name](att:<id>)), of an organisation: PNG, JPEG, GIF or WebP (the type is
+-- detected from the content), at most 2 MiB. They are never changed; they go with the organisation.
+CREATE TABLE ticket_attachments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  uploaded_by uuid REFERENCES ${users} (id) ON DELETE SET NULL,
+  filename text NOT NULL,
+  content_type text NOT NULL CHECK (content_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp')),
+  size integer NOT NULL,
+  data bytea NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX ticket_attachments_tenant ON ticket_attachments (tenant_id);
+
+${isolate('ticket_attachments', 'tenant_id')}
+
+-- Members upload and read the images of their organisation (inside DatabaseService.withTenant())
+GRANT SELECT, INSERT ON ticket_attachments TO ${role};
+`
+    },
+    {
+        id: 18,
+        name: 'demo per product',
+        sql: `
+-- Whether customers can try a product for free (a trial): new members get one automatically and a member may ask one.
+-- A superadmin can always give one. Turning it off does not end the trials that are running.
+ALTER TABLE license_products ADD COLUMN demo_enabled boolean NOT NULL DEFAULT true;
+`
+    },
+    {
+        id: 19,
+        name: 'presence status',
+        sql: `
+-- The status the account chose (like Microsoft Teams). Others see it only while the account is online (a request in
+-- the last 2 minutes); "offline" makes it look offline anyway.
+ALTER TABLE ${users} ADD COLUMN presence text NOT NULL DEFAULT 'available'
+  CHECK (presence IN ('available', 'busy', 'dnd', 'brb', 'away', 'offline'));
+
+-- The list of members (inside DatabaseService.withTenant()) shows it
+GRANT SELECT (presence) ON ${users} TO ${role};
+`
+    },
+    {
+        id: 20,
+        name: 'out of office',
+        sql: `
+-- An out-of-office reply (like Outlook): on or off, optionally only from/until a moment, with a message for colleagues
+-- (the support team, e.g. when they mention the account in an internal note) and one for customers (on their tickets).
+ALTER TABLE ${users}
+  ADD COLUMN ooo_enabled boolean NOT NULL DEFAULT false,
+  ADD COLUMN ooo_from timestamptz,
+  ADD COLUMN ooo_until timestamptz,
+  ADD COLUMN ooo_internal text CHECK (length(ooo_internal) <= 1000),
+  ADD COLUMN ooo_external text CHECK (length(ooo_external) <= 1000),
+  ADD CONSTRAINT ooo_period CHECK (ooo_from IS NULL OR ooo_until IS NULL OR ooo_until > ooo_from);
+`
+    },
+    {
+        id: 21,
+        name: 'catalogue apps sell their product',
+        sql: `
+-- An app of the catalogue has the code of its product as client id: it sells that product from now on
+UPDATE oidc_clients c SET product = c.client_id FROM license_products p WHERE p.code = c.client_id AND c.product IS NULL;
 `
     }
 ]
