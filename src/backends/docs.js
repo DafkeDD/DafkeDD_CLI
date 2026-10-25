@@ -451,6 +451,10 @@ export function backendReadme({
             ? [
                   ['npm run test:db', 'Tests against the real PostgreSQL: tenant isolation (RLS) and storage'],
                   ['npm run oidc:user', 'Add a user to a tenant (see "OpenID Connect")'],
+                  [
+                      'npm run demo:data',
+                      'Demo organisations, users, apps, invoices and tickets (development; -- --remove)'
+                  ],
                   ['npm run mail:dev', 'Start Mailpit in Docker: every email at http://localhost:8025']
               ]
             : []),
@@ -724,10 +728,16 @@ finds all endpoints there.
    authenticator app). Without organisations you land on the platform (\`/admin\`): create the first organisation there,
    with the email of its admin, who gets an invitation.
    Create an account on **http://localhost:3000/register**: the email with the confirmation link arrives in Mailpit
-   (**http://localhost:8025**). Invite colleagues on \`/members\`; as superadmin, manage every organisation on \`/admin\`.
+   (**http://localhost:8025**). Invite colleagues on \`/users\`; as superadmin, manage every organisation on \`/admin\`.
 4. Or add users from the command line: \`npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme --role
    admin\` (creates the tenant when it does not exist; prints a random password once, or use \`--password\`; add
    \`--superadmin\` for a platform administrator; \`--email ... --reset-mfa\` resets two-step verification).
+   **Demo data** to try the portal with (development only, never with \`NODE_ENV=production\`): \`npm run demo:data\`
+   adds two organisations with doctors and staff (\`an.peeters@demo.example.com\` is admin and doctor), four apps in the
+   catalogue, a subscription with seats, a trial, a free grant, invoices (one open), support tickets (answered, closed
+   with a rating) and the discount code \`DEMO20\`; every demo account gets the same password (\`--password\`, otherwise
+   a random one printed once). Running it again changes nothing; \`npm run demo:data -- --remove\` takes it away. The CLI
+   asks it too ("Demodata toevoegen?").
 5. Log in with the **Belgian eID**: start the virtual card reader with \`npm run eid:mock\` in \`./frontend\` (PIN
    \`1234\`), then choose "Register" > "With eID" or "Log in with eID" (see "Belgian eID" below).
 

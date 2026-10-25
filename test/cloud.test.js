@@ -303,3 +303,20 @@ test('a preview per pull request: its own stack, removed with the pull request',
     assert.match(files['infra/README.md'], /## A preview per pull request/)
     assert.match(files['infra/README.md'], /AUTO_DOWN/)
 })
+
+test('the invoices of the login server on Cloud Run: the VAT and the seller from GitHub variables', () => {
+    const tf = mainTf(pasport)
+    assert.match(tf, /BILLING_VAT_PERCENT = var\.vat_percent == "" \? "21" : var\.vat_percent/)
+    assert.match(tf, /INVOICE_SELLER_NAME = var\.invoice_seller_name == "" \? "pasport" : var\.invoice_seller_name/)
+    for (const name of ['ADDRESS', 'VAT', 'EMAIL', 'IBAN'])
+        assert.match(tf, new RegExp(`INVOICE_SELLER_${name} = var\\.invoice_seller_${name.toLowerCase()}`), name)
+    const variables = variablesTf(pasport)
+    for (const name of ['vat_percent', 'invoice_seller_name', 'invoice_seller_iban'])
+        assert.ok(variables.includes(`variable "${name}"`), name)
+    const workflow = cloudWorkflow(pasport, 'pasport')
+    assert.match(workflow, /TF_VAR_vat_percent: \$\{\{ vars\.VAT_PERCENT \}\}/)
+    assert.match(workflow, /TF_VAR_invoice_seller_address: \$\{\{ vars\.INVOICE_SELLER_ADDRESS \}\}/)
+    // Only the login server sends invoices
+    assert.ok(!mainTf(app).includes('INVOICE_SELLER'))
+    assert.ok(!variablesTf(app).includes('vat_percent'))
+})

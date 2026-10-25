@@ -248,7 +248,7 @@ the visitor to \`/login\` on a 401. Always protect the data in the API too (\`@U
 
 /** The Pasport design: the same shell and login screen on the login server and in every app linked to it. */
 /** The files of the shell of a linked app (in the table of pasportDesign). */
-const LINKED_FILES_TABLE = `| \`src/components/shell/app-shell.tsx\` | \`<AppPage>\`: a page of this app in the shell. The rail has this app's pages (\`APP_NAV\`), then the pages of the organisation (its admins) and of the portal on the login server |
+const LINKED_FILES_TABLE = `| \`src/components/shell/app-shell.tsx\` | \`<AppPage>\`: a page of this app in the shell. The rail has this app's pages (\`APP_NAV\`), then the portal on the login server: its dashboard, apps and support, the vault for doctors (the profession from \`GET /me/profile\`), and users, invoices and activity for the admins |
 | \`src/components/shell/shell-view.tsx\` | Puts the sections of \`AppPage\` in \`Shell\`; the bell and the security page open on the login server |
 | \`src/components/pasport/profile.tsx\` | \`Profile\`: the own profile (\`/profile\`): name, email, phone, language, the billing details of the organisation and what the eID says |
 | \`src/components/pasport/page-head.tsx\` | \`PageHead\`: the title, the sentence under it and the actions of a page |

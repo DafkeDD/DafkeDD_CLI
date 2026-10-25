@@ -1,6 +1,7 @@
 import { type ReactNode, Suspense } from 'react'
 import { getTranslations } from 'next-intl/server'
-import { ACCOUNT_URL } from '@/lib/oidc'
+import { ACCOUNT_URL, type Session } from '@/lib/oidc'
+import { PASPORT_API_URL } from '@/lib/pasport'
 import { APP_NAV } from '@/lib/nav'
 import { getSession } from '@/lib/session'
 import { LoginRedirect } from './login-redirect'
@@ -65,6 +66,10 @@ async function Shell({ children, wide, admin }: { children: ReactNode; wide: boo
             items: [
                 { href: account('/dashboard'), label: p('dashboard'), icon: 'dashboard', external },
                 { href: account('/marketplace'), label: p('marketplace'), icon: 'compass', external },
+                // The eHealth vault is for doctors (the profession of the membership on the login server)
+                ...((await isDoctor(session))
+                    ? [{ href: account('/vault'), label: p('vault'), icon: 'vault', external }]
+                    : []),
                 ...(tenantAdmin
                     ? [
                           { href: account('/users'), label: p('users'), icon: 'users', external },
@@ -106,4 +111,17 @@ async function Shell({ children, wide, admin }: { children: ReactNode; wide: boo
             {children}
         </ShellView>
     )
+}
+
+/** A doctor in this organisation (or a superadmin): GET /me/profile of the login server says so. */
+async function isDoctor(session: Session): Promise<boolean> {
+    if (session.superadmin) return true
+    if (!session.tenant) return false
+    const response = await fetch(PASPORT_API_URL + '/me/profile', {
+        headers: { Authorization: 'Bearer ' + session.accessToken, Accept: 'application/json' },
+        cache: 'no-store'
+    }).catch(() => null)
+    if (!response?.ok) return false
+    const profile = (await response.json().catch(() => null)) as { tenant?: { profession?: string } | null } | null
+    return profile?.tenant?.profession === 'doctor'
 }

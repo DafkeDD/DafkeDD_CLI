@@ -1098,7 +1098,8 @@ export const nestjs = {
                                 `eID: npm run eid:mock in ./frontend (virtual card reader, PIN ${EID_MOCK_PIN}), or a real card with the DafkeDD eID program`
                             ]
                           : []),
-                      'npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme --role admin   (add a user)'
+                      'npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme --role admin   (add a user)',
+                      'npm run demo:data   (demo organisations, users, apps, invoices and tickets; -- --remove takes them away)'
                   ]
                 : [])
         ]
@@ -1122,6 +1123,19 @@ export const nestjs = {
                 ok: true,
                 text: `OIDC-server ingesteld: superadmin ${answers.oidc.adminEmail}, tijdelijk wachtwoord ${answers.oidc.adminPassword} (enkel nu getoond). Bij de eerste login stel je tweestapsverificatie in (QR-code); organisaties maak je aan op http://localhost:3000/admin`
             })
+            const demo = answers.oidc.demo
+            if (demo)
+                auth.push(
+                    demo.added
+                        ? {
+                              ok: true,
+                              text: `Demodata toegevoegd: an.peeters@demo.example.com (beheerder, arts), bram.janssens@, sofie.maes@ en koen.wouters@demo.example.com, wachtwoord ${demo.password} (enkel nu getoond). Weghalen: npm run demo:data -- --remove`
+                          }
+                        : {
+                              ok: demo.added !== false,
+                              text: `Demodata: start de database${db.mode === 'docker' ? ' (npm run db:up)' : ''} en voer in ./${DIR} npm run demo:data -- --password ${demo.password} uit`
+                          }
+                )
             auth.push({
                 ok: true,
                 text: `Inloggen en registreren met de Belgische eID staat aan (OIDC_EID=test: ook de testkaart van npm run eid:mock, pincode ${EID_MOCK_PIN}; zet OIDC_EID=on in productie)`
@@ -1357,6 +1371,25 @@ export const nestjs = {
                 }
             })
         }
+        // Demo data, only when asked: it needs the database now (local; with Docker after npm run db:up)
+        if (withOidc?.demo && database?.mode === 'local')
+            steps.push({
+                title: 'Demodata toevoegen',
+                weight: 1,
+                run: async () => {
+                    if (database.connection !== 'ok') return
+                    try {
+                        await exec('npm', ['run', 'demo:data', '--', '--password', withOidc.demo.password], {
+                            cwd: root
+                        })
+                        withOidc.demo.added = true
+                    } catch (error) {
+                        // Not fatal for the install: the summary says how to add it later
+                        withOidc.demo.added = false
+                        withOidc.demo.error = error instanceof Error ? error.message : String(error)
+                    }
+                }
+            })
 
         return steps
     }

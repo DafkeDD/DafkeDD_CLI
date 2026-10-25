@@ -222,11 +222,18 @@ test('ask: only the superadmin email (no organisation), a random temporary passw
             return '  Admin@Example.COM '
         },
         // No other OpenID Connect server
-        select: async () => 'no'
+        select: async () => 'no',
+        // No demo data (the default)
+        confirm: async config => {
+            asked.push(config)
+            return config.default
+        }
     }
     const answers = await oidc.ask({ projectDir: '/projects/acme', prompts })
-    assert.equal(asked.length, 1, 'one question')
+    assert.equal(asked.length, 2, 'the email and the demo data')
     assert.equal(answers.external, null)
+    assert.match(asked[1].message, /Demodata/)
+    assert.equal(answers.demo, null)
     assert.match(asked[0].message, /superadmin/)
     assert.equal(answers.tenantName, undefined)
     assert.equal(answers.adminEmail, 'admin@example.com')
@@ -250,7 +257,8 @@ test('ask: only the superadmin email (no organisation), a random temporary passw
 test('nestjs.ask with "OIDC server" asks the OIDC questions and returns them', async () => {
     const prompts = {
         select: async config => (config.message.includes('database') ? 'postgres' : 'oidc'),
-        input: async config => (config.message.includes('E-mail') ? 'boss@example.com' : 'Shop')
+        input: async config => (config.message.includes('E-mail') ? 'boss@example.com' : 'Shop'),
+        confirm: async () => true
     }
     const registry = {
         postgres: { id: 'postgres', label: 'PostgreSQL', description: 'x', ask: async () => ({ ...DB }) }
@@ -259,6 +267,33 @@ test('nestjs.ask with "OIDC server" asks the OIDC questions and returns them', a
     assert.equal(result.auth, false)
     assert.equal(result.oidc.adminEmail, 'boss@example.com')
     assert.equal(result.oidc.loginUi, true, 'with a frontend the login page lives there')
+    // Demo data asked: a password for the demo accounts, shown once
+    assert.ok(result.oidc.demo.password.length >= 16)
+})
+
+test('demo data: npm run demo:data (added once, --remove), a step only when asked and the database is local', async () => {
+    const script = files['scripts/demo-data.mjs']
+    assert.ok(!script.includes('__USERS_TABLE__'), 'the users table is filled in')
+    assert.match(script, /NODE_ENV === 'production'/)
+    assert.match(script, /remove: \{ type: 'boolean', default: false \}/)
+    assert.match(script, /The demo data is there already/)
+    assert.match(script, /@demo\.example\.com|DOMAIN = 'demo\.example\.com'/)
+    assert.equal(oidc.SCRIPTS['demo:data'], 'node scripts/demo-data.mjs')
+    const titles = async answers =>
+        (await nestjs.steps({ projectDir: '/tmp/x', exec: async () => {}, answers })).map(step => step.title)
+    const local = { ...DB, mode: 'local' }
+    assert.ok(
+        (await titles({ database: local, oidc: { ...ANSWERS, demo: { password: 'p' } } })).includes(
+            'Demodata toevoegen'
+        )
+    )
+    assert.ok(!(await titles({ database: local, oidc: ANSWERS })).includes('Demodata toevoegen'))
+    // The summary: the accounts and the password once, or how to add it later
+    const summary = demo => nestjs.summary({ database: { ...local, connection: 'ok' }, oidc: { ...ANSWERS, demo } })
+    assert.ok(
+        summary({ password: 'pw-1', added: true }).some(line => line.text.includes('an.peeters@demo.example.com'))
+    )
+    assert.ok(summary({ password: 'pw-2' }).some(line => line.text.includes('npm run demo:data -- --password pw-2')))
 })
 
 test('buildFiles refuses the OIDC server without a database, or together with the simple login', () => {

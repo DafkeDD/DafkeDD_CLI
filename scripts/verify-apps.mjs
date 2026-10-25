@@ -79,7 +79,9 @@ const VARIANTS = {
             masterKey: randomBytes(32).toString('hex'),
             loginUi: true,
             appName: 'verify',
-            external: null
+            external: null,
+            // The demo data too (the question of the CLI): added during the install, checked below
+            demo: { password: randomBytes(12).toString('base64url') }
         }
         const answers = { database: db('pasport'), auth: false, oidc }
         return {
@@ -271,6 +273,13 @@ for (const name of names) {
         if (variant.backend.answers.database.connection === 'ok') {
             log(`${name}: tests against PostgreSQL (npm run test:db)`)
             await script(backend, 'test:db')
+            const demo = variant.backend.answers.oidc?.demo
+            if (demo) {
+                log(`${name}: demo data (npm run demo:data, again, --remove, again)`)
+                if (!demo.added) throw new Error(`The demo data was not added during the install: ${demo.error ?? ''}`)
+                for (const args of [[], ['--remove'], []])
+                    await run('npm', ['run', 'demo:data', ...(args.length ? ['--', ...args] : [])], { cwd: backend })
+            }
         } else if (flags['require-db']) {
             throw new Error('The database cannot be reached (VERIFY_DB_*), and --require-db was given')
         } else skipped.push(`${name}: test:db (no database reachable on VERIFY_DB_*)`)

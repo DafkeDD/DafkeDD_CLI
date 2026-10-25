@@ -701,6 +701,16 @@ git switch developer
 
 ## Changelog
 
+- **0.49.0**: demo data, the invoices on Google Cloud and the vault in linked apps.
+    - `npm run demo:data` in the backend of the login server (development only): two organisations with doctors and
+      staff, four apps in the catalogue, a subscription with seats, a trial, a free grant, invoices (one open), support
+      tickets (answered, closed with a rating) and a discount code. Running it again changes nothing; `-- --remove`
+      takes it away. The CLI asks it too ("Demodata toevoegen?", no by default) and shows the password of the demo
+      accounts once.
+    - Google Cloud: the VAT (`BILLING_VAT_PERCENT`) and who sends the invoices (`INVOICE_SELLER_*`) as Terraform
+      variables, set from the GitHub variables `VAT_PERCENT` and `INVOICE_SELLER_*` by the workflow.
+    - A linked app shows the eHealth vault of the login server in its sidebar for doctors, and its sidebar follows the
+      portal (dashboard, apps, users, invoices, support).
 - **0.48.0**: the login server is the whole Pasport portal of the reference project, with everything the CLI had.
     - The customer portal (`src/app/[locale]/(portal)`, `CustomerShell`): dashboard, "Discover apps" (the app catalogue,
       a demo per app), the purchase wizard (seats, monthly or yearly, a discount code, the checkout), the eHealth vault

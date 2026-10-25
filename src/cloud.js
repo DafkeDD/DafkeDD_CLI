@@ -71,7 +71,14 @@ function backendEnv(project) {
             OIDC_EID_REQUIRED: 'var.eid_required',
             // The superadmin made at the first start (the hash of its password: BACKEND_SECRETS)
             OIDC_BOOTSTRAP_ADMIN_EMAIL: 'var.admin_email',
-            APP_NAME: hcl(project.name)
+            APP_NAME: hcl(project.name),
+            // The invoices: the VAT on top of the prices and who sends them (empty: the default)
+            BILLING_VAT_PERCENT: 'var.vat_percent == "" ? "21" : var.vat_percent',
+            INVOICE_SELLER_NAME: `var.invoice_seller_name == "" ? ${hcl(project.name)} : var.invoice_seller_name`,
+            INVOICE_SELLER_ADDRESS: 'var.invoice_seller_address',
+            INVOICE_SELLER_VAT: 'var.invoice_seller_vat',
+            INVOICE_SELLER_EMAIL: 'var.invoice_seller_email',
+            INVOICE_SELLER_IBAN: 'var.invoice_seller_iban'
         })
     if (project.kind === 'app')
         Object.assign(env, {
@@ -248,6 +255,42 @@ variable "eid_required" {
   description = "Every account must have its Belgian eID linked (OIDC_EID_REQUIRED): on or off"
   type        = string
   default     = "off"
+}
+
+variable "vat_percent" {
+  description = "The VAT added to every payment and shown on the invoices (BILLING_VAT_PERCENT); empty: 21"
+  type        = string
+  default     = "21"
+}
+
+variable "invoice_seller_name" {
+  description = "Who sends the invoices (INVOICE_SELLER_NAME); empty: the name of the project"
+  type        = string
+  default     = ""
+}
+
+variable "invoice_seller_address" {
+  description = "The address of the seller on the invoices, lines separated by | (INVOICE_SELLER_ADDRESS)"
+  type        = string
+  default     = ""
+}
+
+variable "invoice_seller_vat" {
+  description = "The VAT number of the seller on the invoices (INVOICE_SELLER_VAT)"
+  type        = string
+  default     = ""
+}
+
+variable "invoice_seller_email" {
+  description = "The email address of the seller on the invoices (INVOICE_SELLER_EMAIL)"
+  type        = string
+  default     = ""
+}
+
+variable "invoice_seller_iban" {
+  description = "The IBAN for a bank transfer on the invoices (INVOICE_SELLER_IBAN)"
+  type        = string
+  default     = ""
 }
 `
             : ''
@@ -596,7 +639,18 @@ export const tfvarsExample = (project, name) =>
         `region     = "${DEFAULT_REGION}"`,
         `name       = "${name}"`,
         'enabled    = true',
-        ...(project.kind === 'pasport' ? ['admin_email = "admin@example.com"'] : []),
+        ...(project.kind === 'pasport'
+            ? [
+                  'admin_email = "admin@example.com"',
+                  '# The invoices: the VAT and who sends them (empty: 21 and the name of the project)',
+                  'vat_percent            = "21"',
+                  'invoice_seller_name    = ""',
+                  'invoice_seller_address = "Dorpsstraat 2|2000 Antwerpen"',
+                  'invoice_seller_vat     = "BE0123456789"',
+                  'invoice_seller_email   = "billing@example.com"',
+                  'invoice_seller_iban    = ""'
+              ]
+            : []),
         ...(project.kind === 'app'
             ? [
                   'login_issuer      = "https://login.example.com/oidc"',
@@ -725,7 +779,16 @@ function workflowEnv(project, { preview = false } = {}) {
             '            TF_VAR_frontend_domain: ${{ vars.FRONTEND_DOMAIN }}',
             '            TF_VAR_backend_domain: ${{ vars.BACKEND_DOMAIN }}'
         )
-    if (project.kind === 'pasport') lines.push('            TF_VAR_admin_email: ${{ vars.ADMIN_EMAIL }}')
+    if (project.kind === 'pasport')
+        lines.push(
+            '            TF_VAR_admin_email: ${{ vars.ADMIN_EMAIL }}',
+            '            TF_VAR_vat_percent: ${{ vars.VAT_PERCENT }}',
+            '            TF_VAR_invoice_seller_name: ${{ vars.INVOICE_SELLER_NAME }}',
+            '            TF_VAR_invoice_seller_address: ${{ vars.INVOICE_SELLER_ADDRESS }}',
+            '            TF_VAR_invoice_seller_vat: ${{ vars.INVOICE_SELLER_VAT }}',
+            '            TF_VAR_invoice_seller_email: ${{ vars.INVOICE_SELLER_EMAIL }}',
+            '            TF_VAR_invoice_seller_iban: ${{ vars.INVOICE_SELLER_IBAN }}'
+        )
     if (project.kind === 'app')
         lines.push(
             '            TF_VAR_login_issuer: ${{ vars.LOGIN_ISSUER }}',
@@ -1160,7 +1223,7 @@ ${[
    It makes the bucket of the Terraform state, a service account for the workflow and Workload Identity Federation
    (no key), and sets the GitHub variables \`GCP_PROJECT_ID\`, \`GCP_REGION\`, \`GCP_DEPLOYER\`, \`GCP_WIF_PROVIDER\`,
    \`TF_STATE_BUCKET\`.
-3. On GitHub, Settings → Secrets and variables → Actions:${project.kind === 'app' ? '\n   - variables `LOGIN_ISSUER`, `LOGIN_API_URL`, `LOGIN_ACCOUNT_URL`: the Pasport login server in production;' : ''}${project.kind === 'pasport' ? '\n   - variable `ADMIN_EMAIL`: the superadmin made at the first start;' : ''}
+3. On GitHub, Settings → Secrets and variables → Actions:${project.kind === 'app' ? '\n   - variables `LOGIN_ISSUER`, `LOGIN_API_URL`, `LOGIN_ACCOUNT_URL`: the Pasport login server in production;' : ''}${project.kind === 'pasport' ? '\n   - variable `ADMIN_EMAIL`: the superadmin made at the first start;\n   - variables `VAT_PERCENT` (empty: 21) and `INVOICE_SELLER_NAME`, `INVOICE_SELLER_ADDRESS` (lines separated by `|`), `INVOICE_SELLER_VAT`, `INVOICE_SELLER_EMAIL`, `INVOICE_SELLER_IBAN`: who sends the invoices;' : ''}
    - secret \`BACKEND_SECRETS\`: the secrets of the backend as JSON, for example
      \`{"SMTP_PASSWORD": "...", ${project.kind === 'pasport' ? '"MOLLIE_API_KEY": "live_...", "OIDC_BOOTSTRAP_ADMIN_PASSWORD_HASH": "scrypt$..."' : '"SMTP_USER": "..."'}}\`;
    - secret \`FRONTEND_SECRETS\`: those of the frontend (${project.kind === 'app' ? '`OIDC_CLIENT_SECRET` for a confidential app' : 'usually none: `{}`'}).

@@ -38,7 +38,7 @@ function promptsFor(answers) {
         asked.push(config)
         return answers.shift()
     }
-    return { asked, prompts: { input: answer, select: answer, password: answer } }
+    return { asked, prompts: { input: answer, select: answer, password: answer, confirm: async () => false } }
 }
 
 test('ask: another OpenID Connect server next to the password, or only that one', async () => {

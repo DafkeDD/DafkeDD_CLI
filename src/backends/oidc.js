@@ -39,6 +39,8 @@ export const MAILPIT_URL = 'http://localhost:8025'
 export const SCRIPTS = {
     'test:db': 'vitest run --config ./vitest.config.db.ts',
     'oidc:user': 'node scripts/oidc-user.mjs',
+    // Demo organisations, users, apps, invoices and tickets (development only; -- --remove takes them away)
+    'demo:data': 'node scripts/demo-data.mjs',
     'mail:dev': 'docker run -d --rm --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit'
 }
 
@@ -908,8 +910,21 @@ export async function ask({ projectDir = process.cwd(), prompts, hasFrontend = f
         loginUi: hasFrontend,
         // The name of the application in emails
         appName: basename(projectDir),
-        external: await askExternal(prompts)
+        external: await askExternal(prompts),
+        demo: await askDemo(prompts)
     }
+}
+
+/**
+ * Demo data (npm run demo:data in the backend): organisations, users, apps, invoices and tickets to try the portal
+ * with. Only when asked: never in a real project by accident. Their password, shown once at the end.
+ */
+async function askDemo(prompts) {
+    const wanted = await prompts.confirm({
+        message: 'Demodata toevoegen (organisaties, gebruikers, apps, facturen en tickets; alleen om te ontwikkelen)?',
+        default: false
+    })
+    return wanted ? { password: generatePassword() } : null
 }
 
 /** An issuer: https (http only on this computer), without a trailing slash. */

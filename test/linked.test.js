@@ -218,6 +218,9 @@ test('the linked frontend: login, session, profile and the notes of its own API;
     // The same shell as the login server: its account pages through OIDC_ACCOUNT_URL, this app's name in the sidebar
     assert.match(own['src/components/shell/app-shell.tsx'], /ACCOUNT_URL \+ path/)
     assert.match(own['src/components/shell/app-shell.tsx'], /account\('\/users'\)/)
+    // The vault of the login server for doctors: the profession from GET /me/profile
+    assert.match(own['src/components/shell/app-shell.tsx'], /account\('\/vault'\)/)
+    assert.ok(own['src/components/shell/app-shell.tsx'].includes("profile?.tenant?.profession === 'doctor'"))
     assert.match(own['src/lib/brand.ts'], /export const APP_NAME: string \| null = "Planner"/)
     // No login form of its own: /login starts the login at the login server at once
     const login = own['src/app/[locale]/login/page.tsx']
