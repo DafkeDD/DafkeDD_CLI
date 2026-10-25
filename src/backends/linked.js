@@ -156,22 +156,9 @@ export const linked = {
                 }
             ]
         })
-        const isolation = await prompts.select({
-            message: 'Hoe wordt de data van de organisaties gescheiden?',
-            default: 'rls',
-            choices: [
-                {
-                    name: 'Eén database met Row-Level Security (aanbevolen)',
-                    value: 'rls',
-                    description: 'Elke rij heeft een tenant_id; PostgreSQL toont enkel de rijen van de organisatie'
-                },
-                {
-                    name: 'Een eigen database per organisatie',
-                    value: 'database',
-                    description: 'Gemaakt bij het eerste gebruik; de databasegebruiker heeft CREATEDB nodig'
-                }
-            ]
-        })
+        // Multi-tenant: every organisation gets a database of its own for this app (TENANT_ISOLATION=database; one
+        // database with Row-Level Security stays possible with TENANT_ISOLATION=rls in .env)
+        const isolation = 'database'
         return {
             link,
             database,

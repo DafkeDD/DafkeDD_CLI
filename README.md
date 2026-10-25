@@ -356,10 +356,10 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   "Login through the login server" in `docs/api.md`. The CLI also asks:
     - **modules**: **Mail** (`MailService` with SMTP, Mailpit during development, `npm run mail:dev`) and **Files**
       (`/files`: images and PDFs per organisation, raw uploads, in `./storage` or a Google Cloud Storage bucket);
-    - **how the data of the organisations is kept apart**: one database with Row-Level Security (the default), or a
-      **database per organisation** (`<name>_t_<organisation id>`, made and migrated the first time it is used;
-      `TENANT_ISOLATION` in `.env`). Every page of the linked frontend is protected: without a login it goes to the
-      login server and comes back.
+    - nothing about how the data of the organisations is kept apart: every organisation gets a **database of its own**
+      for the app (`<name>_t_<organisation id>`, made and migrated the first time it is used; the database user needs
+      `CREATEDB`). One database with Row-Level Security is still possible: `TENANT_ISOLATION=rls` in `.env`. Every page
+      of the linked frontend is protected: without a login it goes to the login server and comes back.
 - **Apps are products**: on `/admin` → Apps a superadmin picks the product an app sells; every user then needs a licence
   of it in their organisation (a trial first, then a seat bought per month or per year). The tokens of the app say so
   (`license` claim) and the API of an app made with the CLI checks it (`OIDC_PRODUCT`).
@@ -691,10 +691,14 @@ git switch developer
 
 ## Changelog
 
-- **0.50.1**: the superadmin of the CLI could not log in ("onjuist") when the demo data was added during the install.
-  The API only made the superadmin in an empty users table, and the demo accounts came first. It now makes it at the
-  start while there is no superadmin and no account with that address. `npm run verify` checks it after the demo data of
-  the install.
+- **0.50.1**: an app for a login server always gets a database per organisation.
+    - The question "Hoe wordt de data van de organisaties gescheiden?" is gone (its arrow keys did not work either):
+      every organisation gets its own database for the app (`TENANT_ISOLATION=database`). Row-Level Security in one
+      database stays possible with `TENANT_ISOLATION=rls` in `.env`.
+    - The superadmin of the CLI could not log in ("onjuist") when the demo data was added during the install. The API
+      only made the superadmin in an empty users table, and the demo accounts came first. It now makes it at the start
+      while there is no superadmin and no account with that address. `npm run verify` checks it after the demo data of
+      the install.
 - **0.50.0**: every project of the CLI is in the Pasport design.
     - A frontend without the OpenID Connect login (a site, a frontend with an API, the simple login) gets the same
       design as the login server: DafkeDD UI with all its components (no question any more), `pasport.css`, the

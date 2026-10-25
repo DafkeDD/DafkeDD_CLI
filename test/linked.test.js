@@ -116,16 +116,10 @@ test('ask: server, port, the code and the own database; a wrong code is asked ag
     }
     const asked = []
     const prompts = {
-        // No Docker question (the database is on the server of the login server): only how the data is kept apart
+        // No Docker question (the database is on the server of the login server), and none about how the data is
+        // kept apart: always a database per organisation
         select: async config => {
-            asked.push(config.message)
-            assert.match(config.message, /gescheiden/)
-            assert.equal(config.default, 'rls')
-            assert.deepEqual(
-                config.choices.map(choice => choice.value),
-                ['rls', 'database']
-            )
-            return 'database'
+            throw new Error(`no select expected: ${config.message}`)
         },
         checkbox: async config => {
             asked.push(config.message)
@@ -165,7 +159,7 @@ test('ask: server, port, the code and the own database; a wrong code is asked ag
         }
     }
     const answers = await linked.ask({ hasFrontend: true, prompts, fetchImpl, projectDir: '/tmp/shop' })
-    assert.equal(asked.length, 10)
+    assert.equal(asked.length, 9)
     assert.deepEqual(answers.link, LINK)
     assert.deepEqual(answers.appOptions, { mail: true, files: false, isolation: 'database' })
     assert.deepEqual(answers.database, {
