@@ -691,6 +691,10 @@ git switch developer
 
 ## Changelog
 
+- **0.50.1**: the superadmin of the CLI could not log in ("onjuist") when the demo data was added during the install.
+  The API only made the superadmin in an empty users table, and the demo accounts came first. It now makes it at the
+  start while there is no superadmin and no account with that address. `npm run verify` checks it after the demo data of
+  the install.
 - **0.50.0**: every project of the CLI is in the Pasport design.
     - A frontend without the OpenID Connect login (a site, a frontend with an API, the simple login) gets the same
       design as the login server: DafkeDD UI with all its components (no question any more), `pasport.css`, the

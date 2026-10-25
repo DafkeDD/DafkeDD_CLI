@@ -243,8 +243,8 @@ describe('tenant isolation and storage (real PostgreSQL)', () => {
         const store = new PgOidcStore(database)
         const admin = { email: 'root@example.com', name: 'Root', passwordHash: 'x' }
         const tenantsBefore = (await store.listTenants()).length
-        expect(await store.bootstrapAdmin(admin)).toBe(false) // there are users already
-        await database.query(`DELETE FROM ${users}`)
+        // Other users (the demo data, before the first start) do not stop it; an existing superadmin does
+        await database.query(`UPDATE ${users} SET is_superadmin = false`)
         expect(await store.bootstrapAdmin(admin)).toBe(true)
         expect(await store.bootstrapAdmin(admin)).toBe(false)
         const root = await store.findUserByEmail('ROOT@example.com')

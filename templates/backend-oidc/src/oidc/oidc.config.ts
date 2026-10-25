@@ -248,7 +248,7 @@ export class OidcConfig {
         return Buffer.from(hex, 'hex')
     }
 
-    /** The superadmin, created when the users table is still empty (it needs no organisation). */
+    /** The superadmin, created at the start while there is none and no account has its address (it needs no organisation). */
     bootstrapAdmin(): BootstrapAdmin | null {
         const email = this.config.get<string>('OIDC_BOOTSTRAP_ADMIN_EMAIL')
         const passwordHash = this.config.get<string>('OIDC_BOOTSTRAP_ADMIN_PASSWORD_HASH')

@@ -513,7 +513,8 @@ export class MemoryOidcStore implements OidcStore {
     }
 
     async bootstrapAdmin(admin: BootstrapAdmin) {
-        if (this.users.length > 0) return false
+        const email = admin.email.toLowerCase()
+        if (this.users.some(user => user.isSuperadmin || user.email.toLowerCase() === email)) return false
         this.addUser({ email: admin.email, name: admin.name, passwordHash: admin.passwordHash, isSuperadmin: true })
         return true
     }

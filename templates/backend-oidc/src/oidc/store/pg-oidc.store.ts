@@ -719,7 +719,11 @@ export class PgOidcStore implements OidcStore {
         await this.database.ready()
         return this.database.transaction(async db => {
             await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['oidc-bootstrap'])
-            const existing = await db.query(`SELECT 1 FROM ${USERS} LIMIT 1`)
+            // Not only in an empty table: the demo data of the CLI comes before the first start of the API. Never a
+            // second superadmin, and never over an account with that address.
+            const existing = await db.query(`SELECT 1 FROM ${USERS} WHERE is_superadmin OR lower(email) = $1 LIMIT 1`, [
+                admin.email.toLowerCase()
+            ])
             if (existing.rows.length > 0) return false
             // The first user is the superadmin of the platform: no organisation needed, it creates them on /admin
             await db.query(

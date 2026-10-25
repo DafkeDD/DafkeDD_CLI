@@ -22,6 +22,7 @@ import { nextjs } from '../src/frontends/nextjs.js'
 import { nestjs } from '../src/backends/nestjs.js'
 import { linked } from '../src/backends/linked.js'
 import { hashPassword } from '../src/backends/oidc.js'
+import { usersTable } from '../src/backends/auth.js'
 import { run } from '../src/runner.js'
 import { claudeSteps, describeProject, LHCI_VERSION, lighthouseUrls, projectClaudeFiles } from '../src/claude.js'
 import { MANIFEST, manifestSteps, readManifest } from '../src/manifest.js'
@@ -207,6 +208,26 @@ async function startsOnPort(dir) {
     }
 }
 
+/** How pg connects to the database of a variant (its answers also have `connection`, which pg reads as a socket). */
+const connectionOf = ({ host, port, user, password, database }) => ({ host, port, user, password, database })
+
+/** The superadmin of .env is in the users table with the hash of the CLI (the API made it at its first start). */
+async function superadminExists(dir, database, oidc) {
+    const pg = createRequire(path.join(dir, 'package.json'))('pg')
+    const client = new pg.Client(connectionOf(database))
+    await client.connect()
+    try {
+        const { rows } = await client.query(
+            `SELECT password_hash FROM "${usersTable(database.database)}" WHERE is_superadmin AND lower(email) = $1`,
+            [oidc.adminEmail.toLowerCase()]
+        )
+        if (rows[0]?.password_hash !== oidc.adminPasswordHash)
+            throw new Error(`No superadmin ${oidc.adminEmail} with the password of the CLI after the first start`)
+    } finally {
+        await client.end()
+    }
+}
+
 for (const name of names) {
     const projectDir = path.join(root, name)
     await fs.mkdir(projectDir)
@@ -279,6 +300,12 @@ for (const name of names) {
             await run('npx', ['--yes', `@lhci/cli@${LHCI_VERSION}`, 'autorun', ...root], { cwd: frontend })
         }
         if (variant.backend.answers.database.connection === 'ok') {
+            const oidc = variant.backend.answers.oidc
+            if (oidc?.adminEmail) {
+                // The superadmin of the CLI exists after the first start, also when the demo data came before it
+                log(`${name}: the superadmin was made at the first start (after the demo data of the install)`)
+                await superadminExists(backend, variant.backend.answers.database, oidc)
+            }
             log(`${name}: tests against PostgreSQL (npm run test:db)`)
             await script(backend, 'test:db')
             const demo = variant.backend.answers.oidc?.demo
@@ -300,7 +327,7 @@ for (const name of names) {
         const database = variant.backend.answers.database
         try {
             const pg = createRequire(path.join(projectDir, 'backend', 'package.json'))('pg')
-            const client = new pg.Client({ ...database, database: 'postgres' })
+            const client = new pg.Client({ ...connectionOf(database), database: 'postgres' })
             await client.connect()
             try {
                 await client.query(`DROP DATABASE IF EXISTS "${database.database}" WITH (FORCE)`)
