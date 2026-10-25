@@ -141,9 +141,11 @@ export function projectClaudeMd(project) {
                   '  pages in `PUBLIC_PATHS` are open.'
               ]
             : [
-                  '- **The Pasport design**, always: `.claude/design/pasport.md` and `.claude/design/pasport-tokens.json` (from the',
-                  '  Claude Design System "Pasport", https://claude.ai/artifact/QD82mLA9dWSEgtpubjgChq). Dafke UI components and',
-                  '  tokens only.'
+                  '- **The Pasport design**, always and only: `.claude/design/pasport.md` and `.claude/design/pasport-tokens.json` (from',
+                  '  the Claude Design System "Pasport", https://claude.ai/artifact/QD82mLA9dWSEgtpubjgChq), built in',
+                  '  `frontend/src/styles/pasport.css` and `frontend/src/components/pasport/`. Every page is in the shell',
+                  '  (`<AppPage>` of `frontend/src/components/shell/app-shell.tsx`, its rail in `frontend/src/lib/nav.ts`), on desktop',
+                  '  and on the phone (390px). `npm run check:design` in `./frontend` (also in the CI) checks it.'
               ]),
         ...(project.kind === 'pasport' || project.kind === 'app'
             ? [
@@ -268,12 +270,8 @@ export function ciWorkflow(project) {
             ...setup('frontend'),
             '            - run: npm run format:check',
             '            - run: npm run lint',
-            ...(project.kind === 'pasport' || project.kind === 'app'
-                ? [
-                      '            # The Pasport design: the shell on every page, its components, icons and colour tokens only',
-                      '            - run: npm run check:design'
-                  ]
-                : []),
+            '            # The Pasport design: the shell on every page, its components, icons and colour tokens only',
+            '            - run: npm run check:design',
             '            - run: npm run build',
             ...(lighthouseUrls(project).length
                 ? [

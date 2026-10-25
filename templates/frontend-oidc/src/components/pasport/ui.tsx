@@ -15,13 +15,15 @@ import {
     type ReactElement,
     type ReactNode
 } from 'react'
-import type { ShownPresence } from '@/lib/portal'
 import { createPortal } from 'react-dom'
 
 /**
  * The building blocks of the Pasport design (src/styles/pasport.css): icons, buttons, fields, the select, badges, the
  * avatar and the notes. Every screen of the login server and of its apps uses them.
  */
+
+/** The status of an account in the design (the presence of the login server; ooo: out of office). */
+export type ShownPresence = 'available' | 'busy' | 'dnd' | 'brb' | 'away' | 'offline' | 'ooo'
 
 /* ============================ ICONS (1:1 from the design) ============================ */
 /** The icons of the design (name: SVG path); a page in APP_NAV (src/lib/nav.ts) names one of these. */

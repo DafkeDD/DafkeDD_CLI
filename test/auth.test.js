@@ -16,7 +16,7 @@ import {
     envLines
 } from '../src/backends/auth.js'
 import { AUTH_MESSAGES, authFiles as frontendAuthFiles } from '../src/frontends/auth.js'
-import { files as nextFiles, uiFiles, withApi, MESSAGES } from '../src/frontends/nextjs.js'
+import { files as nextFiles, uiFiles, withApi, sitePages, MESSAGES } from '../src/frontends/nextjs.js'
 
 const DB = {
     id: 'postgres',
@@ -257,12 +257,20 @@ test('with a frontend and a database the CLI asks how to log in: OIDC server, si
     assert.ok(question, 'a login question is asked')
     assert.deepEqual(
         question.choices.map(choice => choice.value),
-        ['oidc', 'simple', 'none']
+        ['oidc', 'linked', 'simple', 'none']
     )
     assert.ok(
-        question.choices.every(choice => choice.value === 'none' || choice.description.includes('shopusers')),
+        question.choices.every(
+            choice => ['none', 'linked'].includes(choice.value) || choice.description.includes('shopusers')
+        ),
         'the user sees the table name'
     )
+})
+
+test('"log in through your existing Pasport server" hands over to the linked app, with the chosen database', async () => {
+    const { prompts } = loginPrompts('linked')
+    const result = await nestjs.ask({ hasFrontend: true, prompts, registry })
+    assert.deepEqual(result, { database: DB, auth: false, oidc: null, switchTo: 'linked' })
 })
 
 test('the answer "none" gives no login', async () => {
@@ -382,6 +390,7 @@ test('the end of the run mentions the login pages and the table name', () => {
 // ---------------------------------------------------------------- frontend pages
 
 const API = { port: 4000, auth: true }
+const SITE = sitePages({ ...nextFiles, ...uiFiles })
 
 test('the login texts of the frontend exist in nl, fr, en and de with the same keys', () => {
     assert.deepEqual(Object.keys(AUTH_MESSAGES).sort(), [...LOCALES].sort())
@@ -404,16 +413,20 @@ test('the frontend has a login, register and profile page and the components beh
     ]) {
         assert.ok(rel in files, rel)
     }
-    assert.match(files['src/app/[locale]/login/page.tsx'], /<AuthForm mode="login" \/>/)
-    assert.match(files['src/app/[locale]/register/page.tsx'], /<AuthForm mode="register" \/>/)
-    assert.match(files['src/app/[locale]/profile/page.tsx'], /<Profile \/>/)
+    assert.match(files['src/app/[locale]/login/page.tsx'], /<AuthForm mode='login' \/>/)
+    assert.match(files['src/app/[locale]/register/page.tsx'], /<AuthForm mode='register' \/>/)
+    // The profile in the shell of the Pasport design
+    assert.match(files['src/app/[locale]/profile/page.tsx'], /<AppPage>\s*<Profile \/>\s*<\/AppPage>/)
     for (const rel of ['login', 'register', 'profile']) {
         assert.match(
             files[`src/app/[locale]/${rel}/page.tsx`],
-            /setRequestLocale\(locale\)/,
+            /setRequestLocale\(\(await params\)\.locale\)/,
             'static rendering per locale'
         )
     }
+    // The account in the topbar of the shell, with the profile in its menu
+    assert.match(files['src/components/shell/account.ts'], /'\/auth\/me'/)
+    assert.match(files['src/components/shell/account.ts'], /href: '\/profile'/)
 })
 
 test('the form talks to the auth endpoints and shows the translated error of the server', () => {
@@ -424,8 +437,11 @@ test('the form talks to the auth endpoints and shows the translated error of the
     assert.match(form, /router\.push\('\/profile'\)/)
     assert.match(form, /err\.message/, 'the server message is already in the selected language')
     assert.match(form, /autoComplete=\{isRegister \? 'new-password' : 'current-password'\}/)
-    assert.match(form, /type="password"/)
+    assert.match(form, /<PasswordInput/)
     assert.match(form, /minLength=\{isRegister \? 8/)
+    // The login screen of the Pasport design, without the eID card (the simple login has no eID)
+    assert.match(form, /<AuthLayout eid=\{false\}/)
+    assert.match(form, /from '@\/components\/pasport\/ui'/)
 })
 
 test('the profile page loads the user from the API and sends anonymous visitors to the login page', () => {
@@ -445,32 +461,28 @@ test('the pages use the locale-aware navigation of next-intl, and spacing withou
 })
 
 test('the API client sends the cookie along and shows lists of validation messages', () => {
-    const api = withApi(nextFiles, API, { ui: false })['src/lib/api.ts']
+    const api = withApi(SITE, API, { ui: true })['src/lib/api.ts']
     assert.match(api, /credentials: 'include'/)
     assert.match(api, /Array\.isArray\(body\?\.message\)/)
 })
 
-test('withApi (login) adds the pages, the texts and the links on the home page, for both variants', () => {
-    for (const [name, base, ui] of [
-        ['plain', nextFiles, false],
-        ['DafkeDD UI', { ...nextFiles, ...uiFiles }, true]
-    ]) {
-        const result = withApi(base, API, { ui })
-        assert.ok('src/app/[locale]/login/page.tsx' in result, name)
-        const page = result['src/app/[locale]/page.tsx']
-        assert.match(page, /import \{ AuthLinks \} from '@\/components\/auth-links'/, name)
-        assert.equal(page.match(/<AuthLinks \/>/g).length, 1, name)
-        for (const locale of LOCALES) {
-            const messages = JSON.parse(result[`messages/${locale}.json`])
-            assert.deepEqual(messages.Auth, AUTH_MESSAGES[locale], `${name} ${locale}`)
-            assert.deepEqual(messages.HomePage, MESSAGES[locale].HomePage)
-        }
+test('withApi (login) adds the pages, the texts and the account card on the home page', () => {
+    const result = withApi(SITE, API, { ui: true })
+    assert.ok('src/app/[locale]/login/page.tsx' in result)
+    const page = result['src/app/[locale]/page.tsx']
+    assert.match(page, /import \{ AuthLinks \} from '@\/components\/auth-links'/)
+    assert.equal(page.match(/<AuthLinks \/>/g).length, 1)
+    for (const locale of LOCALES) {
+        const messages = JSON.parse(result[`messages/${locale}.json`])
+        assert.deepEqual(messages.Auth, AUTH_MESSAGES[locale], locale)
+        assert.deepEqual(messages.HomePage, MESSAGES[locale].HomePage)
     }
 })
 
 test('withApi without login adds no login pages, links or texts', () => {
-    const result = withApi(nextFiles, { port: 4000, auth: false }, { ui: false })
-    assert.ok(!Object.keys(result).some(rel => /login|register|profile|auth-/.test(rel)))
+    const result = withApi(SITE, { port: 4000, auth: false }, { ui: true })
+    assert.ok(!Object.keys(result).some(rel => /login|register|profile|components\/auth-/.test(rel)))
     assert.ok(!result['src/app/[locale]/page.tsx'].includes('AuthLinks'))
+    assert.match(result['src/components/shell/account.ts'], /account: null/)
     assert.ok(!('Auth' in JSON.parse(result['messages/en.json'])))
 })

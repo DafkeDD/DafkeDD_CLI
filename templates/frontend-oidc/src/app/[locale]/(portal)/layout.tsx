@@ -1,7 +1,7 @@
 import { Suspense, type ReactNode } from 'react'
 import { getTranslations } from 'next-intl/server'
 import { EidRequired } from '@/components/pasport/eid-required'
-import { CustomerShell } from '@/components/pasport/shell'
+import { CustomerShell } from '@/components/pasport/portal-shell'
 import { ClientRedirect, Notice } from '@/components/pasport/page-state'
 import { LoginRedirect } from '@/components/shell/login-redirect'
 import type { Profile } from '@/lib/portal'

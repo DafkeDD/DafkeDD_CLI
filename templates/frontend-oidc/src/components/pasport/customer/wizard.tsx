@@ -17,7 +17,7 @@ import {
     useData,
     useFormat
 } from '@/lib/portal'
-import { useMe } from '../shell'
+import { useMe } from '../portal-shell'
 import { useT } from '../i18n'
 import { LoadError, Loading, Notice } from '../page-state'
 import { useToast } from '../toast'

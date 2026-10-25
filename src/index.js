@@ -65,8 +65,15 @@ export async function main({
         message: 'Welke backend wil je installeren?',
         choices: choicesOf(backendRegistry, 'Geen backend')
     })
-    const backend = backendChoice === NONE ? null : backendRegistry[backendChoice]
-    const backendAnswers = (await backend?.ask?.({ projectDir, hasFrontend: Boolean(frontend) })) ?? {}
+    let backend = backendChoice === NONE ? null : backendRegistry[backendChoice]
+    let backendAnswers = (await backend?.ask?.({ projectDir, hasFrontend: Boolean(frontend) })) ?? {}
+    // "Log in through your existing Pasport server" in the login question: an app linked to that server, with the
+    // database that was already chosen
+    if (backendAnswers.switchTo && backendRegistry[backendAnswers.switchTo]) {
+        backend = backendRegistry[backendAnswers.switchTo]
+        backendAnswers =
+            (await backend.ask({ projectDir, hasFrontend: Boolean(frontend), database: backendAnswers.database })) ?? {}
+    }
 
     // Claude Code: agents, skills, hooks and the pipelines (only for a project with something in it)
     const claude = frontend || backend ? await askClaude({ projectDir }) : false

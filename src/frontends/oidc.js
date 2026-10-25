@@ -11,6 +11,8 @@ import { randomBytes } from 'node:crypto'
 export const TEMPLATE_DIR = fileURLToPath(new URL('../../templates/frontend-oidc/', import.meta.url))
 /** The pages that differ for a frontend linked to an existing login server (links to its account pages). */
 export const LINKED_TEMPLATE_DIR = fileURLToPath(new URL('../../templates/frontend-oidc-linked/', import.meta.url))
+/** The frontend of a project without the OpenID Connect login: its home page, shell and pages, in the same design. */
+export const SITE_TEMPLATE_DIR = fileURLToPath(new URL('../../templates/frontend-site/', import.meta.url))
 
 /** Texts (namespace "Oidc"). Every language needs the same keys (checked by the tests). */
 export const OIDC_MESSAGES = {
@@ -1678,6 +1680,7 @@ export const LINKED_FILES = [
     'src/components/pasport/out-of-office.tsx',
     'src/components/pasport/page-head.tsx',
     'src/components/pasport/page-state.tsx',
+    'src/components/pasport/portal-shell.tsx',
     'src/components/pasport/profile.tsx',
     'src/components/pasport/shell.tsx',
     'src/components/pasport/toast.tsx',
@@ -1702,6 +1705,40 @@ export const LINKED_FILES = [
     'src/proxy.ts',
     'src/styles/pasport.css'
 ]
+
+/**
+ * The Pasport design in a frontend without the OpenID Connect login (a site, or the simple login): the same styles,
+ * components, shell and login screen as the login server, the layout, the design check, and its own home page, AppPage
+ * and APP_NAV (src/components/shell, src/lib/nav.ts).
+ */
+export const SITE_FILES = [
+    'scripts/check-design.mjs',
+    'src/app/[locale]/layout.tsx',
+    'src/app/[locale]/page.tsx',
+    'src/components/pasport/auth-layout.tsx',
+    'src/components/pasport/i18n.ts',
+    'src/components/pasport/page-head.tsx',
+    'src/components/pasport/page-state.tsx',
+    'src/components/pasport/shell.tsx',
+    'src/components/pasport/toast.tsx',
+    'src/components/pasport/ui.tsx',
+    'src/components/pasport/widgets.tsx',
+    'src/components/shell/account.ts',
+    'src/components/shell/app-shell.tsx',
+    'src/lib/brand.ts',
+    'src/lib/nav.ts',
+    'src/styles/pasport.css'
+]
+
+/** The files of SITE_FILES with their content; `appName`: the name in the sidebar (the name of the project). */
+export function siteFrontendFiles({ appName = null } = {}) {
+    const all = {
+        ...readTemplates(TEMPLATE_DIR, 4000, appName),
+        ...readTemplates(LINKED_TEMPLATE_DIR, 4000, appName),
+        ...readTemplates(SITE_TEMPLATE_DIR, 4000, appName)
+    }
+    return Object.fromEntries(SITE_FILES.map(rel => [rel, all[rel]]))
+}
 
 /**
  * The Pasport design of an OIDC frontend (the login server and every linked app): its styles, components, the shell,

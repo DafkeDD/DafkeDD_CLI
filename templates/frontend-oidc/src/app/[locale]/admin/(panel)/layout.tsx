@@ -1,5 +1,5 @@
 import { Suspense, type ReactNode } from 'react'
-import { AdminShell } from '@/components/pasport/shell'
+import { AdminShell } from '@/components/pasport/portal-shell'
 import { ClientRedirect } from '@/components/pasport/page-state'
 import { LoginRedirect } from '@/components/shell/login-redirect'
 import type { AdminTenant, Profile, Ticket } from '@/lib/portal'

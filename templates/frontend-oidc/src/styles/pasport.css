@@ -1963,10 +1963,11 @@ table.tbl {
     color: #fff;
 }
 
+/* Top right: at the bottom left it would cover the footer of the teal panel */
 .theme-float {
     position: fixed;
-    bottom: 22px;
-    left: 22px;
+    top: 22px;
+    right: 22px;
     z-index: 90;
     width: 40px;
     height: 40px;
@@ -2416,6 +2417,19 @@ a.tile {
 .user-pop-locales button.active {
     color: var(--accent-active);
     background: var(--accent-tint);
+}
+/* The language in the topbar of a project without a login (no user menu to hold it) */
+.tb-locales .user-pop-locales {
+    padding: 0;
+}
+@media (max-width: 560px) {
+    .tb-locales .user-pop-locales svg {
+        display: none;
+    }
+    .tb-locales .user-pop-locales button {
+        min-width: 28px;
+        padding: 0 5px;
+    }
 }
 /* Links in the rail look like its buttons */
 a.rail-item {

@@ -92,7 +92,9 @@ export const linked = {
         hasFrontend = false,
         prompts = { input, password, select, checkbox },
         fetchImpl = fetch,
-        projectDir
+        projectDir,
+        /** The database already chosen (the login question of NestJS): not asked again. */
+        database: chosen = null
     } = {}) {
         if (!hasFrontend) return { link: null, reason: 'frontend' }
         const server = normalizeServer(
@@ -132,11 +134,13 @@ export const linked = {
             }
         })
         // Its own database on the PostgreSQL server of the login server
-        const database = await databases.postgres.ask({
-            projectDir,
-            prompts,
-            shared: { name: slugify(link.name) }
-        })
+        const database =
+            chosen ??
+            (await databases.postgres.ask({
+                projectDir,
+                prompts,
+                shared: { name: slugify(link.name) }
+            }))
         const modules = await prompts.checkbox({
             message: 'Welke modules krijgt de API van de app? (spatie om aan te vinken)',
             choices: [

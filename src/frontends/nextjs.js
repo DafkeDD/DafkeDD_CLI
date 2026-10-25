@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { select } from '@inquirer/prompts'
 import { allowEidDownload, EID_MOCK_SCRIPT, EID_PACKAGE } from '../eid.js'
 import { denyInstallScripts } from '../npm.js'
 import { run } from '../runner.js'
@@ -16,7 +15,8 @@ import {
     APP_LICENSE_MESSAGES,
     OIDC_MESSAGES,
     oidcFrontendFiles,
-    SHELL_MESSAGES
+    SHELL_MESSAGES,
+    siteFrontendFiles
 } from './oidc.js'
 import {
     AUTH_SCREEN_MESSAGES,
@@ -85,53 +85,41 @@ export const MESSAGES = {
         HomePage: {
             title: 'Welcome',
             description: 'Next.js, Tailwind CSS and next-intl are ready to use.',
-            start: 'Get started',
-            docs: 'Documentation',
             stackNext: 'App Router, TypeScript',
             stackTailwind: 'Utility-first styling',
             stackIntl: 'NL, FR, EN, DE',
-            stackIcons: 'Thousands of icons'
-        },
-        Settings: { language: 'Language', theme: 'Theme', light: 'Light', dark: 'Dark', system: 'System' }
+            stackDesign: 'The design of every project'
+        }
     },
     nl: {
         HomePage: {
             title: 'Welkom',
             description: 'Next.js, Tailwind CSS en next-intl zijn klaar voor gebruik.',
-            start: 'Aan de slag',
-            docs: 'Documentatie',
             stackNext: 'App Router, TypeScript',
             stackTailwind: 'Utility-first styling',
             stackIntl: 'NL, FR, EN, DE',
-            stackIcons: 'Duizenden iconen'
-        },
-        Settings: { language: 'Taal', theme: 'Thema', light: 'Licht', dark: 'Donker', system: 'Systeem' }
+            stackDesign: 'Het design van elk project'
+        }
     },
     fr: {
         HomePage: {
             title: 'Bienvenue',
             description: "Next.js, Tailwind CSS et next-intl sont prêts à l'emploi.",
-            start: 'Commencer',
-            docs: 'Documentation',
             stackNext: 'App Router, TypeScript',
             stackTailwind: 'Style utilitaire',
             stackIntl: 'NL, FR, EN, DE',
-            stackIcons: "Des milliers d'icônes"
-        },
-        Settings: { language: 'Langue', theme: 'Thème', light: 'Clair', dark: 'Sombre', system: 'Système' }
+            stackDesign: 'Le design de chaque projet'
+        }
     },
     de: {
         HomePage: {
             title: 'Willkommen',
             description: 'Next.js, Tailwind CSS und next-intl sind einsatzbereit.',
-            start: "Los geht's",
-            docs: 'Dokumentation',
             stackNext: 'App Router, TypeScript',
             stackTailwind: 'Utility-first-Styling',
             stackIntl: 'NL, FR, EN, DE',
-            stackIcons: 'Tausende Icons'
-        },
-        Settings: { language: 'Sprache', theme: 'Design', light: 'Hell', dark: 'Dunkel', system: 'System' }
+            stackDesign: 'Das Design jedes Projekts'
+        }
     }
 }
 
@@ -184,333 +172,11 @@ export const config = {
     // Vertalingen: altijd in alle talen (en, nl, fr, de)
     ...Object.fromEntries(
         LOCALES.map(locale => [`messages/${locale}.json`, JSON.stringify(MESSAGES[locale], null, 2) + '\n'])
-    ),
-
-    'src/app/[locale]/layout.tsx': `import type { ReactNode } from 'react';
-import { notFound } from 'next/navigation';
-import { hasLocale, NextIntlClientProvider } from 'next-intl';
-import { setRequestLocale } from 'next-intl/server';
-import { LocaleSwitcher } from '@/components/locale-switcher';
-import { ThemeSwitcher } from '@/components/theme-switcher';
-import { ThemeScript } from '@/components/theme-script';
-import { routing } from '@/i18n/routing';
-import '../globals.css';
-
-export function generateStaticParams() {
-  return routing.locales.map((locale) => ({ locale }));
+    )
 }
 
-export default async function LocaleLayout({
-  children,
-  params,
-}: {
-  children: ReactNode;
-  params: Promise<{ locale: string }>;
-}) {
-  const { locale } = await params;
-  if (!hasLocale(routing.locales, locale)) notFound();
-  setRequestLocale(locale);
-
-  return (
-    <html lang={locale} suppressHydrationWarning>
-      <body className="flex min-h-screen flex-col">
-        <ThemeScript />
-        <NextIntlClientProvider>
-          <header className="flex justify-end gap-2 p-4">
-            <LocaleSwitcher />
-            <ThemeSwitcher />
-          </header>
-          {children}
-        </NextIntlClientProvider>
-      </body>
-    </html>
-  );
-}
-`,
-
-    'src/app/[locale]/page.tsx': `import { use } from 'react';
-import { useTranslations } from 'next-intl';
-import { setRequestLocale } from 'next-intl/server';
-
-export default function HomePage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = use(params);
-  setRequestLocale(locale);
-  const t = useTranslations('HomePage');
-
-  return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-4 p-8">
-      <h1 className="text-4xl font-bold">{t('title')}</h1>
-      <p className="text-lg text-gray-600 dark:text-gray-400">{t('description')}</p>
-    </main>
-  );
-}
-`,
-
-    // Thema: wordt vóór het schilderen gezet (geen flits). DafkeDD UI en Tailwind lezen data-theme.
-    // useServerInsertedHTML voegt het script enkel tijdens de serverweergave in, zodat React in de browser geen waarschuwing geeft.
-    // Bij een taalwissel zet Next de attributen van <html> terug: de observer past het opgeslagen thema dan opnieuw toe.
-    'src/components/theme-script.tsx': `'use client';
-
-import { useEffect } from 'react';
-import { useServerInsertedHTML } from 'next/navigation';
-
-const code = \`(function(){try{var p=localStorage.getItem('theme');if(p!=='light'&&p!=='dark')p='system';var d=p==='dark'||(p==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);var r=document.documentElement;r.setAttribute('data-theme',d?'dark':'light');r.style.colorScheme=d?'dark':'light'}catch(e){}})()\`;
-
-function applyStored() {
-  try {
-    const stored = localStorage.getItem('theme');
-    const dark = stored === 'dark' || (stored !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-    const root = document.documentElement;
-    root.setAttribute('data-theme', dark ? 'dark' : 'light');
-    root.style.colorScheme = dark ? 'dark' : 'light';
-  } catch {}
-}
-
-export function ThemeScript() {
-  useServerInsertedHTML(() => <script dangerouslySetInnerHTML={{ __html: code }} />);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const observer = new MutationObserver(() => {
-      if (!root.hasAttribute('data-theme')) applyStored();
-    });
-    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => observer.disconnect();
-  }, []);
-
-  return null;
-}
-`,
-
-    'src/components/theme-switcher.tsx': `'use client';
-
-import { useSyncExternalStore } from 'react';
-import { useTranslations } from 'next-intl';
-
-type Theme = 'light' | 'dark' | 'system';
-
-const KEY = 'theme';
-const EVENT = 'themechange';
-
-function read(): Theme {
-  try {
-    const value = localStorage.getItem(KEY);
-    return value === 'light' || value === 'dark' ? value : 'system';
-  } catch {
-    return 'system';
-  }
-}
-
-function apply(theme: Theme) {
-  const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-  const root = document.documentElement;
-  root.setAttribute('data-theme', dark ? 'dark' : 'light');
-  root.style.colorScheme = dark ? 'dark' : 'light';
-}
-
-function subscribe(onChange: () => void) {
-  const media = matchMedia('(prefers-color-scheme: dark)');
-  const onMedia = () => {
-    if (read() === 'system') apply('system');
-  };
-  const onStorage = () => {
-    apply(read());
-    onChange();
-  };
-  media.addEventListener('change', onMedia);
-  window.addEventListener('storage', onStorage);
-  window.addEventListener(EVENT, onChange);
-  return () => {
-    media.removeEventListener('change', onMedia);
-    window.removeEventListener('storage', onStorage);
-    window.removeEventListener(EVENT, onChange);
-  };
-}
-
-export function ThemeSwitcher() {
-  const t = useTranslations('Settings');
-  const theme = useSyncExternalStore(subscribe, read, () => 'system' as Theme);
-
-  function change(next: Theme) {
-    try {
-      localStorage.setItem(KEY, next);
-    } catch {}
-    apply(next);
-    window.dispatchEvent(new Event(EVENT));
-  }
-
-  return (
-    <select
-      aria-label={t('theme')}
-      value={theme}
-      onChange={(event) => change(event.target.value as Theme)}
-      className="bg-background text-foreground rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
-    >
-      <option value="light">{t('light')}</option>
-      <option value="dark">{t('dark')}</option>
-      <option value="system">{t('system')}</option>
-    </select>
-  );
-}
-`,
-
-    'src/components/locale-switcher.tsx': `'use client';
-
-import { useTransition } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
-import { usePathname, useRouter } from '@/i18n/navigation';
-import { routing } from '@/i18n/routing';
-
-function languageName(locale: string) {
-  const name = new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
-  return name.charAt(0).toLocaleUpperCase(locale) + name.slice(1);
-}
-
-export function LocaleSwitcher() {
-  const t = useTranslations('Settings');
-  const locale = useLocale();
-  const router = useRouter();
-  const pathname = usePathname();
-  const [isPending, startTransition] = useTransition();
-
-  function change(next: string) {
-    startTransition(() => {
-      router.replace(pathname, { locale: next as (typeof routing.locales)[number] });
-    });
-  }
-
-  return (
-    <select
-      aria-label={t('language')}
-      value={locale}
-      disabled={isPending}
-      onChange={(event) => change(event.target.value)}
-      className="bg-background text-foreground rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
-    >
-      {routing.locales.map((value) => (
-        <option key={value} value={value}>
-          {languageName(value)}
-        </option>
-      ))}
-    </select>
-  );
-}
-`
-}
-
-// Voorbeeld mét DafkeDD UI (enkel bij "alle componenten"): gebruikt het thema en de componenten van de bibliotheek.
+// The theme before the first paint (DafkeDD UI): every frontend, its layout comes with the Pasport design.
 export const uiFiles = {
-    'src/app/[locale]/layout.tsx': `import type { ReactNode } from 'react';
-import { notFound } from 'next/navigation';
-import { hasLocale, NextIntlClientProvider } from 'next-intl';
-import { setRequestLocale } from 'next-intl/server';
-import { LocaleSwitcher } from '@/components/locale-switcher';
-import { ThemeSwitcher } from '@/components/theme-switcher';
-import { ThemeScript } from '@/components/theme-script';
-import { ThemeProvider } from '@/components/ui';
-import { routing } from '@/i18n/routing';
-import '../globals.css';
-
-export function generateStaticParams() {
-  return routing.locales.map((locale) => ({ locale }));
-}
-
-export default async function LocaleLayout({
-  children,
-  params,
-}: {
-  children: ReactNode;
-  params: Promise<{ locale: string }>;
-}) {
-  const { locale } = await params;
-  if (!hasLocale(routing.locales, locale)) notFound();
-  setRequestLocale(locale);
-
-  return (
-    <html lang={locale} suppressHydrationWarning>
-      <body className="flex min-h-screen flex-col">
-        <ThemeScript />
-        <ThemeProvider>
-          <NextIntlClientProvider>
-            <header className="relative z-10 flex flex-wrap items-center justify-between gap-3 px-6 py-5 sm:px-10">
-              <div className="flex items-center gap-2.5">
-                <span className="grid size-7 place-items-center rounded-lg bg-[var(--accent)] text-sm font-bold text-[var(--accent-fg)]">
-                  D
-                </span>
-                <span className="text-[15px] font-semibold tracking-tight">DafkeDD</span>
-              </div>
-            </header>
-            {children}
-            <div className="fixed bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-1 shadow-lg">
-              <LocaleSwitcher />
-              <span aria-hidden className="h-[18px] w-px bg-[var(--border)]" />
-              <ThemeSwitcher />
-            </div>
-          </NextIntlClientProvider>
-        </ThemeProvider>
-      </body>
-    </html>
-  );
-}
-`,
-
-    'src/app/[locale]/page.tsx': `import { use } from 'react';
-import { useTranslations } from 'next-intl';
-import { setRequestLocale } from 'next-intl/server';
-import { LuArrowRight, LuGlobe, LuLayers, LuPalette, LuSparkles } from 'react-icons/lu';
-import { Badge, Button } from '@/components/ui';
-
-export default function HomePage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = use(params);
-  setRequestLocale(locale);
-  const t = useTranslations('HomePage');
-
-  const stack = [
-    { name: 'Next.js', text: t('stackNext'), icon: LuLayers },
-    { name: 'Tailwind CSS', text: t('stackTailwind'), icon: LuPalette },
-    { name: 'next-intl', text: t('stackIntl'), icon: LuGlobe },
-    { name: 'react-icons', text: t('stackIcons'), icon: LuSparkles }
-  ];
-
-  return (
-    <main className="relative flex flex-1 flex-col items-center justify-center gap-7 overflow-x-clip px-6 pt-10 pb-28 text-center">
-      <div className="pointer-events-none absolute top-[-200px] left-1/2 h-[640px] w-[900px] -translate-x-1/2 bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--accent)_14%,transparent),transparent)]" />
-
-      <Badge tone="accent" dot>
-        DafkeDD UI
-      </Badge>
-
-      <div className="relative flex flex-col items-center gap-3.5">
-        <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">{t('title')}</h1>
-        <p className="max-w-md text-lg leading-relaxed text-[var(--text-2)]">{t('description')}</p>
-      </div>
-
-      <div className="relative flex flex-wrap justify-center gap-2.5">
-        <Button className="h-11 gap-2 px-5">
-          {t('start')}
-          <LuArrowRight aria-hidden />
-        </Button>
-        <Button variant="secondary" className="h-11 px-5">
-          {t('docs')}
-        </Button>
-      </div>
-
-      <div className="relative mt-10 grid w-full max-w-3xl grid-cols-2 gap-3 text-left sm:grid-cols-4">
-        {stack.map(({ name, text, icon: Icon }) => (
-          <div key={name} className="flex flex-col gap-2.5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-            <span className="grid size-8 place-items-center rounded-[10px] bg-[var(--accent-tint)] text-[var(--accent)]">
-              <Icon aria-hidden />
-            </span>
-            <span className="text-sm font-semibold">{name}</span>
-            <span className="text-[13px] leading-snug text-[var(--text-3)]">{text}</span>
-          </div>
-        ))}
-      </div>
-    </main>
-  );
-}
-`,
-
     // Zelfde opslagsleutels als de ThemeProvider van DafkeDD UI ('lui-theme'), zodat het script en de provider overeenkomen.
     // Bij een taalwissel zet Next de attributen van <html> terug: thema en dichtheid worden dan opnieuw toegepast.
     'src/components/theme-script.tsx': `'use client';
@@ -544,78 +210,6 @@ export function ThemeScript() {
   }, []);
 
   return null;
-}
-`,
-
-    'src/components/theme-switcher.tsx': `'use client';
-
-import { useTranslations } from 'next-intl';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, useTheme } from '@/components/ui';
-import type { Theme } from '@/components/ui';
-
-export function ThemeSwitcher() {
-  const t = useTranslations('Settings');
-  const { theme, setTheme } = useTheme();
-
-  return (
-    <div className="w-32 [&_.lui-select-trigger]:border-transparent! [&_.lui-select-trigger]:bg-transparent! [&_.lui-select-trigger]:shadow-none!">
-      <Select value={theme} onValueChange={(value) => setTheme(value as Theme)}>
-        <SelectTrigger size="sm" aria-label={t('theme')}>
-          <SelectValue placeholder={t(theme)} style={{ color: 'var(--text)' }} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="light">{t('light')}</SelectItem>
-          <SelectItem value="dark">{t('dark')}</SelectItem>
-          <SelectItem value="system">{t('system')}</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
-`,
-
-    'src/components/locale-switcher.tsx': `'use client';
-
-import { useTransition } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui';
-import { usePathname, useRouter } from '@/i18n/navigation';
-import { routing } from '@/i18n/routing';
-
-function languageName(locale: string) {
-  const name = new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
-  return name.charAt(0).toLocaleUpperCase(locale) + name.slice(1);
-}
-
-export function LocaleSwitcher() {
-  const t = useTranslations('Settings');
-  const locale = useLocale();
-  const router = useRouter();
-  const pathname = usePathname();
-  const [isPending, startTransition] = useTransition();
-
-  function change(next: string) {
-    startTransition(() => {
-      router.replace(pathname, { locale: next as (typeof routing.locales)[number] });
-    });
-  }
-
-  return (
-    <div className="w-36 [&_.lui-select-trigger]:border-transparent! [&_.lui-select-trigger]:bg-transparent! [&_.lui-select-trigger]:shadow-none!">
-      <Select value={locale} onValueChange={change} disabled={isPending}>
-        <SelectTrigger size="sm" aria-label={t('language')}>
-          <SelectValue placeholder={languageName(locale)} style={{ color: 'var(--text)' }} />
-        </SelectTrigger>
-        <SelectContent>
-          {routing.locales.map((value) => (
-            <SelectItem key={value} value={value}>
-              {languageName(value)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
 }
 `
 }
@@ -754,7 +348,7 @@ export function useApi() {
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { LuDatabase, LuServer } from 'react-icons/lu';
+import { Icon } from '@/components/pasport/ui';
 import { ApiError } from '@/lib/api';
 import { useApi } from '@/lib/use-api';
 
@@ -799,19 +393,19 @@ export function ApiStatus() {
   return (
     <section
       aria-live="polite"
-      className="relative mt-6 flex w-full max-w-3xl flex-col gap-5 rounded-2xl border border-black/10 bg-black/[.03] p-5 text-left dark:border-white/15 dark:bg-white/[.04]"
+      className="card card-pad flex w-full flex-col gap-4 text-left"
     >
       <h2 className="text-sm font-semibold">{t('title')}</h2>
       <ul className="flex flex-col gap-3 text-[13px]">
         <li className="flex items-start gap-2.5">
-          <LuServer aria-hidden className="mt-0.5 shrink-0" />
+          <Icon name="server" size={16} className="mt-0.5 shrink-0" />
           <span>
             <strong>{t('api')}: </strong>
             {status.state === 'loading' && t('loading')}
-            {status.state === 'offline' && <span className="text-red-600 dark:text-red-400">{t('offline')}</span>}
+            {status.state === 'offline' && <span className="text-[var(--red)]">{t('offline')}</span>}
             {status.state === 'online' && (
               <>
-                <span className="text-emerald-600 dark:text-emerald-400">{t('online')}</span>
+                <span className="text-[var(--green)]">{t('online')}</span>
                 {' · '}
                 {status.message}{' '}
                 <span className="rounded-full border border-current/25 px-1.5 py-0.5 text-[11px] uppercase">
@@ -823,13 +417,13 @@ export function ApiStatus() {
         </li>
         {status.state === 'online' && status.database !== 'none' && (
           <li className="flex items-start gap-2.5">
-            <LuDatabase aria-hidden className="mt-0.5 shrink-0" />
+            <Icon name="database" size={16} className="mt-0.5 shrink-0" />
             <span>
               <strong>{t('database')}: </strong>
               {status.database === 'up' ? (
-                <span className="text-emerald-600 dark:text-emerald-400">{t('databaseUp')}</span>
+                <span className="text-[var(--green)]">{t('databaseUp')}</span>
               ) : (
-                <span className="text-red-600 dark:text-red-400">{status.databaseMessage ?? t('databaseDown')}</span>
+                <span className="text-[var(--red)]">{status.databaseMessage ?? t('databaseDown')}</span>
               )}
             </span>
           </li>
@@ -852,6 +446,29 @@ const replaceOnce = (text, from, to) => {
  * With the OIDC login (the login server itself, or an app linked to it) the frontend gets the Pasport design: its own
  * layout, home page, shell and login screen, built with DafkeDD UI (see oidcSteps: always installed then).
  */
+/** The texts of the Pasport design in a project without the OpenID Connect login: the shell, the login screen, Nav. */
+export const siteMessages = locale => ({
+    Nav: NAV_MESSAGES[locale],
+    Shell: SHELL_MESSAGES[locale],
+    AuthScreen: AUTH_SCREEN_MESSAGES[locale],
+    Portal: { Shell: PORTAL_MESSAGES[locale].Shell }
+})
+
+/**
+ * Every frontend in the Pasport design. Without the OpenID Connect login (the login server and the apps linked to it
+ * bring theirs): the layout, the home page in the shell (AppPage), the components and styles of the design, the
+ * design check and their texts. The language and the theme are in the topbar of the shell.
+ */
+export function sitePages(fileMap, { api = null, appName = null } = {}) {
+    const result = { ...fileMap }
+    if (api?.oidc) return result
+    Object.assign(result, siteFrontendFiles({ appName }))
+    for (const locale of LOCALES)
+        result[`messages/${locale}.json`] =
+            JSON.stringify({ ...MESSAGES[locale], ...siteMessages(locale) }, null, 2) + '\n'
+    return result
+}
+
 export function withApi(fileMap, api, { ui }) {
     const result = {
         ...fileMap,
@@ -867,21 +484,6 @@ export function withApi(fileMap, api, { ui }) {
               })
             : {})
     }
-    // The Pasport design has its own icons: the status card too (no react-icons in an OIDC frontend)
-    if (api.oidc)
-        result['src/components/api-status.tsx'] = replaceOnce(
-            replaceOnce(
-                replaceOnce(
-                    result['src/components/api-status.tsx'],
-                    "import { LuDatabase, LuServer } from 'react-icons/lu';",
-                    "import { Icon } from '@/components/pasport/ui';"
-                ),
-                '<LuServer aria-hidden className="mt-0.5 shrink-0" />',
-                '<Icon name="server" size={16} className="mt-0.5 shrink-0" />'
-            ),
-            '<LuDatabase aria-hidden className="mt-0.5 shrink-0" />',
-            '<Icon name="database" size={16} className="mt-0.5 shrink-0" />'
-        )
     for (const locale of LOCALES) {
         result[`messages/${locale}.json`] =
             JSON.stringify(
@@ -889,6 +491,7 @@ export function withApi(fileMap, api, { ui }) {
                     ...MESSAGES[locale],
                     ApiStatus: API_MESSAGES[locale],
                     ...(api.auth ? { Auth: AUTH_MESSAGES[locale] } : {}),
+                    ...(api.oidc ? {} : siteMessages(locale)),
                     ...(api.oidc
                         ? {
                               Oidc: OIDC_MESSAGES[locale],
@@ -914,35 +517,23 @@ export function withApi(fileMap, api, { ui }) {
                 2
             ) + '\n'
     }
-    // The Pasport layout and home page come with the OIDC files (src/components/shell); the theme is a button there
-    if (api.oidc) {
-        delete result['src/components/theme-switcher.tsx']
-        // The status card as a card of the Pasport design (the page of a linked app shows it)
-        result['src/components/api-status.tsx'] = replaceOnce(
-            result['src/components/api-status.tsx'],
-            'className="relative mt-6 flex w-full max-w-3xl flex-col gap-5 rounded-2xl border border-black/10 bg-black/[.03] p-5 text-left dark:border-white/15 dark:bg-white/[.04]"',
-            'className="lui-card flex w-full flex-col gap-4 p-6 text-left"'
-        )
-        return result
-    }
+    if (api.oidc) return result
+    // The home page in the shell: the status card of the API, and the account when the project has the simple login
     const page = 'src/app/[locale]/page.tsx'
-    const importAfter = ui
-        ? "import { Badge, Button } from '@/components/ui';\n"
-        : "import { setRequestLocale } from 'next-intl/server';\n"
     let content = replaceOnce(
         result[page],
-        importAfter,
-        importAfter + "import { ApiStatus } from '@/components/api-status';\n"
+        "import { AppPage } from '@/components/shell/app-shell'\n",
+        "import { ApiStatus } from '@/components/api-status'\n" +
+            (api.auth ? "import { AuthLinks } from '@/components/auth-links'\n" : '') +
+            "import { AppPage } from '@/components/shell/app-shell'\n"
     )
-    content = replaceOnce(content, '    </main>\n', '      <ApiStatus />\n    </main>\n')
-    if (api.auth) {
-        content = replaceOnce(
-            content,
-            "import { ApiStatus } from '@/components/api-status';\n",
-            "import { ApiStatus } from '@/components/api-status';\nimport { AuthLinks } from '@/components/auth-links';\n"
-        )
-        content = replaceOnce(content, '      <ApiStatus />\n', '      <ApiStatus />\n      <AuthLinks />\n')
-    }
+    content = replaceOnce(
+        content,
+        '                </div>\n            </div>\n        </AppPage>',
+        '                </div>\n' +
+            (api.auth ? '                <AuthLinks />\n' : '') +
+            '                <ApiStatus />\n            </div>\n        </AppPage>'
+    )
     result[page] = content
     return result
 }
@@ -1021,36 +612,21 @@ export const FONT_PACKAGES = [
     '@fontsource-variable/jetbrains-mono@latest'
 ]
 
-/** Which DafkeDD UI to install: always all of it with the OIDC login (its shell and login screen need it). */
-export const uiFor = (answers, api) => (api?.oidc ? 'all' : (answers?.ui ?? 'none'))
+/** DafkeDD UI: always all of it, in every project (the Pasport design builds on its theme and components). */
+export const uiFor = () => 'all'
 
 export const nextjs = {
     id: 'nextjs',
     label: 'Next.js',
     description:
-        'Next.js (laatste) + Tailwind CSS (laatste) + next-intl (laatste) + react-icons + Prettier, in ./frontend',
+        'Next.js (laatste) + Tailwind CSS (laatste) + next-intl (laatste) + DafkeDD UI in het Pasport-design + Prettier, in ./frontend',
     dir: DIR,
     docsFile: 'frontend.md',
     next: [`cd ${DIR}`, 'npm run dev'],
 
-    async ask({ prompts = { select } } = {}) {
-        const ui = await prompts.select({
-            message: 'DafkeDD UI installeren?',
-            choices: [
-                {
-                    name: 'Ja, alle componenten',
-                    value: 'all',
-                    description: 'Config, tokens, helpers en alle componenten'
-                },
-                {
-                    name: 'Ja, enkel de basis (init)',
-                    value: 'init',
-                    description: 'Daarna zelf componenten toevoegen met dafke-ui add'
-                },
-                { name: 'Nee', value: 'none' }
-            ]
-        })
-        return { ui }
+    /** No question: every project gets DafkeDD UI and the Pasport design. */
+    async ask() {
+        return { ui: 'all' }
     },
 
     async steps({ projectDir, answers, api = null, exec = run }) {
@@ -1109,26 +685,12 @@ export const nextjs = {
                 weight: 2,
                 run: () => exec('npm', ['install', 'next-intl@latest'], { cwd: root })
             },
-            // The Pasport design (OIDC) has its own icons: no react-icons there
-            ...(api?.oidc
-                ? []
-                : [
-                      {
-                          title: 'react-icons installeren',
-                          weight: 2,
-                          run: () => exec('npm', ['install', 'react-icons@latest'], { cwd: root })
-                      }
-                  ]),
-            // The fonts of the Pasport design, self-hosted (the build never needs Google Fonts)
-            ...(api?.oidc
-                ? [
-                      {
-                          title: 'Lettertypen installeren (Hanken Grotesk, JetBrains Mono)',
-                          weight: 1,
-                          run: () => exec('npm', ['install', ...FONT_PACKAGES], { cwd: root })
-                      }
-                  ]
-                : []),
+            // The fonts of the Pasport design, self-hosted (the build never needs Google Fonts); its icons are its own
+            {
+                title: 'Lettertypen installeren (Hanken Grotesk, JetBrains Mono)',
+                weight: 1,
+                run: () => exec('npm', ['install', ...FONT_PACKAGES], { cwd: root })
+            },
             // Login with the Belgian eID: the React hooks of DafkeDD eID (from its release on GitHub)
             ...(api?.oidc && !api.linked
                 ? [
@@ -1158,7 +720,8 @@ export const nextjs = {
                     await fs.rm(path.join(root, 'src/app/page.tsx'), { force: true })
                     await fs.rm(path.join(root, 'src/app/layout.tsx'), { force: true })
                     const withUi = ui === 'all'
-                    let all = { ...files, ...(withUi ? uiFiles : {}) }
+                    // Every project in the Pasport design: without the OpenID Connect login its own home page and shell
+                    let all = sitePages({ ...files, ...uiFiles }, { api, appName: path.basename(projectDir) })
                     // With a backend the frontend also gets the API client, the status card and their texts
                     if (api) all = withApi(all, api, { ui: withUi })
                     for (const [rel, content] of Object.entries(all)) await write(root, rel, content)
@@ -1242,7 +805,7 @@ export const nextjs = {
                     // A virtual card reader with a test eID (PIN 1234) that may log in on this frontend
                     if (api?.oidc && !api.linked) pkg.scripts['eid:mock'] = EID_MOCK_SCRIPT
                     // The Pasport design, checked (also in the CI): scripts/check-design.mjs
-                    if (api?.oidc) pkg.scripts['check:design'] = 'node scripts/check-design.mjs'
+                    pkg.scripts['check:design'] = 'node scripts/check-design.mjs'
                     await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
 
                     await exec('npx', ['--no-install', 'prettier', '--write', '.'], { cwd: root })

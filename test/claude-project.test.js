@@ -112,10 +112,10 @@ test('the CI checks every part on pushes and pull requests, with PostgreSQL for 
     assert.match(ci, /cache-dependency-path: backend\/package-lock.json/)
     const frontendCi = ciWorkflow(frontendOnly)
     assert.ok(!frontendCi.includes('backend') && !frontendCi.includes('postgres'))
-    // The Pasport design is checked for the login server and its apps, not for a site without them
+    // The Pasport design is checked in every project with a frontend, a site without a login too
     assert.ok(ci.includes('npm run check:design'))
     assert.ok(ciWorkflow(pasport).includes('npm run check:design'))
-    assert.ok(!frontendCi.includes('check:design'))
+    assert.ok(frontendCi.includes('npm run check:design'))
 })
 
 test('the release runs only on main, after the CI, with the version of the backend', () => {

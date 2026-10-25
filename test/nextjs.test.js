@@ -18,6 +18,7 @@ import {
     API_MESSAGES,
     apiFiles,
     withApi,
+    sitePages,
     patchNextConfig,
     patchGlobalsCss,
     write
@@ -92,26 +93,9 @@ test('every translation is a non-empty string', () => {
     }
 })
 
-test('the settings dropdowns are translated (language, theme, light, dark, system)', () => {
-    for (const locale of LOCALES) {
-        for (const key of ['language', 'theme', 'light', 'dark', 'system']) {
-            assert.ok(MESSAGES[locale].Settings[key], `${locale}.Settings.${key}`)
-        }
-    }
-})
-
 test('the example page text is translated, including the stack cards', () => {
     for (const locale of LOCALES) {
-        for (const key of [
-            'title',
-            'description',
-            'start',
-            'docs',
-            'stackNext',
-            'stackTailwind',
-            'stackIntl',
-            'stackIcons'
-        ]) {
+        for (const key of ['title', 'description', 'stackNext', 'stackTailwind', 'stackIntl', 'stackDesign']) {
             assert.ok(MESSAGES[locale].HomePage[key], `${locale}.HomePage.${key}`)
         }
     }
@@ -140,41 +124,43 @@ test('next 16 proxy.ts is generated instead of middleware.ts', () => {
     assert.equal(files['middleware.ts'], undefined)
 })
 
-test('the plain variant has locale + theme switchers that do not depend on DafkeDD UI', () => {
-    for (const key of [
-        'src/components/theme-switcher.tsx',
-        'src/components/locale-switcher.tsx',
-        'src/components/theme-script.tsx'
-    ]) {
-        assert.ok(files[key], key)
-        assert.ok(!files[key].includes('@/components/ui'), key)
-    }
-    assert.match(files['src/components/theme-switcher.tsx'], /light/)
-    assert.match(files['src/components/theme-switcher.tsx'], /dark/)
-    assert.match(files['src/components/theme-switcher.tsx'], /system/)
-})
-
 test('the theme is applied through data-theme and survives a language change', () => {
-    assert.match(files['src/components/theme-script.tsx'], /data-theme/)
-    assert.match(files['src/components/theme-script.tsx'], /MutationObserver/)
+    assert.match(uiFiles['src/components/theme-script.tsx'], /data-theme/)
     assert.match(uiFiles['src/components/theme-script.tsx'], /MutationObserver/)
     assert.match(uiFiles['src/components/theme-script.tsx'], /lui-theme/)
 })
 
 test('the theme script is injected via useServerInsertedHTML (no React script-tag warning)', () => {
-    assert.match(files['src/components/theme-script.tsx'], /useServerInsertedHTML/)
     assert.match(uiFiles['src/components/theme-script.tsx'], /useServerInsertedHTML/)
 })
 
-test('the DafkeDD UI variant uses UI components, react-icons and the floating settings pill', () => {
-    const page = uiFiles['src/app/[locale]/page.tsx']
-    assert.match(page, /@\/components\/ui/)
-    assert.match(page, /react-icons\/lu/)
-    const layout = uiFiles['src/app/[locale]/layout.tsx']
-    assert.match(layout, /ThemeProvider/)
-    assert.match(layout, /fixed bottom-6/)
-    assert.match(layout, /<LocaleSwitcher \/>/)
-    assert.match(layout, /<ThemeSwitcher \/>/)
+test('every frontend is in the Pasport design: the layout, the home page in the shell, the design check, the texts', () => {
+    const all = sitePages({ ...files, ...uiFiles }, { appName: 'shop' })
+    const layout = all['src/app/[locale]/layout.tsx']
+    assert.match(layout, /<ThemeProvider>/)
+    assert.match(layout, /import '\.\.\/\.\.\/styles\/pasport\.css'/)
+    assert.match(layout, /@fontsource-variable\/hanken-grotesk/)
+    assert.match(all['src/app/[locale]/page.tsx'], /<AppPage>/)
+    assert.match(all['src/components/shell/app-shell.tsx'], /<Shell\b/)
+    assert.match(all['src/components/shell/account.ts'], /account: null/)
+    assert.match(all['src/lib/brand.ts'], /APP_NAME: string \| null = "shop"/)
+    for (const rel of ['scripts/check-design.mjs', 'src/styles/pasport.css', 'src/components/pasport/ui.tsx'])
+        assert.ok(all[rel], rel)
+    // Nothing of the login server: no OpenID Connect, no presence or notifications of its API
+    for (const [rel, content] of Object.entries(all)) {
+        if (rel === 'scripts/check-design.mjs') continue
+        assert.ok(!/react-icons|lucide-react/.test(content), rel)
+        assert.ok(!/from '@\/(lib\/(oidc|portal|account)|components\/pasport\/portal-shell)'/.test(content), rel)
+    }
+    assert.ok(!all['src/components/theme-switcher.tsx'] && !all['src/components/locale-switcher.tsx'])
+    for (const locale of LOCALES) {
+        const messages = JSON.parse(all[`messages/${locale}.json`])
+        for (const name of ['HomePage', 'Nav', 'Shell', 'AuthScreen']) assert.ok(messages[name], `${locale} ${name}`)
+        assert.ok(messages.Portal.Shell.search, locale)
+    }
+    // The login server and the linked apps bring their own pages
+    const oidc = sitePages({ ...files, ...uiFiles }, { api: { oidc: true } })
+    assert.ok(!oidc['src/app/[locale]/page.tsx'])
 })
 
 test('the UI globals.css loads Tailwind, the UI styles and the data-theme dark variant', () => {
@@ -277,25 +263,12 @@ test('the Next.js frontend definition is complete', () => {
     assert.equal(nextjs.label, 'Next.js')
     assert.equal(nextjs.dir, 'frontend')
     assert.deepEqual(nextjs.next, ['cd frontend', 'npm run dev'])
-    assert.match(nextjs.description, /react-icons/)
+    assert.match(nextjs.description, /Pasport/)
     assert.match(nextjs.description, /Prettier/)
 })
 
-test('ask offers all components, init only, or no DafkeDD UI', async () => {
-    let config
-    const answer = await nextjs.ask({
-        prompts: {
-            select: async c => {
-                config = c
-                return 'all'
-            }
-        }
-    })
-    assert.deepEqual(answer, { ui: 'all' })
-    assert.deepEqual(
-        config.choices.map(c => c.value),
-        ['all', 'init', 'none']
-    )
+test('ask has no question: every project gets DafkeDD UI and the Pasport design', async () => {
+    assert.deepEqual(await nextjs.ask(), { ui: 'all' })
 })
 
 // ---------------------------------------------------------------- the install flow (fake exec, no network)
@@ -327,30 +300,34 @@ async function runAll(steps) {
     for (const step of steps) await step.run()
 }
 
-test('steps (no UI) install, configure and check in the right order', async t => {
+test('steps install, configure and check in the right order', async t => {
     const projectDir = await tmp(t)
-    const steps = await nextjs.steps({ projectDir, answers: { ui: 'none' }, exec: fakeExec() })
+    const steps = await nextjs.steps({ projectDir, answers: {}, exec: fakeExec() })
     assert.deepEqual(titles(steps), [
         'Next.js + Tailwind CSS aanmaken',
         'Dependencies installeren',
         'next-intl installeren',
-        'react-icons installeren',
+        'Lettertypen installeren (Hanken Grotesk, JetBrains Mono)',
         'Prettier installeren',
         'next-intl configureren',
+        'DafkeDD UI ophalen',
+        'DafkeDD UI installeren',
         'Prettier configureren',
         'Project controleren (build)'
     ])
     assert.ok(steps.every(s => s.weight > 0))
 })
 
-test('steps (no UI) install the latest versions of all packages in ./frontend', async t => {
+test('steps install the latest versions of all packages in ./frontend', async t => {
     const projectDir = await tmp(t)
     const calls = []
-    await runAll(await nextjs.steps({ projectDir, answers: { ui: 'none' }, exec: fakeExec(calls) }))
+    await runAll(await nextjs.steps({ projectDir, answers: {}, exec: fakeExec(calls) }))
     const lines = calls.map(c => c.line)
     assert.ok(lines.some(l => l.startsWith('npx --yes create-next-app@latest frontend')))
     assert.ok(lines.includes('npm install next-intl@latest'))
-    assert.ok(lines.includes('npm install react-icons@latest'))
+    // The fonts of the design; its icons are its own (no react-icons)
+    assert.ok(lines.some(l => l.startsWith('npm install @fontsource-variable/hanken-grotesk@latest')))
+    assert.ok(!lines.some(l => l.includes('react-icons')))
     assert.ok(lines.includes('npm install --save-dev prettier@latest prettier-plugin-tailwindcss@latest'))
     assert.ok(lines.includes('npx --no-install prettier --write .'))
     assert.ok(lines.includes('npm run build'))
@@ -360,9 +337,9 @@ test('steps (no UI) install the latest versions of all packages in ./frontend', 
     assert.ok(!lines.some(l => /\s(-g|--global)(\s|$)/.test(l)))
 })
 
-test('steps (no UI) write the i18n files, four message files, Prettier config and patches', async t => {
+test('steps write the i18n files, four message files, Prettier config, the design and patches', async t => {
     const projectDir = await tmp(t)
-    await runAll(await nextjs.steps({ projectDir, answers: { ui: 'none' }, exec: fakeExec() }))
+    await runAll(await nextjs.steps({ projectDir, answers: {}, exec: fakeExec() }))
     const root = path.join(projectDir, 'frontend')
     for (const rel of [
         'src/i18n/routing.ts',
@@ -379,12 +356,15 @@ test('steps (no UI) write the i18n files, four message files, Prettier config an
     assert.ok(!(await exists(path.join(root, 'src/app/page.tsx'))), 'default page is removed')
     assert.ok(!(await exists(path.join(root, 'src/app/layout.tsx'))), 'default layout is removed')
     assert.match(await fs.readFile(path.join(root, 'next.config.ts'), 'utf8'), /withNextIntl\(nextConfig\)/)
-    assert.match(await fs.readFile(path.join(root, 'src/app/globals.css'), 'utf8'), /data-theme/)
+    assert.equal(await fs.readFile(path.join(root, 'src/app/globals.css'), 'utf8'), UI_GLOBALS_CSS)
     const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'))
     assert.equal(pkg.scripts.format, 'prettier --write .')
     assert.equal(pkg.scripts['format:check'], 'prettier --check .')
+    assert.equal(pkg.scripts['check:design'], 'node scripts/check-design.mjs')
     assert.equal(pkg.scripts.dev, 'next dev', 'existing scripts are kept')
-    assert.ok(!(await exists(path.join(root, 'dafke-ui.json'))), 'no DafkeDD UI when not requested')
+    assert.ok(await exists(path.join(root, 'dafke-ui.json')), 'DafkeDD UI in every project')
+    assert.match(await fs.readFile(path.join(root, 'src/app/[locale]/page.tsx'), 'utf8'), /<AppPage>/)
+    assert.match(await fs.readFile(path.join(root, 'src/lib/brand.ts'), 'utf8'), new RegExp(path.basename(projectDir)))
 })
 
 test('steps (UI: all) fetch DafkeDD UI from developer and install every component', async t => {
@@ -403,7 +383,6 @@ test('steps (UI: all) fetch DafkeDD UI from developer and install every componen
     const root = path.join(projectDir, 'frontend')
     assert.ok(await exists(path.join(root, 'dafke-ui.json')))
     assert.equal(await fs.readFile(path.join(root, 'src/app/globals.css'), 'utf8'), UI_GLOBALS_CSS)
-    assert.match(await fs.readFile(path.join(root, 'src/app/[locale]/page.tsx'), 'utf8'), /@\/components\/ui/)
 })
 
 test('steps (UI: all) remove the temporary clone afterwards', async t => {
@@ -415,17 +394,6 @@ test('steps (UI: all) remove the temporary clone afterwards', async t => {
         .line.split(' ')
         .at(-1)
     assert.ok(!(await exists(cloneDir)))
-})
-
-test('steps (UI: init) do not add components and still load the UI stylesheet', async t => {
-    const projectDir = await tmp(t)
-    const calls = []
-    await runAll(await nextjs.steps({ projectDir, answers: { ui: 'init' }, exec: fakeExec(calls) }))
-    const lines = calls.map(c => c.line)
-    assert.ok(lines.some(l => /dafke-ui\.mjs init --yes$/.test(l)))
-    assert.ok(!lines.some(l => l.includes(' add --all')))
-    const css = await fs.readFile(path.join(projectDir, 'frontend/src/app/globals.css'), 'utf8')
-    assert.match(css, /@import "\.\.\/components\/ui\/ui\.css";/)
 })
 
 test('steps clean up the temporary clone and rethrow when cloning fails', async t => {
@@ -449,12 +417,10 @@ test('steps refuse to run when ./frontend already exists and delete nothing', as
 })
 
 test('globals.css loads the DafkeDD UI stylesheet exactly once (regression: duplicate import)', async t => {
-    for (const ui of ['all', 'init']) {
-        const projectDir = await tmp(t)
-        await runAll(await nextjs.steps({ projectDir, answers: { ui }, exec: fakeExec() }))
-        const css = await fs.readFile(path.join(projectDir, 'frontend/src/app/globals.css'), 'utf8')
-        assert.equal(css.match(/components\/ui\/ui\.css/g).length, 1, ui)
-    }
+    const projectDir = await tmp(t)
+    await runAll(await nextjs.steps({ projectDir, answers: {}, exec: fakeExec() }))
+    const css = await fs.readFile(path.join(projectDir, 'frontend/src/app/globals.css'), 'utf8')
+    assert.equal(css.match(/components\/ui\/ui\.css/g).length, 1)
 })
 
 // ---------------------------------------------------------------- backend connection
@@ -493,37 +459,44 @@ test('the status card shows the API message and language, the database state and
     }
 })
 
-test('withApi adds the files, the card on the page and the texts in four languages (plain variant)', () => {
-    const result = withApi(files, API, { ui: false })
+const SITE = sitePages({ ...files, ...uiFiles })
+
+test('withApi adds the files, the card on the page and the texts in four languages', () => {
+    const result = withApi(SITE, API, { ui: true })
     for (const rel of ['src/lib/api.ts', 'src/lib/use-api.ts', 'src/components/api-status.tsx'])
         assert.ok(rel in result, rel)
     const page = result['src/app/[locale]/page.tsx']
     assert.match(page, /import \{ ApiStatus \} from '@\/components\/api-status'/)
-    assert.match(page, /<ApiStatus \/>/)
+    assert.equal(page.match(/<ApiStatus \/>/g).length, 1)
+    assert.match(page, /<AppPage>/)
+    assert.ok(!/AuthLinks/.test(page), 'no login: no account card')
     for (const locale of LOCALES) {
         const messages = JSON.parse(result[`messages/${locale}.json`])
         assert.deepEqual(messages.ApiStatus, API_MESSAGES[locale])
         assert.deepEqual(messages.HomePage, MESSAGES[locale].HomePage, 'existing texts are kept')
+        assert.ok(messages.Nav && messages.Shell, locale)
     }
 })
 
-test('withApi adds the card to the DafkeDD UI page as well', () => {
-    const result = withApi({ ...files, ...uiFiles }, API, { ui: true })
+test('withApi with the simple login puts the account card on the home page and the profile in the shell', () => {
+    const result = withApi(SITE, { ...API, auth: true }, { ui: true })
     const page = result['src/app/[locale]/page.tsx']
-    assert.equal(page.match(/<ApiStatus \/>/g).length, 1)
-    assert.match(page, /import \{ ApiStatus \}/)
+    assert.match(page, /import \{ AuthLinks \} from '@\/components\/auth-links'/)
+    assert.match(page, /<AuthLinks \/>\s*<ApiStatus \/>/)
+    assert.match(result['src/components/shell/account.ts'], /\/auth\/me/)
+    assert.match(result['src/app/[locale]/login/page.tsx'], /<AuthForm mode='login' \/>/)
 })
 
 test('withApi does not change the original files', () => {
-    const before = files['src/app/[locale]/page.tsx']
-    withApi(files, API, { ui: false })
-    assert.equal(files['src/app/[locale]/page.tsx'], before)
+    const before = SITE['src/app/[locale]/page.tsx']
+    withApi(SITE, API, { ui: true })
+    assert.equal(SITE['src/app/[locale]/page.tsx'], before)
     assert.ok(!before.includes('ApiStatus'))
 })
 
 test('withApi fails loudly when a page template changes', () => {
     assert.throws(
-        () => withApi({ ...files, 'src/app/[locale]/page.tsx': 'nothing here' }, API, { ui: false }),
+        () => withApi({ ...SITE, 'src/app/[locale]/page.tsx': 'nothing here' }, API, { ui: true }),
         /Template changed/
     )
 })
@@ -569,7 +542,7 @@ test('steps (without a backend) leave the frontend free of API code', async t =>
 
 test('the status card spaces its parts with flex gap, not margins (DafkeDD UI resets the margin of headings)', () => {
     const card = apiFiles(API)['src/components/api-status.tsx']
-    assert.match(card, /<section[^>]*flex-col gap-5/)
+    assert.match(card, /className="card card-pad flex w-full flex-col gap-4/)
     assert.match(card, /<ul className="flex flex-col gap-3 /)
     assert.ok(!/<h2[^>]*\bm[bt]-/.test(card), 'no margin classes on the heading')
     assert.ok(!/<p[^>]*\bm[bt]-/.test(card), 'no margin classes on the hint')

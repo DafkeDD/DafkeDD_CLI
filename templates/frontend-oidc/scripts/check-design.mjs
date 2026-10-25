@@ -75,13 +75,15 @@ for (const file of code.filter(file => /\.(tsx|jsx)$/.test(file) && !DESIGN.some
         )
 
 // 3. Every page sits in the shell (AppPage, or the CustomerShell/AdminShell of its layout), only redirects, or, when it is public, in the login screen (AuthLayout)
+// With the OpenID Connect login (PUBLIC_PATHS in src/proxy.ts) every other page needs a login; a project without it has
+// no protected routes, and a page is in the shell or, for its own login, in the login screen.
 const proxy = path.join(src, 'proxy.ts')
-const publicPaths = existsSync(proxy)
-    ? [...(/PUBLIC_PATHS\s*=\s*\[([^\]]*)\]/.exec(read(proxy))?.[1] ?? '').matchAll(/'([^']+)'/g)].map(
-          match => match[1]
-      )
-    : []
-if (!publicPaths.includes('/login'))
+const proxyCode = existsSync(proxy) ? read(proxy) : ''
+const withLogin = /PUBLIC_PATHS\s*=/.test(proxyCode) || existsSync(path.join(src, 'lib', 'oidc.ts'))
+const publicPaths = [...(/PUBLIC_PATHS\s*=\s*\[([^\]]*)\]/.exec(proxyCode)?.[1] ?? '').matchAll(/'([^']+)'/g)].map(
+    match => match[1]
+)
+if (withLogin && !publicPaths.includes('/login'))
     problems.push('src/proxy.ts: PUBLIC_PATHS must exist and contain /login (every other page needs a login).')
 /** The page and the components it imports from @/components (one level): the auth screen may live in a form. */
 const withComponents = file => {
@@ -114,7 +116,9 @@ for (const file of pages) {
             .filter(part => !/^\[locale\]$|^\(.*\)$/.test(part))
             .join('/')
     const content = withComponents(file)
-    const isPublic = publicPaths.some(pub => route === pub || route.startsWith(pub + '/'))
+    const isPublic = withLogin
+        ? publicPaths.some(pub => route === pub || route.startsWith(pub + '/'))
+        : /AuthLayout|AuthPage/.test(content)
     if (isPublic) {
         if (!/AuthLayout|AuthPage/.test(content))
             problems.push(
@@ -122,7 +126,7 @@ for (const file of pages) {
             )
     } else if (!/<AppPage[\s>]/.test(content) && !inShellLayout(file) && !REDIRECT.test(read(file))) {
         problems.push(
-            `${rel(file)}: every page sits in the shell: <AppPage> (src/components/shell/app-shell.tsx), or a layout.tsx above it with <CustomerShell> or <AdminShell> (src/components/pasport/shell.tsx). A public page belongs in PUBLIC_PATHS of src/proxy.ts.`
+            `${rel(file)}: every page sits in the shell: <AppPage> (src/components/shell/app-shell.tsx), or a layout.tsx above it with <CustomerShell> or <AdminShell> (src/components/pasport/portal-shell.tsx). A public page belongs in PUBLIC_PATHS of src/proxy.ts (with the login server), or shows the login screen (AuthLayout).`
         )
     }
 }

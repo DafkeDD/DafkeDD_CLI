@@ -192,3 +192,29 @@ test('main rethrows when a step fails', async () => {
     }
     await assert.rejects(main(options), /step failed/)
 })
+
+test('main hands over to the linked app when the login question chose the existing Pasport server', async () => {
+    const { events, options } = setup({ backend: 'demo-be' })
+    const asked = []
+    options.backendRegistry['demo-be'].ask = async () => ({ database: { database: 'shop' }, switchTo: 'demo-linked' })
+    options.backendRegistry['demo-linked'] = {
+        id: 'demo-linked',
+        label: 'Linked',
+        description: 'x',
+        dir: 'backend',
+        api: { port: 4001 },
+        next: () => [],
+        ask: async ctx => {
+            asked.push(ctx)
+            return { link: { name: 'Shop' }, database: ctx.database }
+        },
+        steps: async ctx => {
+            events.push(`demo-linked.steps(${JSON.stringify(ctx.answers)})`)
+            return [{ title: 'linked step', run: async () => {} }]
+        }
+    }
+    await main(options)
+    assert.deepEqual(asked[0].database, { database: 'shop' }, 'the database is not asked again')
+    assert.ok(events.some(e => e.startsWith('demo-linked.steps') && e.includes('"link":{"name":"Shop"}')))
+    assert.ok(!events.some(e => e.startsWith('demo-be.steps')))
+})

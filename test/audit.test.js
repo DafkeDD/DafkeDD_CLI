@@ -128,7 +128,7 @@ test('the frontend: /audit, recent activity on /security, and the IP address and
     assert.ok(frontend['src/components/audit.tsx'])
     assert.match(frontend['src/app/[locale]/(portal)/security/page.tsx'], /<AuditLog scope='me' \/>/)
     // In the user's menu of the portal, for the admins of the organisation
-    assert.match(frontend['src/components/pasport/shell.tsx'], /href: '\/audit'/)
+    assert.match(frontend['src/components/pasport/portal-shell.tsx'], /href: '\/audit'/)
     const route = frontend['src/app/api/backend/[...path]/route.ts']
     const allowed = new RegExp(/^const ALLOWED =\s+\/(.+)\/$/m.exec(route)[1])
     for (const path of ['me/audit', 'tenants/current/audit', 'admin/audit']) assert.ok(allowed.test(path), path)

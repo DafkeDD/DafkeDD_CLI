@@ -364,7 +364,10 @@ async function add() {
         days: 2,
         messages: [
             ['customer', 'Kunnen patiënten ook een **sms** krijgen een dag voor hun afspraak?'],
-            ['support', 'Ja: zet in de agenda onder _Instellingen → Herinneringen_ de sms aan. Lukt het niet, laat het weten.']
+            [
+                'support',
+                'Ja: zet in de agenda onder _Instellingen → Herinneringen_ de sms aan. Lukt het niet, laat het weten.'
+            ]
         ]
     })
     await ticket({
@@ -397,7 +400,9 @@ async function add() {
     console.log(`- ${tenants['demo-de-linde'].name} (Gent) and ${tenants['demo-noord'].name} (Brugge)`)
     for (const person of PEOPLE)
         console.log(`- ${email(person)}: ${person.role}, ${person.profession} (${tenants[person.tenant].name})`)
-    console.log(`- apps ${PRODUCTS.map(product => product.name).join(', ')}, discount code ${DISCOUNT}, invoices and tickets`)
+    console.log(
+        `- apps ${PRODUCTS.map(product => product.name).join(', ')}, discount code ${DISCOUNT}, invoices and tickets`
+    )
     console.log(
         generated
             ? `Password of every demo account (shown once): ${password}`

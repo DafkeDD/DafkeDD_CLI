@@ -3,13 +3,22 @@
  * (POST /auth/register, POST /auth/login, POST /auth/logout, GET /auth/me); the session lives in an httpOnly
  * cookie that the browser sends along (fetch with credentials: 'include').
  *
- * The pages look the same with and without DafkeDD UI: they use plain Tailwind classes and pick up the accent
- * colour of DafkeDD UI (--accent) when it is installed.
+ * The pages are in the Pasport design, like every frontend of DafkeDD_CLI: the login screens in AuthLayout, the profile
+ * in the shell (AppPage), the account in its topbar (src/components/shell/account.ts).
  */
 
 /** Texts of the login pages. Every language needs the same keys (checked by the tests). */
 export const AUTH_MESSAGES = {
     en: {
+        loginText: 'Log in with your email address and password.',
+        registerText: 'Create your account: it takes a minute.',
+        asideTitle: 'Welcome',
+        asideText: 'One account for everything in this application.',
+        profileText: 'Your account in this application.',
+        accountTitle: 'Your account',
+        accountText: 'Log in or create an account to try the login of this project.',
+        showPassword: 'Show password',
+        hidePassword: 'Hide password',
         loginTitle: 'Log in',
         registerTitle: 'Create an account',
         name: 'Name',
@@ -30,6 +39,15 @@ export const AUTH_MESSAGES = {
         profile: 'Profile'
     },
     nl: {
+        loginText: 'Log in met je e-mailadres en wachtwoord.',
+        registerText: 'Maak je account aan: het duurt een minuut.',
+        asideTitle: 'Welkom',
+        asideText: 'Eén account voor alles in deze toepassing.',
+        profileText: 'Je account in deze toepassing.',
+        accountTitle: 'Je account',
+        accountText: 'Log in of maak een account aan om de login van dit project te proberen.',
+        showPassword: 'Wachtwoord tonen',
+        hidePassword: 'Wachtwoord verbergen',
         loginTitle: 'Inloggen',
         registerTitle: 'Account aanmaken',
         name: 'Naam',
@@ -50,6 +68,15 @@ export const AUTH_MESSAGES = {
         profile: 'Profiel'
     },
     fr: {
+        loginText: 'Connectez-vous avec votre adresse e-mail et votre mot de passe.',
+        registerText: 'Créez votre compte : cela prend une minute.',
+        asideTitle: 'Bienvenue',
+        asideText: 'Un seul compte pour tout dans cette application.',
+        profileText: 'Votre compte dans cette application.',
+        accountTitle: 'Votre compte',
+        accountText: 'Connectez-vous ou créez un compte pour essayer la connexion de ce projet.',
+        showPassword: 'Afficher le mot de passe',
+        hidePassword: 'Masquer le mot de passe',
         loginTitle: 'Se connecter',
         registerTitle: 'Créer un compte',
         name: 'Nom',
@@ -70,6 +97,15 @@ export const AUTH_MESSAGES = {
         profile: 'Profil'
     },
     de: {
+        loginText: 'Melde dich mit deiner E-Mail-Adresse und deinem Passwort an.',
+        registerText: 'Lege dein Konto an: Es dauert eine Minute.',
+        asideTitle: 'Willkommen',
+        asideText: 'Ein Konto für alles in dieser Anwendung.',
+        profileText: 'Dein Konto in dieser Anwendung.',
+        accountTitle: 'Dein Konto',
+        accountText: 'Melde dich an oder lege ein Konto an, um die Anmeldung dieses Projekts auszuprobieren.',
+        showPassword: 'Passwort anzeigen',
+        hidePassword: 'Passwort verbergen',
         loginTitle: 'Anmelden',
         registerTitle: 'Konto erstellen',
         name: 'Name',
@@ -91,258 +127,308 @@ export const AUTH_MESSAGES = {
     }
 }
 
-const page = (name, body) => `import { use } from 'react';
-import { setRequestLocale } from 'next-intl/server';
-${body.import}
-
-export default function ${name}Page({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = use(params);
-  setRequestLocale(locale);
-
-  return (
-    <main className="flex flex-1 flex-col items-center justify-center px-6 pt-10 pb-28">
-      ${body.element}
-    </main>
-  );
-}
-`
-
-const CARD =
-    'flex w-full max-w-sm flex-col gap-5 rounded-2xl border border-black/10 bg-black/[.03] p-6 text-left dark:border-white/15 dark:bg-white/[.04]'
-const INPUT =
-    'h-11 w-full rounded-xl border border-black/15 bg-transparent px-3.5 text-sm outline-none focus:border-[var(--accent,#6366f1)] dark:border-white/20'
-const BUTTON =
-    'inline-flex h-11 items-center justify-center rounded-xl bg-[var(--accent,#171717)] px-5 text-sm font-semibold text-[var(--accent-fg,#ffffff)] disabled:opacity-60 dark:bg-[var(--accent,#ededed)] dark:text-[var(--accent-fg,#0a0a0a)]'
-
-// Spacing uses flex gap, not margins: DafkeDD UI resets the margins of headings and paragraphs.
+// The login screens, the profile and the account of the shell, in the Pasport design (src/components/pasport)
 export const authFiles = () => ({
-    'src/app/[locale]/login/page.tsx': page('Login', {
-        import: "import { AuthForm } from '@/components/auth-form';",
-        element: '<AuthForm mode="login" />'
-    }),
+    'src/app/[locale]/login/page.tsx': `import { setRequestLocale } from 'next-intl/server'
+import { AuthForm } from '@/components/auth-form'
 
-    'src/app/[locale]/register/page.tsx': page('Register', {
-        import: "import { AuthForm } from '@/components/auth-form';",
-        element: '<AuthForm mode="register" />'
-    }),
+/** Log in: the login screen of the Pasport design. */
+export default async function LoginPage({ params }: { params: Promise<{ locale: string }> }) {
+    setRequestLocale((await params).locale)
+    return <AuthForm mode='login' />
+}
+`,
 
-    'src/app/[locale]/profile/page.tsx': page('Profile', {
-        import: "import { Profile } from '@/components/profile';",
-        element: '<Profile />'
-    }),
+    'src/app/[locale]/register/page.tsx': `import { setRequestLocale } from 'next-intl/server'
+import { AuthForm } from '@/components/auth-form'
 
-    'src/components/auth-form.tsx': `'use client';
+/** Create an account: the login screen of the Pasport design. */
+export default async function RegisterPage({ params }: { params: Promise<{ locale: string }> }) {
+    setRequestLocale((await params).locale)
+    return <AuthForm mode='register' />
+}
+`,
 
-import { FormEvent, useState } from 'react';
-import { useTranslations } from 'next-intl';
-import { Link, useRouter } from '@/i18n/navigation';
-import { ApiError } from '@/lib/api';
-import { useApi } from '@/lib/use-api';
+    'src/app/[locale]/profile/page.tsx': `import { setRequestLocale } from 'next-intl/server'
+import { Profile } from '@/components/profile'
+import { AppPage } from '@/components/shell/app-shell'
 
-/** Login and register form. Errors come from the API, already in the selected language. */
+/** The own profile, in the shell (GET /auth/me; without a login: to /login). */
+export default async function ProfilePage({ params }: { params: Promise<{ locale: string }> }) {
+    setRequestLocale((await params).locale)
+    return (
+        <AppPage>
+            <Profile />
+        </AppPage>
+    )
+}
+`,
+
+    'src/components/auth-form.tsx': `'use client'
+
+import { type FormEvent, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { AuthHeading, AuthLayout } from '@/components/pasport/auth-layout'
+import { Btn, ErrorNote, Field, Input, PasswordInput } from '@/components/pasport/ui'
+import { Link, useRouter } from '@/i18n/navigation'
+import { ApiError } from '@/lib/api'
+import { useApi } from '@/lib/use-api'
+
+/** Log in or create an account (POST /auth/login, /auth/register). Errors come from the API, in the language. */
 export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
-  const t = useTranslations('Auth');
-  const api = useApi();
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const isRegister = mode === 'register';
+    const t = useTranslations('Auth')
+    const api = useApi()
+    const router = useRouter()
+    const [error, setError] = useState<string | null>(null)
+    const [busy, setBusy] = useState(false)
+    const isRegister = mode === 'register'
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const values = Object.fromEntries(new FormData(event.currentTarget));
-    setBusy(true);
-    setError(null);
-    try {
-      await api.post(isRegister ? '/auth/register' : '/auth/login', values);
-      router.push('/profile');
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('offline'));
-      setBusy(false);
+    async function onSubmit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault()
+        const values = Object.fromEntries(new FormData(event.currentTarget))
+        setBusy(true)
+        setError(null)
+        try {
+            await api.post(isRegister ? '/auth/register' : '/auth/login', values)
+            router.push('/profile')
+        } catch (err) {
+            setError(err instanceof ApiError ? err.message : t('offline'))
+            setBusy(false)
+        }
     }
-  }
 
-  return (
-    <form onSubmit={onSubmit} className="${CARD}">
-      <h1 className="text-2xl font-bold tracking-tight">{isRegister ? t('registerTitle') : t('loginTitle')}</h1>
-
-      {isRegister && (
-        <label className="flex flex-col gap-1.5 text-sm font-medium">
-          {t('name')}
-          <input name="name" type="text" required maxLength={100} autoComplete="name" className="${INPUT}" />
-        </label>
-      )}
-
-      <label className="flex flex-col gap-1.5 text-sm font-medium">
-        {t('email')}
-        <input name="email" type="email" required autoComplete="email" className="${INPUT}" />
-      </label>
-
-      <label className="flex flex-col gap-1.5 text-sm font-medium">
-        {t('password')}
-        <input
-          name="password"
-          type="password"
-          required
-          minLength={isRegister ? 8 : undefined}
-          maxLength={128}
-          autoComplete={isRegister ? 'new-password' : 'current-password'}
-          className="${INPUT}"
-        />
-        {isRegister && <span className="text-xs font-normal opacity-70">{t('passwordHint')}</span>}
-      </label>
-
-      {error && (
-        <p role="alert" className="text-sm whitespace-pre-line text-red-600 dark:text-red-400">
-          {error}
-        </p>
-      )}
-
-      <button type="submit" disabled={busy} className="${BUTTON}">
-        {busy ? t('busy') : isRegister ? t('register') : t('login')}
-      </button>
-
-      <p className="text-sm opacity-80">
-        {isRegister ? t('haveAccount') : t('noAccount')}{' '}
-        <Link href={isRegister ? '/login' : '/register'} className="font-semibold underline">
-          {isRegister ? t('login') : t('register')}
-        </Link>
-      </p>
-    </form>
-  );
+    return (
+        <AuthLayout eid={false} asideTitle={t('asideTitle')} asideText={t('asideText')}>
+            <AuthHeading
+                title={isRegister ? t('registerTitle') : t('loginTitle')}
+                text={isRegister ? t('registerText') : t('loginText')}
+            />
+            <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {isRegister && (
+                    <Field label={t('name')}>
+                        <Input name='name' icon='user' required maxLength={100} autoComplete='name' />
+                    </Field>
+                )}
+                <Field label={t('email')}>
+                    <Input name='email' type='email' icon='mail' required autoComplete='email' />
+                </Field>
+                <Field label={t('password')} hint={isRegister ? t('passwordHint') : undefined}>
+                    <PasswordInput
+                        name='password'
+                        required
+                        minLength={isRegister ? 8 : undefined}
+                        maxLength={128}
+                        autoComplete={isRegister ? 'new-password' : 'current-password'}
+                        showLabel={t('showPassword')}
+                        hideLabel={t('hidePassword')}
+                    />
+                </Field>
+                <ErrorNote>{error}</ErrorNote>
+                <Btn type='submit' size='lg' className='btn-block' disabled={busy} iconRight='arrowRight'>
+                    {busy ? t('busy') : isRegister ? t('register') : t('login')}
+                </Btn>
+                <p style={{ fontSize: 13.5, color: 'var(--text-2)', textAlign: 'center' }}>
+                    {isRegister ? t('haveAccount') : t('noAccount')}{' '}
+                    <Link href={isRegister ? '/login' : '/register'} className='link-btn'>
+                        {isRegister ? t('login') : t('register')}
+                    </Link>
+                </p>
+            </form>
+        </AuthLayout>
+    )
 }
 `,
 
-    'src/components/profile.tsx': `'use client';
+    'src/components/profile.tsx': `'use client'
 
-import { useEffect, useState } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
-import { ApiError } from '@/lib/api';
-import { useApi } from '@/lib/use-api';
+import { useEffect, useState } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
+import { PageHead } from '@/components/pasport/page-head'
+import { Avatar, Btn, ErrorNote, Skeleton } from '@/components/pasport/ui'
+import { useRouter } from '@/i18n/navigation'
+import { ApiError } from '@/lib/api'
+import { useApi } from '@/lib/use-api'
 
-type Me = { id: string; name: string; email: string; createdAt: string };
+type Me = { id: string; name: string; email: string; createdAt: string }
 
-/** Protected page: shows the logged in user from the database, or sends you to the login page. */
+/** The own profile from the database (GET /auth/me); without a session to /login. */
 export function Profile() {
-  const t = useTranslations('Auth');
-  const locale = useLocale();
-  const api = useApi();
-  const router = useRouter();
-  const [user, setUser] = useState<Me | null>(null);
-  const [failed, setFailed] = useState(false);
+    const t = useTranslations('Auth')
+    const locale = useLocale()
+    const api = useApi()
+    const router = useRouter()
+    const [user, setUser] = useState<Me | null>(null)
+    const [failed, setFailed] = useState(false)
 
-  useEffect(() => {
-    let active = true;
-    api
-      .get<Me>('/auth/me')
-      .then((me) => {
-        if (active) setUser(me);
-      })
-      .catch((error) => {
-        if (!active) return;
-        if (error instanceof ApiError && error.status === 401) router.replace('/login');
-        else setFailed(true);
-      });
-    return () => {
-      active = false;
-    };
-    // router is stable for a locale; only a language change (a new api client) needs a new request
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api]);
+    useEffect(() => {
+        let active = true
+        api.get<Me>('/auth/me')
+            .then(me => {
+                if (active) setUser(me)
+            })
+            .catch(error => {
+                if (!active) return
+                if (error instanceof ApiError && error.status === 401) router.replace('/login')
+                else setFailed(true)
+            })
+        return () => {
+            active = false
+        }
+        // router is stable for a locale; only a language change (a new api client) needs a new request
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [api])
 
-  async function logout() {
-    await api.post('/auth/logout', {});
-    router.push('/');
-  }
+    async function logout() {
+        await api.post('/auth/logout', {})
+        router.push('/login')
+    }
 
-  return (
-    <section className="${CARD}">
-      <h1 className="text-2xl font-bold tracking-tight">{t('profileTitle')}</h1>
-      {failed && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{t('offline')}</p>}
-      {!failed && !user && <p className="text-sm opacity-70">{t('loading')}</p>}
-      {user && (
-        <>
-          <dl className="flex flex-col gap-3 text-sm">
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-xs opacity-70">{t('name')}</dt>
-              <dd className="font-medium">{user.name}</dd>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-xs opacity-70">{t('email')}</dt>
-              <dd className="font-medium">{user.email}</dd>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-xs opacity-70">{t('memberSince')}</dt>
-              <dd className="font-medium">
-                {new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(user.createdAt))}
-              </dd>
-            </div>
-          </dl>
-          <button type="button" onClick={logout} className="${BUTTON}">
-            {t('logout')}
-          </button>
-        </>
-      )}
-    </section>
-  );
+    return (
+        <div className='fade-in' style={{ maxWidth: 760, margin: '0 auto' }}>
+            <PageHead title={t('profileTitle')} text={t('profileText')} />
+            <ErrorNote>{failed ? t('offline') : null}</ErrorNote>
+            {!failed && !user && <Skeleton h={120} />}
+            {user && (
+                <div className='card card-pad' style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <Avatar name={user.name} size={52} />
+                        <div>
+                            <div style={{ fontWeight: 650, fontSize: 17 }}>{user.name}</div>
+                            <div style={{ color: 'var(--text-3)', fontSize: 13.5 }}>{user.email}</div>
+                        </div>
+                    </div>
+                    <dl className='form-grid'>
+                        <div>
+                            <dt className='t-eyebrow'>{t('name')}</dt>
+                            <dd>{user.name}</dd>
+                        </div>
+                        <div>
+                            <dt className='t-eyebrow'>{t('memberSince')}</dt>
+                            <dd>
+                                {new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
+                                    new Date(user.createdAt)
+                                )}
+                            </dd>
+                        </div>
+                    </dl>
+                    <div>
+                        <Btn variant='secondary' icon='logout' onClick={logout}>
+                            {t('logout')}
+                        </Btn>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
 }
 `,
 
-    'src/components/auth-links.tsx': `'use client';
+    // The account in the topbar of the shell: logged in (name, profile, log out) or not (nothing; see AuthLinks)
+    'src/components/shell/account.ts': `'use client'
 
-import { useEffect, useState } from 'react';
-import { useTranslations } from 'next-intl';
-import { Link } from '@/i18n/navigation';
-import { useApi } from '@/lib/use-api';
+import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import type { NavItem, ShellAccount } from '@/components/pasport/shell'
+import { useRouter } from '@/i18n/navigation'
+import { useApi } from '@/lib/use-api'
 
-type State = { kind: 'loading' } | { kind: 'offline' } | { kind: 'anonymous' } | { kind: 'user'; name: string };
+type Me = { name: string; email: string }
 
-/** Links on the home page: log in and register, or "Signed in as ..." with a link to the profile. */
+/** The logged in account in the topbar of the shell (GET /auth/me), with the profile in its menu. */
+export function useAccount(): { account: ShellAccount | null; menu: NavItem[] } {
+    const t = useTranslations('Auth')
+    const api = useApi()
+    const router = useRouter()
+    const [me, setMe] = useState<Me | null>(null)
+    useEffect(() => {
+        let active = true
+        api.get<Me>('/auth/me')
+            .then(user => {
+                if (active) setMe(user)
+            })
+            // 401: not logged in; the API down: no account either
+            .catch(() => undefined)
+        return () => {
+            active = false
+        }
+    }, [api])
+    if (!me) return { account: null, menu: [] }
+    return {
+        account: {
+            name: me.name,
+            sub: me.email,
+            email: me.email,
+            onLogout: () =>
+                void api
+                    .post('/auth/logout', {})
+                    .catch(() => undefined)
+                    .then(() => router.push('/login'))
+        },
+        menu: [{ key: '/profile', name: t('profile'), icon: 'user', href: '/profile' }]
+    }
+}
+`,
+
+    'src/components/auth-links.tsx': `'use client'
+
+import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { Icon } from '@/components/pasport/ui'
+import { Link } from '@/i18n/navigation'
+import { useApi } from '@/lib/use-api'
+
+type State = { kind: 'loading' } | { kind: 'offline' } | { kind: 'anonymous' } | { kind: 'user'; name: string }
+
+/** A card on the home page: log in and register, or "Signed in as ..." with a link to the profile. */
 export function AuthLinks() {
-  const t = useTranslations('Auth');
-  const api = useApi();
-  const [state, setState] = useState<State>({ kind: 'loading' });
+    const t = useTranslations('Auth')
+    const api = useApi()
+    const [state, setState] = useState<State>({ kind: 'loading' })
 
-  useEffect(() => {
-    let active = true;
-    api
-      .get<{ name: string }>('/auth/me')
-      .then((me) => {
-        if (active) setState({ kind: 'user', name: me.name });
-      })
-      // 401 means: not logged in. Any other error means the API cannot be reached.
-      .catch((error: { status?: number }) => {
-        if (active) setState({ kind: error.status === 401 ? 'anonymous' : 'offline' });
-      });
-    return () => {
-      active = false;
-    };
-  }, [api]);
+    useEffect(() => {
+        let active = true
+        api.get<{ name: string }>('/auth/me')
+            .then(me => {
+                if (active) setState({ kind: 'user', name: me.name })
+            })
+            // 401 means: not logged in. Any other error means the API cannot be reached.
+            .catch((error: { status?: number }) => {
+                if (active) setState({ kind: error.status === 401 ? 'anonymous' : 'offline' })
+            })
+        return () => {
+            active = false
+        }
+    }, [api])
 
-  if (state.kind === 'loading' || state.kind === 'offline') return null;
+    if (state.kind === 'loading' || state.kind === 'offline') return null
 
-  return (
-    <div className="relative flex flex-wrap items-center justify-center gap-3 text-sm">
-      {state.kind === 'user' ? (
-        <>
-          <span>{t('signedInAs', { name: state.name })}</span>
-          <Link href="/profile" className="font-semibold underline">
-            {t('profile')}
-          </Link>
-        </>
-      ) : (
-        <>
-          <Link href="/login" className="font-semibold underline">
-            {t('login')}
-          </Link>
-          <Link href="/register" className="font-semibold underline">
-            {t('register')}
-          </Link>
-        </>
-      )}
-    </div>
-  );
+    return (
+        <section className='card card-pad' style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <span className='kpi-icon'>
+                <Icon name='user' size={18} />
+            </span>
+            <div style={{ flex: '1 1 220px' }}>
+                <h2 className='t-h3'>{t('accountTitle')}</h2>
+                <p style={{ fontSize: 13.5, color: 'var(--text-2)' }}>
+                    {state.kind === 'user' ? t('signedInAs', { name: state.name }) : t('accountText')}
+                </p>
+            </div>
+            {state.kind === 'user' ? (
+                <Link href='/profile' className='btn btn-secondary'>
+                    {t('profile')}
+                </Link>
+            ) : (
+                <div style={{ display: 'flex', gap: 8 }}>
+                    <Link href='/login' className='btn btn-primary'>
+                        {t('login')}
+                    </Link>
+                    <Link href='/register' className='btn btn-secondary'>
+                        {t('register')}
+                    </Link>
+                </div>
+            )}
+        </section>
+    )
 }
 `
 })

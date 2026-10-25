@@ -5,69 +5,55 @@ Everything is installed **locally in the project**, never globally.
 
 ## What does it install?
 
-| Frontend | Contents                                                                                                                                                                     |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Next.js  | Next.js (latest) + Tailwind CSS (latest) + next-intl (latest) + react-icons + Prettier, in `./frontend`. Optionally with [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI) |
+| Frontend | Contents                                                                                                                                                              |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Next.js  | Next.js (latest) + Tailwind CSS (latest) + next-intl (latest) + [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI) in the Pasport design + Prettier, in `./frontend` |
 
 | Backend | Contents                                                                                                                                                   |
 | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | NestJS  | NestJS (latest) + nestjs-i18n + validation + Swagger + `.env` config + Prettier, in `./backend`. Translated server errors, health endpoint, CORS and tests |
 
 The CLI asks its questions first, then shows **one progress bar** for all steps: create the app, install dependencies,
-install next-intl, react-icons and Prettier, fetch and install DafkeDD UI, configure Prettier and run a build check.
-Optionally the project is pushed to GitHub as the very last step.
+install next-intl, the fonts of the design and Prettier, fetch and install DafkeDD UI, configure Prettier and run a
+build check. Optionally the project is pushed to GitHub as the very last step.
 
 Order of the questions:
 
-1. Which frontend (or none)? Then the frontend options (for Next.js: install DafkeDD UI?).
+1. Which frontend (or none)? Next.js has no questions of its own: every project gets DafkeDD UI and the Pasport design.
 2. Which backend (or none)? Currently only NestJS. Then the backend options: which database (PostgreSQL or none), Docker
    or local, and the connection details (see [Database](#database-postgresql)).
 3. Push to a repo right away? If yes: platform (GitHub only for now), repository name (the CLI checks that the name is
    still free) and private/public.
 
-### DafkeDD UI
+### DafkeDD UI and the Pasport design
 
-The CLI asks whether to install [DafkeDD UI](https://github.com/DafkeDD/DafkeDD_UI):
+**Every project the CLI makes is in the Pasport design**, the design of the login server: a site without a backend, a
+frontend with an API, the simple login and the OpenID Connect login alike. The CLI always runs `dafke-ui init` and
+`dafke-ui add --all` in `./frontend` (there is no question for it any more) and adds:
 
-- **All components**: runs `dafke-ui init` and `dafke-ui add --all` in `./frontend`. The example page then uses the
-  theme and components of DafkeDD UI (`ThemeProvider`, `Badge`, `Button` and `Select`).
-- **Base only (init)**: only config, tokens and helpers. You add components yourself afterwards. The example page is a
-  simple Tailwind version.
-- **No**: nothing.
+- `src/styles/pasport.css` and `src/components/pasport` (the tokens, classes and components of the design, its own
+  icons; no react-icons), the fonts Hanken Grotesk and JetBrains Mono, and the root layout that loads them;
+- the shell (icon rail, topbar with the search, light or dark, the language and the user menu): every page is in
+  `<AppPage>` (`src/components/shell/app-shell.tsx`), the pages of the rail are in `src/lib/nav.ts` (`APP_NAV`);
+- a home page in the shell (the stack, the status card of the API, the account card with the simple login);
+- with the simple login: `/login` and `/register` in the login screen of the design (`AuthLayout`), `/profile` in the
+  shell, and the account in the topbar (`src/components/shell/account.ts`);
+- `npm run check:design` (`scripts/check-design.mjs`, also in the CI): every page in the shell or the login screen, no
+  other component library, icon set or CSS framework, colours only through the tokens.
 
-With the OpenID Connect login (the login server, or a frontend linked to one) DafkeDD UI is **always** installed with
-all components, whatever the answer: the Pasport design (shell and login screen) is built with it.
+The login server and the apps linked to it have their own pages on top of that (the portal, the superadmin panel).
 
 The components end up in `frontend/src/components/ui` (`dafke-ui.json` and `dafke-ui.lock.json` live in `frontend`) and
 `ui.css` is loaded from `src/app/globals.css`. The UI repository (branch `developer`) is cloned temporarily with
 `git clone` and removed again; nothing is installed globally (no `npm link`). Git is therefore required.
 
-### react-icons
-
-[react-icons](https://react-icons.github.io/react-icons/) is a dependency of `frontend`. Usage:
-`import { FaReact } from 'react-icons/fa'` and then `<FaReact />`. Always import from the sub-folder of the icon set
-(`react-icons/fa`, `react-icons/lu`, ...) so Next only bundles the icons you use.
-
 ### Language and theme
 
-The example has a language dropdown and a theme dropdown (components in `src/components`). With DafkeDD UI they sit in
-one floating pill at the bottom of the page, in the plain variant they are simple native selects.
+The language and the theme are in the topbar of the shell (with a login: the language in the user menu).
 
-- **Language** (`locale-switcher.tsx`): switches between English, Nederlands, Français and Deutsch without changing the
-  URL. The choice is remembered.
-- **Theme** (`theme-switcher.tsx`): **Light**, **Dark** or **System** (follows the operating system). The choice is
-  stored in `localStorage` and applied before the first paint, so there is no flash.
-
-Four languages are configured: **English (`en`, the default)**, Dutch (`nl`), French (`fr`) and German (`de`). Every
-text exists in all four languages (`messages/en.json`, `nl.json`, `fr.json`, `de.json`). The language is not part of the
-URL: you browse to `http://localhost:3000/`; the language comes from the user's choice (cookie), otherwise from the
-browser language, otherwise it is English. To add a language, extend `src/i18n/routing.ts` and add a matching
-`messages/<language>.json` (always translate every text).
-
-The theme is set as `data-theme="light|dark"` on `<html>`. This is the same switch DafkeDD UI uses, and Tailwind's
-`dark:` classes follow it too. When the language changes, Next resets the attributes of `<html>`; `theme-script.tsx`
-re-applies the stored theme immediately so the theme never jumps back. With DafkeDD UI the dropdowns are the library's
-`Select` and the theme uses its `ThemeProvider` (storage key `lui-theme`).
+- **Language**: switches between English, Nederlands, Français and Deutsch without changing the URL. The choice is
+  remembered.
+- **Theme**: light or dark, stored in `localStorage` and applied before the first paint, so there is no flash.
 
 ### Prettier
 
@@ -258,6 +244,9 @@ The generated tests never need a database: the e2e tests replace `DatabaseServic
 With a database the CLI asks _"Add a login?"_:
 
 - **Own OIDC server (multi-tenant, OpenID Connect)**: the backend becomes an OpenID Connect login server (see below).
+- **Log in through your existing Pasport OIDC server (link code)** (only with a frontend): the project becomes an app of
+  that server, exactly as the backend choice "App voor een bestaande DafkeDD OIDC-server (koppelcode)" (see below), with
+  the database you just chose. One account for all your apps: email, passkey, eID and two-step through the server.
 - **Simple test login** (only with a frontend): a login, register and profile page with a session cookie.
 - **No login**.
 
@@ -354,16 +343,17 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   logout URI, and for a confidential app a secret that is shown once (only its hash is stored). The apps of the file
   stay read-only there.
 - **An app for an existing login server**: choose Next.js and the backend **"App voor een bestaande DafkeDD OIDC-server
-  (koppelcode)"**. The CLI asks the address of that API, the port of the app's frontend (3001), a one-time link code
-  that a superadmin makes on `/admin` → Apps → "Koppelcode", and the app's own database on the PostgreSQL server of the
-  login server (host, port, user, password, name; default the name of the app). It adds the addresses of the new
-  frontend to that app and writes `.env.local`: the frontend logs in there with single sign-on, is logged out with
-  back-channel logout, and links to the account pages of that server. The app gets its **own NestJS API** in `./backend`
-  (port 4001) with its own database: it has no users of its own, accepts only the access tokens of that login server for
-  this app (`PasportGuard`: signature with its keys, `iss`, `aud`, `typ`, `client_id`), takes the organisation from the
-  token, and keeps its data per organisation with Row-Level Security. The example is `notes` (`GET/POST /notes`,
-  `DELETE /notes/:id` for the beheerder), shown on the home page of the frontend through `/api/app/...` (the token is
-  added on the server). See "Login through the login server" in `docs/api.md`. The CLI also asks:
+  (koppelcode)"**, or NestJS with _"Log in through your existing Pasport OIDC server"_ at the login question. The CLI
+  asks the address of that API, the port of the app's frontend (3001), a one-time link code that a superadmin makes on
+  `/admin` → Apps → "Koppelcode", and the app's own database on the PostgreSQL server of the login server (host, port,
+  user, password, name; default the name of the app). It adds the addresses of the new frontend to that app and writes
+  `.env.local`: the frontend logs in there with single sign-on, is logged out with back-channel logout, and links to the
+  account pages of that server. The app gets its **own NestJS API** in `./backend` (port 4001) with its own database: it
+  has no users of its own, accepts only the access tokens of that login server for this app (`PasportGuard`: signature
+  with its keys, `iss`, `aud`, `typ`, `client_id`), takes the organisation from the token, and keeps its data per
+  organisation with Row-Level Security. The example is `notes` (`GET/POST /notes`, `DELETE /notes/:id` for the
+  beheerder), shown on the home page of the frontend through `/api/app/...` (the token is added on the server). See
+  "Login through the login server" in `docs/api.md`. The CLI also asks:
     - **modules**: **Mail** (`MailService` with SMTP, Mailpit during development, `npm run mail:dev`) and **Files**
       (`/files`: images and PDFs per organisation, raw uploads, in `./storage` or a Google Cloud Storage bucket);
     - **how the data of the organisations is kept apart**: one database with Row-Level Security (the default), or a
@@ -648,7 +638,7 @@ src/progress.js          # one progress bar for all steps
 src/runner.js            # runs commands quietly
 src/repo.js              # push questions + git / GitHub steps
 src/frontends/index.js   # list of available frontends
-src/frontends/nextjs.js  # Next.js + Tailwind + next-intl + react-icons + Prettier + DafkeDD UI
+src/frontends/nextjs.js  # Next.js + Tailwind + next-intl + Prettier + DafkeDD UI in the Pasport design
 src/backends/nestjs.js   # NestJS backend (+ database, login)
 src/backends/oidc.js     # own OpenID Connect server: questions, .env, docs, copies templates/backend-oidc
 src/backends/docs.js     # generated backend documentation (every endpoint)
@@ -701,6 +691,23 @@ git switch developer
 
 ## Changelog
 
+- **0.50.0**: every project of the CLI is in the Pasport design.
+    - A frontend without the OpenID Connect login (a site, a frontend with an API, the simple login) gets the same
+      design as the login server: DafkeDD UI with all its components (no question any more), `pasport.css`, the
+      components and icons of `src/components/pasport`, the fonts, the shell (`<AppPage>`, the rail in `APP_NAV`) and
+      `npm run check:design`, also in the CI. react-icons and the language and theme dropdowns are gone; the language
+      and the theme are in the topbar.
+    - The simple login: `/login` and `/register` in the login screen of the design, `/profile` in the shell, the account
+      in the topbar with the profile, the language and log out in its menu, and an account card on the home page.
+    - `Shell` (`src/components/pasport/shell.tsx`) is the same in every project; the bell, the status and the
+      out-of-office reply of the login server are in `PortalShell` (`portal-shell.tsx`). `AuthLayout` can hide the eID
+      card (`eid={false}`).
+    - NestJS asks _"Add a login?"_ with a new choice: _"Log in through your existing Pasport OIDC server (link code)"_.
+      The project becomes an app of that server (eID, passkeys and two-step through the server), with the database that
+      was already chosen; before, that was only the separate backend choice.
+    - The theme button of the login screen sits at the top right; at the bottom left it covered the footer of the teal
+      panel.
+    - `npm run verify` has a new variant `plain`: an API with the simple login and a database.
 - **0.49.0**: demo data, the invoices on Google Cloud and the vault in linked apps.
     - `npm run demo:data` in the backend of the login server (development only): two organisations with doctors and
       staff, four apps in the catalogue, a subscription with seats, a trial, a free grant, invoices (one open), support

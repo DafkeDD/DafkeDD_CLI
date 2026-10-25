@@ -1062,6 +1062,12 @@ export const nestjs = {
                 ...(hasFrontend
                     ? [
                           {
+                              name: 'Inloggen via je bestaande Pasport OIDC-server (koppelcode)',
+                              value: 'linked',
+                              description:
+                                  'Eén account voor al je apps: e-mail, passkey, eID en tweestaps via de server; een app met eigen data per organisatie'
+                          },
+                          {
                               name: 'Eenvoudige test-login (login- en registerpagina)',
                               value: 'simple',
                               description: `E-mail en wachtwoord met een sessiecookie; tabel ${table}`
@@ -1071,6 +1077,8 @@ export const nestjs = {
                 { name: 'Geen login', value: 'none' }
             ]
         })
+        // Linked to an existing login server: the CLI goes on with the questions of that app (linked.js)
+        if (how === 'linked') return { database, auth: false, oidc: null, switchTo: 'linked' }
         const oidcAnswers = how === 'oidc' ? await oidc.ask({ projectDir, prompts, hasFrontend }) : null
         return { database, auth: how === 'simple', oidc: oidcAnswers }
     },

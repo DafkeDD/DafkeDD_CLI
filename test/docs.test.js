@@ -219,7 +219,7 @@ test('Swagger knows about the cookie when login is installed', () => {
 
 // ---------------------------------------------------------------- frontend README
 
-test('the frontend README explains structure, languages, theme and icons', () => {
+test('the frontend README explains structure, languages, theme, icons and the Pasport design', () => {
     const readme = frontendReadme({ ui: 'none', api: null })
     for (const text of [
         '# Frontend (Next.js)',
@@ -227,11 +227,16 @@ test('the frontend README explains structure, languages, theme and icons', () =>
         'messages/<language>.json',
         '@/i18n/navigation',
         'data-theme',
-        'react-icons/lu'
+        '## Design (Pasport)',
+        '<AppPage>',
+        'APP_NAV',
+        'check:design',
+        '@/components/pasport/ui'
     ]) {
         assert.ok(readme.includes(text), text)
     }
     assert.ok(!readme.includes('useApi'), 'no API section without a backend')
+    assert.ok(!readme.includes("from 'react-icons"), 'the icons of the design')
 })
 
 test('the frontend README documents calling the API when a backend is installed', () => {

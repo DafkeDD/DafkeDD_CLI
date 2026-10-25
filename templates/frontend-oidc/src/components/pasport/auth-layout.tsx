@@ -7,7 +7,17 @@ import { LocaleFloat, ThemeToggle } from './toast'
 import { Icon } from './ui'
 
 /** The left half of the login screens: the teal gradient with the eID card (customer) or the dark one (superadmin). */
-function Aside({ variant, title, text }: { variant: 'customer' | 'admin'; title: string; text: string }) {
+function Aside({
+    variant,
+    title,
+    text,
+    eid
+}: {
+    variant: 'customer' | 'admin'
+    title: string
+    text: string
+    eid: boolean
+}) {
     const t = useTranslations('AuthScreen')
     if (variant === 'admin')
         return (
@@ -95,20 +105,24 @@ function Aside({ variant, title, text }: { variant: 'customer' | 'admin'; title:
                 </div>
             </div>
             <div style={{ position: 'relative', maxWidth: 380 }}>
-                <div className='eid-card-visual' aria-hidden='true'>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div className='eid-chip' />
-                        <span style={{ fontSize: 11, letterSpacing: '.1em', opacity: 0.8 }}>BELGIË · BELGIQUE</span>
-                    </div>
-                    <div>
-                        <div style={{ fontSize: 11, opacity: 0.7 }}>{t('idCard')}</div>
-                        <div style={{ fontSize: 17, fontWeight: 650, marginTop: 2 }}>{t('cardName')}</div>
-                        <div className='t-mono' style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>
-                            ••.••.••-•••.••
+                {eid && (
+                    <div className='eid-card-visual' aria-hidden='true'>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div className='eid-chip' />
+                            <span style={{ fontSize: 11, letterSpacing: '.1em', opacity: 0.8 }}>BELGIË · BELGIQUE</span>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 11, opacity: 0.7 }}>{t('idCard')}</div>
+                            <div style={{ fontSize: 17, fontWeight: 650, marginTop: 2 }}>{t('cardName')}</div>
+                            <div className='t-mono' style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>
+                                ••.••.••-•••.••
+                            </div>
                         </div>
                     </div>
-                </div>
-                <h2 style={{ color: '#fff', fontSize: 24, marginTop: 30, letterSpacing: '-0.02em' }}>{title}</h2>
+                )}
+                <h2 style={{ color: '#fff', fontSize: 24, marginTop: eid ? 30 : 0, letterSpacing: '-0.02em' }}>
+                    {title}
+                </h2>
                 <p style={{ color: 'rgba(255,255,255,.78)', marginTop: 10, fontSize: 14.5 }}>{text}</p>
             </div>
             <div
@@ -145,11 +159,14 @@ export function AuthLayout({
     variant = 'customer',
     asideTitle,
     asideText,
+    eid = true,
     children
 }: {
     variant?: 'customer' | 'admin'
     asideTitle?: string
     asideText?: string
+    /** The eID card in the panel (the login server); a project with its own login shows only the text. */
+    eid?: boolean
     children: ReactNode
 }) {
     const t = useTranslations('AuthScreen')
@@ -161,6 +178,7 @@ export function AuthLayout({
                     variant={variant}
                     title={asideTitle ?? (variant === 'admin' ? t('adminTitle') : t('asideTitle'))}
                     text={asideText ?? (variant === 'admin' ? t('adminText') : t('asideText'))}
+                    eid={eid}
                 />
                 <div className='auth-main'>
                     <div className='auth-card fade-in'>

@@ -4,7 +4,7 @@
 // PostgreSQL. Used by the tester agent (.claude/agents/tester.md) before a commit that touches what the CLI generates.
 //
 //   npm run verify                         every variant
-//   npm run verify -- --only app-full      one variant (pasport, app, app-full)
+//   npm run verify -- --only app-full      one variant (pasport, plain, app, app-full)
 //   npm run verify -- --keep               keep the projects (the folder is printed)
 //   npm run verify -- --require-db         fail when the database cannot be reached (instead of skipping test:db)
 //   npm run verify -- --lighthouse         also Lighthouse as in the CI (needs Chrome; CHROME_PATH for another one)
@@ -86,6 +86,14 @@ const VARIANTS = {
         const answers = { database: db('pasport'), auth: false, oidc }
         return {
             frontend: { answers: { ui: 'all' }, api: { ...nestjs.api, auth: false, oidc: true } },
+            backend: { part: nestjs, answers }
+        }
+    },
+    // Without the OpenID Connect server: Next.js + NestJS + PostgreSQL with the simple login, in the Pasport design too
+    plain: async () => {
+        const answers = { database: db('plain'), auth: true, oidc: null }
+        return {
+            frontend: { answers: { ui: 'all' }, api: { ...nestjs.api, auth: true, oidc: false } },
             backend: { part: nestjs, answers }
         }
     },

@@ -189,6 +189,19 @@ test('ask: server, port, the code and the own database; a wrong code is asked ag
     assert.ok(linked.next(answers).some(line => line.startsWith('npm run mail:dev')))
     const rls = linked.summary({ ...answers, appOptions: { mail: false, files: false, isolation: 'rls' } })
     assert.ok(rls.some(line => line.text.includes('Row-Level Security')))
+    // From the login question of NestJS: the database that was already chosen is not asked again
+    asked.length = 0
+    tries = 0
+    const chosen = { id: 'postgres', mode: 'docker', database: 'shop' }
+    const handedOver = await linked.ask({
+        hasFrontend: true,
+        prompts,
+        fetchImpl,
+        projectDir: '/tmp/shop',
+        database: chosen
+    })
+    assert.equal(handedOver.database, chosen)
+    assert.ok(!asked.some(message => /^(Host|Poort|Gebruikersnaam|Naam van de eigen database)/.test(message)))
     // Without a frontend there is nothing to link
     const none = await linked.ask({ hasFrontend: false, prompts })
     assert.equal(none.link, null)
@@ -237,7 +250,7 @@ test('the linked frontend: login, session, profile and the notes of its own API;
     )
     const page = all['src/app/[locale]/page.tsx']
     assert.match(page, /<ApiStatus \/>/, 'the status card of the API of this app')
-    assert.match(all['src/components/api-status.tsx'], /className="lui-card /)
+    assert.match(all['src/components/api-status.tsx'], /className="card card-pad /)
     assert.match(page, /<Notes\s+admin=/)
     assert.match(page, /<SessionLinks \/>/)
     assert.match(page, /<AppPage>/)

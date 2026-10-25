@@ -9,7 +9,16 @@ import {
 } from '../src/frontends/pasport-messages.js'
 import { PORTAL_MESSAGES } from '../src/frontends/portal-messages.js'
 import assert from 'node:assert/strict'
-import { files, ignoreUiInEslint, nextjs, uiFiles, uiFor, withApi, LOCALES } from '../src/frontends/nextjs.js'
+import {
+    files,
+    ignoreUiInEslint,
+    nextjs,
+    sitePages,
+    uiFiles,
+    uiFor,
+    withApi,
+    LOCALES
+} from '../src/frontends/nextjs.js'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -199,15 +208,16 @@ for (const ui of [true, false]) {
         const page = all['src/app/[locale]/page.tsx']
         assert.match(page, /<ClientRedirect to=\{!session \? '\/login'/)
         assert.match(all['src/components/api-status.tsx'], /<Icon name="server"/)
-        // DafkeDD UI always: the theme script and the language choice of the shell come with it
+        // DafkeDD UI always: the theme script comes with it; the language is chosen in the shell
         assert.match(all['src/components/theme-script.tsx'], /lui-theme/)
-        assert.match(all['src/components/locale-switcher.tsx'], /@\/components\/ui/)
+        assert.ok(!all['src/components/locale-switcher.tsx'])
     })
 }
 
 test('withApi without the OIDC server adds none of it', () => {
-    const all = withApi({ ...files }, { port: 4000 }, { ui: false })
+    const all = withApi(sitePages({ ...files, ...uiFiles }), { port: 4000 }, { ui: true })
     assert.ok(!all['src/lib/oidc.ts'])
+    assert.ok(!all['src/components/pasport/portal-shell.tsx'])
     assert.ok(!JSON.parse(all['messages/en.json']).Oidc)
 })
 
@@ -355,7 +365,7 @@ test('the Pasport design: one layout, the shell around every page and the login 
     for (const name of ['Register', 'ForgotPassword', 'ResetPassword', 'VerifyEmail', 'AcceptInvitation'])
         assert.match(templates['src/components/account-forms.tsx'], new RegExp(`export function ${name}\\(`), name)
     assert.equal(templates['src/components/account-forms.tsx'].match(/<AuthLayout/g).length >= 5, true)
-    const shell = templates['src/components/pasport/shell.tsx']
+    const shell = templates['src/components/pasport/shell.tsx'] + templates['src/components/pasport/portal-shell.tsx']
     for (const part of [
         "className={'app-shell'",
         "className={'sidebar'",
@@ -382,7 +392,7 @@ test('the Pasport design: one layout, the shell around every page and the login 
     assert.match(appShell, /ACCOUNT_URL \+ path/)
     assert.match(appShell, /if \(!session\) return <LoginRedirect \/>/)
     assert.match(linked['src/components/shell/shell-view.tsx'], /<PortalBell accountUrl=\{accountUrl\}/)
-    assert.match(linked['src/components/shell/shell-view.tsx'], /<Shell\b/)
+    assert.match(linked['src/components/shell/shell-view.tsx'], /<PortalShell\b/)
     assert.match(linked['src/lib/nav.ts'], /export const APP_NAV: NavItem\[\]/)
     assert.match(templates['src/components/presence.tsx'], /me\/heartbeat/)
     const screen = templates['src/components/pasport/auth-layout.tsx']
@@ -426,11 +436,11 @@ test('a superadmin on the platform (no organisation) goes to /admin instead of s
     assert.match(templates['src/app/[locale]/page.tsx'], /!session\.tenant && session\.superadmin \? '\/admin'/)
 })
 
-test('with the OIDC login DafkeDD UI is always installed, whatever the answer; ESLint skips its folder', async () => {
+test('DafkeDD UI is always installed, with or without the OIDC login, whatever the answer; ESLint skips its folder', async () => {
     assert.equal(uiFor({ ui: 'none' }, { port: 4000, oidc: true }), 'all')
     assert.equal(uiFor({ ui: 'init' }, { port: 4000, oidc: true, linked: {} }), 'all')
-    assert.equal(uiFor({ ui: 'none' }, { port: 4000 }), 'none')
-    assert.equal(uiFor({}, null), 'none')
+    assert.equal(uiFor({ ui: 'none' }, { port: 4000 }), 'all')
+    assert.equal(uiFor({}, null), 'all')
     const dir = await mkdtemp(path.join(tmpdir(), 'oidc-ui-'))
     try {
         const steps = await nextjs.steps({
@@ -468,7 +478,7 @@ test('the bell: every kind of notification of the backend has a text and an icon
             .matchAll(/\| '([a-z_.]+)'/g)
     ].map(match => match[1])
     assert.ok(kinds.length >= 10, kinds.join(' '))
-    const bell = templates['src/components/pasport/shell.tsx']
+    const bell = templates['src/components/pasport/portal-shell.tsx']
     for (const kind of kinds) assert.match(bell, new RegExp(`case '${kind.replace('.', '\\.')}':`), kind)
     // Polls the login server through the proxy of the frontend, and marks as read there
     assert.match(bell, /api<Notification\[\]>\('me\/notifications'\)/)
@@ -544,7 +554,7 @@ test('security and profile: change the password, edit the profile, also in the s
     assert.match(profile, /'me\/profile', 'PATCH'/)
     assert.match(profile, /'tenants\/current\/billing', 'PATCH'/)
     // The user menu of the superadmin panel opens its own profile and security pages
-    const shell = templates['src/components/pasport/shell.tsx']
+    const shell = templates['src/components/pasport/portal-shell.tsx']
     assert.match(shell, /href: '\/admin\/profile'/)
     assert.match(shell, /href: '\/admin\/security'/)
     // A linked app: its own profile page, security on the login server
