@@ -55,6 +55,7 @@ test('the frontend login files are copied with the API port filled in', () => {
         'src/app/[locale]/invite/page.tsx',
         'src/app/[locale]/reset-password/page.tsx',
         'src/app/[locale]/(portal)/layout.tsx',
+        'src/app/[locale]/(portal)/apps/page.tsx',
         'src/app/[locale]/(portal)/dashboard/page.tsx',
         'src/app/[locale]/(portal)/users/page.tsx',
         'src/app/[locale]/(portal)/profile/page.tsx',

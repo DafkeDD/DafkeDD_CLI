@@ -101,6 +101,30 @@ describe('AccountService with OIDC_EID_REQUIRED', () => {
         expect(await store.findUserByEmail('eve@example.com')).not.toBeNull()
     })
 
+    it('sends an account back to the app that asked for its eID: only a registered app', async () => {
+        const { accounts, store } = await setup('100', { OIDC_EID: 'test' })
+        await store.createClient({
+            clientId: 'planner',
+            name: 'Planner',
+            type: 'public',
+            secretHash: null,
+            redirectUris: ['http://localhost:3001/api/auth/callback'],
+            postLogoutRedirectUris: [],
+            grantTypes: ['authorization_code'],
+            scopes: ['openid'],
+            firstParty: true
+        })
+        expect(await accounts.eidBack('planner')).toEqual({
+            clientId: 'planner',
+            name: 'Planner',
+            url: 'http://localhost:3001/'
+        })
+        expect(await errorOf(accounts.eidBack('https://evil.example.com'))).toEqual({
+            key: 'oidc.CLIENT_NOT_FOUND',
+            status: 404
+        })
+    })
+
     it('says in the eID status whether it is required (never for a superadmin), and keeps a linked eID', async () => {
         const { accounts, store, ada } = await setup('100', { OIDC_EID: 'test' })
         expect(await accounts.eidStatus(ada.id)).toMatchObject({ linked: false, required: true })

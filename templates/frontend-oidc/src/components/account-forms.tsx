@@ -817,7 +817,7 @@ function InvitationApps({ apps }: { apps: NonNullable<Invitation['apps']> }) {
 
 /**
  * /invite?token=...: joins an organisation; without an account it creates one (already verified). A new account reads
- * its eID first when the login server has the eID (required with OIDC_EID_REQUIRED, else it can be skipped): the name
+ * its eID first when the login server has the eID (always: there is no "continue without eID"): the name
  * comes from the card (it can be changed) and the eID is linked; then a password (to log in with the email address).
  */
 export function AcceptInvitation({ token }: { token: string }) {
@@ -984,11 +984,6 @@ export function AcceptInvitation({ token }: { token: string }) {
                     >
                         {v('withEid')}
                     </Btn>
-                    {!invitation.eidRequired && (
-                        <Btn variant='ghost' size='sm' onClick={() => setStep('details')}>
-                            {v('skipEid')}
-                        </Btn>
-                    )}
                 </div>
             )}
 

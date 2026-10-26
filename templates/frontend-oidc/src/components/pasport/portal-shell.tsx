@@ -12,7 +12,7 @@ import {
     useApi,
     useFormat
 } from '@/lib/portal'
-import { EidRequired, useEidRequired } from './eid-required'
+import { EidReminder, EidRequired, useEidRequired } from './eid-required'
 import { Btn, Icon } from './ui'
 import { useToast } from './toast'
 import { useT } from './i18n'
@@ -542,6 +542,7 @@ export function useMe(): ShellUser {
 
 /* ============================ CUSTOMER SHELL ============================ */
 function customerActive(path: string): string {
+    if (path.startsWith('/apps')) return 'apps'
     if (path.startsWith('/marketplace')) return 'marketplace'
     if (path.startsWith('/wizard')) return 'marketplace'
     if (path.startsWith('/invoices')) return 'invoices'
@@ -563,6 +564,7 @@ export function CustomerShell({ user, children }: { user: ShellUser; children: R
     const eidRequired = useEidRequired()
     const admin = user.tenant?.role === 'admin'
     const nav: NavItem[] = [
+        { key: 'apps', name: t('myApps'), icon: 'layers', href: '/apps' },
         { key: 'dashboard', name: t('dashboard'), icon: 'dashboard', href: '/dashboard' },
         { key: 'marketplace', name: t('marketplace'), icon: 'compass', href: '/marketplace' },
         ...(user.doctor ? [{ key: 'vault', name: t('vault'), icon: 'vault', href: '/vault' }] : []),
@@ -595,7 +597,10 @@ export function CustomerShell({ user, children }: { user: ShellUser; children: R
             onSearch={q => router.push(`/marketplace?q=${encodeURIComponent(q)}`)}
             bell={<PortalBell />}
         >
-            <MeContext.Provider value={user}>{children}</MeContext.Provider>
+            <MeContext.Provider value={user}>
+                {!pathname.startsWith('/security') && <EidReminder href='/security' />}
+                {children}
+            </MeContext.Provider>
             {!user.superadmin && <Tour email={user.email} name={user.firstName || user.name} admin={admin} />}
         </PortalShell>
     )

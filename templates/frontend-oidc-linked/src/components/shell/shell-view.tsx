@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
-import { EidRequired, useEidRequired } from '@/components/pasport/eid-required'
+import { EidReminder, EidRequired, useEidRequired } from '@/components/pasport/eid-required'
 import { PortalBell, PortalShell } from '@/components/pasport/portal-shell'
 import type { NavItem } from '@/components/pasport/shell'
 import { Icon } from '@/components/pasport/ui'
@@ -43,6 +43,7 @@ export function ShellView({
     admin = false,
     wide = false,
     accountUrl = '',
+    app = '',
     children
 }: {
     sections: ShellSection[]
@@ -51,6 +52,8 @@ export function ShellView({
     wide?: boolean
     /** The frontend of the login server in a linked app ('' on the login server): where notifications open. */
     accountUrl?: string
+    /** The client id of this app: the login server sends the account back here after reading the eID. */
+    app?: string
     children: ReactNode
 }) {
     const t = useTranslations('Shell')
@@ -85,7 +88,7 @@ export function ShellView({
             ? 'security'
             : ''
 
-    if (eidRequired) return <EidRequired email={user.email} accountUrl={accountUrl} />
+    if (eidRequired) return <EidRequired email={user.email} accountUrl={accountUrl} app={app} />
     return (
         <PortalShell
             brandName={APP_NAME ?? BRAND}
@@ -100,6 +103,7 @@ export function ShellView({
             wide={wide}
             bell={<PortalBell accountUrl={accountUrl} admin={admin} />}
         >
+            <EidReminder href={accountUrl + '/security' + (app ? '?app=' + encodeURIComponent(app) : '')} />
             {children}
         </PortalShell>
     )

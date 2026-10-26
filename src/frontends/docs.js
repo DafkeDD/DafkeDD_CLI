@@ -127,11 +127,12 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | \`/forgot-password\` | Ask for a link to choose a new password |
 | \`/reset-password?token=\` | The link in that email: a new password (the link works once; you are logged out everywhere) |
 | \`/invite?token=\` | The link in an invitation: join the organisation, or create your account for it. Shows the apps of the invitation (their roles, "with a licence") and, once accepted, an "Open <app>" button per app |
-| \`/\` | The customer portal (\`/dashboard\`) when logged in, the superadmin panel (\`/admin\`) for a superadmin without an organisation, else \`/login\` |
+| \`/\` | My apps (\`/apps\`) when logged in, the superadmin panel (\`/admin\`) for a superadmin without an organisation, else \`/login\` |
+| \`/apps\` | **My apps**: the first page after a login at the portal itself, the apps the user may open (an own licence or a running demo) to click through, in the same tab. Without any: what to do (discover apps, or for the admin the licences). A login from an app goes straight back to that app |
 | \`/dashboard\` | **Customer portal** (\`src/app/[locale]/(portal)\`, every page in \`CustomerShell\`): the apps of the organisation, the licences and the open tickets at a glance |
 | \`/marketplace\` | "Discover apps": the app catalogue (search with the topbar), a demo per app (14 days, once), buying through the wizard |
 | \`/wizard\` | The purchase wizard (seats, monthly or yearly, a discount code, the billing details, the checkout of Mollie); \`/wizard?subscription=<id>\` shows the result after the checkout (\`/licenses/return\` comes back here) |
-| \`/vault\` | Doctors (profession of the membership): the eHealth certificate (PKCS#12), encrypted, for the apps that sign with it |
+| \`/vault\` | Only doctors (profession of the membership; a superadmin only when it is a doctor there, the rail shows it to nobody else): the eHealth certificate (PKCS#12), encrypted, for the apps that sign with it |
 | \`/users\` | Admins: the users of the organisation with their status (online, busy, out of office), invite by email (with apps: per app the roles and a licence), open invitations (send again, withdraw), role, profession, disable or remove, the licences per user and the **roles per app**. \`/members\` and \`/licenses\` (older links) come here |
 | \`/invoices\` | Admins: the invoices (FAC numbers, VAT), pay the open ones, the PDF, the contracts and when they renew |
 | \`/support\` | The tickets of the organisation: ask a question, answer, images, close and rate the help |
@@ -295,7 +296,7 @@ element another size or look with the important variant (\`w-40!\`).
 
 /** The Pasport design: the same shell and login screen on the login server and in every app linked to it. */
 /** The files of the shell of a linked app (in the table of pasportDesign). */
-const LINKED_FILES_TABLE = `| \`src/components/shell/app-shell.tsx\` | \`<AppPage>\`: a page of this app in the shell. The rail has this app's pages (\`APP_NAV\`), then the portal on the login server: its dashboard, apps and support, the vault for doctors (the profession from \`GET /me/profile\`), and users, invoices and activity for the admins |
+const LINKED_FILES_TABLE = `| \`src/components/shell/app-shell.tsx\` | \`<AppPage>\`: a page of this app in the shell. The rail has only this app's pages (\`APP_NAV\`); profile, security (on the login server), language and log out are in the user menu |
 | \`src/components/shell/shell-view.tsx\` | Puts the sections of \`AppPage\` in \`Shell\`; the bell and the security page open on the login server |
 | \`src/components/pasport/profile.tsx\` | \`Profile\`: the own profile (\`/profile\`): name, email, phone, language, the billing details of the organisation and what the eID says |
 | \`src/components/pasport/page-head.tsx\` | \`PageHead\`: the title, the sentence under it and the actions of a page |
@@ -303,7 +304,7 @@ const LINKED_FILES_TABLE = `| \`src/components/shell/app-shell.tsx\` | \`<AppPag
 `
 
 /** The pages of the portal and the panel of the login server (in the table of pasportDesign). */
-const PORTAL_FILES_TABLE = `| \`src/components/pasport/customer/*\`, \`admin/*\`, \`tickets/*\` | The pages of the portal (dashboard, marketplace, wizard, vault, users, invoices, profile) and of the panel (statistics, tenants, users, catalogue and connection, codes, ratings), and the tickets of both |
+const PORTAL_FILES_TABLE = `| \`src/components/pasport/customer/*\`, \`admin/*\`, \`tickets/*\` | The pages of the portal (my apps, dashboard, marketplace, wizard, vault, users, invoices, profile) and of the panel (statistics, tenants, users, catalogue and connection, codes, ratings), and the tickets of both |
 `
 
 /** A page of a linked app: in AppPage, in the sidebar through APP_NAV. */

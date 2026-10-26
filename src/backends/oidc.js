@@ -39,8 +39,9 @@ export const MAILPIT_URL = 'http://localhost:8025'
 export const SCRIPTS = {
     'test:db': 'vitest run --config ./vitest.config.db.ts',
     'oidc:user': 'node scripts/oidc-user.mjs',
-    // Demo organisations, users, apps, invoices and tickets (development only; -- --remove takes them away)
+    // Demo organisations, users, apps, invoices and tickets (development only); demo:clear takes them all away again
     'demo:data': 'node scripts/demo-data.mjs',
+    'demo:clear': 'node scripts/demo-data.mjs --remove',
     'mail:dev': 'docker run -d --rm --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit'
 }
 
@@ -3329,6 +3330,20 @@ export const endpoints = ({ port = 4000 } = {}) => [
     // ---------------------------------------------------------------- the eID of the own account
     {
         method: 'GET',
+        path: '/me/eid/back',
+        tag: 'eID',
+        summary:
+            'After reading the eID on `/security?app=<client id>` of the login server: back to the app that sent the account there. Its name and the address of its frontend (the origin of its first redirect URI); only registered, active apps, never an address from the browser (no open redirect). Also without a linked eID (`OIDC_EID_REQUIRED`).',
+        bearer: true,
+        query: [['client', 'required', 'the client id of the app']],
+        response: { status: 200, example: { clientId: 'planner', name: 'Planner', url: 'http://localhost:3001/' } },
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [404, 'oidc.CLIENT_NOT_FOUND']
+        ]
+    },
+    {
+        method: 'GET',
         path: '/me/eid',
         tag: 'eID',
         summary:
@@ -3417,7 +3432,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/me/vault',
         tag: 'eHealth vault',
         summary:
-            'The eHealth vault of the logged in account: whether it may use it (`allowed`: a member with profession `doctor` in the organisation of the token, or a superadmin), what its eHealth certificate says (never the file or its password; `passwordSaved`: it can be opened) and the active products that need the vault (`owned`: the organisation has the app). `cert` is `null` without a certificate; its fields are `null` until it could be opened (its password is set).',
+            'The eHealth vault of the logged in account: whether it may use it (`allowed`: an active member with profession `doctor` in the organisation of the token; a superadmin only when it is a doctor there), what its eHealth certificate says (never the file or its password; `passwordSaved`: it can be opened) and the active products that need the vault (`owned`: the organisation has the app). `cert` is `null` without a certificate; its fields are `null` until it could be opened (its password is set).',
         bearer: true,
         response: { status: 200, example: VAULT_STATUS },
         errors: VAULT_ACCESS
@@ -3538,7 +3553,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/vault/credentials',
         tag: 'eHealth vault',
         summary:
-            'For an app that calls eHealth for a doctor (server to server, never from a browser): the certificate and its password in the clear. Three things must be true at once. **The app proves itself**: Basic authentication with its `client_id` and `client_secret`; the app must be confidential and sell a product that needs the vault (`requiresVault` on the product, linked to the app by its `product`). **The doctor is logged in to that very app**: the body holds an access token issued to that app (its `client_id` claim must match), so a leaked secret alone gives nothing; the token also says the organisation. **The doctor may use it**: an active member with profession `doctor` of an active organisation (or a superadmin), or with `doctorId` a colleague whom that doctor chose (`PUT /me/vault/colleagues`, the certificate of the doctor, only in that organisation), with a licence for the product of the app (a seat, a running demo, or a superadmin). Limited per IP address and per app (`OIDC_LOGIN_RATE_LIMIT` a minute). Never cached (`Cache-Control: no-store`): keep the file and the password in memory only, and do not log them. Each fetch is in the audit log (`account.vault_retrieved` of the doctor, with the app, the thumbprint and `onBehalfOf`, never the password).',
+            'For an app that calls eHealth for a doctor (server to server, never from a browser): the certificate and its password in the clear. Three things must be true at once. **The app proves itself**: Basic authentication with its `client_id` and `client_secret`; the app must be confidential and sell a product that needs the vault (`requiresVault` on the product, linked to the app by its `product`). **The doctor is logged in to that very app**: the body holds an access token issued to that app (its `client_id` claim must match), so a leaked secret alone gives nothing; the token also says the organisation. **The doctor may use it**: an active member with profession `doctor` of an active organisation (a superadmin too, only as a doctor), or with `doctorId` a colleague whom that doctor chose (`PUT /me/vault/colleagues`, the certificate of the doctor, only in that organisation), with a licence for the product of the app (a seat, a running demo, or a superadmin). Limited per IP address and per app (`OIDC_LOGIN_RATE_LIMIT` a minute). Never cached (`Cache-Control: no-store`): keep the file and the password in memory only, and do not log them. Each fetch is in the audit log (`account.vault_retrieved` of the doctor, with the app, the thumbprint and `onBehalfOf`, never the password).',
         basic: '$CLIENT_ID',
         body: {
             example: { accessToken: 'eyJhbGciOiJFUzI1NiIs…', doctorId: '6f1c2a8e-3b4d-4e5f-9a7b-1c2d3e4f5a6b' },

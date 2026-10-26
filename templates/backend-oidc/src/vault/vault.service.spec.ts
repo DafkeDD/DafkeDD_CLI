@@ -98,14 +98,17 @@ describe('PKCS#12', () => {
 })
 
 describe('VaultService', () => {
-    it('is only for doctors of the organisation of the token (and superadmins)', async () => {
+    it('is only for doctors of the organisation of the token, also for a superadmin', async () => {
         const { service, oidc, tenant, doctor, staff } = setup()
         expect((await service.status(staff)).allowed).toBe(false)
         const upload = { filename: 'ehealth.p12', dataBase64: withPassword.der.toString('base64') }
         expect(await errorOf(service.upload(staff, upload))).toEqual({ key: 'oidc.VAULT_NOT_ALLOWED', status: 403 })
         await oidc.setMemberProfession(tenant.id, doctor.userId, 'doctor')
         expect((await service.status(doctor)).allowed).toBe(true)
-        expect(await service.allowed({ userId: staff.userId, tenantId: '', superadmin: true })).toBe(true)
+        // A superadmin is no doctor: no vault, without and with an organisation
+        expect(await service.allowed({ userId: staff.userId, tenantId: '', superadmin: true })).toBe(false)
+        expect(await service.allowed({ ...staff, superadmin: true })).toBe(false)
+        expect(await service.allowed({ ...doctor, superadmin: true })).toBe(true)
         expect(await service.allowed({ ...doctor, tenantId: '' })).toBe(false)
     })
 

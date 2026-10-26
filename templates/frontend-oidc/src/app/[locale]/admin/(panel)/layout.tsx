@@ -35,7 +35,7 @@ async function Gate({ children }: { children: ReactNode }) {
                 email: session.email,
                 tenant: session.tenant,
                 superadmin: true,
-                doctor: true
+                doctor: profile?.tenant?.profession === 'doctor'
             }}
             counts={{
                 tenants: tenants ? tenants.length : null,

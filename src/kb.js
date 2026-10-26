@@ -42,10 +42,10 @@ const PASPORT_PAGES = [
         'everyone',
         { en: 'Home', nl: 'Start', fr: 'Accueil', de: 'Start' },
         {
-            en: 'The first page: log in, or go on to the dashboard of your organisation (superadmins: the panel).',
-            nl: 'De eerste pagina: inloggen, of verder naar het dashboard van je organisatie (superadmins: het paneel).',
-            fr: 'La première page : se connecter, ou continuer vers le tableau de bord de votre organisation (superadmins : le panneau).',
-            de: 'Die erste Seite: anmelden oder weiter zum Dashboard deiner Organisation (Superadmins: das Panel).'
+            en: 'The first page: log in, or go on to your apps (superadmins: the panel).',
+            nl: 'De eerste pagina: inloggen, of verder naar je apps (superadmins: het paneel).',
+            fr: 'La première page : se connecter, ou continuer vers vos applications (superadmins : le panneau).',
+            de: 'Die erste Seite: anmelden oder weiter zu deinen Apps (Superadmins: das Panel).'
         }
     ),
     page(
@@ -136,6 +136,18 @@ const PASPORT_PAGES = [
         }
     ),
     page(
+        'apps',
+        '/apps',
+        'member',
+        { en: 'My apps', nl: 'Mijn apps', fr: 'Mes applications', de: 'Meine Apps' },
+        {
+            en: 'The apps you may open (a licence or a demo): click one to work in it.',
+            nl: 'De apps die je mag openen (een licentie of een demo): klik er een aan om erin te werken.',
+            fr: "Les applications que vous pouvez ouvrir (une licence ou une démo) : cliquez sur l'une d'elles pour y travailler.",
+            de: 'Die Apps, die du öffnen darfst (eine Lizenz oder eine Demo): klicke eine an, um darin zu arbeiten.'
+        }
+    ),
+    page(
         'dashboard',
         '/dashboard',
         'member',
@@ -165,10 +177,10 @@ const PASPORT_PAGES = [
         'member',
         { en: 'Vault', nl: 'Vault', fr: 'Coffre-fort', de: 'Tresor' },
         {
-            en: 'Doctors: your eHealth certificate, stored encrypted, for the apps that sign with it.',
-            nl: 'Artsen: je eHealth-certificaat, versleuteld bewaard, voor de apps die ermee ondertekenen.',
-            fr: 'Médecins : votre certificat eHealth, conservé chiffré, pour les applications qui signent avec.',
-            de: 'Ärzte: dein eHealth-Zertifikat, verschlüsselt gespeichert, für die Apps, die damit signieren.'
+            en: 'Doctors only: your eHealth certificate, stored encrypted, for the apps that sign with it.',
+            nl: 'Enkel artsen: je eHealth-certificaat, versleuteld bewaard, voor de apps die ermee ondertekenen.',
+            fr: 'Médecins uniquement : votre certificat eHealth, conservé chiffré, pour les applications qui signent avec.',
+            de: 'Nur Ärzte: dein eHealth-Zertifikat, verschlüsselt gespeichert, für die Apps, die damit signieren.'
         }
     ),
     page(

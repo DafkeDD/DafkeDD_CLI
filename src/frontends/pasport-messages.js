@@ -514,7 +514,6 @@ export const INVITE_MESSAGES = {
         eidText: 'Confirm who you are with your Belgian identity card and your PIN. Then you choose your password.',
         eidRequired: 'Every user reads their eID here: that way we know for sure who logs in.',
         withEid: 'Continue with eID',
-        skipEid: 'Continue without eID',
         nameFromCard: 'Taken from your eID; you can change it.'
     },
     nl: {
@@ -529,7 +528,6 @@ export const INVITE_MESSAGES = {
         eidText: 'Bevestig wie je bent met je Belgische identiteitskaart en je pincode. Daarna kies je je wachtwoord.',
         eidRequired: 'Elke gebruiker leest hier zijn eID in: zo weten we zeker wie er inlogt.',
         withEid: 'Verder met eID',
-        skipEid: 'Verder zonder eID',
         nameFromCard: 'Overgenomen van je eID; je kan hem aanpassen.'
     },
     fr: {
@@ -546,7 +544,6 @@ export const INVITE_MESSAGES = {
             "Confirmez votre identité avec votre carte d'identité belge et votre code PIN. Ensuite, vous choisissez votre mot de passe.",
         eidRequired: 'Chaque utilisateur lit ici son eID : nous savons ainsi avec certitude qui se connecte.',
         withEid: "Continuer avec l'eID",
-        skipEid: 'Continuer sans eID',
         nameFromCard: 'Repris de votre eID ; vous pouvez le modifier.'
     },
     de: {
@@ -563,7 +560,6 @@ export const INVITE_MESSAGES = {
             'Bestätige mit deinem belgischen Personalausweis und deiner PIN, wer du bist. Danach wählst du dein Passwort.',
         eidRequired: 'Jeder Benutzer liest hier seine eID ein: So wissen wir sicher, wer sich anmeldet.',
         withEid: 'Weiter mit eID',
-        skipEid: 'Weiter ohne eID',
         nameFromCard: 'Von deiner eID übernommen; du kannst ihn ändern.'
     }
 }
@@ -666,7 +662,14 @@ export const EID_GATE_MESSAGES = {
         needs: 'You need a card reader, the DafkeDD eID program on this computer and the PIN of your card.',
         start: 'Read my eID',
         signedInAs: 'Signed in as {email}',
-        linked: 'Your eID is linked. Loading the portal…'
+        linked: 'Your eID is linked. Loading the portal…',
+        reminderTitle: 'Your eID has not been read yet',
+        reminderText:
+            'Read your Belgian identity card once: then you can also log in with your eID, and we know for sure it is you.',
+        reminderLater: 'Later',
+        backText: 'Read your eID here; afterwards you go back to {app}.',
+        back: 'Back to {app}',
+        backLinked: 'Your eID is linked. Back to {app}…'
     },
     nl: {
         title: 'Lees je eID in',
@@ -677,7 +680,14 @@ export const EID_GATE_MESSAGES = {
         needs: 'Je hebt een kaartlezer nodig, het DafkeDD eID-programma op deze computer en de pincode van je kaart.',
         start: 'Mijn eID inlezen',
         signedInAs: 'Aangemeld als {email}',
-        linked: 'Je eID is gekoppeld. Het portaal wordt geladen…'
+        linked: 'Je eID is gekoppeld. Het portaal wordt geladen…',
+        reminderTitle: 'Je eID is nog niet ingelezen',
+        reminderText:
+            'Lees je Belgische identiteitskaart één keer in: dan kan je ook met je eID inloggen, en weten we zeker dat jij het bent.',
+        reminderLater: 'Later',
+        backText: 'Lees hier je eID in; daarna ga je terug naar {app}.',
+        back: 'Terug naar {app}',
+        backLinked: 'Je eID is gekoppeld. Terug naar {app}…'
     },
     fr: {
         title: 'Lisez votre eID',
@@ -688,7 +698,14 @@ export const EID_GATE_MESSAGES = {
         needs: 'Il vous faut un lecteur de carte, le programme DafkeDD eID sur cet ordinateur et le code PIN de votre carte.',
         start: 'Lire mon eID',
         signedInAs: 'Connecté en tant que {email}',
-        linked: 'Votre eID est liée. Chargement du portail…'
+        linked: 'Votre eID est liée. Chargement du portail…',
+        reminderTitle: "Votre eID n'a pas encore été lue",
+        reminderText:
+            "Lisez votre carte d'identité belge une seule fois : vous pourrez alors aussi vous connecter avec votre eID, et nous saurons avec certitude que c'est vous.",
+        reminderLater: 'Plus tard',
+        backText: 'Lisez votre eID ici ; ensuite vous revenez à {app}.',
+        back: 'Retour à {app}',
+        backLinked: 'Votre eID est liée. Retour à {app}…'
     },
     de: {
         title: 'Lies deine eID ein',
@@ -699,7 +716,14 @@ export const EID_GATE_MESSAGES = {
         needs: 'Du brauchst ein Kartenlesegerät, das DafkeDD-eID-Programm auf diesem Computer und die PIN deiner Karte.',
         start: 'Meine eID einlesen',
         signedInAs: 'Angemeldet als {email}',
-        linked: 'Deine eID ist verknüpft. Das Portal wird geladen…'
+        linked: 'Deine eID ist verknüpft. Das Portal wird geladen…',
+        reminderTitle: 'Deine eID wurde noch nicht eingelesen',
+        reminderText:
+            'Lies deinen belgischen Personalausweis einmal ein: dann kannst du dich auch mit deiner eID anmelden, und wir wissen sicher, dass du es bist.',
+        reminderLater: 'Später',
+        backText: 'Lies hier deine eID ein; danach geht es zurück zu {app}.',
+        back: 'Zurück zu {app}',
+        backLinked: 'Deine eID ist verknüpft. Zurück zu {app}…'
     }
 }
 

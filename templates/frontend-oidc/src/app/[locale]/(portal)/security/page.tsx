@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { getTranslations, setRequestLocale } from 'next-intl/server'
 import { AuditLog } from '@/components/audit'
+import { EidBackBanner } from '@/components/pasport/eid-required'
 import { PasswordCard } from '@/components/pasport/password-card'
 import { ConsentsSecurity } from '@/components/consents'
 import { PasskeysSecurity } from '@/components/passkeys'
@@ -29,6 +30,7 @@ async function Content() {
                     <p>{t('subtitle')}</p>
                 </div>
             </div>
+            <EidBackBanner />
             <div className='security-grid'>
                 <PasswordCard />
                 <Security />

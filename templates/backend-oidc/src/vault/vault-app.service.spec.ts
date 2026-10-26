@@ -122,7 +122,7 @@ async function setup() {
         claims.set(name, { sub: userId, client_id: clientId, tenant: { id: tenant.id } })
         return name
     }
-    const owner = (userId: string) => ({ userId, tenantId: '', superadmin: true })
+    const owner = (userId: string) => ({ userId, tenantId: tenant.id, superadmin: false })
     return { vault, service, auditStore, doctor, staff, token, licenseStatus, owner, tenant, oidc }
 }
 

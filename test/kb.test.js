@@ -12,7 +12,18 @@ test('the knowledge base knows the pages the CLI generates, for each kind of pro
         ['/', '/login', '/profile']
     )
     const pasport = kbPages('pasport').map(page => page.id)
-    for (const id of ['login', 'register', 'dashboard', 'users', 'support', 'vault', 'security', 'audit', 'admin'])
+    for (const id of [
+        'login',
+        'register',
+        'apps',
+        'dashboard',
+        'users',
+        'support',
+        'vault',
+        'security',
+        'audit',
+        'admin'
+    ])
         assert.ok(pasport.includes(id), id)
     assert.deepEqual(
         kbPages(null).map(page => page.id),

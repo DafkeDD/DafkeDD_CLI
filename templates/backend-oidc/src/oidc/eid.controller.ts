@@ -1,8 +1,9 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Post } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common'
 import {
     ApiBadRequestResponse,
     ApiConflictResponse,
     ApiForbiddenResponse,
+    ApiNotFoundResponse,
     ApiOkResponse,
     ApiOperation,
     ApiTags,
@@ -28,6 +29,17 @@ export class EidController {
     })
     status(@Auth() auth: AuthContext) {
         return this.accounts.eidStatus(auth.userId)
+    }
+
+    @Get('back')
+    @ApiOperation({
+        summary:
+            'After linking the eID on /security, back to the app that sent the account there (?client=<client id>): its name and the address of its frontend. Only registered apps, never an address from the browser.'
+    })
+    @ApiOkResponse({ description: '{ clientId, name, url }' })
+    @ApiNotFoundResponse({ description: 'oidc.CLIENT_NOT_FOUND' })
+    back(@Query('client') client = '') {
+        return this.accounts.eidBack(client.slice(0, 200))
     }
 
     @Post('challenge')

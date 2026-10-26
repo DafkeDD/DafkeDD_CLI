@@ -18,6 +18,7 @@ export const PORTAL_MESSAGES = {
             logout: 'Log out',
             customerPortal: 'Customer portal',
             superadmin: 'Superadmin',
+            myApps: 'My apps',
             dashboard: 'Dashboard',
             marketplace: 'Discover apps',
             vault: 'Vault',
@@ -108,6 +109,21 @@ export const PORTAL_MESSAGES = {
             oooScheduled: 'Scheduled from {date}',
             oooNotice: '{name} is out of office.',
             oooNoticeUntil: '{name} is out of office until {date}.'
+        },
+        MyApps: {
+            title: 'My apps',
+            subtitle: 'Choose the app you want to work with.',
+            toPortal: 'To the portal',
+            noneTitle: 'You have no licence for an app yet',
+            noneText: 'As soon as you have a licence or a demo, your apps are here.',
+            noneAdmin: 'Choose an app in the catalogue, or give yourself one of the licences of your organisation.',
+            noneMember: 'Ask your administrator for a licence, or ask a demo in Discover apps.',
+            discover: 'Discover apps',
+            licences: 'Manage licences',
+            licence: 'Licence',
+            demoDays: 'Demo · {count, plural, one {# day} other {# days}} left',
+            open: 'Open',
+            noAddress: 'No address yet'
         },
         Dashboard: {
             morning: 'Good morning, {name}',
@@ -992,6 +1008,7 @@ export const PORTAL_MESSAGES = {
             logout: 'Afmelden',
             customerPortal: 'Klantenportaal',
             superadmin: 'Superadmin',
+            myApps: 'Mijn apps',
             dashboard: 'Dashboard',
             marketplace: 'Ontdek apps',
             vault: 'Vault',
@@ -1082,6 +1099,21 @@ export const PORTAL_MESSAGES = {
             oooScheduled: 'Gepland vanaf {date}',
             oooNotice: '{name} is afwezig.',
             oooNoticeUntil: '{name} is afwezig tot {date}.'
+        },
+        MyApps: {
+            title: 'Mijn apps',
+            subtitle: 'Kies de app waarmee je wil werken.',
+            toPortal: 'Naar de portal',
+            noneTitle: 'Je hebt nog geen licentie voor een app',
+            noneText: 'Zodra je een licentie of een demo hebt, staan je apps hier.',
+            noneAdmin: 'Kies een app in de catalogus, of geef jezelf een van de licenties van je organisatie.',
+            noneMember: 'Vraag je beheerder om een licentie, of vraag een demo aan bij Ontdek apps.',
+            discover: 'Ontdek apps',
+            licences: 'Licenties beheren',
+            licence: 'Licentie',
+            demoDays: 'Demo · nog {count, plural, one {# dag} other {# dagen}}',
+            open: 'Openen',
+            noAddress: 'Nog geen adres'
         },
         Dashboard: {
             morning: 'Goeiemorgen, {name}',
@@ -1969,6 +2001,7 @@ export const PORTAL_MESSAGES = {
             logout: 'Se déconnecter',
             customerPortal: 'Portail client',
             superadmin: 'Superadmin',
+            myApps: 'Mes applications',
             dashboard: 'Tableau de bord',
             marketplace: 'Découvrir des apps',
             vault: 'Coffre-fort',
@@ -2061,6 +2094,23 @@ export const PORTAL_MESSAGES = {
             oooScheduled: 'Prévu à partir du {date}',
             oooNotice: '{name} est absent(e).',
             oooNoticeUntil: '{name} est absent(e) jusqu’au {date}.'
+        },
+        MyApps: {
+            title: 'Mes applications',
+            subtitle: "Choisissez l'application avec laquelle vous voulez travailler.",
+            toPortal: 'Vers le portail',
+            noneTitle: "Vous n'avez pas encore de licence pour une application",
+            noneText: 'Dès que vous avez une licence ou une démo, vos applications sont ici.',
+            noneAdmin:
+                'Choisissez une application dans le catalogue, ou attribuez-vous une des licences de votre organisation.',
+            noneMember:
+                'Demandez une licence à votre administrateur, ou demandez une démo dans Découvrir des applications.',
+            discover: 'Découvrir des applications',
+            licences: 'Gérer les licences',
+            licence: 'Licence',
+            demoDays: 'Démo · encore {count, plural, one {# jour} other {# jours}}',
+            open: 'Ouvrir',
+            noAddress: "Pas encore d'adresse"
         },
         Dashboard: {
             morning: 'Bonjour, {name}',
@@ -2959,6 +3009,7 @@ export const PORTAL_MESSAGES = {
             logout: 'Abmelden',
             customerPortal: 'Kundenportal',
             superadmin: 'Superadmin',
+            myApps: 'Meine Apps',
             dashboard: 'Dashboard',
             marketplace: 'Apps entdecken',
             vault: 'Tresor',
@@ -3050,6 +3101,21 @@ export const PORTAL_MESSAGES = {
             oooScheduled: 'Geplant ab {date}',
             oooNotice: '{name} ist abwesend.',
             oooNoticeUntil: '{name} ist bis {date} abwesend.'
+        },
+        MyApps: {
+            title: 'Meine Apps',
+            subtitle: 'Wähle die App, mit der du arbeiten willst.',
+            toPortal: 'Zum Portal',
+            noneTitle: 'Du hast noch keine Lizenz für eine App',
+            noneText: 'Sobald du eine Lizenz oder eine Demo hast, stehen deine Apps hier.',
+            noneAdmin: 'Wähle eine App im Katalog oder gib dir selbst eine der Lizenzen deiner Organisation.',
+            noneMember: 'Bitte deinen Administrator um eine Lizenz oder fordere eine Demo unter Apps entdecken an.',
+            discover: 'Apps entdecken',
+            licences: 'Lizenzen verwalten',
+            licence: 'Lizenz',
+            demoDays: 'Demo · noch {count, plural, one {# Tag} other {# Tage}}',
+            open: 'Öffnen',
+            noAddress: 'Noch keine Adresse'
         },
         Dashboard: {
             morning: 'Guten Morgen, {name}',

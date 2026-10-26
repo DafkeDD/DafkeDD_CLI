@@ -719,6 +719,20 @@ git switch developer
 
 ## Changelog
 
+- **0.53.0**: after logging in, my apps; the vault only for doctors; the eID asked for clearly; `demo:clear`.
+    - A login at the portal itself now lands on **My apps** (`/apps`, first in the rail): the apps the user may open (an
+      own licence or a running demo), to click through in the same tab. Without any it says what to do: discover apps,
+      or for the admin the licences. A login from an app still goes straight back to that app.
+    - The eHealth vault is only for doctors: the rail, the dashboard and `/me/vault` (and the vault for the apps) no
+      longer let in a superadmin who is not a doctor in the organisation.
+    - An invitation on a login server with the eID: a new account always reads its eID ("Continue without eID" is gone).
+    - An account that has not read its eID yet gets a clear message right after logging in, at the top of the portal and
+      of every linked app, with a button "Read my eID" ("Later" hides it for the session).
+    - A linked app sends the account to the security page of the login server to read its eID with `?app=<client id>`;
+      afterwards a button (or, when the eID is required, the eID screen itself) brings it back to that app.
+      `GET /me/eid/back?client=` gives the name and the address of the app: only registered apps, no open redirect.
+    - `npm run demo:clear` in the backend of the login server removes all demo data again (the same as
+      `npm run demo:data -- --remove`).
 - **0.52.0**: the secretariat uses the eHealth certificate of the right doctor.
     - Every doctor keeps an own certificate on `/vault` of the login server. New there: "Who may use my certificate",
       where the doctor ticks the colleagues of the organisation (the secretariat) who may use it in the apps, and can

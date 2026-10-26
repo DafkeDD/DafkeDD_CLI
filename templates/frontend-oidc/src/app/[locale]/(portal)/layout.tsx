@@ -43,7 +43,8 @@ async function Gate({ children }: { children: ReactNode }) {
                 email: session.email,
                 tenant: session.tenant,
                 superadmin: session.superadmin,
-                doctor: profile?.tenant?.profession === 'doctor' || session.superadmin,
+                // Only doctors see the eHealth vault (a superadmin too, only when it is a doctor there)
+                doctor: profile?.tenant?.profession === 'doctor',
                 firstName: profile?.firstName ?? null,
                 slug: profile?.tenant?.slug ?? null
             }}

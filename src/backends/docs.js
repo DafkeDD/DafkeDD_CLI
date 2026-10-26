@@ -741,8 +741,9 @@ finds all endpoints there.
    adds two organisations with doctors and staff (\`an.peeters@demo.example.com\` is admin and doctor), four apps in the
    catalogue, a subscription with seats, a trial, a free grant, invoices (one open), support tickets (answered, closed
    with a rating) and the discount code \`DEMO20\`; every demo account gets the same password (\`--password\`, otherwise
-   a random one printed once). Running it again changes nothing; \`npm run demo:data -- --remove\` takes it away. The CLI
-   asks it too ("Demodata toevoegen?").
+   a random one printed once). Running it again changes nothing; \`npm run demo:clear\` takes it all away again (the
+   demo organisations with everything in them, the demo accounts, the demo apps nobody else uses and the unused
+   discount code). The CLI asks it too ("Demodata toevoegen?").
 5. Log in with the **Belgian eID**: start the virtual card reader with \`npm run eid:mock\` in \`./frontend\` (PIN
    \`1234\`), then choose "Register" > "With eID" or "Log in with eID" (see "Belgian eID" below).
 
@@ -1330,7 +1331,7 @@ the superadmins online for a new ticket (once one claims it, the notification di
 
 A doctor keeps the **eHealth certificate** (PKCS#12, \`.p12\` or \`.pfx\`, at most 64 KiB) on \`/me/vault\`, so the apps
 that call eHealth for that doctor do not each need a copy. Only a member with profession \`doctor\` (set by an admin)
-in the organisation of the token, or a superadmin, may use it (403 \`oidc.VAULT_NOT_ALLOWED\`). The file and its password
+in the organisation of the token may see and use it (a superadmin only when it is a doctor there) (403 \`oidc.VAULT_NOT_ALLOWED\`). The file and its password
 are stored **encrypted** in \`user_vault\` (AES-256-GCM, a key derived from \`OIDC_MASTER_KEY\`, bound to the account):
 upload it (\`PUT /me/vault\`), set its password (\`PUT /me/vault/password\`, checked by opening the file), remove it
 (\`DELETE /me/vault\`). The API only shows what the certificate says (subject, issuer, serial, thumbprint, valid until),

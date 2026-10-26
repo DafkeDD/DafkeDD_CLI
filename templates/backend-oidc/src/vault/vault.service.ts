@@ -21,7 +21,7 @@ export type VaultViewer = Pick<AuthContext, 'userId' | 'tenantId' | 'superadmin'
 
 /**
  * The eHealth vault: the eHealth certificate (PKCS#12) of an account, for the apps that sign or call eHealth for a
- * doctor. Only members whose profession is doctor in the organisation of the token use it (and superadmins). The file
+ * doctor. Only members whose profession is doctor in the organisation of the token use it (a superadmin only when it is a doctor there). The file
  * and its password are stored encrypted (AES-256-GCM, a key derived from OIDC_MASTER_KEY, bound to the account) and
  * never leave the API; only what the certificate says is shown.
  */
@@ -47,9 +47,8 @@ export class VaultService {
         return decrypt(value.toString('utf8'), this.key, `vault:${context}:${userId}`)
     }
 
-    /** A doctor in the organisation of the token, or a superadmin. */
+    /** A doctor in the organisation of the token: only doctors see and use the vault (a superadmin too, only as a doctor). */
     async allowed(viewer: VaultViewer): Promise<boolean> {
-        if (viewer.superadmin) return true
         if (!viewer.tenantId) return false
         const member = await this.oidc.findMember(viewer.tenantId, viewer.userId)
         return member?.status === 'active' && member.profession === 'doctor'

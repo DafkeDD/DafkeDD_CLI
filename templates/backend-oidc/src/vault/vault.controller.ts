@@ -17,7 +17,7 @@ const STATUS =
     '{ allowed, cert: null | { filename, sizeBytes, uploadedAt, thumbprint, subject, issuer, serial, validUntil, passwordSaved }, ' +
     'apps: [{ code, name, icon, color, owned }] }'
 
-/** The eHealth vault of the logged in account (doctors of the organisation of the token, and superadmins). */
+/** The eHealth vault of the logged in account (doctors of the organisation of the token only). */
 @ApiTags('eHealth vault')
 @Controller('me/vault')
 @Access('account')

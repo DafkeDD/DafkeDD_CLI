@@ -96,8 +96,7 @@ export class VaultAppService {
             if (!(await this.doctor(input.doctorId, tenantId))) throw notAllowed
             if (!(await this.vault.delegated(input.doctorId, user.id, tenantId))) throw notAllowed
             ownerId = input.doctorId
-        } else if (!(await this.vault.allowed({ userId: user.id, tenantId, superadmin: user.isSuperadmin })))
-            throw notAllowed
+        } else if (!(await this.vault.allowed({ userId: user.id, tenantId, superadmin: false }))) throw notAllowed
 
         const credentials = await this.vault.reveal(ownerId)
         await this.audit.record('account.vault_retrieved', {
@@ -121,7 +120,7 @@ export class VaultAppService {
     async doctors(input: { clientId: string; clientSecret: string; accessToken: string; ip: string }) {
         const { user, tenantId } = await this.caller(input)
         const ids = await this.vault.ownersFor(user.id, tenantId)
-        if (await this.vault.allowed({ userId: user.id, tenantId, superadmin: user.isSuperadmin })) ids.unshift(user.id)
+        if (await this.vault.allowed({ userId: user.id, tenantId, superadmin: false })) ids.unshift(user.id)
         const result = []
         for (const id of new Set(ids)) {
             const owner = id === user.id ? user : await this.doctor(id, tenantId)

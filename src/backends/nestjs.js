@@ -1109,7 +1109,7 @@ export const nestjs = {
                             ]
                           : []),
                       'npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme --role admin   (add a user)',
-                      'npm run demo:data   (demo organisations, users, apps, invoices and tickets; -- --remove takes them away)'
+                      'npm run demo:data   (demo organisations, users, apps, invoices and tickets; npm run demo:clear takes them away)'
                   ]
                 : [])
         ]
@@ -1139,7 +1139,7 @@ export const nestjs = {
                     demo.added
                         ? {
                               ok: true,
-                              text: `Demodata toegevoegd: an.peeters@demo.example.com (beheerder, arts), bram.janssens@, sofie.maes@ en koen.wouters@demo.example.com, wachtwoord ${demo.password} (enkel nu getoond). Weghalen: npm run demo:data -- --remove`
+                              text: `Demodata toegevoegd: an.peeters@demo.example.com (beheerder, arts), bram.janssens@, sofie.maes@ en koen.wouters@demo.example.com, wachtwoord ${demo.password} (enkel nu getoond). Weghalen: npm run demo:clear`
                           }
                         : {
                               ok: demo.added !== false,

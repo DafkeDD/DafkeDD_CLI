@@ -279,6 +279,7 @@ test('demo data: npm run demo:data (added once, --remove), a step only when aske
     assert.match(script, /The demo data is there already/)
     assert.match(script, /@demo\.example\.com|DOMAIN = 'demo\.example\.com'/)
     assert.equal(oidc.SCRIPTS['demo:data'], 'node scripts/demo-data.mjs')
+    assert.equal(oidc.SCRIPTS['demo:clear'], 'node scripts/demo-data.mjs --remove')
     const titles = async answers =>
         (await nestjs.steps({ projectDir: '/tmp/x', exec: async () => {}, answers })).map(step => step.title)
     const local = { ...DB, mode: 'local' }

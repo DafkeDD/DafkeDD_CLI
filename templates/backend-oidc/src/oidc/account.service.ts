@@ -247,6 +247,18 @@ export class AccountService {
         }
     }
 
+    /**
+     * Where an account goes back to after linking its eID on /security, when an app sent it there: the name of the app
+     * and the address of its frontend (the origin of its first redirect URI). Only registered, active apps: never an
+     * address from the browser, so this is no open redirect.
+     */
+    async eidBack(clientId: string) {
+        const client = await this.store.findClient(clientId)
+        const uri = client?.redirectUris[0]
+        if (!client || !uri) throw new AppException('oidc.CLIENT_NOT_FOUND', HttpStatus.NOT_FOUND)
+        return { clientId: client.clientId, name: client.name, url: new URL(uri).origin + '/' }
+    }
+
     linkChallenge(userId: string) {
         return this.eid.challenge('link', userId)
     }

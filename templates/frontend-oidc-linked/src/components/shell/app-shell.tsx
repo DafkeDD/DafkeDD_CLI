@@ -1,6 +1,6 @@
 import { type ReactNode, Suspense } from 'react'
 import { getTranslations } from 'next-intl/server'
-import { ACCOUNT_URL } from '@/lib/oidc'
+import { ACCOUNT_URL, OIDC_CLIENT_ID } from '@/lib/oidc'
 import { APP_NAV } from '@/lib/nav'
 import { getSession } from '@/lib/session'
 import { LoginRedirect } from './login-redirect'
@@ -42,6 +42,7 @@ async function Shell({ children, wide }: { children: ReactNode; wide: boolean })
             admin={false}
             wide={wide}
             accountUrl={ACCOUNT_URL}
+            app={OIDC_CLIENT_ID}
             sections={sections}
             user={{
                 name: session.name || session.email,

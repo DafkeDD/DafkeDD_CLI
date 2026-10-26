@@ -1,4 +1,4 @@
-// Demo data for development and demos: npm run demo:data (again: nothing changes), npm run demo:data -- --remove
+// Demo data for development and demos: npm run demo:data (again: nothing changes), npm run demo:clear (= --remove)
 // Two organisations with users (doctors and staff), apps in the catalogue, a subscription with seats, a trial, a free
 // grant, invoices (one open), support tickets (answered, closed with a rating) and a discount code. Every demo account
 // has an address @demo.example.com and the same password: --password <text>, otherwise a random one printed once.
@@ -129,7 +129,7 @@ const ahead = days => new Date(Date.now() + days * 86_400_000)
 async function add() {
     const { rows: existing } = await client.query('SELECT 1 FROM tenants WHERE slug = ANY($1)', [TENANTS])
     if (existing.length) {
-        console.log('The demo data is there already (npm run demo:data -- --remove takes it away).')
+        console.log('The demo data is there already (npm run demo:clear takes it away).')
         return
     }
     const generated = !values.password
