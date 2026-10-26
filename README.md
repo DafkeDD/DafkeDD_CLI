@@ -351,12 +351,14 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   `AUDIT_RETENTION_DAYS` (365) days. Admins read their organisation on `/audit`, superadmins the whole platform, every
   account its own recent activity on `/security`.
 - **Log in with another OpenID Connect server** (Microsoft Entra ID, Keycloak, Google, ...): the CLI asks whether that
-  is wanted (no / next to the password / only that), the issuer, the client id and secret, and the text of the button.
-  The login page shows "Log in with <name>"; that server proves who someone is (PKCE, state, nonce, its ID token checked
-  with its JWKS), and accounts, organisations, roles, licences and the audit log stay here. A verified email address
-  joins an existing account; two-step verification there counts when it says so. **Several at once** (Google and
-  Microsoft): after the first the CLI asks "Nog een server toevoegen?"; they are `OIDC_EXTERNAL_*` and
-  `OIDC_EXTERNAL_2_*` to `OIDC_EXTERNAL_9_*` in `.env`, a button each, and an account can be linked to each of them.
+  is wanted (no / next to the password / only that), which server (Google, Microsoft for every organisation or only
+  yours, or another with its issuer), the client id and secret, and the text of the button. Google and Microsoft are
+  always in `.env` and `.env.example`, ready to fill in (an empty client id: off). The login page shows "Log in with
+  <name>"; that server proves who someone is (PKCE, state, nonce, its ID token checked with its JWKS), and accounts,
+  organisations, roles, licences and the audit log stay here. A verified email address joins an existing account;
+  two-step verification there counts when it says so. **Several at once** (Google and Microsoft): after the first the
+  CLI asks "Nog een server toevoegen?"; they are `OIDC_EXTERNAL_*` and `OIDC_EXTERNAL_2_*` to `OIDC_EXTERNAL_9_*` in
+  `.env`, a button each, and an account can be linked to each of them.
 - **Passkeys**: every account adds passkeys on `/security` (fingerprint, face or PIN of the device, synced passkeys or a
   security key) and logs in with "Log in with a passkey": no password, and it counts as two-step verification
   (`acr: loa2`). Our own WebAuthn code (CBOR, COSE keys ES256, RS256 and EdDSA, signature counter), no attestation.
@@ -719,6 +721,12 @@ git switch developer
 
 ## Changelog
 
+- **0.53.3**: Google and Microsoft ready to fill in.
+    - `.env` and `.env.example` of the login server always have Google (`OIDC_EXTERNAL_*`) and Microsoft
+      (`OIDC_EXTERNAL_2_*`) with their issuer and name, and what to register there; an empty client id keeps them off. A
+      server chosen in the CLI comes first.
+    - The CLI asks "Welke server?": Google, Microsoft (every organisation), Microsoft (only yours, with the directory
+      id) or another (its issuer). The question for the client id shows the redirect URI to register.
 - **0.53.2**: the eID is required for the accounts of Google and Microsoft too.
     - With `OIDC_EID_REQUIRED` on, an account that logs in with Google, Microsoft or another OpenID Connect server must
       read its eID once as well, also with `OIDC_EXTERNAL_ONLY=true` (before, that setting turned the eID off

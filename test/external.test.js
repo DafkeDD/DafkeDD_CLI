@@ -45,6 +45,7 @@ test('ask: another OpenID Connect server next to the password, or only that one'
     const { asked, prompts } = promptsFor([
         'admin@example.com',
         'also',
+        'other',
         'https://keycloak.example.com/realms/demo/',
         ' my-app ',
         '',
@@ -65,31 +66,52 @@ test('ask: another OpenID Connect server next to the password, or only that one'
         asked[1].choices.map(choice => choice.value),
         ['no', 'also', 'only']
     )
+    // Google, Microsoft (every organisation or only yours) or another
+    assert.deepEqual(
+        asked[2].choices.map(choice => choice.value),
+        ['google', 'microsoft', 'microsoft-one', 'other']
+    )
     // https only, except on this computer
-    assert.equal(asked[2].validate('https://login.example.com'), true)
-    assert.equal(asked[2].validate('http://localhost:8080/realms/demo'), true)
-    assert.notEqual(asked[2].validate('http://login.example.com'), true)
-    assert.notEqual(asked[3].validate('  '), true)
+    assert.equal(asked[3].validate('https://login.example.com'), true)
+    assert.equal(asked[3].validate('http://localhost:8080/realms/demo'), true)
+    assert.notEqual(asked[3].validate('http://login.example.com'), true)
+    assert.notEqual(asked[4].validate('  '), true)
+    // The redirect URI to register there is in the question
+    assert.match(asked[4].message, /http:\/\/localhost:4000\/oidc\/external\/callback/)
 
-    const only = promptsFor(['admin@example.com', 'only', 'https://accounts.google.com', 'g-1', 'secret', ''])
+    // Google: its issuer without typing it, "Google" on the button
+    const only = promptsFor(['admin@example.com', 'only', 'google', 'g-1', 'secret', ''])
     const google = await oidc.ask({ projectDir: '/p/shop', prompts: only.prompts })
     assert.deepEqual(google.externals[0], {
         issuer: 'https://accounts.google.com',
         clientId: 'g-1',
         clientSecret: 'secret',
-        name: 'accounts.google.com',
+        name: 'Google',
         only: true
     })
+    // Microsoft for every organisation, and for only one (its directory id)
+    const every = promptsFor(['admin@example.com', 'also', 'microsoft', 'm-1', 's', ''])
+    assert.equal(
+        (await oidc.ask({ projectDir: '/p/shop', prompts: every.prompts })).externals[0].issuer,
+        'https://login.microsoftonline.com/organizations/v2.0'
+    )
+    const tenant = '72F988BF-86F1-41AF-91AB-2D7CD011DB47'
+    const one = promptsFor(['admin@example.com', 'also', 'microsoft-one', tenant, 'm-1', 's', ''])
+    const microsoft = (await oidc.ask({ projectDir: '/p/shop', prompts: one.prompts })).externals[0]
+    assert.equal(microsoft.issuer, `https://login.microsoftonline.com/${tenant.toLowerCase()}/v2.0`)
+    assert.equal(microsoft.name, 'Microsoft')
+    assert.notEqual(one.asked[3].validate('contoso'), true)
 })
 
 test('ask: several servers at once (Google and Microsoft), each with its own client and button', async () => {
     const answers = [
         'admin@example.com',
         'also',
-        'https://accounts.google.com',
+        'google',
         'g-1',
         'secret-1',
         'Google',
+        'other',
         'https://login.microsoftonline.com/contoso/v2.0',
         'm-2',
         'secret-2',
@@ -123,8 +145,19 @@ test('ask: several servers at once (Google and Microsoft), each with its own cli
     assert.ok(
         !oidc.envLines({ ...ANSWERS, externals: result.externals }, { port: 4000, example: true }).includes('secret-2')
     )
-    // None: the settings are there, empty
-    assert.match(oidc.envLines({ ...ANSWERS, externals: [] }, { port: 4000 }), /^OIDC_EXTERNAL_ISSUER=$/m)
+    // Microsoft for one organisation was chosen: no second Microsoft from the presets
+    assert.ok(!env.includes('organizations/v2.0'))
+    // None: Google and Microsoft are there, ready to fill in (an empty client id: off), also in .env.example
+    for (const options of [{ port: 4000 }, { port: 4000, example: true }]) {
+        const none = oidc.envLines({ ...ANSWERS, externals: [] }, options)
+        assert.match(none, /^OIDC_EXTERNAL_ISSUER=https:\/\/accounts\.google\.com$/m)
+        assert.match(none, /^OIDC_EXTERNAL_CLIENT_ID=$/m)
+        assert.match(none, /^OIDC_EXTERNAL_NAME='Google'$/m)
+        assert.match(none, /^OIDC_EXTERNAL_2_ISSUER=https:\/\/login\.microsoftonline\.com\/organizations\/v2\.0$/m)
+        assert.match(none, /^OIDC_EXTERNAL_2_CLIENT_ID=$/m)
+        assert.match(none, /^OIDC_EXTERNAL_2_NAME='Microsoft'$/m)
+        assert.match(none, /xms_edov/)
+    }
 })
 
 test('.env: the other server, its secret only in .env, and the redirect URI to register there', () => {
@@ -138,8 +171,11 @@ test('.env: the other server, its secret only in .env, and the redirect URI to r
     assert.match(env, /http:\/\/localhost:4000\/oidc\/external\/callback/)
     const example = oidc.envLines({ ...ANSWERS, external: EXTERNAL }, { port: 4000, example: true })
     assert.ok(!example.includes('s3cret'))
-    // Without the other server: the lines are there, empty (turned off)
-    assert.match(oidc.envLines(ANSWERS, { port: 4000 }), /^OIDC_EXTERNAL_ISSUER=$/m)
+    // Without the other server: Google and Microsoft are there, without a client id (turned off)
+    assert.match(oidc.envLines(ANSWERS, { port: 4000 }), /^OIDC_EXTERNAL_CLIENT_ID=$/m)
+    // The chosen server first, then Google (Microsoft is chosen already: contoso)
+    assert.match(env, /^OIDC_EXTERNAL_2_ISSUER=https:\/\/accounts\.google\.com$/m)
+    assert.ok(!env.includes('organizations/v2.0'))
     assert.ok(!backend['.env.example'].includes('s3cret'))
     assert.match(backend['.env'], /^OIDC_EXTERNAL_CLIENT_ID=app-123$/m)
 })

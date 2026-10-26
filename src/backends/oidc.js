@@ -942,17 +942,56 @@ export function validIssuer(value) {
 /** The most other OpenID Connect servers (OIDC_EXTERNAL_* and OIDC_EXTERNAL_2_* to _9_*). */
 export const MAX_EXTERNALS = 9
 
-/** The questions about one other server: its issuer, our client there and the text of the button. */
+/** The port of the API of the login server (PORT in nestjs.js): for the redirect URI in the question. */
+const LOGIN_SERVER_PORT = 4000
+
+/** A directory (tenant) id of Microsoft Entra ID: a GUID. */
+const DIRECTORY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** The questions about one other server: which one (Google, Microsoft or another), our client there, the button. */
 async function askOneExternal(prompts, only) {
-    const issuer = (
-        await prompts.input({
-            message: 'Issuer-URL van die server (exact zoals "issuer" in zijn /.well-known/openid-configuration):',
-            validate: validIssuer
-        })
-    ).trim()
+    const provider = await prompts.select({
+        message: 'Welke server?',
+        choices: [
+            { name: 'Google', value: 'google', description: 'https://accounts.google.com' },
+            {
+                name: 'Microsoft (elke organisatie)',
+                value: 'microsoft',
+                description: 'Elke praktijk met haar eigen Microsoft 365 (…/organizations/v2.0)'
+            },
+            {
+                name: 'Microsoft (enkel jouw organisatie)',
+                value: 'microsoft-one',
+                description: 'Met de directory-ID (tenant-ID) van Microsoft Entra'
+            },
+            { name: 'Een andere (Keycloak, Auth0, ...)', value: 'other', description: 'Je geeft zelf de issuer-URL op' }
+        ]
+    })
+    const issuer =
+        provider === 'google'
+            ? EXTERNAL_PRESETS[0].issuer
+            : provider === 'microsoft'
+              ? EXTERNAL_PRESETS[1].issuer
+              : provider === 'microsoft-one'
+                ? `https://login.microsoftonline.com/${(
+                      await prompts.input({
+                          message: 'Directory-ID (tenant-ID) van je organisatie in Microsoft Entra:',
+                          validate: value =>
+                              DIRECTORY_ID.test(value.trim()) || 'Een GUID, bv. 72f988bf-86f1-41af-91ab-2d7cd011db47'
+                      })
+                  )
+                      .trim()
+                      .toLowerCase()}/v2.0`
+                : (
+                      await prompts.input({
+                          message:
+                              'Issuer-URL van die server (exact zoals "issuer" in zijn /.well-known/openid-configuration):',
+                          validate: validIssuer
+                      })
+                  ).trim()
     const clientId = (
         await prompts.input({
-            message: 'Client-id van deze applicatie bij die server:',
+            message: `Client-id van deze applicatie bij die server (registreer daar de redirect URI http://localhost:${LOGIN_SERVER_PORT}${ISSUER_PATH}/external/callback):`,
             validate: value => value.trim().length > 0 || 'Geef de client-id op'
         })
     ).trim()
@@ -960,13 +999,9 @@ async function askOneExternal(prompts, only) {
         message: 'Client-secret (leeg laten voor een publieke client met PKCE):',
         mask: '*'
     })
-    const name = (
-        await prompts.input({
-            message: 'Tekst op de knop "Inloggen met ...":',
-            default: new URL(issuer).hostname
-        })
-    ).trim()
-    return { issuer, clientId, clientSecret: secret.trim(), name: name || new URL(issuer).hostname, only }
+    const button = provider === 'google' ? 'Google' : provider === 'other' ? new URL(issuer).hostname : 'Microsoft'
+    const name = (await prompts.input({ message: 'Tekst op de knop "Inloggen met ...":', default: button })).trim()
+    return { issuer, clientId, clientSecret: secret.trim(), name: name || button, only }
 }
 
 /**
@@ -1001,9 +1036,48 @@ const quote = value => `'${String(value).replaceAll("'", '')}'`
 /** The other servers of the answers (`external`: one, of before several were possible). */
 export const externalsOf = oidc => oidc?.externals ?? (oidc?.external ? [oidc.external] : [])
 
+/**
+ * Google and Microsoft are always in .env and .env.example, ready to fill in: their issuer and name are there, the
+ * client id stays empty (off) until it is registered there. A server chosen in the CLI comes first.
+ */
+export const EXTERNAL_PRESETS = [
+    {
+        issuer: 'https://accounts.google.com',
+        name: 'Google',
+        help: [
+            '# Google: console.cloud.google.com > APIs & Services > OAuth consent screen, then Credentials > OAuth client ID >',
+            '# Web application, with the redirect URI above. Fill in its client id and secret to turn it on.'
+        ]
+    },
+    {
+        issuer: 'https://login.microsoftonline.com/organizations/v2.0',
+        name: 'Microsoft',
+        help: [
+            '# Microsoft (every organisation; .../<directory id>/v2.0 for only yours): entra.microsoft.com > App registrations >',
+            '# New registration, platform Web with the redirect URI above; Certificates & secrets > a client secret;',
+            '# Token configuration > optional claims email and xms_edov of the ID token. Fill in client id and secret.'
+        ]
+    }
+]
+
+/** The servers in .env: the chosen ones, then Google and Microsoft when they are not chosen (empty client id: off). */
+export function envExternals(oidc) {
+    const chosen = externalsOf(oidc)
+    const issuers = new Set(chosen.map(item => item.issuer))
+    const hosts = new Set(chosen.map(item => new URL(item.issuer).host))
+    const presets = EXTERNAL_PRESETS.filter(
+        preset => !issuers.has(preset.issuer) && !hosts.has(new URL(preset.issuer).host)
+    )
+    return [...chosen, ...presets.map(preset => ({ ...preset, clientId: '', clientSecret: '', only: false }))].slice(
+        0,
+        MAX_EXTERNALS
+    )
+}
+
 /** The .env lines of one other server (`prefix`: OIDC_EXTERNAL_ or OIDC_EXTERNAL_<n>_). */
 function externalLines(prefix, item, example) {
     return [
+        ...(item?.help ?? []),
         `${prefix}ISSUER=${item?.issuer ?? ''}`,
         `${prefix}CLIENT_ID=${item?.clientId ?? ''}`,
         '# Empty: a public client (PKCE only); otherwise the secret of our client there (client_secret_basic)',
@@ -1061,14 +1135,12 @@ export function envLines(oidc, { port, example = false }) {
         'OIDC_BACKCHANNEL_INTERVAL=5',
         '',
         '# Log in at another OpenID Connect server (Microsoft Entra ID, Keycloak, Google, ...). Register this redirect URI',
-        `# there: http://localhost:${port}${ISSUER_PATH}/external/callback. Leave OIDC_EXTERNAL_ISSUER empty to turn it off.`,
-        '# More servers at the same time (Google and Microsoft): OIDC_EXTERNAL_2_* to OIDC_EXTERNAL_9_*, the same settings.',
-        '# Google: https://accounts.google.com. Microsoft for every organisation: https://login.microsoftonline.com/organizations/v2.0',
-        '# (or .../<directory id>/v2.0 for one organisation; add the optional claims email and xms_edov to the ID token).',
-        ...externalLines('OIDC_EXTERNAL_', externalsOf(oidc)[0], example),
-        '# true: only these servers (no password, no eID, no registration here)',
-        `OIDC_EXTERNAL_ONLY=${externalsOf(oidc)[0]?.only ? 'true' : 'false'}`,
-        ...externalsOf(oidc)
+        `# there: http://localhost:${port}${ISSUER_PATH}/external/callback. An empty CLIENT_ID turns that server off.`,
+        '# Several servers at the same time: OIDC_EXTERNAL_* and OIDC_EXTERNAL_2_* to OIDC_EXTERNAL_9_*, the same settings.',
+        ...externalLines('OIDC_EXTERNAL_', envExternals(oidc)[0], example),
+        '# true: only these servers (no password, no eID login, no registration here)',
+        `OIDC_EXTERNAL_ONLY=${envExternals(oidc)[0]?.only ? 'true' : 'false'}`,
+        ...envExternals(oidc)
             .slice(1)
             .flatMap((item, index) => ['', ...externalLines(`OIDC_EXTERNAL_${index + 2}_`, item, example)]),
         '',
