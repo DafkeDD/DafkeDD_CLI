@@ -1342,6 +1342,13 @@ same app in the body. The doctor must be an active doctor with a licence for the
 keep the file and the password in memory only and do not log them. Every fetch is in the audit log
 (\`account.vault_retrieved\`, never the password).
 
+**Colleagues (the secretariat).** Every doctor has an own certificate. On \`/vault\` the doctor chooses which colleagues
+of the organisation may use it in the apps (\`GET\`/\`PUT /me/vault/colleagues\`, table \`vault_delegates\`, recorded as
+\`account.vault_delegates_changed\`), and can take it away at any time (\`[]\`). A colleague never sees the certificate:
+its app asks \`POST /vault/doctors\` (the doctors it may use: itself when it is a doctor, and who chose it) and then
+\`POST /vault/credentials\` with \`doctorId\`. Only for that organisation, only while the doctor is still an active doctor
+there; the fetch is in the audit log of the doctor with \`onBehalfOf\`.
+
 ### Statistics (superadmin)
 
 \`GET /admin/stats\` (\`?range=6m\`, \`year\` or \`all\`) gives the dashboard of the platform: organisations, active
@@ -1404,6 +1411,7 @@ ${fence}
 | \`billing_payments\` | Payments at Mollie (id, what for, status); a paid one is applied once | yes |
 | \`invoice_numbers\`, \`invoices\` | The last invoice number per year; the invoices (\`FAC-<year>-<number>\`, amounts with and without VAT, the billing details as issued, status) | \`invoices\`: yes |
 | \`user_vault\` | The eHealth certificate of an account and its password, both encrypted, and what the certificate says | no |
+| \`vault_delegates\` | Which colleagues of the organisation may use the certificate of a doctor in the apps | yes |
 | \`tickets\`, \`ticket_messages\`, \`ticket_attachments\` | Support tickets, their conversation and their images | yes |
 | \`ticket_notes\` | The internal notes of the support team (with mentions) | no: support only |
 | \`audit_events\` | The audit log: who, what, about whom, organisation, details, IP address, browser, when (append-only) | yes (\`NULL\`: platform and accounts) |

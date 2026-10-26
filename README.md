@@ -573,7 +573,7 @@ Every piece of code must have tests, and **code cannot be pushed while the tests
 - A **pre-push git hook** (`.githooks/pre-push`, activated by `npm install`) runs `npm run format:check` and `npm test`
   and blocks the push when something fails.
 - **GitHub Actions** (`.github/workflows/ci.yml`) runs the same checks on every push and pull request to `developer` and
-  `main`, on Linux and Windows with Node 22 and 24, and the CLI starts (`--help`, `--version`). The release workflow
+  `main`, on Linux and Windows with Node 22, 24 and 26, and the CLI starts (`--help`, `--version`). The release workflow
   only runs after the tests passed.
 - Hooks can be skipped locally (`--no-verify`), so also enable **branch protection** on `developer` and `main` in the
   GitHub settings with the CI checks as _required status checks_.
@@ -719,6 +719,27 @@ git switch developer
 
 ## Changelog
 
+- **0.52.0**: the secretariat uses the eHealth certificate of the right doctor.
+    - Every doctor keeps an own certificate on `/vault` of the login server. New there: "Who may use my certificate",
+      where the doctor ticks the colleagues of the organisation (the secretariat) who may use it in the apps, and can
+      take it away at any time. Only for that organisation, only while the doctor is an active doctor there. Stored in
+      `vault_delegates` (migration 23), recorded as `account.vault_delegates_changed`.
+    - The login server: `GET`/`PUT /me/vault/colleagues` for the doctor; `POST /vault/doctors` for an app (the doctors
+      the logged in account may use); `POST /vault/credentials` takes an optional `doctorId`. The fetch is in the audit
+      log of the doctor with `onBehalfOf`.
+    - The API of a linked app: `PasportVault.credentials(token, doctorId?)` and `PasportVault.doctors(token)`,
+      `GET /vault/doctors` and `GET /vault?doctor=<id>`.
+    - Fixed: the drop zone of the vault page did not highlight while dragging, and the thumbprint was not monospaced (a
+      missing space in the class name).
+- **0.51.1**: a linked app shows only its own pages, and reaches the eHealth vault through its API.
+    - The rail of a linked app has only the pages of the app (`APP_NAV`); the portal of the login server (dashboard,
+      apps, users, invoices, vault, support, the superadmin panel) is no longer repeated in every app. Profile,
+      security, language and log out stay in the user menu.
+    - The API of a linked app gets `PasportVault` (`src/pasport/pasport-vault.service.ts`): the eHealth certificate of
+      the logged in doctor from the vault of the login server (`POST /vault/credentials`, server to server, with
+      `OIDC_CLIENT_SECRET` in `backend/.env`), and `GET /vault` with what the certificate is (never the file). The vault
+      itself stays only on the login server.
+    - The CI of the CLI also runs on Node 26 (Linux and Windows).
 - **0.51.0**: clearer licences, the database of earlier, several external logins, an answers file and `update` for every
   frontend.
     - A linked app without a licence says so with what to do: "Ask a demo" (new tokens at once, `POST /api/auth/renew`),

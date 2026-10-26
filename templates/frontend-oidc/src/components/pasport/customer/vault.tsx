@@ -440,6 +440,101 @@ export function Vault() {
                     </div>
                 </div>
             )}
+            <Colleagues />
+        </div>
+    )
+}
+
+type Colleague = { userId: string; name: string | null; email: string; profession: string; allowed: boolean }
+
+/** The doctor chooses who of the organisation (the secretariat) may use the certificate in the apps. */
+function Colleagues() {
+    const t = useT('Vault')
+    const push = useToast()
+    const api = useApi()
+    const { data, setData, error, loading, reload } = useData<Colleague[]>('me/vault/colleagues')
+    const [chosen, setChosen] = useState<string[] | null>(null)
+    const [busy, setBusy] = useState(false)
+
+    if (loading && !data) return null
+    if (error && !data) return <LoadError message={error.message} onRetry={() => void reload()} />
+    const list = data ?? []
+    const current = chosen ?? list.filter(c => c.allowed).map(c => c.userId)
+    const changed = chosen !== null
+    const toggle = (userId: string) =>
+        setChosen(current.includes(userId) ? current.filter(id => id !== userId) : [...current, userId])
+    const save = async () => {
+        setBusy(true)
+        try {
+            setData(await api<Colleague[]>('me/vault/colleagues', 'PUT', { userIds: current }))
+            setChosen(null)
+            push(t('colleaguesSaved'), 'users', 'accent')
+        } catch (e) {
+            push(e instanceof ApiFailure ? e.message : t('failed'), 'alert', 'red')
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    return (
+        <div className='card card-pad' style={{ marginTop: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div className='t-eyebrow'>{t('colleaguesTitle')}</div>
+                {current.length > 0 && (
+                    <Badge tone='accent' icon='users'>
+                        {t('colleaguesCount', { count: current.length })}
+                    </Badge>
+                )}
+            </div>
+            <p style={{ fontSize: 13.5, color: 'var(--text-2)', marginBottom: 14, lineHeight: 1.55 }}>
+                {t('colleaguesText')}
+            </p>
+            {list.length === 0 ? (
+                <p className='hint'>{t('noColleagues')}</p>
+            ) : (
+                <div style={{ display: 'grid', gap: 8 }}>
+                    {list.map(c => (
+                        <label
+                            key={c.userId}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 12,
+                                padding: '10px 14px',
+                                border: '1px solid var(--border)',
+                                borderRadius: 'var(--r-md)',
+                                background: current.includes(c.userId) ? 'var(--accent-tint)' : 'var(--surface-2)',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <input
+                                type='checkbox'
+                                checked={current.includes(c.userId)}
+                                disabled={busy}
+                                onChange={() => toggle(c.userId)}
+                            />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 600, fontSize: 14 }}>{c.name ?? c.email}</div>
+                                <div className='t-muted' style={{ fontSize: 12.5 }}>
+                                    {c.email}
+                                </div>
+                            </div>
+                        </label>
+                    ))}
+                </div>
+            )}
+            {list.length > 0 && (
+                <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+                    <Btn variant='primary' icon='check' disabled={!changed || busy} onClick={() => void save()}>
+                        {t('save')}
+                    </Btn>
+                    {changed && (
+                        <Btn variant='ghost' disabled={busy} onClick={() => setChosen(null)}>
+                            {t('cancel')}
+                        </Btn>
+                    )}
+                </div>
+            )}
         </div>
     )
 }

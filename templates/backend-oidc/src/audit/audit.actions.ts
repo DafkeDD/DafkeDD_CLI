@@ -35,7 +35,8 @@ export const AUDIT_ACTIONS = {
         'account.vault_uploaded',
         'account.vault_password_saved',
         'account.vault_removed',
-        'account.vault_retrieved'
+        'account.vault_retrieved',
+        'account.vault_delegates_changed'
     ],
     members: [
         'members.invited',

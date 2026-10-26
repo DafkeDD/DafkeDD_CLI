@@ -109,6 +109,27 @@ describe('VaultService', () => {
         expect(await service.allowed({ ...doctor, tenantId: '' })).toBe(false)
     })
 
+    it('lets a doctor choose the colleagues who may use the certificate, and logs it', async () => {
+        const { service, oidc, tenant, doctor, staff, vault, auditStore } = setup()
+        expect(await errorOf(service.colleagues(doctor))).toEqual({ key: 'oidc.VAULT_NOT_ALLOWED', status: 403 })
+        await oidc.setMemberProfession(tenant.id, doctor.userId, 'doctor')
+        expect(await service.colleagues(doctor)).toEqual([
+            { userId: staff.userId, name: 'Staff', email: 'staff@example.com', profession: 'staff', allowed: false }
+        ])
+        const chosen = await service.setColleagues(doctor, [staff.userId, staff.userId])
+        expect(chosen[0]?.allowed).toBe(true)
+        expect(await vault.listDelegates(doctor.userId, tenant.id)).toEqual([staff.userId])
+        expect(await service.ownersFor(staff.userId, tenant.id)).toEqual([doctor.userId])
+        expect(await service.delegated(doctor.userId, staff.userId, tenant.id)).toBe(true)
+        expect(JSON.stringify(auditStore)).toContain('account.vault_delegates_changed')
+        // Itself, or somebody of another organisation: not a colleague
+        expect((await errorOf(service.setColleagues(doctor, [doctor.userId])))?.key).toBe('oidc.MEMBER_NOT_FOUND')
+        const other = oidc.addUser({ email: 'x@example.com', name: 'X', passwordHash: 'x' })
+        expect((await errorOf(service.setColleagues(doctor, [other.id])))?.key).toBe('oidc.MEMBER_NOT_FOUND')
+        await service.setColleagues(doctor, [])
+        expect(await service.ownersFor(staff.userId, tenant.id)).toEqual([])
+    })
+
     it('stores the file encrypted, asks the password, checks it and shows what the certificate says', async () => {
         const { service, oidc, vault, tenant, doctor, auditStore } = setup()
         await oidc.setMemberProfession(tenant.id, doctor.userId, 'doctor')

@@ -921,9 +921,10 @@ function appFiles(result, database, link, choice) {
             '# Port of the API (the Next.js frontend uses 3000)',
             '# Port of the API (the login server uses 4000)'
         )
-    const extra = appBackend.envLines(link) + appBackend.optionLines(choice, { appName: link.name })
-    changed['.env'] = env(result['.env']) + extra
-    changed['.env.example'] = env(result['.env.example']) + extra
+    const options = appBackend.optionLines(choice, { appName: link.name })
+    changed['.env'] = env(result['.env']) + appBackend.envLines(link) + options
+    // The secret of the app (the eHealth vault) never in .env.example
+    changed['.env.example'] = env(result['.env.example']) + appBackend.envLines(link, { example: true }) + options
     if (choice.files) changed['.gitignore'] = result['.gitignore'] + 'storage\n'
     for (const locale of LOCALES) {
         changed[`src/i18n/${locale}/errors.json`] = json({

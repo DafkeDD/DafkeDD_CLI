@@ -15,8 +15,8 @@ jobs:
             matrix:
                 # Windows too: the CLI is used there (cmd.exe for npm/npx, CRLF checkouts, paths with backslashes)
                 os: [ubuntu-latest, windows-latest]
-                # The Node.js versions with support (20 ended in April 2026)
-                node: [22, 24]
+                # The Node.js versions with support (20 ended in April 2026), and the newest (26)
+                node: [22, 24, 26]
         steps:
             - uses: actions/checkout@v5
 

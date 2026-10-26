@@ -31,4 +31,10 @@ export interface VaultStore {
     /** The password that opens the file, with what the certificate says. False when there is no file. */
     setPassword(userId: string, passwordEncrypted: Buffer, meta: CertificateMeta): Promise<boolean>
     delete(userId: string): Promise<boolean>
+    /** The colleagues (in that organisation) a doctor lets use the certificate: their account ids. */
+    listDelegates(ownerId: string, tenantId: string): Promise<string[]>
+    /** Replaces that list (only members of the organisation; the doctor never). */
+    setDelegates(ownerId: string, tenantId: string, delegateIds: string[]): Promise<void>
+    /** The doctors (in that organisation) who let this account use their certificate. */
+    ownersFor(delegateId: string, tenantId: string): Promise<string[]>
 }

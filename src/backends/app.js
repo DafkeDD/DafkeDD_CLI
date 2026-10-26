@@ -40,28 +40,49 @@ export const ERRORS = {
         NO_LICENSE:
             'You have no licence for {product} in this organisation: buy one on Licences or ask your administrator',
         NOTE_NOT_FOUND: 'This note does not exist (anymore)',
-        ROLE_REQUIRED: 'You need one of these roles for this: {roles}. Ask the administrator of your organisation'
+        ROLE_REQUIRED: 'You need one of these roles for this: {roles}. Ask the administrator of your organisation',
+        VAULT_NOT_SET_UP: 'The eHealth vault is not set up for this app (OIDC_CLIENT_SECRET)',
+        VAULT_EMPTY: 'You have not added an eHealth certificate to the vault of the login server yet',
+        VAULT_NOT_ALLOWED: 'Only doctors with a licence of this app can use the eHealth vault',
+        VAULT_NOT_READY: 'Your eHealth certificate cannot be used: its password is missing or it has expired',
+        VAULT_UNAVAILABLE: 'The eHealth vault of the login server cannot be reached'
     },
     nl: {
         NO_ORGANISATION: 'Log in met een organisatie om dit te gebruiken',
         NO_LICENSE:
             'Je hebt geen licentie voor {product} in deze organisatie: koop er een bij Licenties of vraag het je beheerder',
         NOTE_NOT_FOUND: 'Deze notitie bestaat niet (meer)',
-        ROLE_REQUIRED: 'Hiervoor heb je een van deze rollen nodig: {roles}. Vraag het de beheerder van je organisatie'
+        ROLE_REQUIRED: 'Hiervoor heb je een van deze rollen nodig: {roles}. Vraag het de beheerder van je organisatie',
+        VAULT_NOT_SET_UP: 'De eHealth-kluis is niet ingesteld voor deze app (OIDC_CLIENT_SECRET)',
+        VAULT_EMPTY: 'Je hebt nog geen eHealth-certificaat in de kluis van de loginserver gezet',
+        VAULT_NOT_ALLOWED: 'Alleen artsen met een licentie van deze app kunnen de eHealth-kluis gebruiken',
+        VAULT_NOT_READY: 'Je eHealth-certificaat is niet bruikbaar: het wachtwoord ontbreekt of het is verlopen',
+        VAULT_UNAVAILABLE: 'De eHealth-kluis van de loginserver is niet bereikbaar'
     },
     fr: {
         NO_ORGANISATION: 'Connectez-vous avec une organisation pour utiliser ceci',
         NO_LICENSE:
             "Vous n'avez pas de licence pour {product} dans cette organisation : achetez-en une sous Licences ou demandez à votre administrateur",
         NOTE_NOT_FOUND: "Cette note n'existe pas (ou plus)",
-        ROLE_REQUIRED: "Il vous faut l'un de ces rôles : {roles}. Demandez-le à l'administrateur de votre organisation"
+        ROLE_REQUIRED: "Il vous faut l'un de ces rôles : {roles}. Demandez-le à l'administrateur de votre organisation",
+        VAULT_NOT_SET_UP: "Le coffre-fort eHealth n'est pas configuré pour cette application (OIDC_CLIENT_SECRET)",
+        VAULT_EMPTY: "Vous n'avez pas encore ajouté de certificat eHealth au coffre-fort du serveur de connexion",
+        VAULT_NOT_ALLOWED:
+            'Seuls les médecins avec une licence de cette application peuvent utiliser le coffre-fort eHealth',
+        VAULT_NOT_READY: "Votre certificat eHealth n'est pas utilisable : le mot de passe manque ou il a expiré",
+        VAULT_UNAVAILABLE: "Le coffre-fort eHealth du serveur de connexion n'est pas joignable"
     },
     de: {
         NO_ORGANISATION: 'Melde dich mit einer Organisation an, um dies zu nutzen',
         NO_LICENSE:
             'Du hast keine Lizenz für {product} in dieser Organisation: kaufe eine unter Lizenzen oder frage deinen Administrator',
         NOTE_NOT_FOUND: 'Diese Notiz gibt es nicht (mehr)',
-        ROLE_REQUIRED: 'Dafür brauchst du eine dieser Rollen: {roles}. Frage den Administrator deiner Organisation'
+        ROLE_REQUIRED: 'Dafür brauchst du eine dieser Rollen: {roles}. Frage den Administrator deiner Organisation',
+        VAULT_NOT_SET_UP: 'Der eHealth-Tresor ist für diese App nicht eingerichtet (OIDC_CLIENT_SECRET)',
+        VAULT_EMPTY: 'Du hast noch kein eHealth-Zertifikat in den Tresor des Anmeldeservers gelegt',
+        VAULT_NOT_ALLOWED: 'Nur Ärzte mit einer Lizenz dieser App können den eHealth-Tresor nutzen',
+        VAULT_NOT_READY: 'Dein eHealth-Zertifikat ist nicht nutzbar: das Passwort fehlt oder es ist abgelaufen',
+        VAULT_UNAVAILABLE: 'Der eHealth-Tresor des Anmeldeservers ist nicht erreichbar'
     }
 }
 
@@ -273,7 +294,7 @@ export function optionLines(choice = DEFAULT_OPTIONS, { appName = 'App' } = {}) 
 }
 
 /** The .env lines of the login server whose tokens this API accepts. */
-export const envLines = link =>
+export const envLines = (link, { example = false } = {}) =>
     [
         '',
         '# The login server (Pasport): this API accepts its access tokens (see README.md, "Login through the login server")',
@@ -284,6 +305,9 @@ export const envLines = link =>
         `OIDC_CLIENT_IDS=${link.clientId}`,
         '# The product (licence) this app sells: members need a trial or a seat of it. Empty: a free app',
         `OIDC_PRODUCT=${link.product ?? ''}`,
+        '# The key of this app at the login server (a confidential app): the eHealth vault of a doctor',
+        '# (POST /vault/credentials, server to server). Empty: a public app, no vault. Never commit it',
+        `OIDC_CLIENT_SECRET=${example ? '' : (link.clientSecret ?? '')}`,
         ''
     ].join('\n')
 
@@ -383,6 +407,59 @@ const baseEndpoints = () => [
             }
         },
         errors: [[401, 'errors.UNAUTHORIZED']]
+    },
+    {
+        method: 'GET',
+        path: '/vault/doctors',
+        tag: 'eHealth vault',
+        summary:
+            'The doctors whose certificate the logged in account may use, from the login server (`POST /vault/doctors`): itself when it is a doctor (`self`), and the doctors of the organisation who chose it on /vault of the login server (the secretariat). `ready`: certificate and password are there.',
+        bearer: true,
+        response: {
+            status: 200,
+            example: [{ id: '6f1c2a8e-…', name: 'Dr. An Peeters', email: 'an@example.com', self: false, ready: true }]
+        },
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [403, 'errors.NO_ORGANISATION'],
+            [403, 'errors.VAULT_NOT_ALLOWED'],
+            [503, 'errors.VAULT_NOT_SET_UP', 'no OIDC_CLIENT_SECRET'],
+            [502, 'errors.VAULT_UNAVAILABLE']
+        ]
+    },
+    {
+        method: 'GET',
+        path: '/vault',
+        tag: 'eHealth vault',
+        query: [
+            [
+                'doctor',
+                'optional',
+                'the id of a doctor who chose this account (`GET /vault/doctors`); without: the own certificate'
+            ]
+        ],
+        summary:
+            'The eHealth certificate of the logged in doctor, or with `?doctor=` of a doctor who chose this account (the secretariat), from the vault of the login server (it lives only there): subject, issuer, serial, valid until, thumbprint. Never the file or its password: the API keeps those for its calls to eHealth (`PasportVault.credentials(token, doctorId?)`, `POST /vault/credentials` of the login server with `OIDC_CLIENT_SECRET`).',
+        bearer: true,
+        response: {
+            status: 200,
+            example: {
+                subject: 'CN=Dr. An Peeters',
+                issuer: 'CN=eHealth CA',
+                serial: '0A1B2C',
+                validUntil: '2027-10-01T00:00:00.000Z',
+                thumbprint: 'ab12…'
+            }
+        },
+        errors: [
+            [401, 'errors.UNAUTHORIZED'],
+            [403, 'errors.NO_ORGANISATION'],
+            [403, 'errors.VAULT_NOT_ALLOWED'],
+            [404, 'errors.VAULT_EMPTY'],
+            [409, 'errors.VAULT_NOT_READY'],
+            [502, 'errors.VAULT_UNAVAILABLE'],
+            [503, 'errors.VAULT_NOT_SET_UP']
+        ]
     },
     {
         method: 'GET',

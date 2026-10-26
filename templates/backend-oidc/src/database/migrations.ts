@@ -849,5 +849,26 @@ ALTER TABLE user_identifiers DROP CONSTRAINT user_identifiers_type_check;
 ALTER TABLE user_identifiers ADD CONSTRAINT user_identifiers_type_check
   CHECK (type IN ('eid', 'external') OR type ~ '^external_[2-9]$');
 `
+    },
+    {
+        id: 23,
+        name: 'colleagues who use the eHealth certificate of a doctor',
+        sql: `
+-- A doctor lets colleagues of the same organisation (the secretariat) use the eHealth certificate in the apps: for
+-- that organisation only, and it goes away with the membership of either. Platform code reads it (the tenant role
+-- has no access); Row-Level Security like every table with a tenant_id.
+CREATE TABLE vault_delegates (
+  tenant_id uuid NOT NULL,
+  owner_id uuid NOT NULL,
+  delegate_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, owner_id, delegate_id),
+  CHECK (owner_id <> delegate_id),
+  FOREIGN KEY (tenant_id, owner_id) REFERENCES tenant_members (tenant_id, user_id) ON DELETE CASCADE,
+  FOREIGN KEY (tenant_id, delegate_id) REFERENCES tenant_members (tenant_id, user_id) ON DELETE CASCADE
+);
+CREATE INDEX vault_delegates_delegate ON vault_delegates (delegate_id, tenant_id);
+${isolate('vault_delegates', 'tenant_id')}
+`
     }
 ]

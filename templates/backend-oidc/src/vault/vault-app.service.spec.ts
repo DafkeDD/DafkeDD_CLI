@@ -123,13 +123,13 @@ async function setup() {
         return name
     }
     const owner = (userId: string) => ({ userId, tenantId: '', superadmin: true })
-    return { vault, service, auditStore, doctor, staff, token, licenseStatus, owner }
+    return { vault, service, auditStore, doctor, staff, token, licenseStatus, owner, tenant, oidc }
 }
 
 const ask = (
     service: VaultAppService,
     accessToken: string,
-    overrides: Partial<{ clientId: string; clientSecret: string }> = {}
+    overrides: Partial<{ clientId: string; clientSecret: string; doctorId: string | null }> = {}
 ) =>
     service.credentials({
         clientId: 'dossier-app',
@@ -200,6 +200,57 @@ describe('VaultAppService', () => {
         vi.useFakeTimers({ toFake: ['Date'] })
         vi.setSystemTime(new Date('2029-01-01T00:00:00Z'))
         expect(await errorOf(ask(service, own))).toEqual({ key: 'oidc.VAULT_EXPIRED', status: 409 })
+    })
+
+    it('the secretariat uses the certificate of a doctor who chose it, only in that organisation', async () => {
+        const { service, vault, doctor, staff, token, owner, tenant, oidc, auditStore } = await setup()
+        await vault.upload(owner(doctor.id), { filename: 'a.p12', dataBase64: p12Base64 })
+        await vault.setPassword(owner(doctor.id), PASSWORD)
+        const staffToken = token(staff.id, 'dossier-app')
+        const asDoctor = { userId: doctor.id, tenantId: tenant.id, superadmin: false }
+        // Not chosen yet: refused, also with the id of the doctor
+        expect((await errorOf(ask(service, staffToken, { doctorId: doctor.id })))?.key).toBe('oidc.VAULT_NOT_ALLOWED')
+        expect(
+            await service.doctors({
+                clientId: 'dossier-app',
+                clientSecret: 'app-secret',
+                accessToken: staffToken,
+                ip: '1'
+            })
+        ).toEqual([])
+
+        // The doctor chooses the colleague on /vault
+        const colleagues = await vault.setColleagues(asDoctor, [staff.id])
+        expect(colleagues).toEqual([expect.objectContaining({ userId: staff.id, allowed: true })])
+        const result = await ask(service, staffToken, { doctorId: doctor.id })
+        expect(result.password).toBe(PASSWORD)
+        expect(JSON.stringify(auditStore)).toContain(`"onBehalfOf":"${doctor.id}"`)
+        expect(
+            await service.doctors({
+                clientId: 'dossier-app',
+                clientSecret: 'app-secret',
+                accessToken: staffToken,
+                ip: '1'
+            })
+        ).toEqual([{ id: doctor.id, name: 'Doc', email: 'doc@example.com', self: false, ready: true }])
+        // Without doctorId the colleague still has no certificate of its own
+        expect((await errorOf(ask(service, staffToken)))?.key).toBe('oidc.VAULT_NOT_ALLOWED')
+
+        // Only members of the organisation; [] takes it away again
+        expect((await errorOf(vault.setColleagues(asDoctor, ['00000000-0000-4000-8000-000000000000'])))?.key).toBe(
+            'oidc.MEMBER_NOT_FOUND'
+        )
+        await vault.setColleagues(asDoctor, [])
+        expect((await errorOf(ask(service, staffToken, { doctorId: doctor.id })))?.key).toBe('oidc.VAULT_NOT_ALLOWED')
+
+        // A doctor who is no longer a doctor there: its colleagues can not use the certificate either
+        await vault.setColleagues(asDoctor, [staff.id])
+        await oidc.setMemberProfession(tenant.id, doctor.id, 'staff')
+        expect((await errorOf(ask(service, staffToken, { doctorId: doctor.id })))?.key).toBe('oidc.VAULT_NOT_ALLOWED')
+        // A staff member chooses nobody
+        expect(
+            (await errorOf(vault.colleagues({ userId: staff.id, tenantId: tenant.id, superadmin: false })))?.key
+        ).toBe('oidc.VAULT_NOT_ALLOWED')
     })
 
     it('slows down repeated attempts', async () => {

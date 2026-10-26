@@ -25,4 +25,23 @@ export class MemoryVaultStore implements VaultStore {
     async delete(userId: string) {
         return this.entries.delete(userId)
     }
+
+    /** tenantId → ownerId → delegate ids. */
+    delegates = new Map<string, Map<string, Set<string>>>()
+
+    async listDelegates(ownerId: string, tenantId: string) {
+        return [...(this.delegates.get(tenantId)?.get(ownerId) ?? [])]
+    }
+
+    async setDelegates(ownerId: string, tenantId: string, delegateIds: string[]) {
+        const tenant = this.delegates.get(tenantId) ?? new Map<string, Set<string>>()
+        tenant.set(ownerId, new Set(delegateIds.filter(id => id !== ownerId)))
+        this.delegates.set(tenantId, tenant)
+    }
+
+    async ownersFor(delegateId: string, tenantId: string) {
+        return [...(this.delegates.get(tenantId) ?? new Map<string, Set<string>>()).entries()]
+            .filter(([, ids]) => ids.has(delegateId))
+            .map(([owner]) => owner)
+    }
 }

@@ -30,5 +30,6 @@ export const TENANT_TABLES = [
     'ticket_attachments',
     'invoices',
     'notifications',
-    'app_role_assignments'
+    'app_role_assignments',
+    'vault_delegates'
 ] as const

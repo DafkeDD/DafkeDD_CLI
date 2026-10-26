@@ -3494,15 +3494,62 @@ export const endpoints = ({ port = 4000 } = {}) => [
         errors: VAULT_ACCESS
     },
     {
+        method: 'GET',
+        path: '/me/vault/colleagues',
+        tag: 'eHealth vault',
+        summary:
+            'For a doctor: the colleagues of the organisation of the token (active members, never itself) and whether each may use its certificate in the apps (`allowed`).',
+        bearer: true,
+        response: {
+            status: 200,
+            example: [
+                {
+                    userId: '1d2e…',
+                    name: 'Sara Secretariaat',
+                    email: 'sara@example.com',
+                    profession: 'staff',
+                    allowed: true
+                }
+            ]
+        },
+        errors: [...VAULT_ACCESS, [403, 'oidc.VAULT_NOT_ALLOWED', 'not a doctor in this organisation']]
+    },
+    {
+        method: 'PUT',
+        path: '/me/vault/colleagues',
+        tag: 'eHealth vault',
+        summary:
+            'The doctor chooses who of its organisation (the secretariat) may use its certificate in the apps (`POST /vault/credentials` with `doctorId`), for this organisation only. Replaces the list; `[]` takes it away from everybody. Answers the list, like `GET /me/vault/colleagues`. Recorded in the audit log (`account.vault_delegates_changed`).',
+        bearer: true,
+        body: {
+            example: { userIds: ['1d2e…'] },
+            fields: [['userIds', 'uuid[]', 'required, at most 500, active members of the organisation']]
+        },
+        response: { status: 200, example: [{ userId: '1d2e…', name: 'Sara Secretariaat', allowed: true }] },
+        errors: [
+            BAD_REQUEST,
+            ...VAULT_ACCESS,
+            [403, 'oidc.VAULT_NOT_ALLOWED', 'not a doctor in this organisation'],
+            [404, 'oidc.MEMBER_NOT_FOUND', 'not an active member of the organisation']
+        ]
+    },
+    {
         method: 'POST',
         path: '/vault/credentials',
         tag: 'eHealth vault',
         summary:
-            'For an app that calls eHealth for a doctor (server to server, never from a browser): the certificate and its password in the clear. Three things must be true at once. **The app proves itself**: Basic authentication with its `client_id` and `client_secret`; the app must be confidential and sell a product that needs the vault (`requiresVault` on the product, linked to the app by its `product`). **The doctor is logged in to that very app**: the body holds an access token issued to that app (its `client_id` claim must match), so a leaked secret alone gives nothing; the token also says the organisation. **The doctor may use it**: an active member with profession `doctor` of an active organisation (or a superadmin), with a licence for the product of the app (a seat, a running demo, or a superadmin). Limited per IP address and per app (`OIDC_LOGIN_RATE_LIMIT` a minute). Never cached (`Cache-Control: no-store`): keep the file and the password in memory only, and do not log them. Each fetch is in the audit log (`account.vault_retrieved`, with the app and the thumbprint, never the password).',
+            'For an app that calls eHealth for a doctor (server to server, never from a browser): the certificate and its password in the clear. Three things must be true at once. **The app proves itself**: Basic authentication with its `client_id` and `client_secret`; the app must be confidential and sell a product that needs the vault (`requiresVault` on the product, linked to the app by its `product`). **The doctor is logged in to that very app**: the body holds an access token issued to that app (its `client_id` claim must match), so a leaked secret alone gives nothing; the token also says the organisation. **The doctor may use it**: an active member with profession `doctor` of an active organisation (or a superadmin), or with `doctorId` a colleague whom that doctor chose (`PUT /me/vault/colleagues`, the certificate of the doctor, only in that organisation), with a licence for the product of the app (a seat, a running demo, or a superadmin). Limited per IP address and per app (`OIDC_LOGIN_RATE_LIMIT` a minute). Never cached (`Cache-Control: no-store`): keep the file and the password in memory only, and do not log them. Each fetch is in the audit log (`account.vault_retrieved` of the doctor, with the app, the thumbprint and `onBehalfOf`, never the password).',
         basic: '$CLIENT_ID',
         body: {
-            example: { accessToken: 'eyJhbGciOiJFUzI1NiIs…' },
-            fields: [['accessToken', 'string', 'required, the access token of the doctor, issued to this app']]
+            example: { accessToken: 'eyJhbGciOiJFUzI1NiIs…', doctorId: '6f1c2a8e-3b4d-4e5f-9a7b-1c2d3e4f5a6b' },
+            fields: [
+                ['accessToken', 'string', 'required, the access token of the logged in account, issued to this app'],
+                [
+                    'doctorId',
+                    'uuid',
+                    'optional, the certificate of this doctor of the organisation, who chose the account on /vault (the secretariat); without: the own certificate'
+                ]
+            ]
         },
         response: {
             status: 200,
@@ -3527,6 +3574,25 @@ export const endpoints = ({ port = 4000 } = {}) => [
             [409, 'oidc.VAULT_EXPIRED'],
             TOO_MANY
         ]
+    },
+    {
+        method: 'POST',
+        path: '/vault/doctors',
+        tag: 'eHealth vault',
+        summary:
+            'For an app (server to server, like `POST /vault/credentials`): the doctors whose certificate the logged in account may use. Itself when it is a doctor (`self`), and the doctors of the organisation of the token who chose it (`PUT /me/vault/colleagues`). `ready`: certificate and password are there. Same Basic authentication, product and licence checks; never cached.',
+        basic: '$CLIENT_ID',
+        body: {
+            example: { accessToken: 'eyJhbGciOiJFUzI1NiIs…' },
+            fields: [
+                ['accessToken', 'string', 'required, the access token of the logged in account, issued to this app']
+            ]
+        },
+        response: {
+            status: 200,
+            example: [{ id: '6f1c2a8e-…', name: 'Dr. An Peeters', email: 'an@example.com', self: false, ready: true }]
+        },
+        errors: [BAD_REQUEST, [401, 'oidc.VAULT_APP_UNAUTHORIZED'], [403, 'oidc.VAULT_APP_NOT_ALLOWED'], TOO_MANY]
     },
     // ---------------------------------------------------------------- the sessions of the own account
     {

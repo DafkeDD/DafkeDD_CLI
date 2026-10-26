@@ -332,7 +332,13 @@ export const PORTAL_MESSAGES = {
             noAccessText:
                 'The eHealth Vault is only available to users with the role Doctor. Contact your practice administrator to request access.',
             requiredRole: 'Required role: Doctor',
-            gdpr: 'GDPR protected'
+            gdpr: 'GDPR protected',
+            colleaguesTitle: 'Who may use my certificate',
+            colleaguesText:
+                'Colleagues of your organisation you choose here (the secretariat, for example) may use your certificate in the apps, for this organisation only. You can take it away at any time.',
+            noColleagues: 'There are no other members in your organisation yet.',
+            colleaguesCount: '{count} chosen',
+            colleaguesSaved: 'Colleagues saved'
         },
         Profile: {
             title: 'Profile',
@@ -1301,7 +1307,13 @@ export const PORTAL_MESSAGES = {
             noAccessText:
                 'De eHealth Vault is enkel toegankelijk voor gebruikers met de rol Arts. Neem contact op met de praktijkbeheerder om toegang aan te vragen.',
             requiredRole: 'Vereiste rol: Arts',
-            gdpr: 'GDPR-beveiligd'
+            gdpr: 'GDPR-beveiligd',
+            colleaguesTitle: 'Wie mag mijn certificaat gebruiken',
+            colleaguesText:
+                'Collega’s van je organisatie die je hier kiest (bv. het secretariaat) mogen je certificaat gebruiken in de apps, enkel voor deze organisatie. Je kan het altijd weer intrekken.',
+            noColleagues: 'Er zijn nog geen andere leden in je organisatie.',
+            colleaguesCount: '{count} gekozen',
+            colleaguesSaved: 'Collega’s bewaard'
         },
         Profile: {
             title: 'Profiel',
@@ -2278,7 +2290,13 @@ export const PORTAL_MESSAGES = {
             noAccessText:
                 'L’eHealth Vault est uniquement accessible aux utilisateurs ayant le rôle Médecin. Contactez l’administrateur de votre cabinet pour demander l’accès.',
             requiredRole: 'Rôle requis : Médecin',
-            gdpr: 'Protégé par le RGPD'
+            gdpr: 'Protégé par le RGPD',
+            colleaguesTitle: 'Qui peut utiliser mon certificat',
+            colleaguesText:
+                'Les collègues de votre organisation que vous choisissez ici (le secrétariat, par exemple) peuvent utiliser votre certificat dans les apps, uniquement pour cette organisation. Vous pouvez le retirer à tout moment.',
+            noColleagues: 'Il n’y a pas encore d’autres membres dans votre organisation.',
+            colleaguesCount: '{count} choisi(s)',
+            colleaguesSaved: 'Collègues enregistrés'
         },
         Profile: {
             title: 'Profil',
@@ -3257,7 +3275,13 @@ export const PORTAL_MESSAGES = {
             noAccessText:
                 'Der eHealth Vault ist nur für Benutzer mit der Rolle Arzt zugänglich. Wende dich an den Administrator deiner Praxis, um Zugriff zu beantragen.',
             requiredRole: 'Erforderliche Rolle: Arzt',
-            gdpr: 'DSGVO-geschützt'
+            gdpr: 'DSGVO-geschützt',
+            colleaguesTitle: 'Wer darf mein Zertifikat verwenden',
+            colleaguesText:
+                'Kollegen deiner Organisation, die du hier wählst (zum Beispiel das Sekretariat), dürfen dein Zertifikat in den Apps verwenden, nur für diese Organisation. Du kannst es jederzeit wieder entziehen.',
+            noColleagues: 'Es gibt noch keine anderen Mitglieder in deiner Organisation.',
+            colleaguesCount: '{count} gewählt',
+            colleaguesSaved: 'Kollegen gespeichert'
         },
         Profile: {
             title: 'Profil',

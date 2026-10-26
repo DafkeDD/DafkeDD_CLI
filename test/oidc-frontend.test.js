@@ -389,7 +389,7 @@ test('the Pasport design: one layout, the shell around every page and the login 
     const linked = oidcFrontendFiles({ linked: true, appName: 'Planner' })
     const appShell = linked['src/components/shell/app-shell.tsx']
     assert.match(appShell, /APP_NAV\.map/)
-    assert.match(appShell, /ACCOUNT_URL \+ path/)
+    assert.match(appShell, /security: ACCOUNT_URL \+ '\/security'/)
     assert.match(appShell, /if \(!session\) return <LoginRedirect \/>/)
     assert.match(linked['src/components/shell/shell-view.tsx'], /<PortalBell accountUrl=\{accountUrl\}/)
     assert.match(linked['src/components/shell/shell-view.tsx'], /<PortalShell\b/)

@@ -64,4 +64,33 @@ export class PgVaultStore implements VaultStore {
     async delete(userId: string) {
         return (await this.query('DELETE FROM user_vault WHERE user_id = $1 RETURNING 1', [userId])).length === 1
     }
+
+    async listDelegates(ownerId: string, tenantId: string) {
+        const rows = await this.query<{ id: string }>(
+            'SELECT delegate_id AS id FROM vault_delegates WHERE owner_id = $1 AND tenant_id = $2 ORDER BY created_at',
+            [ownerId, tenantId]
+        )
+        return rows.map(row => row.id)
+    }
+
+    async setDelegates(ownerId: string, tenantId: string, delegateIds: string[]) {
+        await this.database.ready()
+        await this.database.transaction(async db => {
+            await db.query('DELETE FROM vault_delegates WHERE owner_id = $1 AND tenant_id = $2', [ownerId, tenantId])
+            for (const id of new Set(delegateIds))
+                if (id !== ownerId)
+                    await db.query(
+                        'INSERT INTO vault_delegates (tenant_id, owner_id, delegate_id) VALUES ($1, $2, $3)',
+                        [tenantId, ownerId, id]
+                    )
+        })
+    }
+
+    async ownersFor(delegateId: string, tenantId: string) {
+        const rows = await this.query<{ id: string }>(
+            'SELECT owner_id AS id FROM vault_delegates WHERE delegate_id = $1 AND tenant_id = $2',
+            [delegateId, tenantId]
+        )
+        return rows.map(row => row.id)
+    }
 }

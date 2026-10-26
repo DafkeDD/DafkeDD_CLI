@@ -10,7 +10,7 @@ import {
     ApiUnprocessableEntityResponse
 } from '@nestjs/swagger'
 import { Access, Auth, type AuthContext } from '../access/access.js'
-import { VaultPasswordDto, VaultUploadDto } from './vault.dto.js'
+import { VaultColleaguesDto, VaultPasswordDto, VaultUploadDto } from './vault.dto.js'
 import { VaultService } from './vault.service.js'
 
 const STATUS =
@@ -54,6 +54,29 @@ export class VaultController {
     @ApiUnprocessableEntityResponse({ description: 'oidc.VAULT_WRONG_PASSWORD' })
     password(@Auth() auth: AuthContext, @Body() body: VaultPasswordDto) {
         return this.vault.setPassword(auth, body.password)
+    }
+
+    @Get('colleagues')
+    @ApiOperation({
+        summary:
+            'The colleagues of my organisation, and who of them may use my certificate in the apps (the secretariat)'
+    })
+    @ApiOkResponse({ description: '[{ userId, name, email, profession, allowed }]' })
+    @ApiForbiddenResponse({ description: 'oidc.VAULT_NOT_ALLOWED: not a doctor in this organisation' })
+    colleagues(@Auth() auth: AuthContext) {
+        return this.vault.colleagues(auth)
+    }
+
+    @Put('colleagues')
+    @ApiOperation({
+        summary:
+            'Who of my organisation may use my certificate in the apps: replaces the list ([] nobody), for this organisation only'
+    })
+    @ApiOkResponse({ description: '[{ userId, name, email, profession, allowed }]' })
+    @ApiForbiddenResponse({ description: 'oidc.VAULT_NOT_ALLOWED' })
+    @ApiNotFoundResponse({ description: 'oidc.MEMBER_NOT_FOUND: not a member of this organisation' })
+    setColleagues(@Auth() auth: AuthContext, @Body() body: VaultColleaguesDto) {
+        return this.vault.setColleagues(auth, body.userIds)
     }
 
     @Delete()

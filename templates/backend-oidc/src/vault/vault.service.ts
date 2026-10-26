@@ -167,6 +167,66 @@ export class VaultService {
         }
     }
 
+    // ---------------------------------------------------------------- colleagues who use the certificate
+
+    /**
+     * The colleagues of the organisation of the token (active members, never the doctor itself), and whether each may
+     * use the certificate of this doctor in the apps (`allowed`). Only for a doctor there.
+     */
+    async colleagues(viewer: VaultViewer) {
+        await this.assertAllowed(viewer)
+        if (!viewer.tenantId) return []
+        const [members, delegates] = await Promise.all([
+            this.oidc.listMembers(viewer.tenantId),
+            this.store.listDelegates(viewer.userId, viewer.tenantId)
+        ])
+        const chosen = new Set(delegates)
+        return members
+            .filter(member => member.userId !== viewer.userId && member.status === 'active')
+            .map(member => ({
+                userId: member.userId,
+                name: member.name,
+                email: member.email,
+                profession: member.profession,
+                allowed: chosen.has(member.userId)
+            }))
+    }
+
+    /**
+     * The doctor chooses who may use the certificate in the apps (the secretariat): members of the organisation of the
+     * token only, for that organisation only. Replaces the list; [] takes it away from everybody.
+     */
+    async setColleagues(viewer: VaultViewer, userIds: string[]) {
+        await this.assertAllowed(viewer)
+        if (!viewer.tenantId) throw new AppException('oidc.VAULT_NOT_ALLOWED', HttpStatus.FORBIDDEN)
+        const members = new Set(
+            (await this.oidc.listMembers(viewer.tenantId))
+                .filter(member => member.status === 'active' && member.userId !== viewer.userId)
+                .map(member => member.userId)
+        )
+        const unknown = userIds.find(id => !members.has(id))
+        if (unknown) throw new AppException('oidc.MEMBER_NOT_FOUND', HttpStatus.NOT_FOUND)
+        const unique = [...new Set(userIds)]
+        await this.store.setDelegates(viewer.userId, viewer.tenantId, unique)
+        await this.audit.record('account.vault_delegates_changed', {
+            tenantId: viewer.tenantId,
+            actorId: viewer.userId,
+            target: { type: 'user', id: viewer.userId },
+            details: { colleagues: unique.length }
+        })
+        return this.colleagues(viewer)
+    }
+
+    /** May `delegateId` use the certificate of `ownerId` in this organisation (the doctor chose it)? */
+    async delegated(ownerId: string, delegateId: string, tenantId: string): Promise<boolean> {
+        return (await this.store.listDelegates(ownerId, tenantId)).includes(delegateId)
+    }
+
+    /** The doctors of this organisation who let this account use their certificate. */
+    ownersFor(delegateId: string, tenantId: string): Promise<string[]> {
+        return this.store.ownersFor(delegateId, tenantId)
+    }
+
     /** Removes the certificate and its password (always allowed: it is the own data of the account). */
     async remove(viewer: VaultViewer) {
         if (await this.store.delete(viewer.userId))
