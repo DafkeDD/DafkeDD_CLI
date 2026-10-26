@@ -719,6 +719,18 @@ git switch developer
 
 ## Changelog
 
+- **0.53.2**: the eID is required for the accounts of Google and Microsoft too.
+    - With `OIDC_EID_REQUIRED` on, an account that logs in with Google, Microsoft or another OpenID Connect server must
+      read its eID once as well, also with `OIDC_EXTERNAL_ONLY=true` (before, that setting turned the eID off
+      completely). The eID is then no way to log in, but it can be read to link it.
+- **0.53.1**: logging in with Google and Microsoft.
+    - Microsoft Entra ID for every organisation:
+      `OIDC_EXTERNAL_ISSUER=https://login.microsoftonline.com/organizations/v2.0` works (its discovery says
+      `{tenantid}`; the ID token must carry the issuer of the organisation in its `tid`).
+    - Microsoft sends no `email_verified`: its optional claim `xms_edov` (the organisation verified the domain) now
+      counts as a verified address, so the first login with Microsoft is no longer refused.
+    - The docs and `.env` explain step by step what to register in the Google Cloud console and in Microsoft Entra (the
+      redirect URI `/oidc/external/callback`, the client id and secret, the optional claims).
 - **0.53.0**: after logging in, my apps; the vault only for doctors; the eID asked for clearly; `demo:clear`.
     - A login at the portal itself now lands on **My apps** (`/apps`, first in the rail): the apps the user may open (an
       own licence or a running demo), to click through in the same tab. Without any it says what to do: discover apps,

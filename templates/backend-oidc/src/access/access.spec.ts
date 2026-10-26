@@ -119,5 +119,7 @@ describe('OidcConfig.eidRequired', () => {
         expect(required({})).toBe(false)
         expect(required({ OIDC_EID: 'on', OIDC_EID_REQUIRED: 'off' })).toBe(false)
         expect(required({ OIDC_EID: 'test', OIDC_EID_REQUIRED: 'on' })).toBe(true)
+        // Also for the accounts of Google or Microsoft, also when only they log in
+        expect(required({ OIDC_EID: 'on', OIDC_EXTERNAL_ONLY: 'true' })).toBe(true)
     })
 })

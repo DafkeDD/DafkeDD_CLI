@@ -1,5 +1,5 @@
 import { constants, generateKeyPairSync, type KeyObject, sign } from 'node:crypto'
-import { allowedUrl } from './external.service.js'
+import { allowedUrl, issuerMatches, tenantTemplate } from './external.service.js'
 import { importJwks, verifyExternalJwt } from './external-jwt.js'
 
 const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url')
@@ -84,5 +84,33 @@ describe('ID tokens of another OpenID Connect server', () => {
         // In production only https, also on this computer
         expect(allowedUrl('http://localhost:8080/realms/demo', true)).toBe(false)
         expect(allowedUrl('https://login.example.com', true)).toBe(true)
+    })
+})
+
+describe('Microsoft Entra ID for every organisation ({tenantid} in the issuer)', () => {
+    const template = 'https://login.microsoftonline.com/{tenantid}/v2.0'
+    const tid = '72f988bf-86f1-41af-91ab-2d7cd011db47'
+
+    it('accepts the template only for the configured organizations or common issuer of the same host', () => {
+        expect(tenantTemplate(template, 'https://login.microsoftonline.com/organizations/v2.0')).toBe(true)
+        expect(tenantTemplate(template, 'https://login.microsoftonline.com/common/v2.0')).toBe(true)
+        expect(tenantTemplate(template, 'https://evil.example.com/organizations/v2.0')).toBe(false)
+        expect(tenantTemplate(template, 'https://login.microsoftonline.com/other/v2.0')).toBe(false)
+        expect(tenantTemplate('https://accounts.google.com', 'https://accounts.google.com')).toBe(false)
+    })
+
+    it('wants the issuer of the organisation the token names itself', () => {
+        expect(issuerMatches(template, { iss: `https://login.microsoftonline.com/${tid}/v2.0`, tid })).toBe(true)
+        expect(issuerMatches(template, { iss: `https://login.microsoftonline.com/${tid}/v2.0` })).toBe(false)
+        expect(issuerMatches(template, { iss: 'https://login.microsoftonline.com/x/v2.0', tid: 'x' })).toBe(false)
+        expect(
+            issuerMatches(template, {
+                iss: `https://login.microsoftonline.com/${tid}/v2.0`,
+                tid: '00000000-0000-4000-8000-000000000000'
+            })
+        ).toBe(false)
+        // Without a template: exactly the issuer of the discovery document
+        expect(issuerMatches('https://accounts.google.com', { iss: 'https://accounts.google.com' })).toBe(true)
+        expect(issuerMatches('https://accounts.google.com', { iss: 'https://accounts.google.com/' })).toBe(false)
     })
 })

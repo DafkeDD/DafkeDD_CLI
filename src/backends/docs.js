@@ -372,7 +372,11 @@ export function backendReadme({
                   ['OIDC_EXTERNAL_CLIENT_ID', '(empty)', 'Our client id at that server'],
                   ['OIDC_EXTERNAL_CLIENT_SECRET', '(empty)', 'Our secret there; empty: a public client (PKCE)'],
                   ['OIDC_EXTERNAL_NAME', '(its host name)', 'The button: "Log in with <name>"'],
-                  ['OIDC_EXTERNAL_ONLY', 'false', '`true`: only that server (no password, eID or registration here)'],
+                  [
+                      'OIDC_EXTERNAL_ONLY',
+                      'false',
+                      '`true`: only that server (no password, eID login or registration here; `OIDC_EID_REQUIRED` still asks the eID once)'
+                  ],
                   [
                       'OIDC_EXTERNAL_MFA',
                       'external',
@@ -931,12 +935,30 @@ licences, sessions, two-step verification and the audit log stay in this server,
 2. Fill in \`OIDC_EXTERNAL_ISSUER\` (exactly the \`issuer\` of its \`/.well-known/openid-configuration\`, for example
    \`https://login.microsoftonline.com/<tenant-id>/v2.0\` or \`https://keycloak.example.com/realms/<realm>\`),
    \`OIDC_EXTERNAL_CLIENT_ID\`, and \`OIDC_EXTERNAL_CLIENT_SECRET\` for a confidential client (empty: a public client,
-   PKCE only). \`OIDC_EXTERNAL_ONLY=true\` leaves only that button (no password, no eID, no registration here).
+   PKCE only). \`OIDC_EXTERNAL_ONLY=true\` leaves only that button (no password, no eID login, no registration here).
+   With \`OIDC_EID_REQUIRED\` on, an account of that server must still read its eID once, like every account: until
+   it is linked the portal and every app show the eID screen (\`oidc.EID_REQUIRED\`).
 3. **Several servers at once** (Google and Microsoft, for example): the same settings with a number,
    \`OIDC_EXTERNAL_2_ISSUER\`, \`OIDC_EXTERNAL_2_CLIENT_ID\`, \`OIDC_EXTERNAL_2_CLIENT_SECRET\`, \`OIDC_EXTERNAL_2_NAME\`,
    \`OIDC_EXTERNAL_2_MFA\` (up to \`OIDC_EXTERNAL_9_*\`). The login page shows a button for each; the form sends
    \`provider\` (its number, 1 for \`OIDC_EXTERNAL_*\`). An account can be linked to each of them
    (\`user_identifiers\` types \`external\`, \`external_2\`, ...; migration 22). \`OIDC_EXTERNAL_ONLY\` is for all of them.
+
+**Google, step by step.** In the Google Cloud console: APIs & Services → OAuth consent screen (the name and logo users
+see, scopes \`openid\`, \`email\`, \`profile\`), then Credentials → Create credentials → OAuth client ID → Web
+application, with the redirect URI above (\`http://localhost\` is allowed for development). Then
+\`OIDC_EXTERNAL_ISSUER=https://accounts.google.com\`, the client id and its secret, \`OIDC_EXTERNAL_NAME=Google\`.
+
+**Microsoft, step by step.** In the Microsoft Entra admin center: App registrations → New registration, "Accounts in
+any organizational directory" (every organisation) or only your own, platform **Web** with the redirect URI above. Then
+Certificates & secrets → a client secret, and Token configuration → optional claims of the **ID token**: \`email\`
+and \`xms_edov\` (Entra has no \`email_verified\`: \`xms_edov\` says the organisation verified the domain of the
+address; without it the first login is refused with \`oidc.EXTERNAL_EMAIL_UNVERIFIED\`). The issuer:
+\`https://login.microsoftonline.com/organizations/v2.0\` for every organisation (its discovery says \`{tenantid}\`: the
+ID token must then carry the issuer of the organisation it names in \`tid\`), or
+\`https://login.microsoftonline.com/<directory id>/v2.0\` for one. For example as the second server:
+\`OIDC_EXTERNAL_2_ISSUER\`, \`OIDC_EXTERNAL_2_CLIENT_ID\`, \`OIDC_EXTERNAL_2_CLIENT_SECRET\`,
+\`OIDC_EXTERNAL_2_NAME=Microsoft\`. In production the redirect URI is the https address of the API.
 
 | Step | What happens |
 | --- | --- |

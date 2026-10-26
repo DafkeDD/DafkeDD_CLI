@@ -310,10 +310,10 @@ for (const name of names) {
             await script(backend, 'test:db')
             const demo = variant.backend.answers.oidc?.demo
             if (demo) {
-                log(`${name}: demo data (npm run demo:data, again, --remove, again)`)
+                log(`${name}: demo data (npm run demo:data, again, demo:clear, again)`)
                 if (!demo.added) throw new Error(`The demo data was not added during the install: ${demo.error ?? ''}`)
-                for (const args of [[], ['--remove'], []])
-                    await run('npm', ['run', 'demo:data', ...(args.length ? ['--', ...args] : [])], { cwd: backend })
+                for (const script of ['demo:data', 'demo:data', 'demo:clear', 'demo:data'])
+                    await run('npm', ['run', script], { cwd: backend })
             }
         } else if (flags['require-db']) {
             throw new Error('The database cannot be reached (VERIFY_DB_*), and --require-db was given')

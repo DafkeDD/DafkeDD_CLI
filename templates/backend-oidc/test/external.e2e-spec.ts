@@ -13,8 +13,10 @@ import { MemoryBillingStore } from '../src/billing/store/memory-billing.store.js
 import { DatabaseService } from '../src/database/database.service.js'
 import { MailService } from '../src/mail/mail.service.js'
 import { pkceChallenge } from '../src/oidc/crypto.js'
+import { EidService } from '../src/oidc/eid.service.js'
 import { signJwt, thumbprint } from '../src/oidc/jose.js'
 import { LoginLimiter } from '../src/oidc/login-limiter.js'
+import { OidcConfig } from '../src/oidc/oidc.config.js'
 import { OidcModule } from '../src/oidc/oidc.module.js'
 import { hashPassword } from '../src/oidc/password.js'
 import { MemoryOidcStore } from '../src/oidc/store/memory-oidc.store.js'
@@ -42,6 +44,8 @@ interface Person {
     sub: string
     email?: string
     email_verified?: boolean
+    /** Microsoft Entra ID: the organisation verified the domain of the address (instead of email_verified). */
+    xms_edov?: boolean
     name?: string
     amr?: string[]
 }
@@ -355,6 +359,34 @@ describe('Logging in at another OpenID Connect server (e2e)', () => {
             .set('Accept', 'application/json')
             .expect(200)
         expect(pending.body).toMatchObject({ pending: true, password: true, external: { name: 'Contoso' } })
+    })
+
+    it('Microsoft: xms_edov counts as a verified address (Entra ID sends no email_verified)', async () => {
+        const { back } = await viaOther({ sub: 'entra-erin', email: 'erin@example.com', xms_edov: true, name: 'Erin' })
+        // A new account (no organisation yet), with its address verified
+        expect(back.status).toBe(403)
+        expect(await store.findUserByEmail('erin@example.com')).toMatchObject({ emailVerified: true })
+    })
+
+    it('OIDC_EID_REQUIRED: an account of the other server must also read its eID, also with OIDC_EXTERNAL_ONLY', async () => {
+        process.env.OIDC_EID = 'test'
+        process.env.OIDC_EID_REQUIRED = 'on'
+        process.env.OIDC_EXTERNAL_ONLY = 'true'
+        try {
+            const config = app.get(OidcConfig)
+            expect(config.eidRequired).toBe(true)
+            const eid = app.get(EidService)
+            // The card can be read to link it, but it is no way to log in when only the other servers log in
+            expect(eid.enabled).toBe(true)
+            expect(eid.loginEnabled).toBe(false)
+            const login = await begin()
+            const json = await http().get(login.page).set('Cookie', login.cookie).set('Accept', 'application/json')
+            expect(json.body).toMatchObject({ eid: false, password: false })
+        } finally {
+            process.env.OIDC_EID_REQUIRED = 'off'
+            delete process.env.OIDC_EID
+            delete process.env.OIDC_EXTERNAL_ONLY
+        }
     })
 
     it('never takes over an account with an email address that is not verified, there or here', async () => {

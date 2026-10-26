@@ -165,10 +165,11 @@ export class OidcConfig {
      * Every account must have its Belgian eID linked (OIDC_EID_REQUIRED): `on` or `off`; by default on when the eID
      * login is on (OIDC_EID on or test). Then registration is only possible with the eID, a new account of an invitation
      * reads the eID first, and the API refuses (403 oidc.EID_REQUIRED) an account without one, except the routes to link
-     * it (@EidOptional) and superadmins. Never when there is no eID login (OIDC_EID=off or OIDC_EXTERNAL_ONLY).
+     * it (@EidOptional) and superadmins. Never without the eID (OIDC_EID=off); also for the accounts of Google or Microsoft.
      */
     get eidRequired(): boolean {
-        if (this.eid === 'off' || this.externalOnly) return false
+        // Also for the accounts of other OpenID Connect servers (Google, Microsoft), also with OIDC_EXTERNAL_ONLY
+        if (this.eid === 'off') return false
         const value = this.config.get<string>('OIDC_EID_REQUIRED')
         return value ? value !== 'off' : true
     }

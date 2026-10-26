@@ -116,7 +116,8 @@ export class ExternalService {
         const { issuer } = this.settings(id)
         try {
             const value = await this.get<Discovery>(issuer.replace(/\/+$/, '') + '/.well-known/openid-configuration')
-            if (value.issuer !== issuer) throw new Error(`The discovery document is of ${value.issuer}, not ${issuer}`)
+            if (value.issuer !== issuer && !tenantTemplate(value.issuer, issuer))
+                throw new Error(`The discovery document is of ${value.issuer}, not ${issuer}`)
             for (const url of [value.authorization_endpoint, value.token_endpoint, value.jwks_uri])
                 if (typeof url !== 'string' || !allowedUrl(url, this.config.production))
                     throw new Error('Incomplete discovery document')
@@ -212,11 +213,14 @@ export class ExternalService {
             (typeof claims.preferred_username === 'string' ? claims.preferred_username : null) ||
             email
         return {
-            issuer: metadata.issuer,
+            // The issuer of the token: the same as the discovery document, or (Microsoft for every organisation) the
+            // issuer of the organisation of the user
+            issuer: String(claims.iss),
             subject: String(claims.sub),
             email,
-            // Some servers send "true" as text
-            emailVerified: claims.email_verified === true || claims.email_verified === 'true',
+            // Some servers send "true" as text. Microsoft Entra ID has no email_verified: its optional claim xms_edov
+            // (the domain of the address is verified by its organisation) counts instead
+            emailVerified: [claims.email_verified, claims.xms_edov].some(value => value === true || value === 'true'),
             name: name ? name.slice(0, 100) : null,
             amr: Array.isArray(claims.amr)
                 ? claims.amr.filter((value): value is string => typeof value === 'string')
@@ -238,7 +242,7 @@ export class ExternalService {
         const claims = verified.payload
         const now = Math.floor(Date.now() / 1000)
         const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud]
-        if (claims.iss !== (await this.metadata(id)).issuer) throw new JoseError('Wrong issuer')
+        if (!issuerMatches((await this.metadata(id)).issuer, claims)) throw new JoseError('Wrong issuer')
         if (!audiences.includes(settings.clientId)) throw new JoseError('Wrong audience')
         // With several audiences, the authorized party must be us (OpenID Connect Core 3.1.3.7)
         if ((audiences.length > 1 || claims.azp !== undefined) && claims.azp !== settings.clientId)
@@ -255,4 +259,31 @@ export class ExternalService {
     warn(reason: string, id = '1') {
         this.logger.warn(`Login at the other server failed${id === '1' ? '' : ` (${clean(id)})`}: ` + reason)
     }
+}
+
+/**
+ * Microsoft Entra ID for every organisation (issuer .../organizations/v2.0 or .../common/v2.0): its discovery document
+ * says `https://login.microsoftonline.com/{tenantid}/v2.0`. That is only accepted for the configured issuer it stands
+ * for (`{tenantid}` = organizations or common), never for another host.
+ */
+export function tenantTemplate(discovered: string, configured: string): boolean {
+    if (!discovered.includes('{tenantid}')) return false
+    const [before, after] = discovered.split('{tenantid}')
+    if (!configured.startsWith(before) || !configured.endsWith(after)) return false
+    return /^(?:organizations|common)$/.test(configured.slice(before.length, configured.length - after.length))
+}
+
+/**
+ * The issuer of an ID token is that of the discovery document; with `{tenantid}` in it (Microsoft for every
+ * organisation) the token must be of the organisation it names itself (`tid`, a GUID) and nothing else.
+ */
+export function issuerMatches(discovered: string, claims: { iss?: unknown; tid?: unknown }): boolean {
+    if (typeof claims.iss !== 'string') return false
+    if (!discovered.includes('{tenantid}')) return claims.iss === discovered
+    if (
+        typeof claims.tid !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(claims.tid)
+    )
+        return false
+    return claims.iss === discovered.replace('{tenantid}', claims.tid)
 }

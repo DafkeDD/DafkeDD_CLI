@@ -63,13 +63,25 @@ export class EidService {
             throw new Error('OIDC_EID=test also trusts test cards: never use it in production. Use OIDC_EID=on.')
     }
 
-    /** OIDC_EID on or test, and not only the other OpenID Connect server (OIDC_EXTERNAL_ONLY). */
+    /**
+     * OIDC_EID on or test: the card can be read (linking it to an account, an invitation). Also with
+     * OIDC_EXTERNAL_ONLY: an account of Google or Microsoft must still read its eID when OIDC_EID_REQUIRED is on.
+     */
     get enabled(): boolean {
-        return this.config.eid !== 'off' && !this.config.externalOnly
+        return this.config.eid !== 'off'
+    }
+
+    /** Logging in with the eID: not when only the other OpenID Connect servers log in (OIDC_EXTERNAL_ONLY). */
+    get loginEnabled(): boolean {
+        return this.enabled && !this.config.externalOnly
     }
 
     assertEnabled(): void {
         if (!this.enabled) throw new AppException('oidc.EID_DISABLED', HttpStatus.NOT_FOUND)
+    }
+
+    assertLoginEnabled(): void {
+        if (!this.loginEnabled) throw new AppException('oidc.EID_DISABLED', HttpStatus.NOT_FOUND)
     }
 
     /** A nonce for the bridge: 32 random bytes in base64 (44 characters). */

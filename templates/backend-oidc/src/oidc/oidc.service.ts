@@ -592,7 +592,7 @@ export class OidcService implements OnApplicationBootstrap, OnModuleDestroy {
         const found = await this.findInteraction(id, sealed)
         if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
             return { kind: 'expired' }
-        this.eid.assertEnabled()
+        this.eid.assertLoginEnabled()
         const nonce = this.eid.nonce()
         const next = { ...found.interaction, eidNonce: nonce }
         return { kind: 'eid-challenge', nonce, cookie: { id, value: this.seal(next) } }
@@ -606,7 +606,7 @@ export class OidcService implements OnApplicationBootstrap, OnModuleDestroy {
         const found = await this.findInteraction(id, sealed)
         if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
             return { kind: 'expired' }
-        this.eid.assertEnabled()
+        this.eid.assertLoginEnabled()
         const { client } = found
         // The nonce works once: the cookie forgets it, whatever the outcome
         const interaction = { ...found.interaction, eidNonce: null }
