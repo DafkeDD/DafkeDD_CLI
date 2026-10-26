@@ -1,4 +1,4 @@
-import { confirm } from '@inquirer/prompts'
+import { confirm } from './prompts.js'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'

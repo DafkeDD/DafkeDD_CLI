@@ -838,5 +838,16 @@ ALTER TABLE ${users}
 -- An app of the catalogue has the code of its product as client id: it sells that product from now on
 UPDATE oidc_clients c SET product = c.client_id FROM license_products p WHERE p.code = c.client_id AND c.product IS NULL;
 `
+    },
+    {
+        id: 22,
+        name: 'several other OpenID Connect servers',
+        sql: `
+-- An account can be linked to several other servers at once (Google and Microsoft): one kind per server, external for
+-- the first (OIDC_EXTERNAL_*) and external_<n> for OIDC_EXTERNAL_<n>_*
+ALTER TABLE user_identifiers DROP CONSTRAINT user_identifiers_type_check;
+ALTER TABLE user_identifiers ADD CONSTRAINT user_identifiers_type_check
+  CHECK (type IN ('eid', 'external') OR type ~ '^external_[2-9]$');
+`
     }
 ]

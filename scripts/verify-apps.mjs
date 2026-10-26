@@ -80,7 +80,7 @@ const VARIANTS = {
             masterKey: randomBytes(32).toString('hex'),
             loginUi: true,
             appName: 'verify',
-            external: null,
+            externals: [],
             // The demo data too (the question of the CLI): added during the install, checked below
             demo: { password: randomBytes(12).toString('base64url') }
         }

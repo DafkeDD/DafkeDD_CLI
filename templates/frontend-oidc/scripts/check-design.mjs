@@ -120,7 +120,8 @@ for (const file of pages) {
         ? publicPaths.some(pub => route === pub || route.startsWith(pub + '/'))
         : /AuthLayout|AuthPage/.test(content)
     if (isPublic) {
-        if (!/AuthLayout|AuthPage/.test(content))
+        // A public page that only sends the browser on (an old link) shows nothing itself
+        if (!/AuthLayout|AuthPage/.test(content) && !REDIRECT.test(read(file)))
             problems.push(
                 `${rel(file)}: a public page (${route}) shows the login screen of the design: AuthLayout (src/components/pasport/auth-layout.tsx).`
             )

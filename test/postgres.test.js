@@ -14,6 +14,7 @@ import {
     DEFAULT_PORT
 } from '../src/databases/postgres.js'
 import { databases } from '../src/databases/index.js'
+import { dockerVolume, dockerVolumeExists, emptyDatabase, localTables } from '../src/databases/existing.js'
 
 const DB = {
     id: 'postgres',
@@ -66,6 +67,146 @@ test('validators accept good values and reject bad ones', () => {
     assert.notEqual(validators.password("it's"), true, 'a single quote would break the .env value')
 })
 
+/** No database of earlier (no Docker volume, no tables): the CLI asks nothing more. */
+const FRESH = { localTables: async () => null, dockerVolumeExists: async () => false }
+
+test('a local database of earlier with tables: another name, empty it, or keep it', async () => {
+    const answers = {
+        'Hoe draait PostgreSQL?': 'local',
+        'Host van de database:': 'localhost',
+        'Poort van de database:': '5432',
+        'Gebruikersnaam:': 'postgres',
+        'Wachtwoord:': 'secret',
+        'Databasenaam:': 'shop'
+    }
+    // The first name has tables, the second one not: "another name" asks the name again (default with _2)
+    const seen = []
+    const inspect = {
+        localTables: async db => (seen.push(db.database), db.database === 'shop' ? 12 : null),
+        dockerVolumeExists: async () => false
+    }
+    let names = 0
+    const rename = scripted({ ...answers })
+    const base = rename.prompts
+    const prompts = {
+        ...base,
+        input: async config => {
+            if (config.message === 'Databasenaam:' && names++ === 1) {
+                assert.equal(config.default, 'shop_2')
+                return 'shop_new'
+            }
+            return base.input(config)
+        },
+        select: async config => {
+            if (config.message.includes('bestaat al')) {
+                assert.match(config.message, /"shop"/)
+                assert.deepEqual(
+                    config.choices.map(choice => choice.value),
+                    ['rename', 'reset', 'keep']
+                )
+                return 'rename'
+            }
+            return base.select(config)
+        }
+    }
+    const renamed = await postgres.ask({ projectDir: '/work/shop', prompts, inspect })
+    assert.equal(renamed.database, 'shop_new')
+    assert.ok(!('reset' in renamed))
+    assert.deepEqual(seen, ['shop', 'shop_new'])
+
+    for (const [choice, reset] of [
+        ['reset', true],
+        ['keep', false]
+    ]) {
+        const { prompts: base2 } = scripted({ ...answers })
+        const result = await postgres.ask({
+            projectDir: '/work/shop',
+            prompts: {
+                ...base2,
+                select: async config => (config.message.includes('bestaat al') ? choice : base2.select(config))
+            },
+            inspect
+        })
+        assert.equal(result.database, 'shop')
+        assert.equal(result.reset === true, reset, choice)
+    }
+})
+
+test('a Docker volume of earlier: empty it or keep it (no other name: the volume belongs to the project)', async () => {
+    const { prompts: base } = scripted({
+        'Hoe draait PostgreSQL?': 'docker',
+        'Poort op je machine:': '5432',
+        'Gebruikersnaam:': 'postgres',
+        'Wachtwoord:': 'x',
+        'Databasenaam:': 'shop'
+    })
+    let question = null
+    const result = await postgres.ask({
+        projectDir: '/work/shop',
+        prompts: {
+            ...base,
+            select: async config => {
+                if (!config.message.includes('bestaat al')) return base.select(config)
+                question = config
+                return 'reset'
+            }
+        },
+        inspect: { localTables: async () => null, dockerVolumeExists: async project => project === 'shop' }
+    })
+    assert.deepEqual(
+        question.choices.map(choice => choice.value),
+        ['reset', 'keep']
+    )
+    assert.equal(result.reset, true)
+})
+
+test('existing.js: the tables of a database, the Docker volume, and emptying both', async () => {
+    const queries = []
+    const fake = (tables, { fail = false } = {}) =>
+        class {
+            constructor(config) {
+                this.config = config
+            }
+            async connect() {
+                if (fail) throw Object.assign(new Error('no db'), { code: '3D000' })
+            }
+            async query(sql) {
+                queries.push([this.config.database, sql])
+                return { rows: [{ tables }] }
+            }
+            async end() {}
+        }
+    const db = {
+        mode: 'local',
+        host: 'localhost',
+        port: 5432,
+        user: 'u',
+        password: 'p',
+        database: 'shop',
+        project: 'shop'
+    }
+    assert.equal(await localTables(db, { Client: fake(3) }), 3)
+    assert.equal(await localTables(db, { Client: fake(3, { fail: true }) }), null, 'not there: nothing to warn about')
+    await emptyDatabase(db, { Client: fake(0) })
+    assert.deepEqual(queries.at(-1), ['postgres', 'DROP DATABASE IF EXISTS "shop" WITH (FORCE)'])
+
+    const calls = []
+    const exec = async (cmd, args) => {
+        calls.push([cmd, ...args].join(' '))
+        if (args[0] === 'volume' && args[1] === 'inspect' && args[2] !== 'shop_postgres-data') throw new Error('none')
+        return args[0] === 'ps' ? 'abc\ndef\n' : ''
+    }
+    assert.equal(dockerVolume('shop'), 'shop_postgres-data')
+    assert.equal(await dockerVolumeExists('shop', { exec }), true)
+    assert.equal(await dockerVolumeExists('other', { exec }), false)
+    await emptyDatabase({ ...db, mode: 'docker' }, { exec })
+    assert.deepEqual(calls.slice(-3), [
+        'docker ps -aq --filter label=com.docker.compose.project=shop',
+        'docker rm -f abc def',
+        'docker volume rm -f shop_postgres-data'
+    ])
+})
+
 test('ask (Docker): asks mode, port, user, password and database; the host is always localhost', async () => {
     const { prompts, asked } = scripted({
         'Hoe draait PostgreSQL?': 'docker',
@@ -74,7 +215,7 @@ test('ask (Docker): asks mode, port, user, password and database; the host is al
         'Wachtwoord:': 'secret',
         'Databasenaam:': 'demo'
     })
-    const result = await postgres.ask({ projectDir: '/work/My Project', prompts })
+    const result = await postgres.ask({ projectDir: '/work/My Project', prompts, inspect: FRESH })
     assert.deepEqual(result, {
         id: 'postgres',
         mode: 'docker',
@@ -97,7 +238,7 @@ test('ask (local): also asks for the host', async () => {
         'Wachtwoord:': 'secret',
         'Databasenaam:': 'demo'
     })
-    const result = await postgres.ask({ projectDir: '/work/demo', prompts })
+    const result = await postgres.ask({ projectDir: '/work/demo', prompts, inspect: FRESH })
     assert.equal(result.host, 'db.local')
     assert.equal(result.mode, 'local')
     assert.equal(result.port, 5432)
@@ -111,7 +252,7 @@ test('ask has sensible defaults (port 5432, user postgres, database named after 
         'Wachtwoord:': 'x',
         'Databasenaam:': 'my_project'
     })
-    await postgres.ask({ projectDir: '/work/My Project', prompts })
+    await postgres.ask({ projectDir: '/work/My Project', prompts, inspect: FRESH })
     const byMessage = Object.fromEntries(asked.map(q => [q.message, q]))
     assert.equal(byMessage['Poort op je machine:'].default, String(DEFAULT_PORT))
     assert.equal(byMessage['Gebruikersnaam:'].default, 'postgres')

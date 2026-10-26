@@ -456,15 +456,33 @@ describe('Apps on /admin (e2e)', () => {
         const code = (await http().post('/admin/clients/shop.app/link-code').set(bearer(tokens.root))).body.code
         const linked = await http().post('/oidc/link').send({ code }).expect(200)
         expect(linked.body.client.product).toBe('shop')
+        // The roles of the app (the developer sends them with a link code): only with a licence in the tokens
+        const rolesCode = (await http().post('/admin/clients/shop.app/link-code').set(bearer(tokens.root))).body.code
+        await http()
+            .post('/oidc/link/roles')
+            .send({
+                code: rolesCode,
+                roles: [
+                    {
+                        key: 'editor',
+                        names: { en: 'Editor', nl: 'Bewerker', fr: 'Éditeur', de: 'Bearbeiter' },
+                        default: true
+                    }
+                ]
+            })
+            .expect(200)
 
         // A login never starts a demo by itself: Alice has none until she asks it
         const shop = { id: 'shop.app', redirect: APP.redirectUris[0]! }
         const none = await login('alice@example.com', shop)
         expect(claims(none.access_token).license).toEqual({ product: 'shop', status: 'none' })
+        expect(claims(none.access_token).roles).toEqual([])
         await http().post('/me/licenses/shop/trial').set(bearer(tokens.alice)).expect(201)
         const first = await login('alice@example.com', shop)
         const license = claims(first.access_token).license as { product: string; status: string; ends_at: number }
         expect(license).toMatchObject({ product: 'shop', status: 'trial' })
+        // A demo: the default roles of the app
+        expect(claims(first.access_token).roles).toEqual(['editor'])
         expect(license.ends_at * 1000).toBeGreaterThan(Date.now() + 13 * 24 * 60 * 60 * 1000)
         expect(audit.events.findLast(event => event.action === 'licences.trial_started')).toMatchObject({
             tenantId,
@@ -480,6 +498,7 @@ describe('Apps on /admin (e2e)', () => {
             .send({ grant_type: 'refresh_token', refresh_token: first.refresh_token, client_id: 'shop.app' })
             .expect(200)
         expect(claims(refreshed.body.access_token).license).toEqual({ product: 'shop', status: 'none' })
+        expect(claims(refreshed.body.access_token).roles).toEqual([])
         // A seat: the admin gives Alice one of the free seats a superadmin granted
         await http()
             .post(`/admin/tenants/${tenantId}/grants`)
@@ -492,6 +511,7 @@ describe('Apps on /admin (e2e)', () => {
             .expect(response => expect([200, 201]).toContain(response.status))
         const seat = await login('alice@example.com', shop)
         expect(claims(seat.access_token).license).toEqual({ product: 'shop', status: 'seat' })
+        expect(claims(seat.access_token).roles).toEqual(['editor'])
         // Superadmins always
         const root = await login('root@example.com', shop, { tenant_hint: tenantId })
         expect(claims(root.access_token).license).toEqual({ product: 'shop', status: 'superadmin' })
@@ -713,7 +733,8 @@ describe('Apps on /admin (e2e)', () => {
         expect(token1.roles).toEqual(['viewer'])
         expect(token1.license).toEqual({ product: 'agenda', status: 'seat' })
 
-        // No free seat left: Hank still joins (without a seat) and the default roles; the answer says so
+        // No free seat left: Hank still joins (without a seat); the answer says so. Without a licence his tokens carry
+        // no roles yet (his default roles come with a seat or a demo)
         await invite({ email: 'hank@example.com', apps: [{ clientId: 'agenda.app', seat: true }] }).expect(202)
         const hankToken = /token=([^\s&]+)/.exec(
             outbox.filter(item => item.to === 'hank@example.com').at(-1)?.text ?? ''
@@ -726,7 +747,11 @@ describe('Apps on /admin (e2e)', () => {
             { clientId: 'agenda.app', name: 'Agenda', url: 'https://planner.partner.com', seat: false }
         ])
         const hankClaims = claims((await login('hank@example.com', agenda)).access_token)
-        expect(hankClaims.roles).toEqual(['editor'])
+        expect(hankClaims.roles).toEqual([])
         expect(hankClaims.license).toEqual({ product: 'agenda', status: 'none' })
+        // A demo (the token first: two requests at once share the test server)
+        const hankAccess = (await login('hank@example.com')).access_token
+        await http().post('/me/licenses/agenda/trial').set(bearer(hankAccess)).expect(201)
+        expect(claims((await login('hank@example.com', agenda)).access_token).roles).toEqual(['editor'])
     })
 })

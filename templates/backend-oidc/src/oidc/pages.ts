@@ -73,8 +73,8 @@ export function loginPage(
         error?: string
         /** Email and password (false: only the other OpenID Connect server). */
         password?: boolean
-        /** "Log in with <name>": another OpenID Connect server. */
-        external?: { name: string; action: string }
+        /** "Log in with <name>": other OpenID Connect servers (one button each). */
+        externals?: { id: string; name: string; action: string }[]
     }
 ) {
     const error = options.error ? `<p class="error" role="alert">${escapeHtml(options.error)}</p>` : ''
@@ -86,11 +86,15 @@ export function loginPage(
               `<label>${escapeHtml(t('oidc.EMAIL'))}<input name="email" type="email" autocomplete="username" required maxlength="254" value="${escapeHtml(options.email ?? '')}"></label>` +
               `<label>${escapeHtml(t('oidc.PASSWORD'))}<input name="password" type="password" autocomplete="current-password" required maxlength="128"></label>` +
               `<button type="submit">${escapeHtml(t('oidc.LOGIN_SUBMIT'))}</button></form>`
-    const external = options.external
-        ? `<form method="post" action="${escapeHtml(options.external.action)}">` +
-          `<input type="hidden" name="csrf" value="${escapeHtml(options.csrf)}">` +
-          `<button type="submit"${options.password === false ? '' : ' class="choice"'}>${escapeHtml(t('oidc.EXTERNAL_LOGIN', { name: options.external.name }))}</button></form>`
-        : ''
+    const external = (options.externals ?? [])
+        .map(
+            item =>
+                `<form method="post" action="${escapeHtml(item.action)}">` +
+                `<input type="hidden" name="csrf" value="${escapeHtml(options.csrf)}">` +
+                `<input type="hidden" name="provider" value="${escapeHtml(item.id)}">` +
+                `<button type="submit"${options.password === false ? '' : ' class="choice"'}>${escapeHtml(t('oidc.EXTERNAL_LOGIN', { name: item.name }))}</button></form>`
+        )
+        .join('')
     return {
         title: t('oidc.LOGIN_TITLE'),
         body:

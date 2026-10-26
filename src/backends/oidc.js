@@ -910,7 +910,7 @@ export async function ask({ projectDir = process.cwd(), prompts, hasFrontend = f
         loginUi: hasFrontend,
         // The name of the application in emails
         appName: basename(projectDir),
-        external: await askExternal(prompts),
+        externals: await askExternals(prompts),
         demo: await askDemo(prompts)
     }
 }
@@ -938,20 +938,11 @@ export function validIssuer(value) {
     return 'Geef de https-URL van de issuer op (bv. https://login.microsoftonline.com/<tenant-id>/v2.0)'
 }
 
-/**
- * Logging in at another OpenID Connect server (Microsoft Entra ID, Keycloak, Google, ...): its issuer, our client
- * there and the text of the button. Null when not wanted.
- */
-async function askExternal(prompts) {
-    const how = await prompts.select({
-        message: 'Ook inloggen via een bestaande OIDC-server (Entra ID, Keycloak, Google, ...)?',
-        choices: [
-            { name: 'Nee', value: 'no' },
-            { name: 'Ja, naast e-mail en wachtwoord', value: 'also' },
-            { name: 'Ja, enkel via die server', value: 'only' }
-        ]
-    })
-    if (how !== 'also' && how !== 'only') return null
+/** The most other OpenID Connect servers (OIDC_EXTERNAL_* and OIDC_EXTERNAL_2_* to _9_*). */
+export const MAX_EXTERNALS = 9
+
+/** The questions about one other server: its issuer, our client there and the text of the button. */
+async function askOneExternal(prompts, only) {
     const issuer = (
         await prompts.input({
             message: 'Issuer-URL van die server (exact zoals "issuer" in zijn /.well-known/openid-configuration):',
@@ -974,16 +965,55 @@ async function askExternal(prompts) {
             default: new URL(issuer).hostname
         })
     ).trim()
-    return {
-        issuer,
-        clientId,
-        clientSecret: secret.trim(),
-        name: name || new URL(issuer).hostname,
-        only: how === 'only'
+    return { issuer, clientId, clientSecret: secret.trim(), name: name || new URL(issuer).hostname, only }
+}
+
+/**
+ * Logging in at other OpenID Connect servers (Microsoft Entra ID, Keycloak, Google, ...), one or several (Google and
+ * Microsoft at the same time): per server its issuer, our client there and the text of the button. Empty when not
+ * wanted.
+ */
+async function askExternals(prompts) {
+    const how = await prompts.select({
+        message: 'Ook inloggen via een bestaande OIDC-server (Entra ID, Keycloak, Google, ...)?',
+        choices: [
+            { name: 'Nee', value: 'no' },
+            { name: 'Ja, naast e-mail en wachtwoord', value: 'also' },
+            { name: 'Ja, enkel via die server(s)', value: 'only' }
+        ]
+    })
+    if (how !== 'also' && how !== 'only') return []
+    const externals = [await askOneExternal(prompts, how === 'only')]
+    while (externals.length < MAX_EXTERNALS) {
+        const more = await prompts.confirm({
+            message: `Nog een server toevoegen (bv. Google én Microsoft)? Nu: ${externals.map(item => item.name).join(', ')}`,
+            default: false
+        })
+        if (!more) break
+        externals.push(await askOneExternal(prompts, how === 'only'))
     }
+    return externals
 }
 
 const quote = value => `'${String(value).replaceAll("'", '')}'`
+
+/** The other servers of the answers (`external`: one, of before several were possible). */
+export const externalsOf = oidc => oidc?.externals ?? (oidc?.external ? [oidc.external] : [])
+
+/** The .env lines of one other server (`prefix`: OIDC_EXTERNAL_ or OIDC_EXTERNAL_<n>_). */
+function externalLines(prefix, item, example) {
+    return [
+        `${prefix}ISSUER=${item?.issuer ?? ''}`,
+        `${prefix}CLIENT_ID=${item?.clientId ?? ''}`,
+        '# Empty: a public client (PKCE only); otherwise the secret of our client there (client_secret_basic)',
+        `${prefix}CLIENT_SECRET=${example ? '' : quote(item?.clientSecret ?? '')}`,
+        '# The text of the button: "Log in with <name>"',
+        `${prefix}NAME=${quote(item?.name ?? '')}`,
+        '# Does a login there count as two-step verification? external: when it says so (amr "mfa"); trust: always;',
+        '# local: never (our own code follows)',
+        `${prefix}MFA=external`
+    ]
+}
 
 /** .env lines. With `example: true` (for .env.example) secrets are replaced by placeholders. */
 export function envLines(oidc, { port, example = false }) {
@@ -1031,17 +1061,13 @@ export function envLines(oidc, { port, example = false }) {
         '',
         '# Log in at another OpenID Connect server (Microsoft Entra ID, Keycloak, Google, ...). Register this redirect URI',
         `# there: http://localhost:${port}${ISSUER_PATH}/external/callback. Leave OIDC_EXTERNAL_ISSUER empty to turn it off.`,
-        `OIDC_EXTERNAL_ISSUER=${oidc.external?.issuer ?? ''}`,
-        `OIDC_EXTERNAL_CLIENT_ID=${oidc.external?.clientId ?? ''}`,
-        '# Empty: a public client (PKCE only); otherwise the secret of our client there (client_secret_basic)',
-        `OIDC_EXTERNAL_CLIENT_SECRET=${example ? '' : quote(oidc.external?.clientSecret ?? '')}`,
-        '# The text of the button: "Log in with <name>"',
-        `OIDC_EXTERNAL_NAME=${quote(oidc.external?.name ?? '')}`,
-        '# true: only that server (no password, no eID, no registration here)',
-        `OIDC_EXTERNAL_ONLY=${oidc.external?.only ? 'true' : 'false'}`,
-        '# Does a login there count as two-step verification? external: when it says so (amr "mfa"); trust: always;',
-        '# local: never (our own code follows)',
-        'OIDC_EXTERNAL_MFA=external',
+        '# More servers at the same time (Google and Microsoft): OIDC_EXTERNAL_2_* to OIDC_EXTERNAL_9_*, the same settings.',
+        ...externalLines('OIDC_EXTERNAL_', externalsOf(oidc)[0], example),
+        '# true: only these servers (no password, no eID, no registration here)',
+        `OIDC_EXTERNAL_ONLY=${externalsOf(oidc)[0]?.only ? 'true' : 'false'}`,
+        ...externalsOf(oidc)
+            .slice(1)
+            .flatMap((item, index) => ['', ...externalLines(`OIDC_EXTERNAL_${index + 2}_`, item, example)]),
         '',
         '# Accounts: links in emails go to the pages of the frontend (/verify-email, /reset-password, /invite)',
         `APP_URL=${APP_URL}`,

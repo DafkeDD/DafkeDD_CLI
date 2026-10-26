@@ -1,4 +1,4 @@
-import { checkbox, input, password, select } from '@inquirer/prompts'
+import { checkbox, input, password, select } from '../prompts.js'
 import { databases } from '../databases/index.js'
 import { slugify } from '../databases/postgres.js'
 import { APP_PORT, DEFAULT_ROLES } from './app.js'
@@ -81,6 +81,8 @@ export async function useLinkCode({ server, code, port, fetchImpl = fetch }) {
  */
 export const linked = {
     id: 'linked',
+    // Not a backend choice of its own: NestJS → a database → "Inloggen via je bestaande Pasport OIDC-server"
+    hidden: true,
     label: 'App voor een bestaande DafkeDD OIDC-server (koppelcode)',
     description:
         'Eigen NestJS-API en database (multi-tenant) voor een app die inlogt via je bestaande server (koppelcode via /admin → Apps)',

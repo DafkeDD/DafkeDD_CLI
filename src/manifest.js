@@ -5,6 +5,7 @@ import path from 'node:path'
 import { projectClaudeFiles } from './claude.js'
 import { cloudFiles } from './cloud.js'
 import { designFiles } from './frontends/oidc.js'
+import { isSite, siteDesignFiles } from './frontends/site.js'
 
 /**
  * The manifest of a generated project (`.dafkedd.json`, committed): the version of the CLI, what the project is made
@@ -48,7 +49,9 @@ export function managedFiles(project) {
         // The Pasport design of the frontend of the login server and of every linked app
         ...(project.frontend && (project.kind === 'pasport' || project.kind === 'app')
             ? designFiles({ linked: project.kind === 'app' })
-            : {})
+            : {}),
+        // The same design in every other frontend (a site, an API, the simple login)
+        ...(isSite(project) ? siteDesignFiles(project) : {})
     }
 }
 

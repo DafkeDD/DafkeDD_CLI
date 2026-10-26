@@ -1,5 +1,6 @@
 import { basename } from 'node:path'
-import { input, password, select } from '@inquirer/prompts'
+import { input, password, select } from '../prompts.js'
+import { dockerVolumeExists, localTables } from './existing.js'
 
 export const DEFAULT_PORT = 5432
 export const DOCKER_IMAGE = 'postgres:17-alpine'
@@ -57,6 +58,8 @@ export function envLines(db, { showPassword = true } = {}) {
         `DATABASE_USER=${db.user}`,
         `DATABASE_PASSWORD=${quoteEnv(showPassword ? db.password : 'change-me')}`,
         `DATABASE_NAME=${db.database}`,
+        '# The most connections of this API to PostgreSQL at the same time (on Google Cloud: per instance, set by Terraform)',
+        'DATABASE_MAX_CONNECTIONS=20',
         ''
     ].join('\n')
 }
@@ -103,6 +106,8 @@ export class DatabaseService implements OnModuleDestroy {
       user: config.get<string>('DATABASE_USER'),
       password: config.get<string>('DATABASE_PASSWORD'),
       database: config.get<string>('DATABASE_NAME'),
+      // DATABASE_MAX_CONNECTIONS: what this instance may use of the connections of the server (Cloud SQL has few)
+      max: Number(config.get<string>('DATABASE_MAX_CONNECTIONS')) || 10,
       connectionTimeoutMillis: 3000,
     });
     // An idle client that loses its connection must not crash the process.
@@ -269,7 +274,12 @@ export const postgres = {
      * `prompts` can be injected (used by the tests). `shared`: the database of an app linked to a login server, on
      * the PostgreSQL server of that login server (no Docker question; `shared.name` is the default database name).
      */
-    async ask({ projectDir = process.cwd(), prompts = { input, password, select }, shared = null } = {}) {
+    async ask({
+        projectDir = process.cwd(),
+        prompts = { input, password, select },
+        shared = null,
+        inspect = { localTables, dockerVolumeExists }
+    } = {}) {
         const project = slugify(basename(projectDir))
         const mode = shared
             ? 'local'
@@ -322,17 +332,68 @@ export const postgres = {
             mask: '*',
             validate: validators.password
         })
-        const database = (
-            await prompts.input({
-                message: shared
-                    ? 'Naam van de eigen database van deze app (niet die van de login server):'
-                    : 'Databasenaam:',
-                default: (shared?.name ?? project).slice(0, 50),
-                validate: validators.databaseName
-            })
-        ).trim()
+        const askName = async fallback =>
+            (
+                await prompts.input({
+                    message: shared
+                        ? 'Naam van de eigen database van deze app (niet die van de login server):'
+                        : 'Databasenaam:',
+                    default: fallback.slice(0, 50),
+                    validate: validators.databaseName
+                })
+            ).trim()
+        let database = await askName(shared?.name ?? project)
 
-        return { id: 'postgres', mode, host, port, user, password: secret, database, project }
+        // A database of earlier with the same name (a project made before): its data and passwords would stay
+        let reset = false
+        for (;;) {
+            const db = { mode, host, port, user, password: secret, database, project }
+            const earlier =
+                mode === 'docker'
+                    ? await inspect.dockerVolumeExists(project)
+                    : ((await inspect.localTables(db)) ?? 0) > 0
+            if (!earlier) break
+            const what = await prompts.select({
+                message:
+                    mode === 'docker'
+                        ? `De Docker-database van "${project}" bestaat al (van een vorige installatie). Wat wil je doen?`
+                        : `Database "${database}" bestaat al en bevat tabellen (van een vorige installatie). Wat wil je doen?`,
+                choices: [
+                    ...(mode === 'local' ? [{ name: 'Een andere databasenaam kiezen', value: 'rename' }] : []),
+                    {
+                        name: 'Leegmaken en opnieuw beginnen',
+                        value: 'reset',
+                        description: 'Alle data van toen wordt verwijderd, ook de gebruikers en hun wachtwoorden'
+                    },
+                    {
+                        name: 'Behouden',
+                        value: 'keep',
+                        description:
+                            mode === 'docker'
+                                ? 'De data van toen blijft, ook de superadmin, zijn wachtwoord en het databasewachtwoord van toen'
+                                : 'De data van toen blijft, ook de superadmin en zijn wachtwoord van toen'
+                    }
+                ]
+            })
+            if (what === 'rename') {
+                database = await askName(`${database}_2`)
+                continue
+            }
+            reset = what === 'reset'
+            break
+        }
+
+        return {
+            id: 'postgres',
+            mode,
+            host,
+            port,
+            user,
+            password: secret,
+            database,
+            project,
+            ...(reset ? { reset } : {})
+        }
     },
 
     /** Everything the NestJS backend needs for this database. */

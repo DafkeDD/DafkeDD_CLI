@@ -176,7 +176,8 @@ export interface Invitation {
  * A way to recognise a person outside email and password. `eid`: the Belgian eID; `valueHash` is an HMAC of the national
  * register number (key derived from OIDC_MASTER_KEY), so the number itself is never stored.
  */
-export type IdentifierType = 'eid' | 'external'
+/** eid, or the login at another server: `external` (the first), `external_<n>` (OIDC_EXTERNAL_<n>_*). */
+export type IdentifierType = 'eid' | 'external' | `external_${number}`
 
 export interface UserIdentifier {
     type: IdentifierType

@@ -231,7 +231,7 @@ test('ask: only the superadmin email (no organisation), a random temporary passw
     }
     const answers = await oidc.ask({ projectDir: '/projects/acme', prompts })
     assert.equal(asked.length, 2, 'the email and the demo data')
-    assert.equal(answers.external, null)
+    assert.deepEqual(answers.externals, [])
     assert.match(asked[1].message, /Demodata/)
     assert.equal(answers.demo, null)
     assert.match(asked[0].message, /superadmin/)

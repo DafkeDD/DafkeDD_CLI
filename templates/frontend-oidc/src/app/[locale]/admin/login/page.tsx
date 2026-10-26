@@ -1,24 +1,9 @@
-import { Suspense } from 'react'
-import { setRequestLocale } from 'next-intl/server'
-import { StartLogin } from '@/components/shell/start-login'
+import { redirect } from 'next/navigation'
 
-/** /admin/login: the same login server, shown in the dark superadmin style; afterwards the platform (/admin). */
-export default async function AdminLoginPage({
-    params,
-    searchParams
-}: {
-    params: Promise<{ locale: string }>
-    searchParams: Promise<{ error?: string }>
-}) {
-    setRequestLocale((await params).locale)
-    return (
-        <Suspense fallback={null}>
-            <Content searchParams={searchParams} />
-        </Suspense>
-    )
-}
-
-async function Content({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-    const { error } = await searchParams
-    return <StartLogin admin error={error} />
+/**
+ * One login screen for everybody: /admin/login (an old link) is /login, back to the platform afterwards. A superadmin
+ * chooses "Platform management" after the login, or one of its organisations.
+ */
+export default function AdminLoginPage() {
+    redirect('/login?returnTo=%2Fadmin')
 }

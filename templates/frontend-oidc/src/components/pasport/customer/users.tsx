@@ -90,18 +90,23 @@ function LicenseChips({ keys, apps, t }: { keys: string[]; apps: CatalogApp[]; t
     )
 }
 
-/** The roles of an app as checkboxes (the developer of the app defines them; their names per language). */
+/**
+ * The roles of an app as checkboxes (the developer of the app defines them; their names per language). Without a
+ * licence (`licensed` false) they are kept, but the app only gets them with a seat or a running demo: said under them.
+ */
 function RolePicker({
     roles,
     value,
     onToggle,
     disabled,
+    licensed = true,
     t
 }: {
     roles: AppRole[]
     value: string[]
     onToggle: (key: string) => void
     disabled: boolean
+    licensed?: boolean
     t: T
 }) {
     const locale = useLocale() as keyof AppRole['names']
@@ -123,6 +128,11 @@ function RolePicker({
                     {role.names[locale] ?? role.names.en}
                 </label>
             ))}
+            {!licensed && (
+                <span className='hint' style={{ flexBasis: '100%', margin: 0 }}>
+                    {t('rolesNeedLicense')}
+                </span>
+            )}
         </div>
     )
 }
@@ -185,6 +195,7 @@ function LicensePicker({
                             value={roles.value(a.code)}
                             onToggle={key => roles.onToggle(a.code, key)}
                             disabled={false}
+                            licensed={value.includes(a.code)}
                             t={t}
                         />
                     )}

@@ -117,7 +117,7 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | --- | --- |
 | \`/api/auth/login\` | Starts a login: state, nonce and a PKCE verifier go into an encrypted cookie, then to the login server |
 | \`/login\` | Without a login request: starts one at once and comes back to \`?returnTo=\` (\`?error=\` stays and shows why the last login failed). Every page that is not public sends a browser without a session here (\`src/proxy.ts\`) |
-| \`/admin/login\` | The same login in the dark superadmin style; afterwards the platform (\`/admin\`) |
+| \`/admin/login\` | An old link: \`/login\`, afterwards the platform (\`/admin\`). There is one login screen for everybody; a superadmin chooses "Platform management" after the login |
 | \`/login?interaction=<id>\` | The login screen of the login server, for this frontend and for every app linked to it ("Log in to <app>": eID, passkey, email and password, "Log in with <name>" for another OpenID Connect server, second factor, organisation choice, and "Allow <application>?" for applications of others), shown by this frontend. Back from the other server it goes on where the login is (\`pending\`); \`&error=EXTERNAL_...\` shows why that login failed |
 | \`/api/auth/callback\` | Back from the login server: checks state and \`iss\`, exchanges the code, verifies the ID token |
 | \`/api/auth/backchannel-logout\` | POST from the login server (back-channel logout): a signed logout token when a session ended there; every browser of that session is logged out here at its next request |
@@ -396,7 +396,7 @@ next to it (\`<file>.dafkedd-new\`).
 | \`src/components/pasport/widgets.tsx\` | \`Modal\`, \`OtpInput\` (the six boxes of a code), \`QrCode\`, \`Sparkline\`, \`BarChart\`, \`LineChart\`, \`Donut\` |
 | \`src/components/pasport/page-state.tsx\` | \`Loading\`, \`LoadError\`, \`Notice\`, \`ClientRedirect\` |
 | \`src/components/pasport/toast.tsx\` | \`useToast\` (a message at the bottom right), \`ThemeToggle\`, \`LocaleFloat\` |
-| \`src/components/pasport/auth-layout.tsx\` | \`AuthLayout\`: the login screen, the teal panel with the eID card on the left (the dark variant for \`/admin/login\`), the form on the right; only the form on a phone |
+| \`src/components/pasport/auth-layout.tsx\` | \`AuthLayout\`: the login screen (one for everybody), the teal panel with the eID card on the left, the form on the right; only the form on a phone |
 | \`src/components/pasport/shell.tsx\` | \`Shell\`: the rail (collapsible, a drawer on a phone, badges), the topbar (search with ⌘K, the bell with toasts and a chime for tickets, light or dark, the user menu with its pages, the status and the out-of-office reply, the language and log out). The same in every project of the CLI |
 | \`src/components/pasport/portal-shell.tsx\` | \`PortalShell\`: \`Shell\` with the bell, the status and the out-of-office reply of the login server. \`CustomerShell\` and \`AdminShell\` fill it for the portal and the panel; \`useMe()\` is the logged in user inside them |
 | \`src/components/pasport/out-of-office.tsx\`, \`tour.tsx\` | The out-of-office dialog and notice, and the tour of the portal (once per user, again from the user menu) |

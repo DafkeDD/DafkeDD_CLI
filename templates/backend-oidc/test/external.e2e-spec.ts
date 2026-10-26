@@ -411,6 +411,64 @@ describe('Logging in at another OpenID Connect server (e2e)', () => {
         warn.mockRestore()
     })
 
+    it('several other servers at once (OIDC_EXTERNAL_2_*): a button each, an account linked to both', async () => {
+        const second = new OtherServer()
+        await second.start()
+        process.env.OIDC_EXTERNAL_2_ISSUER = second.issuer
+        process.env.OIDC_EXTERNAL_2_CLIENT_ID = CLIENT_ID
+        process.env.OIDC_EXTERNAL_2_CLIENT_SECRET = CLIENT_SECRET
+        process.env.OIDC_EXTERNAL_2_NAME = 'Fabrikam'
+        try {
+            const login = await begin()
+            expect(login.html).toContain('Log in with Contoso')
+            expect(login.html).toContain('Log in with Fabrikam')
+            expect(login.html).toContain('name="provider" value="2"')
+            const json = await http().get(login.page).set('Cookie', login.cookie).set('Accept', 'application/json')
+            expect(json.body.externals).toEqual([
+                { id: '1', name: 'Contoso' },
+                { id: '2', name: 'Fabrikam' }
+            ])
+            // The second button: to the second server
+            const started = await http()
+                .post(login.page + '/external')
+                .set('Cookie', login.cookie)
+                .type('form')
+                .send({ csrf: login.csrf, provider: '2' })
+                .expect(303)
+            const authorize = started.headers.location as string
+            expect(authorize.startsWith(second.issuer + '/authorize')).toBe(true)
+            // Alice is linked to Contoso already: Fabrikam links too (one identifier per server)
+            const query = second.login(authorize, {
+                sub: 'fabrikam-alice',
+                email: 'alice@example.com',
+                email_verified: true,
+                amr: ['pwd', 'mfa']
+            })
+            const back = await http()
+                .get('/oidc/external/callback?' + new URLSearchParams(query).toString())
+                .set('Cookie', cookieOf(started, 'oidc_ext'))
+            expect(back.status).toBe(303)
+            expect(new URL(back.headers.location as string).searchParams.get('code')).toBeTruthy()
+            expect(audit.events.findLast(event => event.action === 'account.external_linked')).toMatchObject({
+                actorId: ids.alice,
+                details: { provider: 'Fabrikam' }
+            })
+            expect(await store.findIdentifier(ids.alice, 'external')).toBeTruthy()
+            expect(await store.findIdentifier(ids.alice, 'external_2')).toBeTruthy()
+            // A server that is not set up: 404
+            await http()
+                .post(login.page + '/external')
+                .set('Cookie', login.cookie)
+                .set('Accept', 'application/json')
+                .send({ csrf: login.csrf, provider: '3' })
+                .expect(404)
+        } finally {
+            for (const name of ['ISSUER', 'CLIENT_ID', 'CLIENT_SECRET', 'NAME'])
+                delete process.env['OIDC_EXTERNAL_2_' + name]
+            second.stop()
+        }
+    })
+
     it('OIDC_EXTERNAL_ONLY: only that server, no password login and no registration here', async () => {
         process.env.OIDC_EXTERNAL_ONLY = 'true'
         try {

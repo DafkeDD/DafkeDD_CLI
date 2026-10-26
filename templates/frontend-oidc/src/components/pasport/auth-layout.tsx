@@ -6,89 +6,9 @@ import { APP_NAME, BRAND } from '@/lib/brand'
 import { LocaleFloat, ThemeToggle } from './toast'
 import { Icon } from './ui'
 
-/** The left half of the login screens: the teal gradient with the eID card (customer) or the dark one (superadmin). */
-function Aside({
-    variant,
-    title,
-    text,
-    eid
-}: {
-    variant: 'customer' | 'admin'
-    title: string
-    text: string
-    eid: boolean
-}) {
+/** The left half of the login screens: the teal gradient with the eID card. */
+function Aside({ title, text, eid }: { title: string; text: string; eid: boolean }) {
     const t = useTranslations('AuthScreen')
-    if (variant === 'admin')
-        return (
-            <div className='auth-aside admin'>
-                <div className='auth-aside-deco' />
-                <div className='auth-grid-lines' />
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 11 }}>
-                    <div className='brand-mark' style={{ background: 'rgba(255,255,255,.14)' }}>
-                        <Icon name='shield' />
-                    </div>
-                    <div className='brand-name' style={{ color: '#fff' }}>
-                        {BRAND}
-                    </div>
-                </div>
-                <div style={{ position: 'relative', maxWidth: 400 }}>
-                    <span className='badge badge-neutral'>
-                        <Icon name='lock' size={12} />
-                        <span style={{ color: 'var(--text-2)' }}>{t('adminArea')}</span>
-                    </span>
-                    <h2
-                        style={{
-                            color: '#fff',
-                            fontSize: 27,
-                            marginTop: 18,
-                            letterSpacing: '-0.025em',
-                            lineHeight: 1.2
-                        }}
-                    >
-                        {title}
-                    </h2>
-                    <p style={{ color: 'rgba(255,255,255,.7)', marginTop: 12, fontSize: 14.5 }}>{text}</p>
-                    <div style={{ display: 'grid', gap: 12, marginTop: 28 }}>
-                        {(
-                            [
-                                ['building', t('adminPoint1')],
-                                ['box', t('adminPoint2')],
-                                ['ticket', t('adminPoint3')]
-                            ] as const
-                        ).map(([ic, label]) => (
-                            <div
-                                key={label}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 12,
-                                    color: 'rgba(255,255,255,.85)',
-                                    fontSize: 14
-                                }}
-                            >
-                                <span
-                                    style={{
-                                        width: 32,
-                                        height: 32,
-                                        borderRadius: 8,
-                                        background: 'rgba(255,255,255,.1)',
-                                        display: 'grid',
-                                        placeItems: 'center'
-                                    }}
-                                >
-                                    <Icon name={ic} size={16} />
-                                </span>
-                                {label}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-                <div style={{ position: 'relative', color: 'rgba(255,255,255,.5)', fontSize: 12 }}>
-                    {t('adminFooter')}
-                </div>
-            </div>
-        )
     return (
         <div className='auth-aside'>
             <div className='auth-aside-deco' />
@@ -145,24 +65,16 @@ function Aside({
     )
 }
 
-/** The superadmin variant of the login screen is chosen by /admin/login (a short-lived cookie, pp-login-ui). */
-export function loginVariant(): 'customer' | 'admin' {
-    if (typeof document === 'undefined') return 'customer'
-    return document.cookie.split('; ').includes('pp-login-ui=admin') ? 'admin' : 'customer'
-}
-
 /**
  * The login, registration and account screens: brand panel left, the form right (the panel disappears on small
  * screens), with the floating theme and language buttons.
  */
 export function AuthLayout({
-    variant = 'customer',
     asideTitle,
     asideText,
     eid = true,
     children
 }: {
-    variant?: 'customer' | 'admin'
     asideTitle?: string
     asideText?: string
     /** The eID card in the panel (the login server); a project with its own login shows only the text. */
@@ -174,30 +86,16 @@ export function AuthLayout({
     return (
         <>
             <div className='auth-wrap'>
-                <Aside
-                    variant={variant}
-                    title={asideTitle ?? (variant === 'admin' ? t('adminTitle') : t('asideTitle'))}
-                    text={asideText ?? (variant === 'admin' ? t('adminText') : t('asideText'))}
-                    eid={eid}
-                />
+                <Aside title={asideTitle ?? t('asideTitle')} text={asideText ?? t('asideText')} eid={eid} />
                 <div className='auth-main'>
                     <div className='auth-card fade-in'>
                         <div className='auth-logo'>
-                            <div
-                                className='brand-mark'
-                                style={
-                                    variant === 'admin'
-                                        ? { background: 'var(--text)', color: 'var(--surface)' }
-                                        : undefined
-                                }
-                            >
+                            <div className='brand-mark'>
                                 <Icon name='shield' />
                             </div>
                             <div>
                                 <div className='brand-name'>{BRAND}</div>
-                                <div className='brand-sub'>
-                                    {variant === 'admin' ? shell('superadmin') : (APP_NAME ?? shell('customerPortal'))}
-                                </div>
+                                <div className='brand-sub'>{APP_NAME ?? shell('customerPortal')}</div>
                             </div>
                         </div>
                         {children}

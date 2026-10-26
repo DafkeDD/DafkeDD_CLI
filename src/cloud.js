@@ -1,4 +1,4 @@
-import { confirm } from '@inquirer/prompts'
+import { confirm } from './prompts.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
@@ -55,7 +55,9 @@ function backendEnv(project) {
             DATABASE_HOST: '"/cloudsql/${google_sql_database_instance.db.connection_name}"',
             DATABASE_PORT: '"5432"',
             DATABASE_USER: 'google_sql_user.app.name',
-            DATABASE_NAME: 'google_sql_database.app.name'
+            DATABASE_NAME: 'google_sql_database.app.name',
+            // Every instance its share of the connections of Cloud SQL (never more than the server allows)
+            DATABASE_MAX_CONNECTIONS: 'tostring(floor(var.db_max_connections / var.max_instances))'
         })
     if (project.kind === 'pasport')
         Object.assign(env, {
@@ -218,6 +220,12 @@ variable "db_tier" {
   description = "The machine of Cloud SQL (db-f1-micro is the smallest; it only costs while it runs)"
   type        = string
   default     = "db-f1-micro"
+}
+
+variable "db_max_connections" {
+  description = "Connections of the API to Cloud SQL, shared by its instances (db-f1-micro allows 25; a few stay free for Cloud SQL itself). Raise it with a bigger db_tier"
+  type        = number
+  default     = 20
 }
 
 variable "preview" {

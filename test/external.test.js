@@ -51,7 +51,8 @@ test('ask: another OpenID Connect server next to the password, or only that one'
         'Keycloak'
     ])
     const answers = await oidc.ask({ projectDir: '/p/shop', prompts })
-    assert.deepEqual(answers.external, {
+    assert.equal(answers.externals.length, 1)
+    assert.deepEqual(answers.externals[0], {
         // Exactly as typed (some issuers end with a slash, like Auth0)
         issuer: 'https://keycloak.example.com/realms/demo/',
         clientId: 'my-app',
@@ -72,13 +73,58 @@ test('ask: another OpenID Connect server next to the password, or only that one'
 
     const only = promptsFor(['admin@example.com', 'only', 'https://accounts.google.com', 'g-1', 'secret', ''])
     const google = await oidc.ask({ projectDir: '/p/shop', prompts: only.prompts })
-    assert.deepEqual(google.external, {
+    assert.deepEqual(google.externals[0], {
         issuer: 'https://accounts.google.com',
         clientId: 'g-1',
         clientSecret: 'secret',
         name: 'accounts.google.com',
         only: true
     })
+})
+
+test('ask: several servers at once (Google and Microsoft), each with its own client and button', async () => {
+    const answers = [
+        'admin@example.com',
+        'also',
+        'https://accounts.google.com',
+        'g-1',
+        'secret-1',
+        'Google',
+        'https://login.microsoftonline.com/contoso/v2.0',
+        'm-2',
+        'secret-2',
+        'Microsoft'
+    ]
+    const asked = []
+    let more = 0
+    const answer = async config => (asked.push(config), answers.shift())
+    const prompts = {
+        input: answer,
+        select: answer,
+        password: answer,
+        // "Nog een server toevoegen?": yes once, then no (and no demo data)
+        confirm: async config => (asked.push(config), /Nog een server/.test(config.message) ? more++ === 0 : false)
+    }
+    const result = await oidc.ask({ projectDir: '/p/shop', prompts })
+    assert.deepEqual(
+        result.externals.map(item => [item.name, item.clientId, item.only]),
+        [
+            ['Google', 'g-1', false],
+            ['Microsoft', 'm-2', false]
+        ]
+    )
+    assert.ok(asked.some(config => /Nog een server toevoegen.*Google/.test(config.message)))
+    // .env: the first as OIDC_EXTERNAL_*, the second as OIDC_EXTERNAL_2_*
+    const env = oidc.envLines({ ...ANSWERS, externals: result.externals }, { port: 4000 })
+    assert.match(env, /^OIDC_EXTERNAL_ISSUER=https:\/\/accounts\.google\.com$/m)
+    assert.match(env, /^OIDC_EXTERNAL_2_ISSUER=https:\/\/login\.microsoftonline\.com\/contoso\/v2\.0$/m)
+    assert.match(env, /^OIDC_EXTERNAL_2_CLIENT_SECRET='secret-2'$/m)
+    assert.match(env, /^OIDC_EXTERNAL_2_NAME='Microsoft'$/m)
+    assert.ok(
+        !oidc.envLines({ ...ANSWERS, externals: result.externals }, { port: 4000, example: true }).includes('secret-2')
+    )
+    // None: the settings are there, empty
+    assert.match(oidc.envLines({ ...ANSWERS, externals: [] }, { port: 4000 }), /^OIDC_EXTERNAL_ISSUER=$/m)
 })
 
 test('.env: the other server, its secret only in .env, and the redirect URI to register there', () => {
@@ -139,7 +185,9 @@ test('the backend: our own code for the other server, migration 6, the routes an
 
 test('the login page of the frontend: "Log in with ...", only that, and going on after the other server', () => {
     const login = frontend['src/components/oidc-login.tsx']
-    assert.match(login, /submit\('\/external', \{ csrf: state\.csrf \}\)/)
+    assert.match(login, /submit\('\/external', \{ csrf: state\.csrf, provider \}\)/)
+    // A button per server
+    assert.match(login, /state\.externals\.map\(\(external, index\) =>/)
     assert.match(login, /call\('\/resume', \{ csrf: answer\.csrf \}\)/)
     // Only the other server (no password): its button, no email tab
     assert.match(login, /\(tab === 'eid' && firstTab\) \|\| !state\.password \?/)

@@ -1,11 +1,11 @@
 'use client'
 
-import { type FormEvent, type ReactNode, useEffect, useState, useSyncExternalStore } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useEid } from '@dafkedd/eid/react'
 import { Link } from '@/i18n/navigation'
 import { EidBridge, EidPin, type EidToken } from '@/components/eid'
-import { AuthHeading, AuthLayout, Divider, loginVariant } from '@/components/pasport/auth-layout'
+import { AuthHeading, AuthLayout, Divider } from '@/components/pasport/auth-layout'
 import { Badge, Btn, ErrorNote, Field, Icon, Input, OkNote } from '@/components/pasport/ui'
 import { OtpInput, QrSvg } from '@/components/pasport/widgets'
 import { useAccountApi } from '@/lib/account'
@@ -24,9 +24,10 @@ type Login = {
     passkey: boolean
     /** Email and password (false: only the other OpenID Connect server). */
     password: boolean
-    /** "Log in with <name>": another OpenID Connect server (for example itsme®). */
-    external: { name: string } | null
+    /** "Log in with <name>": other OpenID Connect servers (for example itsme®, Google and Microsoft), one button each. */
+    externals: External[]
 }
+type External = { id: string; name: string }
 type State =
     | { step: 'loading' }
     | ({ step: 'login' | 'eid' } & Login)
@@ -54,6 +55,7 @@ type Answer = {
     options?: GetOptions
     password?: boolean
     external?: { name: string } | null
+    externals?: External[]
     pending?: boolean
     nonce?: string
     secret?: string
@@ -136,12 +138,6 @@ export function OidcLogin({
     const t = useTranslations('Oidc')
     const p = useTranslations('AuthScreen')
     const locale = useLocale()
-    // The superadmin style (cookie of /admin/login): only known in the browser
-    const variant = useSyncExternalStore(
-        () => () => undefined,
-        loginVariant,
-        () => 'customer' as const
-    )
     const [state, setState] = useState<State>({ step: 'loading' })
     // Why the login at the other OpenID Connect server did not work (?error= of its callback)
     const [error, setError] = useState<string | null>(() =>
@@ -204,10 +200,12 @@ export function OidcLogin({
                         eid: answer.eid === true,
                         passkey: answer.passkey === true && passkeysSupported(),
                         password: answer.password !== false,
-                        external: answer.external ?? null
+                        // A login server of before several were possible only says `external` (the first)
+                        externals:
+                            answer.externals ?? (answer.external ? [{ id: '1', name: answer.external.name }] : [])
                     }
                     // Without eID, itsme® or passkey there is nothing on the first tab: open the email tab
-                    if (!login.eid && !login.external && !login.passkey) setTab('email')
+                    if (!login.eid && !login.externals.length && !login.passkey) setTab('email')
                     setState({ step: 'login', ...login })
                 } else {
                     setState({ step: 'fatal', message: answer.message ?? t('offline') })
@@ -301,9 +299,9 @@ export function OidcLogin({
     }
 
     /** "Log in with ...": to the other server (the answer is { status: "redirect", location }). */
-    function onExternal() {
+    function onExternal(provider: string) {
         if (state.step !== 'login') return
-        void submit('/external', { csrf: state.csrf })
+        void submit('/external', { csrf: state.csrf, provider })
     }
 
     /** "Log in with a passkey": a challenge, the device signs it (fingerprint, face or PIN), the answer goes back. */
@@ -365,7 +363,7 @@ export function OidcLogin({
         void submit('/mfa', { csrf: state.csrf, code: value })
     }
 
-    const layout = (children: ReactNode) => <AuthLayout variant={variant}>{children}</AuthLayout>
+    const layout = (children: ReactNode) => <AuthLayout>{children}</AuthLayout>
 
     if (state.step === 'loading')
         return layout(
@@ -737,24 +735,20 @@ export function OidcLogin({
         )
 
     // The first screen: eID / itsme® / passkey, or email and password
-    const firstTab = state.eid || !!state.external || state.passkey
-    const externalIcon = state.external && /itsme/i.test(state.external.name) ? 'itsme' : 'globe'
+    const firstTab = state.eid || state.externals.length > 0 || state.passkey
+    const externalIcon = (name: string) => (/itsme/i.test(name) ? 'itsme' : 'globe')
     return layout(
         <>
             <AuthHeading
                 title={
-                    variant === 'admin'
-                        ? p('adminLogin')
-                        : state.clientName && state.clientId !== ownClient
-                          ? t('loginTitleApp', { client: state.clientName })
-                          : p('welcome')
+                    state.clientName && state.clientId !== ownClient
+                        ? t('loginTitleApp', { client: state.clientName })
+                        : p('welcome')
                 }
                 text={
-                    variant === 'admin'
-                        ? p('adminLoginText')
-                        : state.clientName && state.clientId !== ownClient
-                          ? t('loginSubtitle', { client: state.clientName })
-                          : p('welcomeText')
+                    state.clientName && state.clientId !== ownClient
+                        ? t('loginSubtitle', { client: state.clientName })
+                        : p('welcomeText')
                 }
             />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -768,7 +762,9 @@ export function OidcLogin({
                             style={{ flex: 1 }}
                             onClick={() => setTab('eid')}
                         >
-                            {state.external ? p('tabEidItsme') : p('tabEid')}
+                            {state.externals.some(external => /itsme/i.test(external.name))
+                                ? p('tabEidItsme')
+                                : p('tabEid')}
                         </button>
                         <button
                             type='button'
@@ -800,18 +796,19 @@ export function OidcLogin({
                                 {p('loginEid')}
                             </Btn>
                         )}
-                        {state.external && (
+                        {state.externals.map((external, index) => (
                             <Btn
-                                variant={state.eid ? 'secondary' : 'primary'}
+                                key={external.id}
+                                variant={state.eid || index > 0 ? 'secondary' : 'primary'}
                                 size='lg'
                                 className='btn-block'
-                                icon={externalIcon}
+                                icon={externalIcon(external.name)}
                                 disabled={busy}
-                                onClick={onExternal}
+                                onClick={() => onExternal(external.id)}
                             >
-                                {p('loginWith', { name: state.external.name })}
+                                {p('loginWith', { name: external.name })}
                             </Btn>
-                        )}
+                        ))}
                         {state.passkey && (
                             <Btn
                                 variant='secondary'
@@ -894,7 +891,7 @@ export function OidcLogin({
                         </p>
                     </form>
                 )}
-                {state.registration && variant === 'customer' && (
+                {state.registration && (
                     <>
                         <Divider label={t('noAccount')} />
                         <Link href='/register' className='btn btn-ghost btn-lg btn-block'>

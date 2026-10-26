@@ -1,12 +1,19 @@
 import { readFileSync } from 'node:fs'
-import { select } from '@inquirer/prompts'
+import { ANSWERS_FILE, readAnswers, saveAnswers, select, useAnswers } from './prompts.js'
 import pc from 'picocolors'
 import { runSteps } from './progress.js'
 import { frontends } from './frontends/index.js'
 import { backends } from './backends/index.js'
 import { askRepo, githubLines, repoSteps } from './repo.js'
 import { docsStep, docsProject } from './docs.js'
-import { askClaude as askClaudeCode, claudeNext, claudeSteps, DEVELOP_BRANCH, describeProject } from './claude.js'
+import {
+    askClaude as askClaudeCode,
+    claudeNext,
+    claudeSteps,
+    DEVELOP_BRANCH,
+    describeProject,
+    ensureGitignore
+} from './claude.js'
 import path from 'node:path'
 import { kbSteps } from './kb.js'
 import { askCloud as askCloudSetup, cloudNext, cloudSteps } from './cloud.js'
@@ -26,8 +33,11 @@ function docsSteps({ projectDir, frontend, backend }) {
     return [docsStep({ projectDir, parts, swagger, kb: Boolean(frontend) })]
 }
 
+// A part with `hidden` is not a choice of its own: another question leads to it (the linked app: the login question)
 const choicesOf = (registry, noneLabel) => [
-    ...Object.values(registry).map(item => ({ name: item.label, value: item.id, description: item.description })),
+    ...Object.values(registry)
+        .filter(item => !item.hidden)
+        .map(item => ({ name: item.label, value: item.id, description: item.description })),
     { name: noneLabel, value: NONE }
 ]
 
@@ -45,8 +55,11 @@ export async function main({
     registry = frontends,
     backendRegistry = backends,
     execute = runSteps,
-    log = console.log
+    log = console.log,
+    /** --answers <file>: the answers of an earlier run (.dafkedd-answers.json); what it misses is asked. */
+    answersFile = null
 } = {}) {
+    if (answersFile) useAnswers(await readAnswers(answersFile), { log })
     log(
         pc.bold('\nDafkeDD_CLI') +
             pc.dim(` v${version}`) +
@@ -113,6 +126,19 @@ export async function main({
         ...(cloud ? cloudSteps({ projectDir, project: described }) : []),
         // What the CLI wrote, for a later "update" (only when it manages files: Claude Code or Google Cloud)
         ...(project || cloud ? manifestSteps({ projectDir, project: described, version }) : []),
+        // The answers of this run, to make the same project again (DafkeDD_CLI --answers): not committed
+        ...(frontend || backend
+            ? [
+                  {
+                      title: `Antwoorden bewaren (${ANSWERS_FILE}, voor --answers)`,
+                      weight: 1,
+                      run: async () => {
+                          await saveAnswers(projectDir, version)
+                          await ensureGitignore(projectDir, [ANSWERS_FILE])
+                      }
+                  }
+              ]
+            : []),
         ...(repo
             ? repoSteps({
                   projectDir,

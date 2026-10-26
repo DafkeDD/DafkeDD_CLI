@@ -16,7 +16,7 @@ import { KeysService } from './keys.service.js'
 import { MFA_AMR, MfaService, type MfaSetup, type SecondFactor } from './mfa.service.js'
 import { parseRoles } from './app-roles.js'
 import { OAuthError } from './oauth.error.js'
-import { OIDC, OidcConfig } from './oidc.config.js'
+import { type ExternalSettings, externalType, OIDC, OidcConfig } from './oidc.config.js'
 import { hashPassword, verifyPassword } from './password.js'
 import {
     type AuthorizationParams,
@@ -658,7 +658,9 @@ export class OidcService implements OnApplicationBootstrap, OnModuleDestroy {
         if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
             return { kind: 'expired' }
         if (!this.external.enabled) throw new AppException('oidc.EXTERNAL_DISABLED', HttpStatus.NOT_FOUND)
-        const { location, attempt } = await this.external.start(found.interaction.params.loginHint)
+        // Which server: the button that was pressed (one of several), else the first
+        const provider = typeof form.provider === 'string' && /^[1-9]$/.test(form.provider) ? form.provider : '1'
+        const { location, attempt } = await this.external.start(provider, found.interaction.params.loginHint)
         const cookie = { id, interaction: this.seal(found.interaction), attempt, e: found.interaction.expiresAt }
         return {
             kind: 'external',
@@ -689,23 +691,25 @@ export class OidcService implements OnApplicationBootstrap, OnModuleDestroy {
             return { id, result: { kind: 'form' as const, interaction, client, errorKey, email: '', cookie } }
         }
 
+        const provider = saved.attempt.provider ?? '1'
+        let settings: ExternalSettings
         let identity: ExternalIdentity
         try {
+            settings = this.external.settings(provider)
             identity = await this.external.finish(query, saved.attempt)
         } catch (error) {
-            this.external.warn(error instanceof Error ? error.message : String(error))
+            this.external.warn(error instanceof Error ? error.message : String(error), provider)
             return refused('oidc.EXTERNAL_FAILED', 'external_failed')
         }
-        const found = await this.externalAccount(identity)
+        const found = await this.externalAccount(identity, settings)
         if (typeof found === 'string') return refused(found, found.replace(/^oidc\./, '').toLowerCase())
         const { user, linkedNow } = found
         if (user.status !== 'active') return refused('oidc.ACCOUNT_DISABLED', 'account_blocked', user.id)
 
-        const settings = this.config.external
         // The first login that joins an existing account proves it with OUR second factor (when it has one, or
         // OIDC_MFA=required): control over an email address at the other server alone never takes over an account
         const mfaThere =
-            !linkedNow && (settings?.mfa === 'trust' || (settings?.mfa === 'external' && identity.amr.includes('mfa')))
+            !linkedNow && (settings.mfa === 'trust' || (settings.mfa === 'external' && identity.amr.includes('mfa')))
         if (mfaThere)
             return {
                 id,
@@ -770,25 +774,27 @@ export class OidcService implements OnApplicationBootstrap, OnModuleDestroy {
      * the same (verified) email address, or a new account. Returns an error key when that is not possible.
      */
     private async externalAccount(
-        identity: ExternalIdentity
+        identity: ExternalIdentity,
+        settings: ExternalSettings
     ): Promise<{ user: StoredUser; linkedNow: boolean } | string> {
+        // One kind of identifier per server: an account can be linked to Google and to Microsoft
+        const type = externalType(settings.id)
         const hash = createHmac('sha256', deriveKey(this.config.masterKey(), 'oidc external subject v1'))
             .update(identity.issuer + '\n' + identity.subject)
             .digest('hex')
-        const linked = await this.store.findUserByIdentifier('external', hash)
+        const linked = await this.store.findUserByIdentifier(type, hash)
         if (linked) {
-            await this.store.touchIdentifier('external', hash)
+            await this.store.touchIdentifier(type, hash)
             return { user: linked, linkedNow: false }
         }
         // Only an address the other server verified says who someone is
         if (!identity.email) return 'oidc.EXTERNAL_NO_EMAIL'
         if (!identity.emailVerified) return 'oidc.EXTERNAL_EMAIL_UNVERIFIED'
-        const settings = this.config.external
         const existing = await this.store.findUserByEmail(identity.email)
         if (existing) {
             // Never an account whose own address was not verified here (someone may have registered it first)
-            if (!settings?.linkByEmail || !existing.emailVerified) return 'oidc.EXTERNAL_EMAIL_TAKEN'
-            const result = await this.store.linkIdentifier(existing.id, 'external', hash)
+            if (!settings.linkByEmail || !existing.emailVerified) return 'oidc.EXTERNAL_EMAIL_TAKEN'
+            const result = await this.store.linkIdentifier(existing.id, type, hash)
             if (result !== 'ok') return 'oidc.EXTERNAL_OTHER_LINKED'
             await this.audit.record('account.external_linked', {
                 tenantId: null,
@@ -806,13 +812,12 @@ export class OidcService implements OnApplicationBootstrap, OnModuleDestroy {
             locale: null
         })
         if (!created) return 'oidc.EXTERNAL_EMAIL_TAKEN'
-        if ((await this.store.linkIdentifier(created.id, 'external', hash)) !== 'ok')
-            return 'oidc.EXTERNAL_OTHER_LINKED'
+        if ((await this.store.linkIdentifier(created.id, type, hash)) !== 'ok') return 'oidc.EXTERNAL_OTHER_LINKED'
         await this.audit.record('account.registered', {
             tenantId: null,
             actorId: created.id,
             target: { type: 'user', id: created.id },
-            details: { method: 'external', provider: settings?.name ?? null }
+            details: { method: 'external', provider: settings.name }
         })
         return { user: created, linkedNow: false }
     }

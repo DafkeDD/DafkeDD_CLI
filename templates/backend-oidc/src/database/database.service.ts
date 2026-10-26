@@ -30,6 +30,8 @@ export class DatabaseService implements OnModuleDestroy {
             user: config.get<string>('DATABASE_USER'),
             password: config.get<string>('DATABASE_PASSWORD'),
             database: config.get<string>('DATABASE_NAME'),
+            // DATABASE_MAX_CONNECTIONS: what this instance may use of the connections of the server (Cloud SQL has few)
+            max: Number(config.get<string>('DATABASE_MAX_CONNECTIONS')) || 10,
             connectionTimeoutMillis: 3000
         })
         // An idle client that loses its connection must not crash the process.

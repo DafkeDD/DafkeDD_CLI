@@ -1597,7 +1597,12 @@ export const NOTES_MESSAGES = {
 export const APP_LICENSE_MESSAGES = {
     en: {
         title: 'Licence · {product}',
-        trial: 'Trial until {date}',
+        trial: 'Demo: {days, plural, =0 {ends today} one {# day left} other {# days left}} (until {date})',
+        buy: 'Buy a licence',
+        portal: 'The apps of the portal',
+        noRolesTitle: 'No role in this app',
+        noRolesAdmin: 'You have a licence, but no role in this app yet. Give yourself one on the users page.',
+        noRolesMember: 'You have a licence, but no role in this app yet. Ask the administrator of your organisation.',
         seat: 'You have a licence for this app.',
         superadmin: 'Superadmin: always access.',
         manage: 'Licences of the organisation',
@@ -1607,7 +1612,13 @@ export const APP_LICENSE_MESSAGES = {
     },
     nl: {
         title: 'Licentie · {product}',
-        trial: 'Proefperiode tot {date}',
+        trial: 'Demo: {days, plural, =0 {eindigt vandaag} one {nog # dag} other {nog # dagen}} (tot {date})',
+        buy: 'Licentie kopen',
+        portal: 'De apps van het portaal',
+        noRolesTitle: 'Geen rol in deze app',
+        noRolesAdmin:
+            'Je hebt een licentie, maar nog geen rol in deze app. Geef jezelf er een op de pagina gebruikers.',
+        noRolesMember: 'Je hebt een licentie, maar nog geen rol in deze app. Vraag de beheerder van je organisatie.',
         seat: 'Je hebt een licentie voor deze app.',
         superadmin: 'Superadmin: altijd toegang.',
         manage: 'Licenties van de organisatie',
@@ -1617,7 +1628,14 @@ export const APP_LICENSE_MESSAGES = {
     },
     fr: {
         title: 'Licence · {product}',
-        trial: "Période d'essai jusqu'au {date}",
+        trial: "Démo : {days, plural, =0 {se termine aujourd'hui} one {encore # jour} other {encore # jours}} (jusqu'au {date})",
+        buy: 'Acheter une licence',
+        portal: 'Les applications du portail',
+        noRolesTitle: 'Aucun rôle dans cette application',
+        noRolesAdmin:
+            'Vous avez une licence, mais pas encore de rôle dans cette application. Attribuez-vous-en un sur la page des utilisateurs.',
+        noRolesMember:
+            "Vous avez une licence, mais pas encore de rôle dans cette application. Demandez à l'administrateur de votre organisation.",
         seat: 'Vous avez une licence pour cette application.',
         superadmin: 'Superadmin : toujours accès.',
         manage: "Licences de l'organisation",
@@ -1627,7 +1645,13 @@ export const APP_LICENSE_MESSAGES = {
     },
     de: {
         title: 'Lizenz · {product}',
-        trial: 'Testphase bis {date}',
+        trial: 'Demo: {days, plural, =0 {endet heute} one {noch # Tag} other {noch # Tage}} (bis {date})',
+        buy: 'Lizenz kaufen',
+        portal: 'Die Apps des Portals',
+        noRolesTitle: 'Keine Rolle in dieser App',
+        noRolesAdmin: 'Du hast eine Lizenz, aber noch keine Rolle in dieser App. Gib dir eine auf der Benutzerseite.',
+        noRolesMember:
+            'Du hast eine Lizenz, aber noch keine Rolle in dieser App. Frag den Administrator deiner Organisation.',
         seat: 'Du hast eine Lizenz für diese App.',
         superadmin: 'Superadmin: immer Zugriff.',
         manage: 'Lizenzen der Organisation',
@@ -1667,6 +1691,7 @@ export const LINKED_FILES = [
     'src/app/api/auth/callback/route.ts',
     'src/app/api/auth/login/route.ts',
     'src/app/api/auth/logout/route.ts',
+    'src/app/api/auth/renew/route.ts',
     'src/app/api/app/[...path]/route.ts',
     'src/app/api/backend/[...path]/route.ts',
     'src/components/account-ui.tsx',

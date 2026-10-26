@@ -63,8 +63,20 @@ export const OIDC = {
     LOCALES: ['en', 'nl', 'fr', 'de']
 } as const
 
-/** The other OpenID Connect server (OIDC_EXTERNAL_*). */
+/** The most other OpenID Connect servers at the same time (OIDC_EXTERNAL_* and OIDC_EXTERNAL_2_* to _9_*). */
+export const MAX_EXTERNALS = 9
+
+/**
+ * The kind of identifier of the login at another server: `external` for the first (OIDC_EXTERNAL_*, as before),
+ * `external_<n>` for OIDC_EXTERNAL_<n>_*. An account has at most one of each kind.
+ */
+export const externalType = (id: string) =>
+    (id === '1' ? 'external' : `external_${id}`) as 'external' | `external_${number}`
+
+/** Another OpenID Connect server (OIDC_EXTERNAL_*, or OIDC_EXTERNAL_<n>_* for the second, third, ...). */
 export interface ExternalSettings {
+    /** 1 for OIDC_EXTERNAL_*, n for OIDC_EXTERNAL_<n>_*: in the address of "Log in with ..." and the identifier. */
+    id: string
     /** Its issuer, exactly as in its discovery document (https). */
     issuer: string
     clientId: string
@@ -73,7 +85,7 @@ export interface ExternalSettings {
     /** On the button: "Log in with <name>". */
     name: string
     scopes: string
-    /** Only this way of logging in. */
+    /** Only these servers (OIDC_EXTERNAL_ONLY): no password, eID or registration here. */
     only: boolean
     /**
      * Does a login there count as two-step verification? `external` (default): when its ID token says so (amr "mfa");
@@ -170,25 +182,41 @@ export class OidcConfig {
     }
 
     /**
-     * Logging in at another OpenID Connect server (federation), or null when OIDC_EXTERNAL_ISSUER is empty. That server
-     * proves who the user is; accounts, organisations, roles and licences stay here.
+     * The first other OpenID Connect server (federation), or null when there is none. That server proves who the user
+     * is; accounts, organisations, roles and licences stay here. Every one of them: `externals`.
      */
     get external(): ExternalSettings | null {
-        // Exactly as in its discovery document (some end with a slash, like Auth0)
-        const issuer = (this.config.get<string>('OIDC_EXTERNAL_ISSUER') ?? '').trim()
-        const clientId = (this.config.get<string>('OIDC_EXTERNAL_CLIENT_ID') ?? '').trim()
-        if (!issuer || !clientId) return null
-        const mfa = this.config.get<string>('OIDC_EXTERNAL_MFA') ?? 'external'
-        return {
-            issuer,
-            clientId,
-            clientSecret: this.config.get<string>('OIDC_EXTERNAL_CLIENT_SECRET') || null,
-            name: this.config.get<string>('OIDC_EXTERNAL_NAME') || new URL(issuer).hostname,
-            scopes: this.config.get<string>('OIDC_EXTERNAL_SCOPES') || 'openid profile email',
-            only: this.config.get<string>('OIDC_EXTERNAL_ONLY') === 'true',
-            mfa: mfa === 'trust' || mfa === 'local' ? mfa : 'external',
-            linkByEmail: this.config.get<string>('OIDC_EXTERNAL_LINK_EMAIL') !== 'false'
+        return this.externals[0] ?? null
+    }
+
+    /**
+     * Every other OpenID Connect server to log in with, in order: OIDC_EXTERNAL_* (the first) and OIDC_EXTERNAL_2_* to
+     * OIDC_EXTERNAL_9_* (Google and Microsoft at the same time, for example). OIDC_EXTERNAL_ONLY is for all of them.
+     */
+    get externals(): ExternalSettings[] {
+        const only = this.config.get<string>('OIDC_EXTERNAL_ONLY') === 'true'
+        const result: ExternalSettings[] = []
+        for (let n = 1; n <= MAX_EXTERNALS; n++) {
+            const key = (name: string) =>
+                this.config.get<string>(n === 1 ? `OIDC_EXTERNAL_${name}` : `OIDC_EXTERNAL_${n}_${name}`)
+            // Exactly as in its discovery document (some end with a slash, like Auth0)
+            const issuer = (key('ISSUER') ?? '').trim()
+            const clientId = (key('CLIENT_ID') ?? '').trim()
+            if (!issuer || !clientId) continue
+            const mfa = key('MFA') ?? 'external'
+            result.push({
+                id: String(n),
+                issuer,
+                clientId,
+                clientSecret: key('CLIENT_SECRET') || null,
+                name: key('NAME') || new URL(issuer).hostname,
+                scopes: key('SCOPES') || 'openid profile email',
+                only,
+                mfa: mfa === 'trust' || mfa === 'local' ? mfa : 'external',
+                linkByEmail: key('LINK_EMAIL') !== 'false'
+            })
         }
+        return result
     }
 
     /** Passkeys (WebAuthn): OIDC_PASSKEYS=on (default) or off; never when only the other OpenID Connect server is used. */
@@ -223,7 +251,7 @@ export class OidcConfig {
 
     /** Only the other server: no password and no eID login, no registration with them (OIDC_EXTERNAL_ONLY=true). */
     get externalOnly(): boolean {
-        return this.external?.only === true
+        return this.externals.length > 0 && this.externals[0]!.only
     }
 
     get production(): boolean {

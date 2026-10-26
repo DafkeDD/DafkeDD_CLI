@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import { getTranslations, setRequestLocale } from 'next-intl/server'
 import { ApiStatus } from '@/components/api-status'
-import { AppLicense } from '@/components/app-license'
+import { AppLicense, NoRoles } from '@/components/app-license'
 import { Notes } from '@/components/notes'
 import { SessionLinks } from '@/components/session-links'
 import { PageHead } from '@/components/pasport/page-head'
@@ -31,7 +31,10 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     )
 }
 
-/** The licence and the notes, for whoever is logged in with an organisation (the notes only with a licence). */
+/**
+ * The licence and the notes, for whoever is logged in with an organisation: the notes only with a licence and a role in
+ * this app (roles: the login server gives none without a licence; the beheerder can give none).
+ */
 async function OrganisationNotes() {
     const session = await getSession()
     if (!session?.tenant) return null
@@ -40,7 +43,10 @@ async function OrganisationNotes() {
     return (
         <>
             {license && <AppLicense license={license} admin={admin} />}
-            {license?.status !== 'none' && (
+            {license?.status !== 'none' && session.roles?.length === 0 && !session.superadmin && (
+                <NoRoles admin={admin} />
+            )}
+            {license?.status !== 'none' && (session.roles?.length !== 0 || session.superadmin) && (
                 <Notes
                     admin={admin}
                     me={session.sub}

@@ -86,7 +86,7 @@ export async function checks({
     const at = rel => path.join(projectDir, rel)
 
     const major = Number(nodeVersion.split('.')[0])
-    add(major >= 20 ? OK : FAIL, `Node.js ${nodeVersion}`, major >= 20 ? null : 'Installeer Node.js 20 of later')
+    add(major >= 22 ? OK : FAIL, `Node.js ${nodeVersion}`, major >= 22 ? null : 'Installeer Node.js 22 of later')
     add((await works(exec, 'git', ['--version'], projectDir)) ? OK : FAIL, 'git', 'Installeer git')
 
     const gh = await works(exec, 'gh', ['--version'], projectDir)

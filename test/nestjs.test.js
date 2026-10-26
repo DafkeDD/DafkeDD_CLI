@@ -513,6 +513,24 @@ test('steps (local database) test the connection last and report success', async
     )
 })
 
+test('steps empty the database of earlier (the answer of the postgres question) before the connection test', async t => {
+    const projectDir = await tmp(t)
+    const database = { ...DB, mode: 'local', reset: true }
+    const emptied = []
+    const steps = await nestjs.steps({
+        projectDir,
+        answers: { database },
+        exec: fakeExec(),
+        emptyEarlier: async db => emptied.push(db.database)
+    })
+    assert.deepEqual(titles(steps).slice(-2), ['Vorige database leegmaken', 'Databaseverbinding testen'])
+    await runAll(steps)
+    assert.deepEqual(emptied, ['demo'])
+    // Without that answer: nothing is emptied
+    const kept = await nestjs.steps({ projectDir: await tmp(t), answers: { database: { ...DB } }, exec: fakeExec() })
+    assert.ok(!titles(kept).includes('Vorige database leegmaken'))
+})
+
 test('steps (local database) survive an unreachable database and report it at the end', async t => {
     const projectDir = await tmp(t)
     const database = { ...DB, mode: 'local' }

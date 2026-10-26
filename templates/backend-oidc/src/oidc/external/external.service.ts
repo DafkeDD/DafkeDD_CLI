@@ -2,7 +2,7 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { AppException } from '../../common/app.exception.js'
 import { pkceChallenge, randomToken, safeEqual } from '../crypto.js'
 import { JoseError, type JwtPayload } from '../jose.js'
-import { OidcConfig } from '../oidc.config.js'
+import { type ExternalSettings, OidcConfig } from '../oidc.config.js'
 import { type ExternalKey, importJwks, verifyExternalJwt } from './external-jwt.js'
 
 /** What we need of the discovery document of the other server. */
@@ -16,6 +16,8 @@ interface Discovery {
 
 /** A login at the other server that is on its way (kept in an encrypted cookie until the callback). */
 export interface ExternalAttempt {
+    /** Which of the other servers (ExternalSettings.id); missing in a cookie of before: the first. */
+    provider?: string
     state: string
     nonce: string
     verifier: string
@@ -58,25 +60,32 @@ const clean = (value: string) => value.replace(/\p{Cc}/gu, ' ').slice(0, 60)
 const FAILED_MS = 30_000
 
 /**
- * Logging in at ANOTHER OpenID Connect server (federation: Microsoft Entra ID, Keycloak, Google, ...). It proves who
+ * Logging in at ANOTHER OpenID Connect server (federation: Microsoft Entra ID, Keycloak, Google, ...), one or several. It proves who
  * the user is; accounts, organisations, roles, licences and sessions stay in this server. Authorization code flow with
  * PKCE, state and nonce; the ID token is checked with the keys of that server (its JWKS). Our own code, no library.
  */
 @Injectable()
 export class ExternalService {
     private readonly logger = new Logger('ExternalLogin')
-    private discovery: { value: Discovery; until: number } | null = null
-    private failedUntil = 0
-    private jwks: { keys: ExternalKey[]; fetchedAt: number } | null = null
+    /** Per other server (its id): its discovery document, when it last failed, and its keys. */
+    private readonly discovery = new Map<string, { value: Discovery; until: number }>()
+    private readonly failedUntil = new Map<string, number>()
+    private readonly jwks = new Map<string, { keys: ExternalKey[]; fetchedAt: number }>()
 
     constructor(private readonly config: OidcConfig) {}
 
     get enabled(): boolean {
-        return this.config.external !== null
+        return this.config.externals.length > 0
     }
 
-    private settings() {
-        const settings = this.config.external
+    /** The other servers, in order (the buttons "Log in with ..."). */
+    get providers(): ExternalSettings[] {
+        return this.config.externals
+    }
+
+    /** One of them; 404 oidc.EXTERNAL_DISABLED for an id that is not configured. */
+    settings(id = '1'): ExternalSettings {
+        const settings = this.config.externals.find(item => item.id === id)
         if (!settings) throw new AppException('oidc.EXTERNAL_DISABLED', HttpStatus.NOT_FOUND)
         return settings
     }
@@ -99,37 +108,44 @@ export class ExternalService {
     }
 
     /** The discovery document of the other server (cached for an hour); its issuer must be exactly the configured one. */
-    async metadata(): Promise<Discovery> {
-        if (this.discovery && this.discovery.until > Date.now()) return this.discovery.value
-        if (this.failedUntil > Date.now()) throw new Error('The other server was not reachable less than 30 s ago')
-        const { issuer } = this.settings()
+    async metadata(id = '1'): Promise<Discovery> {
+        const cached = this.discovery.get(id)
+        if (cached && cached.until > Date.now()) return cached.value
+        if ((this.failedUntil.get(id) ?? 0) > Date.now())
+            throw new Error('The other server was not reachable less than 30 s ago')
+        const { issuer } = this.settings(id)
         try {
             const value = await this.get<Discovery>(issuer.replace(/\/+$/, '') + '/.well-known/openid-configuration')
             if (value.issuer !== issuer) throw new Error(`The discovery document is of ${value.issuer}, not ${issuer}`)
             for (const url of [value.authorization_endpoint, value.token_endpoint, value.jwks_uri])
                 if (typeof url !== 'string' || !allowedUrl(url, this.config.production))
                     throw new Error('Incomplete discovery document')
-            this.discovery = { value, until: Date.now() + CACHE_MS }
+            this.discovery.set(id, { value, until: Date.now() + CACHE_MS })
             return value
         } catch (error) {
-            this.failedUntil = Date.now() + FAILED_MS
+            this.failedUntil.set(id, Date.now() + FAILED_MS)
             throw error
         }
     }
 
-    private async keys(refresh = false): Promise<ExternalKey[]> {
-        const fresh = this.jwks && Date.now() - this.jwks.fetchedAt < (refresh ? REFETCH_MS : CACHE_MS)
-        if (this.jwks && fresh) return this.jwks.keys
-        const keys = importJwks(await this.get((await this.metadata()).jwks_uri))
-        this.jwks = { keys, fetchedAt: Date.now() }
+    private async keys(id: string, refresh = false): Promise<ExternalKey[]> {
+        const known = this.jwks.get(id)
+        if (known && Date.now() - known.fetchedAt < (refresh ? REFETCH_MS : CACHE_MS)) return known.keys
+        const keys = importJwks(await this.get((await this.metadata(id)).jwks_uri))
+        this.jwks.set(id, { keys, fetchedAt: Date.now() })
         return keys
     }
 
-    /** Where the browser goes to log in at the other server, and what to remember until it comes back. */
-    async start(loginHint?: string | null): Promise<{ location: string; attempt: ExternalAttempt }> {
-        const settings = this.settings()
-        const metadata = await this.metadata()
-        const attempt: ExternalAttempt = { state: randomToken(), nonce: randomToken(), verifier: randomToken(48) }
+    /** Where the browser goes to log in at that server, and what to remember until it comes back. */
+    async start(id = '1', loginHint?: string | null): Promise<{ location: string; attempt: ExternalAttempt }> {
+        const settings = this.settings(id)
+        const metadata = await this.metadata(id)
+        const attempt: ExternalAttempt = {
+            provider: id,
+            state: randomToken(),
+            nonce: randomToken(),
+            verifier: randomToken(48)
+        }
         const location = new URL(metadata.authorization_endpoint)
         location.searchParams.set('response_type', 'code')
         location.searchParams.set('client_id', settings.clientId)
@@ -148,13 +164,15 @@ export class ExternalService {
      * secret) and checks the ID token (signature, issuer, audience, expiry, nonce). Throws an Error with the reason.
      */
     async finish(query: Record<string, unknown>, attempt: ExternalAttempt): Promise<ExternalIdentity> {
-        const settings = this.settings()
+        // A cookie of before several servers: the first one
+        const id = attempt.provider ?? '1'
+        const settings = this.settings(id)
         const state = typeof query.state === 'string' ? query.state : ''
         if (!state || !safeEqual(state, attempt.state)) throw new Error('state does not match')
         if (typeof query.error === 'string') throw new Error('the other server answered ' + clean(query.error))
         const code = typeof query.code === 'string' ? query.code : ''
         if (!code) throw new Error('no code')
-        const metadata = await this.metadata()
+        const metadata = await this.metadata(id)
 
         const body = new URLSearchParams({
             grant_type: 'authorization_code',
@@ -185,7 +203,7 @@ export class ExternalService {
                 `the token endpoint answered ${response.status} ${typeof tokens.error === 'string' ? clean(tokens.error) : ''}`.trim()
             )
 
-        const claims = await this.verifyIdToken(tokens.id_token, attempt.nonce)
+        const claims = await this.verifyIdToken(id, tokens.id_token, attempt.nonce)
         const email = typeof claims.email === 'string' ? claims.email.trim().toLowerCase() : null
         const given = [claims.given_name, claims.family_name].filter(part => typeof part === 'string').join(' ')
         const name =
@@ -207,20 +225,20 @@ export class ExternalService {
         }
     }
 
-    private async verifyIdToken(token: string, nonce: string): Promise<JwtPayload> {
-        const settings = this.settings()
+    private async verifyIdToken(id: string, token: string, nonce: string): Promise<JwtPayload> {
+        const settings = this.settings(id)
         let verified
         try {
-            verified = verifyExternalJwt(token, await this.keys())
+            verified = verifyExternalJwt(token, await this.keys(id))
         } catch (error) {
             // Their keys may have changed since we fetched them: once more with a fresh JWKS
             if (!(error instanceof JoseError) || error.message !== 'Unknown key') throw error
-            verified = verifyExternalJwt(token, await this.keys(true))
+            verified = verifyExternalJwt(token, await this.keys(id, true))
         }
         const claims = verified.payload
         const now = Math.floor(Date.now() / 1000)
         const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud]
-        if (claims.iss !== (await this.metadata()).issuer) throw new JoseError('Wrong issuer')
+        if (claims.iss !== (await this.metadata(id)).issuer) throw new JoseError('Wrong issuer')
         if (!audiences.includes(settings.clientId)) throw new JoseError('Wrong audience')
         // With several audiences, the authorized party must be us (OpenID Connect Core 3.1.3.7)
         if ((audiences.length > 1 || claims.azp !== undefined) && claims.azp !== settings.clientId)
@@ -234,7 +252,7 @@ export class ExternalService {
     }
 
     /** For the log: why a login at the other server did not work (never tokens or secrets). */
-    warn(reason: string) {
-        this.logger.warn('Login at the other server failed: ' + reason)
+    warn(reason: string, id = '1') {
+        this.logger.warn(`Login at the other server failed${id === '1' ? '' : ` (${clean(id)})`}: ` + reason)
     }
 }

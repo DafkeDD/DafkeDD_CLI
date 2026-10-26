@@ -284,8 +284,21 @@ test('the linked frontend: login, session, profile and the notes of its own API;
     assert.match(all['src/lib/oidc.ts'], /license: licenseOf\(claims\.license\)/)
     assert.match(all['src/lib/refresh.ts'], /\blicense,\n[^}]*\broles\n/)
     assert.match(page, /<AppLicense license=\{license\} admin=\{admin\} \/>/)
-    assert.match(page, /license\?\.status !== 'none' && \(\s+<Notes/)
+    // The notes only with a licence and a role; a licence without a role: what to do instead of an error of the API
+    assert.match(
+        page,
+        /license\?\.status !== 'none' && \(session\.roles\?\.length !== 0 \|\| session\.superadmin\) && \(\s+<Notes/
+    )
+    assert.match(page, /<NoRoles admin=\{admin\} \/>/)
     assert.match(all['src/components/app-license.tsx'], /ACCOUNT_URL \+ '\/users'/)
+    // Without a licence: start a demo here (then new tokens at once), or the apps of the portal; a demo: days left
+    const license = all['src/components/app-license.tsx']
+    assert.match(license, /<AskDemo code=\{license\.product\} \/>/)
+    assert.match(license, /ACCOUNT_URL \+ '\/marketplace'/)
+    assert.match(license, /t\('trial', \{\s+days:/)
+    assert.match(all['src/components/ask-demo.tsx'], /fetch\('\/api\/auth\/renew', \{ method: 'POST' \}\)/)
+    assert.match(all['src/app/api/auth/renew/route.ts'], /freshSession\(.*\{ force: true \}\)/)
+    assert.match(all['src/app/api/auth/renew/route.ts'], /fromThisApp\(request\)/)
     for (const locale of ['en', 'nl', 'fr', 'de']) {
         const messages = JSON.parse(all[`messages/${locale}.json`])
         assert.deepEqual(

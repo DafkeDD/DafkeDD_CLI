@@ -220,6 +220,7 @@ export const PORTAL_MESSAGES = {
             deleteInvitationText: 'from the invitations? The invitation link stops working.',
             adminOnly: 'Only administrators of your practice can manage users.',
             appRoles: 'Roles:',
+            rolesNeedLicense: 'These roles only apply with a licence or a running demo of this app.',
             licensesWithInvite:
                 'The user gets the ticked apps (with their roles) once the invitation has been accepted, with a licence when one is still free. When none is free, you assign one later.'
         },
@@ -1188,6 +1189,7 @@ export const PORTAL_MESSAGES = {
             deleteInvitationText: 'niet meer wilt uitnodigen? De uitnodigingslink werkt dan niet meer.',
             adminOnly: 'Alleen beheerders van je praktijk kunnen gebruikers beheren.',
             appRoles: 'Rollen:',
+            rolesNeedLicense: 'Deze rollen gelden pas met een licentie of een lopende demo van deze app.',
             licensesWithInvite:
                 'De aangevinkte apps (met hun rollen) krijgt de gebruiker zodra de uitnodiging aanvaard is, met een licentie als er nog een vrij is. Is er geen meer vrij, dan wijs je die later toe.'
         },
@@ -2162,6 +2164,8 @@ export const PORTAL_MESSAGES = {
             deleteInvitationText: 'des invitations ? Le lien d’invitation ne fonctionnera plus.',
             adminOnly: 'Seuls les administrateurs de votre cabinet peuvent gérer les utilisateurs.',
             appRoles: 'Rôles :',
+            rolesNeedLicense:
+                "Ces rôles ne s'appliquent qu'avec une licence ou une démo en cours de cette application.",
             licensesWithInvite:
                 'L’utilisateur reçoit les applications cochées (avec leurs rôles) dès que l’invitation a été acceptée, avec une licence s’il en reste une. S’il n’en reste plus, vous en attribuez une plus tard.'
         },
@@ -3141,6 +3145,7 @@ export const PORTAL_MESSAGES = {
             deleteInvitationText: 'wirklich nicht mehr einladen? Der Einladungslink funktioniert dann nicht mehr.',
             adminOnly: 'Nur Administratoren deiner Praxis können Benutzer verwalten.',
             appRoles: 'Rollen:',
+            rolesNeedLicense: 'Diese Rollen gelten erst mit einer Lizenz oder einer laufenden Demo dieser App.',
             licensesWithInvite:
                 'Der Benutzer erhält die angekreuzten Apps (mit ihren Rollen), sobald die Einladung angenommen wurde, mit einer Lizenz, wenn noch eine frei ist. Ist keine mehr frei, weise später eine zu.'
         },

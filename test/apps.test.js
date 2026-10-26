@@ -142,7 +142,9 @@ test('roles per app: migration 12, the roles claim, /users for the admins, roles
     assert.match(backend['src/database/migrations.ts'], /id: 12,\s+name: 'roles per app'/)
     assert.match(backend['src/database/migrations.ts'], /CREATE TABLE app_role_assignments/)
     assert.match(backend['src/database/database.constants.ts'], /'app_role_assignments'/)
-    assert.match(backend['src/oidc/tokens.service.ts'], /roles: await this\.appRoles\.claim\(/)
+    assert.match(backend['src/oidc/tokens.service.ts'], /roles: licensed \? await this\.appRoles\.claim\(/)
+    // Roles only with a licence in an app that sells a product (a seat, a demo, a superadmin)
+    assert.match(backend['src/oidc/tokens.service.ts'], /license\.license\?\.status !== 'none'/)
     assert.match(backend['src/oidc/app-roles.ts'], /export function effectiveRoles/)
     assert.match(
         backend['src/tenants/app-roles.controller.ts'],

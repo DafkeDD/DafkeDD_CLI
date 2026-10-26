@@ -159,6 +159,20 @@ npm run dev
 
 If `./frontend` or `./backend` already exists, the CLI stops without deleting anything.
 
+### The same project again: `--answers`
+
+Every run keeps its answers in **`.dafkedd-answers.json`** in the project (not committed: it is in `.gitignore`). Start
+the CLI in a new folder with that file to make the same project again without typing everything:
+
+```
+npx --allow-git=all github:DafkeDD/DafkeDD_CLI --answers ../shop/.dafkedd-answers.json
+```
+
+Every question the file answers is shown with "(antwoordbestand)"; a question it does not have, or whose answer no
+longer fits (a link code that was used, a choice that is gone), is asked as usual. **Passwords are never kept**: they
+are always asked. The file is JSON (`{ "version", "answers": [{ "question", "answer" }] }`), so you can also write or
+change one yourself, for example for every new customer app.
+
 ### An existing project: `update` and `doctor`
 
 In the folder of a project made with the CLI:
@@ -176,6 +190,12 @@ npx --allow-git=all github:DafkeDD/DafkeDD_CLI doctor
       git), to compare with `git diff --no-index <file> <file>.dafkedd-new`;
     - a missing file, and missing pages of the knowledge base, are added; a file the CLI no longer makes is reported,
       not deleted.
+
+    A frontend without the OpenID Connect login (a site, an API, the simple login) gets the Pasport design this way too.
+    One made before 0.50.0 also gets, once, what a new project has: its home page in the shell, `APP_NAV`, the account
+    in the topbar and the login pages (new ones written, yours untouched with the new version next to them as
+    `.dafkedd-new`), DafkeDD UI, the fonts and `npm run check:design`; the old language and theme dropdowns are
+    reported, not deleted.
 
     A project of a CLI before 0.46.0 has no manifest: `update` reads what it is made of from its folders and `.env`
     files, shows that and asks to confirm; then every file that differs gets a `.dafkedd-new` version. Commit the result
@@ -218,11 +238,17 @@ The CLI asks which database you want (PostgreSQL for now, or none). No ORM: the 
    taken).
 4. **User** (default `postgres`), **password** (hidden while typing, required) and **database name** (default: the name
    of your project folder).
+5. Only when that **database already exists** (a project of earlier with the same name): local, when it has tables;
+   Docker, when the volume of the project is there. Its data would stay, also the superadmin and the passwords of then,
+   so the CLI asks: **another name** (local), **empty it and start again** (`DROP DATABASE`, or the Docker volume and
+   its containers removed during the install) or **keep it**.
 
 What you get in `./backend`:
 
-- `.env` with `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USER`, `DATABASE_PASSWORD` and `DATABASE_NAME`. `.env` is in
-  `.gitignore`; `.env.example` is committed and holds `change-me` instead of your password.
+- `.env` with `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME` and
+  `DATABASE_MAX_CONNECTIONS` (the most connections of the API at the same time, default 20; on Google Cloud every
+  instance gets its share of `db_max_connections` in Terraform). `.env` is in `.gitignore`; `.env.example` is committed
+  and holds `change-me` instead of your password.
 - `src/database/`: a global `DatabaseModule` and `DatabaseService` (connection pool; `query()` and `ping()`), plus a
   unit test. Inject `DatabaseService` anywhere and call `this.database.query('SELECT ...', [params])`.
 - `GET /health` returns `{ "status": "ok", "database": "up" }`, or a **translated 503** (`errors.DATABASE_UNAVAILABLE`)
@@ -245,8 +271,8 @@ With a database the CLI asks _"Add a login?"_:
 
 - **Own OIDC server (multi-tenant, OpenID Connect)**: the backend becomes an OpenID Connect login server (see below).
 - **Log in through your existing Pasport OIDC server (link code)** (only with a frontend): the project becomes an app of
-  that server, exactly as the backend choice "App voor een bestaande DafkeDD OIDC-server (koppelcode)" (see below), with
-  the database you just chose. One account for all your apps: email, passkey, eID and two-step through the server.
+  that server (see below), with the database you just chose. One account for all your apps: email, passkey, eID and
+  two-step through the server.
 - **Simple test login** (only with a frontend): a login, register and profile page with a session cookie.
 - **No login**.
 
@@ -328,7 +354,9 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   is wanted (no / next to the password / only that), the issuer, the client id and secret, and the text of the button.
   The login page shows "Log in with <name>"; that server proves who someone is (PKCE, state, nonce, its ID token checked
   with its JWKS), and accounts, organisations, roles, licences and the audit log stay here. A verified email address
-  joins an existing account; two-step verification there counts when it says so.
+  joins an existing account; two-step verification there counts when it says so. **Several at once** (Google and
+  Microsoft): after the first the CLI asks "Nog een server toevoegen?"; they are `OIDC_EXTERNAL_*` and
+  `OIDC_EXTERNAL_2_*` to `OIDC_EXTERNAL_9_*` in `.env`, a button each, and an account can be linked to each of them.
 - **Passkeys**: every account adds passkeys on `/security` (fingerprint, face or PIN of the device, synced passkeys or a
   security key) and logs in with "Log in with a passkey": no password, and it counts as two-step verification
   (`acr: loa2`). Our own WebAuthn code (CBOR, COSE keys ES256, RS256 and EdDSA, signature counter), no attestation.
@@ -342,18 +370,17 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   of editing `config/oidc-clients.json`: redirect URIs, scopes, refresh tokens, own app or of others, back-channel
   logout URI, and for a confidential app a secret that is shown once (only its hash is stored). The apps of the file
   stay read-only there.
-- **An app for an existing login server**: choose Next.js and the backend **"App voor een bestaande DafkeDD OIDC-server
-  (koppelcode)"**, or NestJS with _"Log in through your existing Pasport OIDC server"_ at the login question. The CLI
-  asks the address of that API, the port of the app's frontend (3001), a one-time link code that a superadmin makes on
-  `/admin` → Apps → "Koppelcode", and the app's own database on the PostgreSQL server of the login server (host, port,
-  user, password, name; default the name of the app). It adds the addresses of the new frontend to that app and writes
-  `.env.local`: the frontend logs in there with single sign-on, is logged out with back-channel logout, and links to the
-  account pages of that server. The app gets its **own NestJS API** in `./backend` (port 4001) with its own database: it
-  has no users of its own, accepts only the access tokens of that login server for this app (`PasportGuard`: signature
-  with its keys, `iss`, `aud`, `typ`, `client_id`), takes the organisation from the token, and keeps its data per
-  organisation with Row-Level Security. The example is `notes` (`GET/POST /notes`, `DELETE /notes/:id` for the
-  beheerder), shown on the home page of the frontend through `/api/app/...` (the token is added on the server). See
-  "Login through the login server" in `docs/api.md`. The CLI also asks:
+- **An app for an existing login server**: choose Next.js, NestJS, a database and at _"Add a login?"_ **"Inloggen via je
+  bestaande Pasport OIDC-server (koppelcode)"**. The CLI asks the address of that API, the port of the app's frontend
+  (3001) and a one-time link code that a superadmin makes on `/admin` → Apps → "Koppelcode"; the app's own database is
+  the one chosen before the login question (Docker or local). It adds the addresses of the new frontend to that app and
+  writes `.env.local`: the frontend logs in there with single sign-on, is logged out with back-channel logout, and links
+  to the account pages of that server. The app gets its **own NestJS API** in `./backend` (port 4001) with its own
+  database: it has no users of its own, accepts only the access tokens of that login server for this app
+  (`PasportGuard`: signature with its keys, `iss`, `aud`, `typ`, `client_id`), takes the organisation from the token,
+  and keeps its data per organisation with Row-Level Security. The example is `notes` (`GET/POST /notes`,
+  `DELETE /notes/:id` for the beheerder), shown on the home page of the frontend through `/api/app/...` (the token is
+  added on the server). See "Login through the login server" in `docs/api.md`. The CLI also asks:
     - **modules**: **Mail** (`MailService` with SMTP, Mailpit during development, `npm run mail:dev`) and **Files**
       (`/files`: images and PDFs per organisation, raw uploads, in `./storage` or a Google Cloud Storage bucket);
     - nothing about how the data of the organisations is kept apart: every organisation gets a **database of its own**
@@ -372,8 +399,8 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   screens and the same shell, on the desktop and on the phone, built in `src/styles/pasport.css` (the tokens and every
   class of the design) and `src/components/pasport` (`Btn`, `Field`, `Input`, `Badge`, `Avatar`, `Modal`, `PageHead`,
   `AuthLayout`, toasts, ...):
-    - the login screen: the teal panel with the eID card (dark for superadmins at `/admin/login`), the tabs eID and
-      email, the steps of the eID, the six boxes of the code, the language and theme at the bottom right;
+    - the login screen, one for everybody: the teal panel with the eID card, the tabs eID and email, the steps of the
+      eID, the six boxes of the code, the language and theme at the bottom right;
     - the shell: an icon rail (collapsible; a drawer on a phone) with the app's own pages (`src/lib/nav.ts`), the
       organisation (its admins) and the platform (superadmins); a topbar with the search for a page (⌘K), light or dark
       and the user menu (profile, security, language, log out); the superadmin panel (`/admin`, `/admin/catalog`,
@@ -546,7 +573,8 @@ Every piece of code must have tests, and **code cannot be pushed while the tests
 - A **pre-push git hook** (`.githooks/pre-push`, activated by `npm install`) runs `npm run format:check` and `npm test`
   and blocks the push when something fails.
 - **GitHub Actions** (`.github/workflows/ci.yml`) runs the same checks on every push and pull request to `developer` and
-  `main`, on Linux and Windows with Node 20 and 22. The release workflow only runs after the tests passed.
+  `main`, on Linux and Windows with Node 22 and 24, and the CLI starts (`--help`, `--version`). The release workflow
+  only runs after the tests passed.
 - Hooks can be skipped locally (`--no-verify`), so also enable **branch protection** on `developer` and `main` in the
   GitHub settings with the CI checks as _required status checks_.
 
@@ -691,7 +719,33 @@ git switch developer
 
 ## Changelog
 
-- **0.50.1**: an app for a login server always gets a database per organisation.
+- **0.51.0**: clearer licences, the database of earlier, several external logins, an answers file and `update` for every
+  frontend.
+    - A linked app without a licence says so with what to do: "Ask a demo" (new tokens at once, `POST /api/auth/renew`),
+      the apps of the portal and, for the admin, the users of the organisation. During a demo it shows how many days are
+      left. A licence without a role says that too, instead of an error of the API.
+    - Users (`/users`) on the login server: under the roles of an app "these roles only apply with a licence or a
+      running demo" when the member has no licence for it.
+    - The database of earlier: when the chosen database already has tables (local) or the Docker volume of the project
+      exists, the CLI asks: another name, empty it and start again, or keep it (its data and passwords stay).
+    - Google Cloud: `DATABASE_MAX_CONNECTIONS` per instance (`db_max_connections` in Terraform, default 20 for
+      db-f1-micro): an app with a database per organisation shares it between the database of the app and the
+      organisations used most recently, so it never asks Cloud SQL for more connections than it allows.
+    - `update` gives every frontend the Pasport design: a site, an API or the simple login made before 0.50.0 gets its
+      home page in the shell, the rail, the account and the login pages (next to yours as `.dafkedd-new`), DafkeDD UI,
+      the fonts and `npm run check:design`.
+    - Several other OpenID Connect servers at once (Google and Microsoft): `OIDC_EXTERNAL_2_*` to `OIDC_EXTERNAL_9_*`, a
+      button each on the login page, an account linked to each (migration 22).
+    - `--answers <file>`: the same project again with the answers of `.dafkedd-answers.json` (every run writes it,
+      without passwords); what it misses is asked.
+    - The CI of the CLI runs on Linux and Windows with Node 22 and 24 and checks that the CLI starts; Node 22 or later
+      is needed (20 is no longer supported).
+- **0.50.1**: an app for a login server always gets a database per organisation, and its roles need a licence.
+    - Every question once: the separate backend choice "App voor een bestaande DafkeDD OIDC-server (koppelcode)" is
+      gone, the login question of NestJS leads to the same app ("Inloggen via je bestaande Pasport OIDC-server").
+    - The roles of an app (`roles` in its tokens) come with a licence when the app sells a product: a seat, a running
+      demo or a superadmin; without one the claim is empty. A member has roles per organisation and per app, several at
+      once (the default roles of the app until an admin gives others on /users).
     - The question "Hoe wordt de data van de organisaties gescheiden?" is gone (its arrow keys did not work either):
       every organisation gets its own database for the app (`TENANT_ISOLATION=database`). Row-Level Security in one
       database stays possible with `TENANT_ISOLATION=rls` in `.env`.

@@ -104,7 +104,7 @@ test('main runs frontend steps, then backend steps, then the git steps', async (
     const executed = events.find(e => e.startsWith('execute('))
     assert.match(
         executed,
-        /^execute\(demo-fe step,demo-be step,Kennisbank aanmaken \(docs\/kb, 4 talen\),Git initialiseren,Repo "demo-repo"/
+        /^execute\(demo-fe step,demo-be step,Kennisbank aanmaken \(docs\/kb, 4 talen\),Antwoorden bewaren \(\.dafkedd-answers\.json, voor --answers\),Git initialiseren,Repo "demo-repo"/
     )
 })
 
@@ -139,7 +139,7 @@ test('main works with only a backend', async () => {
     const { events, options } = setup({ frontend: 'none' })
     await main(options)
     assert.ok(!events.some(e => e.startsWith('demo-fe.ask')))
-    assert.ok(events.includes('execute(demo-be step)'))
+    assert.ok(events.includes('execute(demo-be step,Antwoorden bewaren (.dafkedd-answers.json, voor --answers))'))
 })
 
 test('main shows the result lines of the backend (✔ and ✖) and its answer-dependent next steps', async () => {
@@ -154,7 +154,11 @@ test('main shows the result lines of the backend (✔ and ✖) and its answer-de
 test('main works with only a frontend', async () => {
     const { events, logs, options } = setup({ backend: 'none' })
     await main(options)
-    assert.ok(events.includes('execute(demo-fe step,Kennisbank aanmaken (docs/kb, 4 talen))'))
+    assert.ok(
+        events.includes(
+            'execute(demo-fe step,Kennisbank aanmaken (docs/kb, 4 talen),Antwoorden bewaren (.dafkedd-answers.json, voor --answers))'
+        )
+    )
     assert.ok(!events.some(e => e.startsWith('demo-be.ask')))
     assert.ok(!logs.some(l => l.includes('DemoBE')))
 })
@@ -217,4 +221,17 @@ test('main hands over to the linked app when the login question chose the existi
     assert.deepEqual(asked[0].database, { database: 'shop' }, 'the database is not asked again')
     assert.ok(events.some(e => e.startsWith('demo-linked.steps') && e.includes('"link":{"name":"Shop"}')))
     assert.ok(!events.some(e => e.startsWith('demo-be.steps')))
+})
+
+test('a hidden part (the linked app, reached through the login question) is not a backend choice of its own', async () => {
+    const { asked, options } = setup()
+    options.backendRegistry['demo-hidden'] = { id: 'demo-hidden', label: 'Hidden', description: 'x', hidden: true }
+    await main(options)
+    assert.ok(!asked[1].choices.some(choice => choice.value === 'demo-hidden'))
+})
+
+test('the real registry offers NestJS, not the linked app as a separate choice', async () => {
+    const { backends } = await import('../src/backends/index.js')
+    assert.equal(backends.linked.hidden, true)
+    assert.ok(!backends.nestjs.hidden)
 })

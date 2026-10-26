@@ -271,7 +271,12 @@ export function backendReadme({
                   ['DATABASE_PORT', String(database.port), 'Database port'],
                   ['DATABASE_USER', database.user, 'Database user'],
                   ['DATABASE_PASSWORD', '(secret)', 'Database password'],
-                  ['DATABASE_NAME', database.database, 'Database name']
+                  ['DATABASE_NAME', database.database, 'Database name'],
+                  [
+                      'DATABASE_MAX_CONNECTIONS',
+                      '20',
+                      'The most connections of this API to PostgreSQL at the same time (on Google Cloud per instance)'
+                  ]
               ]
             : []),
         ...(auth
@@ -926,6 +931,11 @@ licences, sessions, two-step verification and the audit log stay in this server,
    \`https://login.microsoftonline.com/<tenant-id>/v2.0\` or \`https://keycloak.example.com/realms/<realm>\`),
    \`OIDC_EXTERNAL_CLIENT_ID\`, and \`OIDC_EXTERNAL_CLIENT_SECRET\` for a confidential client (empty: a public client,
    PKCE only). \`OIDC_EXTERNAL_ONLY=true\` leaves only that button (no password, no eID, no registration here).
+3. **Several servers at once** (Google and Microsoft, for example): the same settings with a number,
+   \`OIDC_EXTERNAL_2_ISSUER\`, \`OIDC_EXTERNAL_2_CLIENT_ID\`, \`OIDC_EXTERNAL_2_CLIENT_SECRET\`, \`OIDC_EXTERNAL_2_NAME\`,
+   \`OIDC_EXTERNAL_2_MFA\` (up to \`OIDC_EXTERNAL_9_*\`). The login page shows a button for each; the form sends
+   \`provider\` (its number, 1 for \`OIDC_EXTERNAL_*\`). An account can be linked to each of them
+   (\`user_identifiers\` types \`external\`, \`external_2\`, ...; migration 22). \`OIDC_EXTERNAL_ONLY\` is for all of them.
 
 | Step | What happens |
 | --- | --- |

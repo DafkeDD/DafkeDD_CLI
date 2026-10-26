@@ -90,7 +90,8 @@ test('main adds the docs step last before the repo steps, only when parts docume
         'fe step',
         'be step',
         'Documentatie samenstellen (./docs)',
-        'Kennisbank aanmaken (docs/kb, 4 talen)'
+        'Kennisbank aanmaken (docs/kb, 4 talen)',
+        'Antwoorden bewaren (.dafkedd-answers.json, voor --answers)'
     ])
 })
 

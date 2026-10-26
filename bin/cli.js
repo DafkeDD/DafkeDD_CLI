@@ -6,6 +6,9 @@ import { doctor } from '../src/doctor.js'
 const HELP = `DafkeDD_CLI v${version}
 
   DafkeDD_CLI            een nieuw project in deze map (frontend, backend, Claude Code, Google Cloud, GitHub)
+  DafkeDD_CLI --answers <bestand>
+                         hetzelfde project opnieuw, met de antwoorden van toen (.dafkedd-answers.json van een
+                         vorig project); wat er niet in staat en elk wachtwoord wordt gevraagd
   DafkeDD_CLI update     een bestaand project bijwerken naar deze versie (agents, hooks, pipelines, Terraform,
                          het Pasport-design van de frontend);
                          wat je zelf aanpaste wordt nooit overschreven (<bestand>.dafkedd-new ernaast)
@@ -23,8 +26,13 @@ const commands = {
     '-h': () => console.log(HELP)
 }
 
-const [command] = process.argv.slice(2)
-const action = command === undefined ? () => main() : commands[command]
+const [command, value] = process.argv.slice(2)
+const answers = command === '--answers' || command === '-a'
+if (answers && !value) {
+    console.error(`--answers heeft een bestand nodig.\n\n${HELP}`)
+    process.exit(1)
+}
+const action = command === undefined ? () => main() : answers ? () => main({ answersFile: value }) : commands[command]
 if (!action) {
     console.error(`Onbekend commando "${command}".\n\n${HELP}`)
     process.exit(1)

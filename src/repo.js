@@ -1,6 +1,6 @@
 import { basename } from 'node:path'
 import { existsSync } from 'node:fs'
-import { confirm, input, select } from '@inquirer/prompts'
+import { confirm, input, select } from './prompts.js'
 import { run } from './runner.js'
 
 export const platforms = {

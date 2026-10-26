@@ -3,7 +3,7 @@ import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { AuditService } from '../../audit/audit.service.js'
 import { AppException } from '../../common/app.exception.js'
 import { decrypt, deriveKey, encrypt } from '../crypto.js'
-import { OidcConfig } from '../oidc.config.js'
+import { externalType, OidcConfig } from '../oidc.config.js'
 import { OIDC_STORE, type OidcStore, type Passkey, type StoredUser } from '../store/oidc.store.js'
 import {
     type AuthenticationResponse,
@@ -163,12 +163,14 @@ export class PasskeyService {
 
     /** Removes a passkey; not the last way to log in (no password, eID or other server, and no other passkey). */
     async remove(userId: string, id: string) {
-        const [user, passkeys, eid, external] = await Promise.all([
+        const [user, passkeys, eid, ...externals] = await Promise.all([
             this.store.findUserById(userId),
             this.store.listPasskeys(userId),
             this.store.findIdentifier(userId, 'eid'),
-            this.store.findIdentifier(userId, 'external')
+            // Every other server it can log in with (Google, Microsoft, ...)
+            ...this.config.externals.map(item => this.store.findIdentifier(userId, externalType(item.id)))
         ])
+        const external = externals.some(Boolean)
         const passkey = passkeys.find(item => item.id === id)
         if (!passkey) throw new AppException('oidc.PASSKEY_NOT_FOUND', HttpStatus.NOT_FOUND)
         if (!user?.passwordHash && !eid && !external && passkeys.length === 1)

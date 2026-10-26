@@ -8,7 +8,8 @@ import { useBackend } from '@/lib/account'
 
 /**
  * "Ask a demo" for a product the user has no licence of: a trial for themselves (POST /me/licenses/:code/trial,
- * once per product). A demo never starts by itself, also not at the first login to the app.
+ * once per product), then new tokens with that licence. A demo never starts by itself, also not at the first login to
+ * the app.
  */
 export function AskDemo({ code }: { code: string }) {
     const t = useTranslations('Licenses')
@@ -24,6 +25,8 @@ export function AskDemo({ code }: { code: string }) {
         setBusy(false)
         if (!result) return setError(t('offline'))
         if (result.status !== 201) return setError(result.message || t('offline'))
+        // New tokens now: the licence (and the roles that come with it) are in them
+        await fetch('/api/auth/renew', { method: 'POST' }).catch(() => null)
         router.refresh()
     }
 

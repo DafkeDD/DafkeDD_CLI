@@ -1,12 +1,13 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
-import { confirm, input, password, select } from '@inquirer/prompts'
+import { confirm, input, password, select } from '../prompts.js'
 import { allowEidDownload, EID_MOCK_PIN } from '../eid.js'
 import { denyInstallScripts } from '../npm.js'
 import { run } from '../runner.js'
 import { PRETTIERRC } from '../frontends/nextjs.js'
 import { databases } from '../databases/index.js'
+import { emptyDatabase } from '../databases/existing.js'
 import * as login from './auth.js'
 import * as oidc from './oidc.js'
 import * as appBackend from './app.js'
@@ -1162,7 +1163,13 @@ export const nestjs = {
         return [{ ok: true, text: `Verbonden met PostgreSQL op ${where}` }, ...auth]
     },
 
-    async steps({ projectDir, exec = run, answers = {}, secret = () => randomBytes(48).toString('hex') }) {
+    async steps({
+        projectDir,
+        exec = run,
+        answers = {},
+        secret = () => randomBytes(48).toString('hex'),
+        emptyEarlier = database => emptyDatabase(database, { exec })
+    }) {
         const database = answers?.database ?? null
         const withAuth = Boolean(database && answers?.auth)
         const withOidc = database && answers?.oidc ? answers.oidc : null
@@ -1364,6 +1371,13 @@ export const nestjs = {
             }
         )
 
+        // The database of an earlier project with this name: emptied when that was the answer (postgres ask)
+        if (database?.reset)
+            steps.push({
+                title: 'Vorige database leegmaken',
+                weight: 1,
+                run: () => emptyEarlier(database)
+            })
         if (database?.mode === 'local') {
             steps.push({
                 title: 'Databaseverbinding testen',

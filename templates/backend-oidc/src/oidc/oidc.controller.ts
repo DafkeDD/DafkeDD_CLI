@@ -127,7 +127,7 @@ export class OidcController {
     @ApiProduces('text/html', 'application/json')
     @ApiOkResponse({
         description:
-            'The login form, or { step, clientId, clientName, registration, password, eid, external, pending, csrf, loginHint }'
+            'The login form, or { step, clientId, clientName, registration, password, eid, external, externals, pending, csrf, loginHint }'
     })
     @ApiResponse({
         status: 410,
@@ -143,7 +143,7 @@ export class OidcController {
         const found = await this.oidc.findInteraction(id, this.interactionCookie(request, id))
         if (wantsJson(request)) {
             if (!found) return this.json(response, 410, { status: 'expired', message: t('oidc.EXPIRED') })
-            const external = this.config.external
+            const externals = this.config.externals
             return this.json(response, 200, {
                 step: 'login',
                 // The app that asked for the login: its own login screen says "Log in to <app>" for another app
@@ -156,8 +156,10 @@ export class OidcController {
                 eid: this.config.eid !== 'off' && !this.config.externalOnly,
                 // "Log in with a passkey" (OIDC_PASSKEYS, not with OIDC_EXTERNAL_ONLY)
                 passkey: this.config.passkeys,
-                // "Log in with <name>": another OpenID Connect server (OIDC_EXTERNAL_ISSUER)
-                external: external ? { name: external.name } : null,
+                // "Log in with <name>": other OpenID Connect servers (OIDC_EXTERNAL_*, OIDC_EXTERNAL_<n>_*); external is
+                // the first (as before several were possible)
+                external: externals[0] ? { name: externals[0].name } : null,
+                externals: externals.map(item => ({ id: item.id, name: item.name })),
                 // Back from that server, halfway (second factor, organisation): POST .../resume goes on
                 pending: found.interaction.userId !== null,
                 csrf: found.interaction.csrf,
@@ -264,7 +266,7 @@ export class OidcController {
     @Post('interaction/:id/external')
     @ApiOperation({
         summary:
-            'Log in at the other OpenID Connect server (OIDC_EXTERNAL_ISSUER; form-encoded or JSON { csrf }): to its login page with PKCE, state and nonce'
+            'Log in at another OpenID Connect server (form-encoded or JSON { csrf, provider }; provider: its id, default 1): to its login page with PKCE, state and nonce'
     })
     @ApiResponse({ status: 303, description: 'To the other server (form), or JSON { status: "redirect", location }' })
     @ApiResponse({ status: 404, description: 'oidc.EXTERNAL_DISABLED: no other server is set up' })
@@ -671,7 +673,6 @@ export class OidcController {
         email: string,
         error?: string
     ) {
-        const external = this.config.external
         return {
             action: this.action(id, 'login', request),
             csrf,
@@ -679,15 +680,19 @@ export class OidcController {
             email,
             error,
             password: !this.config.externalOnly,
-            external: external ? { name: external.name, action: this.action(id, 'external', request) } : undefined
+            externals: this.config.externals.map(item => ({
+                id: item.id,
+                name: item.name,
+                action: this.action(id, 'external', request)
+            }))
         }
     }
 
-    /** Where the forms of the login page may go (Content-Security-Policy form-action): the client and the other server. */
+    /** Where the forms of the login page may go (Content-Security-Policy form-action): the client and the other servers. */
     private async loginTargets(redirectUri: string): Promise<string[]> {
         const targets = [new URL(redirectUri).origin]
-        if (this.config.external) {
-            const authorize = await this.external.metadata().catch(() => null)
+        for (const item of this.config.externals) {
+            const authorize = await this.external.metadata(item.id).catch(() => null)
             if (authorize) targets.push(new URL(authorize.authorization_endpoint).origin)
         }
         return targets

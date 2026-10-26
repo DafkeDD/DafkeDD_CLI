@@ -17,7 +17,10 @@ import {
     sha
 } from '../src/manifest.js'
 import { addMissing, DESIGN_MESSAGES, NEW_SUFFIX, planUpdate, update } from '../src/update.js'
+import { existsSync } from 'node:fs'
 import { DESIGN_FILES, designFiles } from '../src/frontends/oidc.js'
+
+const exists = async file => existsSync(file)
 
 const project = {
     ...describeProject({
@@ -236,9 +239,18 @@ test('update keeps the Pasport design of the frontend in step: styles, component
     // The pages and APP_NAV are yours: never managed
     for (const rel of ['frontend/src/app/[locale]/page.tsx', 'frontend/src/lib/nav.ts', 'frontend/src/lib/brand.ts'])
         assert.ok(!files[rel], rel)
-    // Only the login server and linked apps have the design
+    // Every other frontend has the design too (a site, an API, the simple login), but not its pages, rail or name
     const api = { ...project, kind: 'api', link: null }
-    assert.ok(!Object.keys(managedFiles(api)).some(rel => rel.startsWith('frontend/src/')))
+    const site = Object.keys(managedFiles(api)).filter(rel => rel.startsWith('frontend/'))
+    for (const rel of [
+        'frontend/src/components/pasport/shell.tsx',
+        'frontend/src/styles/pasport.css',
+        'frontend/scripts/check-design.mjs'
+    ])
+        assert.ok(site.includes(rel), rel)
+    for (const rel of ['frontend/src/app/[locale]/page.tsx', 'frontend/src/lib/nav.ts', 'frontend/src/lib/brand.ts'])
+        assert.ok(!site.includes(rel), rel)
+    assert.ok(!site.some(rel => rel.includes('portal-shell') || rel.includes('/lib/oidc')))
 
     // An older project: the shell it has is yours (no manifest entry), the new one comes next to it; the missing
     // design files and texts are added, your texts stay
@@ -290,4 +302,74 @@ test('addMissing adds missing texts, also nested ones, and never changes one tha
     const into = { a: 'mine', b: { c: 'mine' } }
     assert.deepEqual(addMissing(into, { a: 'new', b: { c: 'new', d: 'new' }, e: { f: 'new' } }), ['b.d', 'e'])
     assert.deepEqual(into, { a: 'mine', b: { c: 'mine', d: 'new' }, e: { f: 'new' } })
+})
+
+test('update brings an older frontend without the OpenID Connect login into the Pasport design', async t => {
+    const dir = await tempDir(t)
+    const site = {
+        name: 'shop',
+        frontend: true,
+        backend: true,
+        kind: 'login',
+        database: 'shop',
+        claude: false,
+        cloud: false
+    }
+    // A frontend of 0.49: its own home page without the shell, the old switchers, no DafkeDD UI, no fonts
+    const root = path.join(dir, 'frontend')
+    await fs.mkdir(path.join(root, 'src/app/[locale]'), { recursive: true })
+    await fs.mkdir(path.join(root, 'src/components'), { recursive: true })
+    await fs.mkdir(path.join(root, 'messages'), { recursive: true })
+    await fs.writeFile(path.join(root, 'src/app/[locale]/page.tsx'), 'export default function Home() { return null }\n')
+    await fs.writeFile(path.join(root, 'src/components/locale-switcher.tsx'), 'old')
+    await fs.writeFile(
+        path.join(root, 'package.json'),
+        JSON.stringify({ scripts: { dev: 'next dev' }, dependencies: { 'react-icons': '^5.0.0' } })
+    )
+    await fs.writeFile(path.join(root, 'messages/en.json'), JSON.stringify({ HomePage: { title: 'Mine' } }))
+    await fs.writeFile(path.join(dir, MANIFEST), JSON.stringify({ version: '0.49.0', project: site, files: {} }))
+
+    const calls = []
+    const exec = async (cmd, args) => calls.push([cmd, ...args].join(' '))
+    const dafkeUi = {
+        clone: async () => fs.mkdtemp(path.join(os.tmpdir(), 'ui-')),
+        setup: async ({ root: where }) => fs.mkdir(path.join(where, 'src/components/ui'), { recursive: true })
+    }
+    const lines = []
+    await update({ projectDir: dir, version: '0.51.0', log: line => lines.push(String(line)), exec, dafkeUi })
+
+    // The design itself is written; the home page you have gets the new one next to it
+    assert.ok(await exists(path.join(root, 'src/components/pasport/shell.tsx')))
+    assert.ok(await exists(path.join(root, 'src/styles/pasport.css')))
+    assert.equal(
+        await fs.readFile(path.join(root, 'src/app/[locale]/page.tsx'), 'utf8'),
+        'export default function Home() { return null }\n'
+    )
+    assert.match(await fs.readFile(path.join(root, `src/app/[locale]/page.tsx${NEW_SUFFIX}`), 'utf8'), /<AppPage>/)
+    // The starters that were missing: the rail, the account of the simple login, the login pages
+    assert.match(await fs.readFile(path.join(root, 'src/lib/nav.ts'), 'utf8'), /APP_NAV/)
+    assert.match(await fs.readFile(path.join(root, 'src/components/shell/account.ts'), 'utf8'), /\/auth\/me/)
+    assert.match(await fs.readFile(path.join(root, 'src/app/[locale]/login/page.tsx'), 'utf8'), /AuthForm/)
+    // The old switchers are left alone and reported; the check, the fonts and DafkeDD UI come with it
+    assert.ok(await exists(path.join(root, 'src/components/locale-switcher.tsx')))
+    assert.ok(lines.some(line => line.includes('locale-switcher.tsx: niet meer nodig')))
+    assert.ok(lines.some(line => line.includes('npm uninstall react-icons')))
+    const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'))
+    assert.equal(pkg.scripts['check:design'], 'node scripts/check-design.mjs')
+    assert.equal(pkg.scripts.dev, 'next dev')
+    assert.ok(calls.some(call => call.startsWith('npm install @fontsource-variable/hanken-grotesk@latest')))
+    assert.ok(await exists(path.join(root, 'src/components/ui')))
+    // The texts of the design are added, yours stay
+    const en = JSON.parse(await fs.readFile(path.join(root, 'messages/en.json'), 'utf8'))
+    assert.equal(en.HomePage.title, 'Mine')
+    assert.ok(en.Shell && en.Nav && en.Auth)
+
+    // Once in the design (<AppPage> on the home page) the starters are yours: no new .dafkedd-new next time
+    await fs.rename(
+        path.join(root, `src/app/[locale]/page.tsx${NEW_SUFFIX}`),
+        path.join(root, 'src/app/[locale]/page.tsx')
+    )
+    await fs.rm(path.join(root, `src/app/[locale]/login/page.tsx`))
+    await update({ projectDir: dir, version: '0.51.0', log: () => {}, exec, dafkeUi })
+    assert.ok(!(await exists(path.join(root, 'src/app/[locale]/login/page.tsx'))), 'a page you removed stays away')
 })

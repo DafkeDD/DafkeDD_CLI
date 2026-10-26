@@ -56,15 +56,16 @@ async function renew(session: Session): Promise<Session | null> {
 
 /**
  * The session of a cookie, with an access token that is valid for at least another minute: renewed with the refresh
- * token when needed. `cookie` is the new cookie value to set (or "delete" when the login server ended the session).
+ * token when needed (or now, with `force`). `cookie` is the new cookie value to set (or "delete" when the login server ended the session).
  * Only for the proxy and route handlers: they can set cookies, server components cannot.
  */
-export async function freshSession(sealed: string | undefined): Promise<Renewed> {
+export async function freshSession(sealed: string | undefined, { force = false } = {}): Promise<Renewed> {
     const session = unseal<Session>(sealed, SESSION_COOKIE)
     if (!session) return { session: null, cookie: sealed ? 'delete' : null }
     // The login server ended this session (back-channel logout): logged out here too
     if (sessionEnded(session.sid)) return { session: null, cookie: 'delete' }
-    if (session.expiresAt - RENEW_BEFORE_MS > Date.now()) return { session, cookie: null }
+    // `force`: new tokens now (a demo just started: its licence and roles are in the next tokens)
+    if (!force && session.expiresAt - RENEW_BEFORE_MS > Date.now()) return { session, cookie: null }
     const key = session.refreshToken ?? ''
     let pending = running.get(key)
     if (!pending) {

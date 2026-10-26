@@ -19,10 +19,25 @@ export interface Queryable {
 export type TenantIsolation = 'rls' | 'database'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-/** How many organisations keep an open connection pool at the same time; the one used longest ago closes first. */
-const MAX_TENANT_POOLS = 50
-/** Connections per organisation (the database of the app keeps the default of 10). */
-const TENANT_POOL_SIZE = 5
+/** Connections per organisation (TENANT_ISOLATION=database). */
+const TENANT_POOL_SIZE = 2
+
+/**
+ * How the connections of this instance (DATABASE_MAX_CONNECTIONS, default 20) are shared: with one database all of
+ * them for it; with a database per organisation a quarter for the database of the app and the rest for the
+ * organisations used most recently, 2 each (the one used longest ago closes first). Cloud SQL allows few connections
+ * (db-f1-micro: 25 for the whole server), so the total never goes over the budget.
+ */
+export function connectionBudget(total: number, isolation: TenantIsolation) {
+    const budget = Math.max(2, Math.floor(total) || 20)
+    if (isolation === 'rls') return { main: budget, tenantPools: 0, perTenant: 0 }
+    const main = Math.max(1, Math.ceil(budget / 4))
+    return {
+        main,
+        tenantPools: Math.max(1, Math.floor((budget - main) / TENANT_POOL_SIZE)),
+        perTenant: TENANT_POOL_SIZE
+    }
+}
 
 /**
  * Thin wrapper around a pg connection pool. The settings come from .env (DATABASE_*, TENANT_ISOLATION).
@@ -43,6 +58,7 @@ export class DatabaseService implements OnModuleDestroy {
     private migrated: Promise<void> | null = null
     /** The pools of the databases of the organisations (TENANT_ISOLATION=database), the one used last at the end */
     private readonly tenantPools = new Map<string, Promise<pg.Pool>>()
+    private readonly budget: ReturnType<typeof connectionBudget>
 
     constructor(config: ConfigService) {
         const isolation = config.get<string>('TENANT_ISOLATION') || 'rls'
@@ -57,7 +73,8 @@ export class DatabaseService implements OnModuleDestroy {
             password: config.get<string>('DATABASE_PASSWORD'),
             connectionTimeoutMillis: 3000
         }
-        this.pool = newPool({ ...this.settings, database: this.base })
+        this.budget = connectionBudget(Number(config.get<string>('DATABASE_MAX_CONNECTIONS')), isolation)
+        this.pool = newPool({ ...this.settings, database: this.base, max: this.budget.main })
     }
 
     query<T extends pg.QueryResultRow = pg.QueryResultRow>(text: string, params?: unknown[]) {
@@ -164,7 +181,7 @@ export class DatabaseService implements OnModuleDestroy {
         })
         this.tenantPools.set(key, pool)
         for (const [oldest, closing] of this.tenantPools) {
-            if (this.tenantPools.size <= MAX_TENANT_POOLS) break
+            if (this.tenantPools.size <= this.budget.tenantPools) break
             this.tenantPools.delete(oldest)
             void closing.then(
                 old => old.end(),
@@ -186,7 +203,7 @@ export class DatabaseService implements OnModuleDestroy {
             const { rowCount } = await this.pool.query('SELECT 1 FROM pg_database WHERE datname = $1', [name])
             // CREATE DATABASE cannot run in a transaction nor take a parameter: the name is checked above
             if (!rowCount) await this.pool.query(`CREATE DATABASE "${name}"`)
-            const pool = newPool({ ...this.settings, database: name, max: TENANT_POOL_SIZE })
+            const pool = newPool({ ...this.settings, database: name, max: this.budget.perTenant })
             try {
                 const client = await pool.connect()
                 try {

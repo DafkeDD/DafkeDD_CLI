@@ -4,15 +4,6 @@
 /** The login screens of the Pasport design (namespace AuthScreen): the panel on the left, the steps of the login. */
 export const AUTH_SCREEN_MESSAGES = {
     en: {
-        adminArea: 'Management area',
-        adminFooter: 'Protected with 2FA · Every action is logged',
-        adminLogin: 'Log in',
-        adminLoginText: 'Log in with your administrator account, followed by 2FA.',
-        adminPoint1: 'Organisations & members',
-        adminPoint2: 'Apps & licences',
-        adminPoint3: 'Activity log & security',
-        adminText: 'Manage organisations, members, apps and licences from one central place.',
-        adminTitle: 'Superadmin panel',
         asideText:
             'Log in with your Belgian eID, a passkey or your email address. Your data stays encrypted and is never shared with third parties.',
         asideTitle: 'Log in securely with your identity',
@@ -64,15 +55,6 @@ export const AUTH_SCREEN_MESSAGES = {
         welcomeText: 'Log in to open your apps.'
     },
     nl: {
-        adminArea: 'Beheeromgeving',
-        adminFooter: 'Beveiligd met 2FA · Alle acties worden gelogd',
-        adminLogin: 'Aanmelden',
-        adminLoginText: 'Meld je aan met je beheerdersaccount, gevolgd door 2FA.',
-        adminPoint1: 'Organisaties & leden',
-        adminPoint2: 'Apps & licenties',
-        adminPoint3: 'Activiteitenlog & beveiliging',
-        adminText: 'Beheer organisaties, leden, apps en licenties vanaf één centrale plek.',
-        adminTitle: 'Superadmin-paneel',
         asideText:
             'Meld je aan met je Belgische eID, een passkey of je e-mailadres. Je gegevens blijven versleuteld en worden nooit gedeeld met derden.',
         asideTitle: 'Veilig inloggen met je identiteit',
@@ -124,16 +106,6 @@ export const AUTH_SCREEN_MESSAGES = {
         welcomeText: 'Meld je aan om je apps te openen.'
     },
     fr: {
-        adminArea: 'Espace de gestion',
-        adminFooter: 'Protégé par 2FA · Toutes les actions sont journalisées',
-        adminLogin: 'Connexion',
-        adminLoginText: 'Connectez-vous avec votre compte administrateur, suivi de la 2FA.',
-        adminPoint1: 'Organisations & membres',
-        adminPoint2: 'Applications & licences',
-        adminPoint3: 'Journal d’activité & sécurité',
-        adminText:
-            'Gérez les organisations, les membres, les applications et les licences depuis un seul endroit central.',
-        adminTitle: 'Panneau superadmin',
         asideText:
             'Connectez-vous avec votre eID belge, une clé d’accès ou votre adresse e-mail. Vos données restent chiffrées et ne sont jamais partagées avec des tiers.',
         asideTitle: 'Connexion sécurisée avec votre identité',
@@ -188,15 +160,6 @@ export const AUTH_SCREEN_MESSAGES = {
         welcomeText: 'Connectez-vous pour ouvrir vos applications.'
     },
     de: {
-        adminArea: 'Verwaltungsbereich',
-        adminFooter: 'Geschützt mit 2FA · Jede Aktion wird protokolliert',
-        adminLogin: 'Anmelden',
-        adminLoginText: 'Melde dich mit deinem Administratorkonto an, danach folgt 2FA.',
-        adminPoint1: 'Organisationen & Mitglieder',
-        adminPoint2: 'Apps & Lizenzen',
-        adminPoint3: 'Aktivitätsprotokoll & Sicherheit',
-        adminText: 'Verwalte Organisationen, Mitglieder, Apps und Lizenzen an einem zentralen Ort.',
-        adminTitle: 'Superadmin-Bereich',
         asideText:
             'Melde dich mit deiner belgischen eID, einem Passkey oder deiner E-Mail-Adresse an. Deine Daten bleiben verschlüsselt und werden nie an Dritte weitergegeben.',
         asideTitle: 'Sicher anmelden mit deiner Identität',

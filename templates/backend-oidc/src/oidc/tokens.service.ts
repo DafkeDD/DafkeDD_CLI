@@ -220,9 +220,11 @@ export class TokensService {
                   )
               }
             : {}
-        // An app with roles: the roles of the user in this organisation (given by its admins, or the default ones)
+        // An app with roles: the roles of the user in this organisation (given by its admins, or the default ones). In an
+        // app that sells a product only with a licence: a seat, a running demo (trial) or a superadmin; none without
+        const licensed = license.license?.status !== 'none'
         const roles = client.roles?.length
-            ? { roles: await this.appRoles.claim(client, membership?.tenantId ?? null, user.id) }
+            ? { roles: licensed ? await this.appRoles.claim(client, membership?.tenantId ?? null, user.id) : [] }
             : {}
         const accessKey = await this.keys.signingKey('ES256')
         const accessToken = signJwt(

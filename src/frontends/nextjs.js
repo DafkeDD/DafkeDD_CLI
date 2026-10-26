@@ -441,11 +441,6 @@ const replaceOnce = (text, from, to) => {
     return text.replace(from, () => to)
 }
 
-/**
- * Adds the backend connection to a set of frontend files: API client, status card, texts and the card on the page.
- * With the OIDC login (the login server itself, or an app linked to it) the frontend gets the Pasport design: its own
- * layout, home page, shell and login screen, built with DafkeDD UI (see oidcSteps: always installed then).
- */
 /** The texts of the Pasport design in a project without the OpenID Connect login: the shell, the login screen, Nav. */
 export const siteMessages = locale => ({
     Nav: NAV_MESSAGES[locale],
@@ -469,6 +464,11 @@ export function sitePages(fileMap, { api = null, appName = null } = {}) {
     return result
 }
 
+/**
+ * Adds the backend connection to a set of frontend files: API client, status card, texts and the card on the page.
+ * With the OIDC login (the login server itself, or an app linked to it) the frontend gets the Pasport design: its own
+ * layout, home page, shell and login screen, built with DafkeDD UI (see oidcSteps: always installed then).
+ */
 export function withApi(fileMap, api, { ui }) {
     const result = {
         ...fileMap,
@@ -614,6 +614,42 @@ export const FONT_PACKAGES = [
 
 /** DafkeDD UI: always all of it, in every project (the Pasport design builds on its theme and components). */
 export const uiFor = () => 'all'
+
+/**
+ * DafkeDD UI in a frontend, with its CLI from the clone of the UI repository (`cli`): dafke-ui.json, init, every
+ * component (`all`), ESLint skips its folder, and its stylesheet loaded from src/app/globals.css. Also used by
+ * `update` for a frontend made before every project had it.
+ */
+export async function setupDafkeUi({ root, exec = run, cli, all = true }) {
+    await write(root, 'dafke-ui.json', JSON.stringify(UI_CONFIG, null, 2) + '\n')
+    await exec('node', [cli, 'init', '--yes'], { cwd: root })
+    await ignoreUiInEslint(root)
+    if (all) await exec('node', [cli, 'add', '--all'], { cwd: root })
+    // CSS-verzamelbestand van DafkeDD UI laden in de globale stylesheet
+    const css = path.join(root, 'src/app/globals.css')
+    const importLine = '@import "../components/ui/ui.css";'
+    let content = await fs.readFile(css, 'utf8')
+    if (!/components\/ui\/ui\.css/.test(content)) {
+        content = content.replace(/(@import\s+["']tailwindcss["'];?\r?\n)/, `$1${importLine}\n`)
+        if (!content.includes(importLine)) content = `${importLine}\n${content}`
+        await fs.writeFile(css, content)
+    }
+}
+
+/** A shallow clone of the UI repository (branch UI_BRANCH) in a temporary folder; returns the folder. */
+export async function cloneDafkeUi(exec = run) {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-ui-'))
+    try {
+        await exec('git', ['clone', '--depth', '1', '--branch', UI_BRANCH, '--single-branch', UI_REPO, dir])
+        return dir
+    } catch (error) {
+        await fs.rm(dir, { recursive: true, force: true })
+        throw error
+    }
+}
+
+/** The CLI of DafkeDD UI in a clone of its repository. */
+export const dafkeUiCli = dir => path.join(dir, 'packages', 'cli', 'bin', 'dafke-ui.mjs')
 
 export const nextjs = {
     id: 'nextjs',
@@ -769,20 +805,7 @@ export const nextjs = {
                     weight: 2,
                     run: async () => {
                         try {
-                            await write(root, 'dafke-ui.json', JSON.stringify(UI_CONFIG, null, 2) + '\n')
-                            await exec('node', [cli(), 'init', '--yes'], { cwd: root })
-                            await ignoreUiInEslint(root)
-                            if (ui === 'all') await exec('node', [cli(), 'add', '--all'], { cwd: root })
-
-                            // CSS-verzamelbestand van DafkeDD UI laden in de globale stylesheet
-                            const css = path.join(root, 'src/app/globals.css')
-                            const importLine = '@import "../components/ui/ui.css";'
-                            let content = await fs.readFile(css, 'utf8')
-                            if (!/components\/ui\/ui\.css/.test(content)) {
-                                content = content.replace(/(@import\s+["']tailwindcss["'];?\r?\n)/, `$1${importLine}\n`)
-                                if (!content.includes(importLine)) content = `${importLine}\n${content}`
-                                await fs.writeFile(css, content)
-                            }
+                            await setupDafkeUi({ root, exec, cli: cli(), all: ui === 'all' })
                         } finally {
                             await cleanupUi()
                         }

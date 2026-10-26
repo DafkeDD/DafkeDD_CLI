@@ -70,6 +70,10 @@ test('Terraform: Cloud Run that scales to zero and goes away with enabled = fals
     assert.match(tf, /database_version\s+= "POSTGRES_17"/)
     assert.match(tf, /DATABASE_HOST = "\/cloudsql\/\$\{google_sql_database_instance\.db\.connection_name\}"/)
     assert.match(tf, /TENANT_ISOLATION = "database"/)
+    // Every instance its share of the few connections of Cloud SQL (a database per organisation needs CREATEDB: the
+    // built-in user of Cloud SQL has it)
+    assert.match(tf, /DATABASE_MAX_CONNECTIONS = tostring\(floor\(var\.db_max_connections \/ var\.max_instances\)\)/)
+    assert.match(variablesTf(app, 'kidiefile'), /variable "db_max_connections" \{[^}]*default\s+= 20/)
     assert.match(tf, /FILES_DRIVER = "gcs"/)
     assert.match(tf, /public_access_prevention\s+= "enforced"/)
     assert.match(tf, /OIDC_CLIENT_IDS = "kidiefile"/)

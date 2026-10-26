@@ -77,8 +77,8 @@ never has a login or registration form of its own.
 - The card says which app the user logs in to: "Inloggen bij Planner".
 - Order: `SsoButton` "Aanmelden met eID", `AuthDivider` "of met e-mail", e-mail and password `Field`s, the primary
   `Button`, then "Nog geen account? Account maken" in the footer. Registering always happens here, on the login server.
-- The superadmin login (/admin/login) is the same screen with `asideTone="ink"` and the brand mark in `text` on
-  `surface`.
+- One login screen for everybody, superadmins too: after the login a superadmin chooses "Platform management" (or one of
+  its organisations). `/admin/login` is only an old link to `/login`.
 - On narrow screens the aside disappears and the card fills the screen.
 
 ### The shell
@@ -107,8 +107,8 @@ Every app, the login server's own portal included, uses the same shell (`Shell` 
 ### The login screens
 
 The login, registration, password, email and invitation screens use `AuthLayout`: the teal panel with the eID card on
-the left (dark for the superadmin login at `/admin/login`), the form on the right in `auth-card`, the theme and the
-language buttons at the bottom right. On the phone only the form.
+the left, the form on the right in `auth-card`, the theme and the language buttons at the bottom right. On the phone
+only the form.
 
 ## Iconography
 

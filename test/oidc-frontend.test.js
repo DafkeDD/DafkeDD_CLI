@@ -361,7 +361,7 @@ test('the Pasport design: one layout, the shell around every page and the login 
         /if \(!session\.superadmin\) return <ClientRedirect/
     )
     // The auth screens draw the login screen of the design themselves
-    assert.match(templates['src/components/oidc-login.tsx'], /<AuthLayout variant=\{variant\}>/)
+    assert.match(templates['src/components/oidc-login.tsx'], /<AuthLayout>\{children\}<\/AuthLayout>/)
     for (const name of ['Register', 'ForgotPassword', 'ResetPassword', 'VerifyEmail', 'AcceptInvitation'])
         assert.match(templates['src/components/account-forms.tsx'], new RegExp(`export function ${name}\\(`), name)
     assert.equal(templates['src/components/account-forms.tsx'].match(/<AuthLayout/g).length >= 5, true)
@@ -424,8 +424,10 @@ test('every page is protected: the proxy sends a browser without a session to /l
     const login = templates['src/app/[locale]/login/page.tsx']
     assert.match(login, /returnTo\?\.startsWith\('\/'\) && !returnTo\.startsWith\('\/\/'\)/)
     assert.match(templates['src/components/shell/start-login.tsx'], /name='returnTo'/)
-    // /admin/login: the dark login of the superadmins, back to the platform
-    assert.match(templates['src/app/[locale]/admin/login/page.tsx'], /<StartLogin admin/)
+    // One login screen for everybody: /admin/login (an old link) is /login, back to the platform
+    assert.match(templates['src/app/[locale]/admin/login/page.tsx'], /redirect\('\/login\?returnTo=%2Fadmin'\)/)
+    assert.ok(!/variant|pp-login-ui/.test(templates['src/components/shell/start-login.tsx']))
+    assert.ok(!/variant=|admin/.test(templates['src/components/pasport/auth-layout.tsx']))
 })
 
 test('a superadmin on the platform (no organisation) goes to /admin instead of seeing an error', () => {
