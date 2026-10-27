@@ -9,8 +9,8 @@ const HELP = `DafkeDD_CLI v${version}
   DafkeDD_CLI --answers <bestand>
                          hetzelfde project opnieuw, met de antwoorden van toen (.dafkedd-answers.json van een
                          vorig project); wat er niet in staat en elk wachtwoord wordt gevraagd
-  DafkeDD_CLI update     een bestaand project bijwerken naar deze versie (agents, hooks, pipelines, Terraform,
-                         het Pasport-design van de frontend);
+  DafkeDD_CLI update     een bestaand project bijwerken naar deze versie (de code van de backend en de frontend,
+                         nieuwe teksten, scripts en .env-instellingen, agents, hooks, pipelines, Terraform);
                          wat je zelf aanpaste wordt nooit overschreven (<bestand>.dafkedd-new ernaast)
   DafkeDD_CLI doctor     controleren of alles er is (node, gh, MCP-servers, database, labels, branchbescherming)
   DafkeDD_CLI --version`

@@ -12,9 +12,21 @@ import { cloneDafkeUi, dafkeUiCli, setupDafkeUi } from './frontends/nextjs.js'
 import { isSite, SITE_STARTER_FILES, siteFrontend } from './frontends/site.js'
 import { run } from './runner.js'
 import { buildManifest, inferProject, managedFiles, manifestProject, MANIFEST, readManifest, sha } from './manifest.js'
+import {
+    codeFiles,
+    formatLike,
+    moveReadmesToDocs,
+    frontendMessages,
+    untouchedSinceFirstCommit,
+    updateEnv,
+    updatePackages
+} from './update-code.js'
 
 /** The suffix of the new version of a file you changed yourself: the CLI never overwrites your changes. */
 export const NEW_SUFFIX = '.dafkedd-new'
+
+/** Your version of a file of an older project that update replaced after you said it was unchanged. */
+export const OLD_SUFFIX = '.dafkedd-old'
 
 /**
  * What `update` does with every file the CLI manages, by comparing three versions: on disk, the hash the manifest
@@ -46,14 +58,15 @@ const LABELS = {
     new: 'nieuw',
     updated: 'bijgewerkt',
     changed: `zelf aangepast: nieuwe versie in <bestand>${NEW_SUFFIX}`,
+    replaced: `vervangen; je vorige versie staat in <bestand>${OLD_SUFFIX}`,
     removed: 'niet meer nodig (niet verwijderd)',
     deleted: 'door jou verwijderd (niet teruggezet; verwijder de regel uit .dafkedd.json om het terug te krijgen)'
 }
 
 /**
- * `DafkeDD_CLI update` in the folder of a project: the agents, skills, hooks, pipelines, Terraform and the Pasport design
- * of the frontend (styles, components, shell, protected routes, missing texts) of this version of the CLI, without
- * overwriting what you changed. Without a manifest (a project of an older CLI) it reads what the
+ * `DafkeDD_CLI update` in the folder of a project: the code of the backend and the frontend (see update-code.js),
+ * the agents, skills, hooks, pipelines, Terraform and the Pasport design of the frontend of this version of the CLI,
+ * plus the missing texts, npm scripts, packages and .env settings, without overwriting what you changed. Without a manifest (a project of an older CLI) it reads what the
  * project is made of from its folders and asks to confirm that first.
  */
 export async function update({
@@ -85,15 +98,70 @@ export async function update({
         )
     }
     const wanted = managedFiles(project)
+    // The code of the backend and the frontend, formatted like Prettier of the project formatted it when it was made
+    const notes = []
+    const code = codeFiles(project, projectDir)
+    const formattedParts = []
+    for (const part of ['backend', 'frontend']) {
+        const files = Object.fromEntries(Object.entries(code).filter(([rel]) => rel.startsWith(part + '/')))
+        if (!Object.keys(files).length) continue
+        const formatted = await formatLike(projectDir, part, files)
+        if (!formatted) {
+            notes.push(
+                `${pc.yellow('!')} ${part}: de code is niet bijgewerkt, want Prettier staat er niet: voer "npm install" uit in ./${part} en dan update opnieuw`
+            )
+            continue
+        }
+        Object.assign(code, formatted)
+        formattedParts.push(part)
+    }
+    // The design files of the frontend as before; the rest of the code next to them (a part Prettier could not format
+    // is left out), the READMEs moved to ./docs like when the project was made
+    const ready = Object.fromEntries(
+        Object.entries(code).filter(([rel]) => formattedParts.some(part => rel.startsWith(part + '/')))
+    )
+    // Only for the code (not the design files and the files of Claude Code): the question below
+    const codeRels = new Set()
+    for (const [rel, content] of Object.entries(moveReadmesToDocs(projectDir, project, ready)))
+        if (!(rel in wanted)) {
+            wanted[rel] = content
+            codeRels.add(rel)
+        }
     const disk = {}
     for (const rel of new Set([...Object.keys(wanted), ...Object.keys(manifest?.files ?? {})])) {
         const full = path.join(projectDir, rel)
         if (existsSync(full)) disk[rel] = sha(await fs.readFile(full, 'utf8'))
     }
-    const plan = planUpdate({ disk, remembered: manifest?.files ?? {}, wanted })
+    // Code the manifest does not know yet (a project of before 0.54.0): still as the CLI made it in the first commit,
+    // and not changed since, counts as written by the CLI (it is replaced); everything else gets a new version next to it
+    const remembered = { ...manifest?.files }
+    const unknown = Object.keys(wanted).filter(rel => disk[rel] !== undefined && remembered[rel] === undefined)
+    const untouched = await untouchedSinceFirstCommit(projectDir, unknown)
+    for (const rel of untouched) remembered[rel] = disk[rel]
+    const plan = planUpdate({ disk, remembered, wanted })
+    // Without git history to tell (no repository, or committed together with your changes) the code of an older
+    // project is not known: one question for all of it. Yes: the new version, yours kept as <file>.dafkedd-old
+    const unsure = plan.filter(
+        entry =>
+            entry.action === 'changed' &&
+            codeRels.has(entry.rel) &&
+            unknown.includes(entry.rel) &&
+            !untouched.has(entry.rel)
+    )
+    if (
+        unsure.length &&
+        (await prompts.confirm({
+            message: `${unsure.length} bestanden van de code kent update nog niet (gemaakt met een oudere versie). Heb je ze zelf niet aangepast? Dan worden ze vervangen door de nieuwe versie; je huidige versie blijft als <bestand>${OLD_SUFFIX}. Nee: de nieuwe versie komt ernaast als <bestand>${NEW_SUFFIX}`,
+            default: false
+        }))
+    )
+        for (const entry of unsure) entry.action = 'replaced'
     for (const { rel, action } of plan) {
         const target = path.join(projectDir, rel)
-        if (action === 'new' || action === 'updated') {
+        if (action === 'replaced') {
+            await fs.copyFile(target, target + OLD_SUFFIX)
+            await fs.writeFile(target, wanted[rel])
+        } else if (action === 'new' || action === 'updated') {
             await fs.mkdir(path.dirname(target), { recursive: true })
             await fs.writeFile(target, wanted[rel], rel.endsWith('.sh') ? { mode: 0o755 } : undefined)
         } else if (action === 'changed') await fs.writeFile(target + NEW_SUFFIX, wanted[rel])
@@ -112,13 +180,22 @@ export async function update({
     // the fonts and the design check
     const migration = site ? await migrateSite({ projectDir, project, exec, dafkeUi }) : null
     // The texts of the design (shell, bell, login screens, page headers) that are missing: added, yours stay
-    const textsAdded = design ? await addDesignTexts(projectDir, site ? project : null) : []
-    await ensureGitignore(projectDir, project.claude ? GITIGNORE_LINES : [`*${NEW_SUFFIX}`])
+    const textsAdded = design ? await addDesignTexts(projectDir, site ? project : null, project) : []
+    // package.json (missing scripts and packages) and .env (missing settings): yours stay as they are
+    notes.push(...(await updatePackages({ projectDir, project, exec })))
+    notes.push(...(await updateEnv({ projectDir, project })))
+    await ensureGitignore(
+        projectDir,
+        project.claude ? [...GITIGNORE_LINES, `*${OLD_SUFFIX}`] : [`*${NEW_SUFFIX}`, `*${OLD_SUFFIX}`]
+    )
 
     // The manifest remembers what the CLI wrote; a file you changed keeps the hash of the new version, so it is
     // replaced next time only when you took that version over
     const next = await buildManifest({ projectDir, project, version })
     for (const { rel, action } of plan) {
+        // Formatted like the project: what is on disk now when it was written
+        if (action === 'new' || action === 'updated' || action === 'same' || action === 'replaced')
+            next.files[rel] = sha(wanted[rel])
         if (action === 'changed') next.files[rel] = sha(wanted[rel])
         // Remembered, so it stays deleted next time too
         if (action === 'deleted') next.files[rel] = manifest.files[rel]
@@ -128,19 +205,32 @@ export async function update({
 
     const shown = plan.filter(entry => entry.action !== 'same')
     log('')
-    if (!shown.length && !kbAdded.length && !textsAdded.length)
+    if (!shown.length && !kbAdded.length && !textsAdded.length && !notes.length)
         log(`${pc.green('✔')} Alles is al bij met DafkeDD_CLI v${version}.`)
     for (const { rel, action } of shown)
         log(
-            `${action === 'changed' || action === 'deleted' ? pc.yellow('!') : pc.green('✔')} ${rel}: ${LABELS[action].replace('<bestand>', rel)}`
+            `${action === 'changed' || action === 'deleted' || action === 'replaced' ? pc.yellow('!') : pc.green('✔')} ${rel}: ${LABELS[action].replace('<bestand>', rel)}`
         )
     for (const line of migration?.lines ?? []) log(line)
+    for (const line of notes) log(line)
     if (kbAdded.length) log(`${pc.green('✔')} Kennisbank: ${kbAdded.length} ontbrekende bestanden toegevoegd`)
     for (const file of textsAdded) log(`${pc.green('✔')} ${file}: ontbrekende teksten van het design toegevoegd`)
+    if (shown.some(entry => entry.rel.startsWith('backend/') && entry.action !== 'removed'))
+        log(
+            pc.dim(
+                '\nDe backend is bijgewerkt: "npm install", "npm run build" en "npm test" in ./backend; nieuwe migraties lopen bij de volgende start van de API.'
+            )
+        )
     if (design && shown.some(entry => entry.rel.startsWith('frontend/')))
         log(
             pc.dim(
                 '\nHet Pasport-design is bijgewerkt: controleer met "npm run check:design" en "npm run build" in ./frontend.'
+            )
+        )
+    if (plan.some(entry => entry.action === 'replaced'))
+        log(
+            pc.dim(
+                `\nVervangen bestanden: je vorige versie staat ernaast als <bestand>${OLD_SUFFIX}; verwijder die zodra alles werkt.`
             )
         )
     if (plan.some(entry => entry.action === 'changed'))
@@ -197,9 +287,11 @@ export function addMissing(into, from, prefix = '') {
  * The missing texts of the design in frontend/messages/<locale>.json (4 spaces, as Prettier writes them). `site`: a
  * frontend without the OpenID Connect login, whose texts are those the CLI makes for it now.
  */
-async function addDesignTexts(projectDir, site = null) {
+async function addDesignTexts(projectDir, site = null, project = null) {
     const added = []
     const generated = site ? siteFrontend(site) : null
+    // The login server and a linked app: every text of the frontend of this version (also of its pages)
+    const full = !site && project ? frontendMessages(project, projectDir) : null
     for (const locale of Object.keys(SHELL_MESSAGES)) {
         const file = path.join(projectDir, 'frontend', 'messages', `${locale}.json`)
         if (!existsSync(file)) continue
@@ -208,7 +300,8 @@ async function addDesignTexts(projectDir, site = null) {
             messages,
             generated
                 ? JSON.parse(generated[`messages/${locale}.json`])
-                : Object.fromEntries(Object.entries(DESIGN_MESSAGES).map(([name, texts]) => [name, texts[locale]]))
+                : (full?.[locale] ??
+                      Object.fromEntries(Object.entries(DESIGN_MESSAGES).map(([name, texts]) => [name, texts[locale]])))
         )
         if (!keys.length) continue
         await fs.writeFile(file, JSON.stringify(messages, null, 4) + '\n')

@@ -83,7 +83,7 @@ const ENTRIES = {
     }
 }
 
-const pointer = (title, file) => `# ${title}
+export const pointer = (title, file) => `# ${title}
 
 The documentation lives in one place: [../${DOCS_DIR}/${file}](../${DOCS_DIR}/${file}). See also the
 [documentation index](../${DOCS_DIR}/README.md).
@@ -104,6 +104,21 @@ Or open \`index.html\` in this folder directly.
 | --- | --- |
 ${rows.join('\n')}
 ${swagger ? `\nTry the API from the browser (Swagger): **${swagger}**\n` : ''}${kb ? '\n**Knowledge base** (for the users of the app, in four languages, every page and button with screenshots):\n[kb/README.md](kb/README.md)\n' : ''}`
+}
+
+/**
+ * The files of ./docs besides the documents themselves: the index, the same documentation as a web page (open
+ * docs/index.html in a browser) and its little server. `done`: `[{ file, id, title, markdown }]`.
+ */
+export function docsFolder(done, { swagger = null, kb = false } = {}) {
+    const index = docsIndex(done, { swagger, kb })
+    const pages = [{ id: 'index', title: 'Overview', markdown: index }, ...done]
+    return {
+        [`${DOCS_DIR}/README.md`]: index,
+        [`${DOCS_DIR}/index.html`]: docsSite(pages, { title: 'Project documentation', swagger }),
+        [`${DOCS_DIR}/serve.mjs`]: SERVER,
+        [`${DOCS_DIR}/package.json`]: JSON.stringify(DOCS_PACKAGE, null, 2) + '\n'
+    }
 }
 
 /**
@@ -129,20 +144,9 @@ export function docsStep({ projectDir, parts, swagger = null, kb = false }) {
                 await addDocsScript(path.join(projectDir, dir, 'package.json'))
                 done.push({ file, id: file.replace(/\.md$/, ''), title, markdown: content })
             }
-            if (done.length > 0) {
-                await fs.writeFile(path.join(projectDir, DOCS_DIR, 'README.md'), docsIndex(done, { swagger, kb }))
-                // The same documentation as a web page: open docs/index.html in a browser
-                const pages = [{ id: 'index', title: 'Overview', markdown: docsIndex(done, { swagger, kb }) }, ...done]
-                await fs.writeFile(
-                    path.join(projectDir, DOCS_DIR, 'index.html'),
-                    docsSite(pages, { title: 'Project documentation', swagger })
-                )
-                await fs.writeFile(path.join(projectDir, DOCS_DIR, 'serve.mjs'), SERVER)
-                await fs.writeFile(
-                    path.join(projectDir, DOCS_DIR, 'package.json'),
-                    JSON.stringify(DOCS_PACKAGE, null, 2) + '\n'
-                )
-            }
+            if (done.length > 0)
+                for (const [rel, content] of Object.entries(docsFolder(done, { swagger, kb })))
+                    await fs.writeFile(path.join(projectDir, rel), content)
         }
     }
 }

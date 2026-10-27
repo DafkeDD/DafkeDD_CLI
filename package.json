@@ -1,6 +1,6 @@
 {
     "name": "dafkedd_cli",
-    "version": "0.53.4",
+    "version": "0.54.0",
     "description": "Interactieve CLI om per project een frontend te installeren (nooit globaal)",
     "type": "module",
     "bin": {

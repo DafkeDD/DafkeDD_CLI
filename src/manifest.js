@@ -6,6 +6,7 @@ import { projectClaudeFiles } from './claude.js'
 import { cloudFiles } from './cloud.js'
 import { designFiles } from './frontends/oidc.js'
 import { isSite, siteDesignFiles } from './frontends/site.js'
+import { codeFiles, moveReadmesToDocs } from './update-code.js'
 
 /**
  * The manifest of a generated project (`.dafkedd.json`, committed): the version of the CLI, what the project is made
@@ -41,9 +42,14 @@ export function manifestProject(project) {
     }
 }
 
-/** Every file the CLI manages for this project, with the content of this version of the CLI. */
-export function managedFiles(project) {
+/**
+ * Every file the CLI manages for this project, with the content of this version of the CLI. With `projectDir` also the
+ * code of the backend and the frontend (codeFiles: what it depends on is read from the .env files there), not yet
+ * formatted like the project (see update).
+ */
+export function managedFiles(project, projectDir = null) {
     return {
+        ...(projectDir ? moveReadmesToDocs(projectDir, project, codeFiles(project, projectDir)) : {}),
         ...(project.claude ? projectClaudeFiles(project) : {}),
         ...(project.cloud ? cloudFiles(project) : {}),
         // The Pasport design of the frontend of the login server and of every linked app
@@ -58,7 +64,7 @@ export function managedFiles(project) {
 /** The manifest of a project, from the files as they are on disk now. */
 export async function buildManifest({ projectDir, project, version }) {
     const files = {}
-    for (const rel of Object.keys(managedFiles(project)).sort()) {
+    for (const rel of Object.keys(managedFiles(project, projectDir)).sort()) {
         const full = path.join(projectDir, rel)
         if (existsSync(full)) files[rel] = sha(await fs.readFile(full, 'utf8'))
     }

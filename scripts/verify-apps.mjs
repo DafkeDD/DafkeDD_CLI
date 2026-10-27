@@ -178,7 +178,13 @@ async function checkExtras(projectDir, project) {
     // The manifest knows every managed file, and update on a fresh project changes nothing
     const manifest = readManifest(projectDir)
     if (!manifest) throw new Error(`No ${MANIFEST}`)
-    const plan = await update({ projectDir, version: 'verify', log: () => {} })
+    const plan = await update({
+        projectDir,
+        version: 'verify',
+        log: () => {},
+        // Never a question here: a fresh project has nothing to ask about
+        prompts: { confirm: async () => false }
+    })
     const changed = plan.filter(entry => entry.action !== 'same')
     if (changed.length) throw new Error(`update changes a fresh project: ${JSON.stringify(changed)}`)
     // doctor finds nothing that does not work (warnings, such as gh or Chrome, are fine here)
@@ -251,6 +257,8 @@ for (const name of names) {
                     { dir: 'frontend', file: 'frontend.md', title: 'Next.js' },
                     { dir: 'backend', file: 'api.md', title: 'NestJS' }
                 ],
+                // Like the CLI: the Swagger of the API (the API of a linked app on its own port)
+                swagger: `http://localhost:${variant.frontend.api?.linked ? 4001 : 4000}/docs`,
                 kb: true
             }),
             ...kbSteps({ projectDir, project }),

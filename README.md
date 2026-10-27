@@ -182,8 +182,13 @@ npx --allow-git=all github:DafkeDD/DafkeDD_CLI update
 npx --allow-git=all github:DafkeDD/DafkeDD_CLI doctor
 ```
 
-- **`update`** brings the files the CLI manages up to this version: the agents, skills, hooks, `CLAUDE.md`, the
-  pipelines, `.mcp.json` and, with Google Cloud, Terraform, the workflows and the Dockerfiles. The manifest
+- **`update`** brings the files the CLI manages up to this version: **the code of the backend and the frontend** (the
+  login server, a linked app or an API, and its pages, as the CLI makes them now, formatted with the Prettier of the
+  project), the agents, skills, hooks, `CLAUDE.md`, the pipelines, `.mcp.json` and, with Google Cloud, Terraform, the
+  workflows and the Dockerfiles. It also adds what is missing and never changes what is there: the texts of the frontend
+  (`messages/*.json`), the npm scripts and packages (`package.json`, `npm install`), and the new settings of
+  `backend/.env` and `.env.example` (with their comment, never a secret). `.env` values, `package.json` otherwise and
+  `docker-compose.yml` stay yours. The READMEs go to `./docs` like when the project was made. The manifest
   `.dafkedd.json` (committed) remembers the version, what the project is made of and a hash of every such file:
     - a file that is still as the CLI wrote it is replaced;
     - a file you changed is never overwritten: the new version lands next to it as `<file>.dafkedd-new` (ignored by
@@ -196,6 +201,16 @@ npx --allow-git=all github:DafkeDD/DafkeDD_CLI doctor
     in the topbar and the login pages (new ones written, yours untouched with the new version next to them as
     `.dafkedd-new`), DafkeDD UI, the fonts and `npm run check:design`; the old language and theme dropdowns are
     reported, not deleted.
+
+    Code of a project made before 0.54.0 (its manifest did not know the code yet) that git knows from one commit only,
+    the first one of the CLI, and that did not change since, counts as written by the CLI: it is replaced. Without git
+    to tell (no repository), `update` asks once for all of that code whether you changed it: no, then the new version
+    replaces it and yours stays as `<file>.dafkedd-old`; yes, then the new version comes next to it as
+    `<file>.dafkedd-new`. Run `npm install` in `./backend` and `./frontend` first (Prettier is needed to compare); after
+    the update `npm run build` and `npm test`, the new migrations run at the next start of the API.
+
+    Run the version you want: `npx --allow-git=all github:DafkeDD/DafkeDD_CLI#developer update` for `developer`, or
+    `node <folder of the CLI>/bin/cli.js update`.
 
     A project of a CLI before 0.46.0 has no manifest: `update` reads what it is made of from its folders and `.env`
     files, shows that and asks to confirm; then every file that differs gets a `.dafkedd-new` version. Commit the result
@@ -721,6 +736,15 @@ git switch developer
 
 ## Changelog
 
+- **0.54.0**: `update` also brings the code.
+    - The code of the backend (login server, linked app, API) and the frontend (all its pages and components) as this
+      version makes it, formatted with the Prettier of the project. Unchanged files are replaced; a file you changed
+      gets `<file>.dafkedd-new`. A project made before has no hashes of its code in `.dafkedd.json`: a file git knows
+      from the first commit (of the CLI) only, and that did not change since, counts as unchanged; without git `update`
+      asks once, and keeps your version as `<file>.dafkedd-old` when it replaces it.
+    - Missing texts of the frontend (every namespace), npm scripts (like `demo:clear`), packages (installed) and the new
+      settings of `backend/.env` and `.env.example` (like Google and Microsoft) are added; what is there stays yours.
+    - `docs/api.md`, `docs/frontend.md`, `docs/README.md` and `docs/index.html` follow the code.
 - **0.53.4**: no licence, no app; the databases of the organisations named after them.
     - An app that sells a product only lets in an account with a licence of it in its organisation (a demo, a seat, a
       superadmin). Without one the login stops on a screen of the login server: "Ask a demo" (when its demo is on and
