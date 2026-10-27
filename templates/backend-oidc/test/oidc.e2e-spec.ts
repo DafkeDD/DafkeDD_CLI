@@ -463,7 +463,7 @@ describe('OpenID Connect (e2e)', () => {
             const id = await verifyToken(tokens.body.id_token, 'RS256', CLIENT, 'JWT')
             expect(id).toMatchObject({ sub: ids.alice, aud: CLIENT, nonce: 'nonce-456', acr: 'loa1', amr: ['pwd'] })
             expect(id.at_hash).toBe(halfHash(tokens.body.access_token))
-            expect(id.tenant).toEqual({ id: ids.acme, name: 'Acme', role: 'admin' })
+            expect(id.tenant).toEqual({ id: ids.acme, name: 'Acme', slug: 'acme', role: 'admin' })
 
             const access = await verifyToken(tokens.body.access_token, 'ES256', AUDIENCE, 'at+jwt')
             expect(access).toMatchObject({ sub: ids.alice, client_id: CLIENT, scope: 'openid profile email tenant' })
@@ -575,6 +575,7 @@ describe('OpenID Connect (e2e)', () => {
             expect(decodeUnverified(tokens.body.access_token)?.tenant).toEqual({
                 id: ids.globex,
                 name: 'Globex',
+                slug: 'globex',
                 role: 'admin'
             })
         })
@@ -627,7 +628,7 @@ describe('OpenID Connect (e2e)', () => {
                 name: 'Alice',
                 email: 'alice@example.com',
                 email_verified: true,
-                tenant: { id: ids.acme, name: 'Acme', role: 'admin' }
+                tenant: { id: ids.acme, name: 'Acme', slug: 'acme', role: 'admin' }
             }
             expect(
                 (

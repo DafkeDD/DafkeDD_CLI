@@ -13,10 +13,27 @@ export interface Queryable {
 /**
  * How the data of the organisations is kept apart (TENANT_ISOLATION in .env, chosen when the app was made):
  * - rls: one database, every row has a tenant_id and Row-Level Security only shows the rows of one organisation
- * - database: every organisation gets a PostgreSQL database of its own (<DATABASE_NAME>_t_<organisation id>), made the
- *   first time it is used; Row-Level Security stays on inside it as a second wall
+ * - database: every organisation gets a PostgreSQL database of its own, named after it (<DATABASE_NAME>_<slug of the
+ *   organisation>, easy to find), made the first time it is used; Row-Level Security stays on inside it as a second wall
  */
 export type TenantIsolation = 'rls' | 'database'
+
+/**
+ * The slugs of the organisations, from the tokens (PasportGuard): the name of a new database of an organisation. Only a
+ * hint for the name, never for access: the register tenant_databases says which database belongs to which
+ * organisation, so a later change of the slug changes nothing.
+ */
+const slugs = new Map<string, string>()
+
+/** Remembers the slug of an organisation (from the `tenant` claim of its token) for the name of its database. */
+export function rememberTenantSlug(tenantId: string, slug: string | null | undefined) {
+    if (!slug || !UUID.test(tenantId) || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(slug)) return
+    const key = tenantId.toLowerCase()
+    slugs.delete(key)
+    slugs.set(key, slug)
+    // The most recent thousand are enough: an organisation without a hint gets a name with its id
+    if (slugs.size > 1000) slugs.delete(slugs.keys().next().value as string)
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 /** Connections per organisation (TENANT_ISOLATION=database). */
@@ -156,13 +173,33 @@ export class DatabaseService implements OnModuleDestroy {
         })
     }
 
-    /** The name of the database of an organisation (TENANT_ISOLATION=database). */
+    /**
+     * The name of the database of an organisation without a known slug (TENANT_ISOLATION=database), and of the ones
+     * made before 0.53.4: <DATABASE_NAME>_t_<organisation id>.
+     */
     tenantDatabaseName(tenantId: string): string {
         if (!UUID.test(tenantId)) throw new Error('A tenant database needs a tenant id (uuid)')
         const name = `${this.base}_t_${tenantId.replaceAll('-', '').toLowerCase()}`
         if (!/^[a-z0-9_]{1,63}$/.test(name))
             throw new Error(`Invalid database name ${name}: DATABASE_NAME may have at most 28 characters (a-z, 0-9, _)`)
         return name
+    }
+
+    /**
+     * The names a new database of an organisation may get, the most readable first: <DATABASE_NAME>_<slug>
+     * (dafkedd_kids_de_linde), then with the start of its id when that one is taken (another organisation, or a
+     * database of another app on the same server), then <DATABASE_NAME>_t_<id>. At most 63 characters (a-z, 0-9, _).
+     */
+    tenantDatabaseNames(tenantId: string, slug: string | null = slugs.get(tenantId.toLowerCase()) ?? null): string[] {
+        const fallback = this.tenantDatabaseName(tenantId)
+        if (!slug) return [fallback]
+        const id = tenantId.replaceAll('-', '').toLowerCase().slice(0, 8)
+        const part = (room: number) => slug.replaceAll('-', '_').slice(0, room).replace(/_+$/, '')
+        const plain = `${this.base}_${part(62 - this.base.length)}`
+        const withId = `${this.base}_${part(62 - this.base.length - 9)}_${id}`
+        return [...new Set([plain, withId, fallback])].filter(
+            name => /^[a-z0-9_]{1,63}$/.test(name) && name !== this.base
+        )
     }
 
     /** The pool of the database of an organisation: made, registered and migrated the first time in this process. */
@@ -191,15 +228,40 @@ export class DatabaseService implements OnModuleDestroy {
         return pool
     }
 
+    /**
+     * The database of an organisation: the one in the register, or a new name (see tenantDatabaseNames) that no other
+     * organisation has and that is no database on the server yet. The register's unique name decides between two
+     * instances that pick the same name for two organisations at the same moment.
+     */
+    private async registeredDatabase(tenantId: string): Promise<{ name: string; created: boolean }> {
+        const known = await this.pool.query<{ database_name: string }>(
+            'SELECT database_name FROM tenant_databases WHERE organisation_id = $1',
+            [tenantId]
+        )
+        if (known.rows[0]) return { name: known.rows[0].database_name, created: false }
+        for (const name of this.tenantDatabaseNames(tenantId)) {
+            const exists = await this.pool.query('SELECT 1 FROM pg_database WHERE datname = $1', [name])
+            // A database of another app (or of an organisation that is gone): never take it over
+            if (exists.rowCount && name !== this.tenantDatabaseName(tenantId)) continue
+            try {
+                await this.pool.query('INSERT INTO tenant_databases (organisation_id, database_name) VALUES ($1, $2)', [
+                    tenantId,
+                    name
+                ])
+                return { name, created: true }
+            } catch (error) {
+                // 23505: that name belongs to another organisation already: the next one
+                if ((error as { code?: string }).code !== '23505') throw error
+            }
+        }
+        throw new Error(`No free database name for organisation ${tenantId}`)
+    }
+
     private async openTenant(tenantId: string): Promise<pg.Pool> {
         await this.ready()
-        const name = this.tenantDatabaseName(tenantId)
         // Only one instance of the API makes (and migrates) the database of an organisation at a time
-        return this.withLock('tenant-database:' + name, async () => {
-            await this.pool.query(
-                'INSERT INTO tenant_databases (organisation_id, database_name) VALUES ($1, $2) ON CONFLICT (organisation_id) DO NOTHING',
-                [tenantId, name]
-            )
+        return this.withLock('tenant-database:' + tenantId, async () => {
+            const { name } = await this.registeredDatabase(tenantId)
             const { rowCount } = await this.pool.query('SELECT 1 FROM pg_database WHERE datname = $1', [name])
             // CREATE DATABASE cannot run in a transaction nor take a parameter: the name is checked above
             if (!rowCount) await this.pool.query(`CREATE DATABASE "${name}"`)

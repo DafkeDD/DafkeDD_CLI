@@ -9,7 +9,8 @@ export interface Caller {
     /** The id of the account at the login server. */
     sub: string
     /** The organisation (tenant) the user logged in with, and the role there. Null: no organisation. */
-    tenant: { id: string; name: string; role: 'user' | 'admin' } | null
+    /** slug: null from a login server before 0.53.4. */
+    tenant: { id: string; name: string; slug: string | null; role: 'user' | 'admin' } | null
     superadmin: boolean
     /** The session at the login server. */
     sid: string | null

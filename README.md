@@ -721,6 +721,16 @@ git switch developer
 
 ## Changelog
 
+- **0.53.4**: no licence, no app; the databases of the organisations named after them.
+    - An app that sells a product only lets in an account with a licence of it in its organisation (a demo, a seat, a
+      superadmin). Without one the login stops on a screen of the login server: "Ask a demo" (when its demo is on and
+      the member never had one, then straight into the app), "Ask your administrator", "To my apps" and "Try again".
+      Also with single sign-on; `prompt=none` gives `access_denied`. Before, the account got into the app and only its
+      data was refused.
+    - With a database per organisation, a new one is named after the organisation: `<app>_<slug>`
+      (`dafkedd_kids_de_linde`) instead of `<app>_t_<id>`. When that name is taken the start of the id is added. The
+      register `tenant_databases` keeps the name, so databases made before keep theirs and a new slug changes nothing.
+      The `tenant` claim of the tokens now also has the `slug`.
 - **0.53.3**: Google and Microsoft ready to fill in.
     - `.env` and `.env.example` of the login server always have Google (`OIDC_EXTERNAL_*`) and Microsoft
       (`OIDC_EXTERNAL_2_*`) with their issuer and name, and what to register there; an empty client id keeps them off. A

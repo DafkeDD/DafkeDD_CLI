@@ -30,6 +30,11 @@ export interface Interaction {
      * and the organisation of this login (null: the platform). Null otherwise.
      */
     consent?: { sessionId: string; tenantId: string | null } | null
+    /**
+     * Logged in, but the app sells a product and this account has no licence of it in this organisation: the "no
+     * licence" screen (ask a demo, or to the portal). Its session and organisation, like `consent`. Null otherwise.
+     */
+    license?: { sessionId: string; tenantId: string | null } | null
     /** The User-Agent of the browser that started the login (for the list of sessions), shortened. */
     userAgent: string
     /** Milliseconds since 1970. */
@@ -59,6 +64,7 @@ export function sealInteraction(interaction: Interaction, key: Buffer): string {
         x: interaction.eidNonce,
         k: interaction.passkeyChallenge,
         o: interaction.consent ?? null,
+        l: interaction.license ?? null,
         g: interaction.userAgent,
         e: interaction.expiresAt
     }
@@ -84,6 +90,7 @@ export function openInteraction(
             x?: string | null
             k?: string | null
             o?: { sessionId?: unknown; tenantId?: unknown } | null
+            l?: { sessionId?: unknown; tenantId?: unknown } | null
             g?: string
             e: number
         }
@@ -103,6 +110,13 @@ export function openInteraction(
                     ? {
                           sessionId: data.o.sessionId,
                           tenantId: typeof data.o.tenantId === 'string' ? data.o.tenantId : null
+                      }
+                    : null,
+            license:
+                data.l && typeof data.l.sessionId === 'string'
+                    ? {
+                          sessionId: data.l.sessionId,
+                          tenantId: typeof data.l.tenantId === 'string' ? data.l.tenantId : null
                       }
                     : null,
             userAgent: typeof data.g === 'string' ? data.g : '',

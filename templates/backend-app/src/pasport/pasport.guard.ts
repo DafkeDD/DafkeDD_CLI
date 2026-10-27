@@ -2,6 +2,7 @@ import { type CanActivate, type ExecutionContext, HttpStatus, Injectable } from 
 import { Reflector } from '@nestjs/core'
 import type { Request } from 'express'
 import { AppException } from '../common/app.exception.js'
+import { rememberTenantSlug } from '../database/database.service.js'
 import { ACCESS_KEY, type AccessLevel, type Caller, LICENSE_STATUSES, type LicenseStatus, ROLES_KEY } from './access.js'
 import { ALGORITHMS, JoseError, type VerifyKey, verifyJwt } from './jose.js'
 import { PasportConfig } from './pasport.config.js'
@@ -81,17 +82,25 @@ export class PasportGuard implements CanActivate {
             const clientId = typeof payload.client_id === 'string' ? payload.client_id : ''
             if (!this.config.clientIds.includes(clientId)) throw new JoseError('Token of another app')
             if (typeof payload.sub !== 'string') throw new JoseError('No subject')
-            const tenant = payload.tenant as { id?: unknown; name?: unknown; role?: unknown } | undefined
+            const tenant = payload.tenant as
+                { id?: unknown; name?: unknown; slug?: unknown; role?: unknown } | undefined
             const validTenant =
                 tenant &&
                 typeof tenant.id === 'string' &&
                 UUID.test(tenant.id) &&
                 typeof tenant.name === 'string' &&
                 (tenant.role === 'user' || tenant.role === 'admin')
+            // The name of a new database of this organisation (TENANT_ISOLATION=database): its slug
+            if (validTenant && typeof tenant.slug === 'string') rememberTenantSlug(tenant.id as string, tenant.slug)
             return {
                 sub: payload.sub,
                 tenant: validTenant
-                    ? { id: tenant.id as string, name: tenant.name as string, role: tenant.role as 'user' | 'admin' }
+                    ? {
+                          id: tenant.id as string,
+                          name: tenant.name as string,
+                          slug: typeof tenant.slug === 'string' ? tenant.slug : null,
+                          role: tenant.role as 'user' | 'admin'
+                      }
                     : null,
                 superadmin: payload.superadmin === true,
                 sid: typeof payload.sid === 'string' ? payload.sid : null,

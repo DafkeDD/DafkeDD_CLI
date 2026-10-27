@@ -616,7 +616,7 @@ request is checked by \`PasportGuard\` (\`src/pasport\`), a global guard:
 2. \`typ\` is \`at+jwt\` (an ID token is refused), \`iss\` is \`OIDC_ISSUER\`, \`aud\` is \`OIDC_AUDIENCE\`, it has not expired;
 3. \`client_id\` is one of \`OIDC_CLIENT_IDS\`: a token of another app of the same login server opens nothing here.
 
-Nothing is looked up: who calls comes from the token (\`@CurrentCaller()\`: \`sub\`, \`tenant { id, name, role }\`,
+Nothing is looked up: who calls comes from the token (\`@CurrentCaller()\`: \`sub\`, \`tenant { id, name, slug, role }\`,
 \`superadmin\`, \`sid\`). Every route says who may call it, with \`@Access(...)\` (\`src/pasport/access.ts\`):
 
 | Level | Who |
@@ -673,7 +673,7 @@ Where that data lives is \`TENANT_ISOLATION\` in \`.env\` (here **\`${isolation}
 | \`TENANT_ISOLATION\` | Where |
 | --- | --- |
 | \`rls\` | one database (\`DATABASE_NAME\`, on the same PostgreSQL server as the login server): \`MIGRATIONS\` run in it at the first start |
-| \`database\` | a database **per organisation**, \`<DATABASE_NAME>_t_<organisation id>\`, made the first time it is used (under an advisory lock, so two instances never make it twice) and migrated with \`MIGRATIONS\`; after an update the new migrations run the first time the organisation is used again. Row-Level Security stays on inside it. The database of the app itself only keeps the register \`tenant_databases\` (\`MAIN_MIGRATIONS\`). The user of \`DATABASE_USER\` needs \`CREATEDB\`; \`DATABASE_NAME\` has at most 28 characters; a database is never removed automatically |
+| \`database\` | a database **per organisation**, named after it: \`<DATABASE_NAME>_<slug>\` (\`planner_de_linde\`; the slug comes from the \`tenant\` claim of the token, \`-\` becomes \`_\`). When that name is taken (another organisation, or a database of another app on the same server) the start of its id is added (\`planner_de_linde_c4042d40\`); without a slug (a login server before 0.53.4) \`<DATABASE_NAME>_t_<organisation id>\`. The register \`tenant_databases\` remembers which database belongs to which organisation, so a new slug later changes nothing; databases made before keep their name. It is made the first time it is used (under an advisory lock, so two instances never make it twice) and migrated with \`MIGRATIONS\`; after an update the new migrations run the first time the organisation is used again. Row-Level Security stays on inside it. The database of the app itself only keeps the register \`tenant_databases\` (\`MAIN_MIGRATIONS\`). The user of \`DATABASE_USER\` needs \`CREATEDB\`; \`DATABASE_NAME\` has at most 28 characters; a database is never removed automatically |
 
 \`DatabaseService.withLock(key, fn)\` runs \`fn\` while holding a PostgreSQL advisory lock: one instance of the API (or one
 request) at a time, for example for a monthly job. \`runMigrations(db, migrations, { lock, table })\` takes its own lock key
@@ -1106,8 +1106,12 @@ ${fence}
 | \`superadmin\` | a superadmin: always |
 | \`none\` | no licence (the trial ended, no seat): the API of the app refuses its data with 403 |
 
-The login itself is not refused: the app shows the user what to do (the beheerder gives a seat or buys more on
-\`/licenses\`). An app made with the CLI ("App for an existing DafkeDD OIDC server") learns the product with the link
+**Without a licence the login does not get into the app.** After the login (also with single sign-on) the login
+server shows the "no licence" screen instead of sending a code: "Ask a demo" when the demo of the product is on and the
+member never had one (\`POST /oidc/interaction/:id/demo\`: the demo starts and the login goes on into the app), otherwise
+"ask your administrator", and always "To my apps" (\`/apps\` of the portal) and "try again" (an admin gave a seat
+meanwhile). \`prompt=none\` answers \`error=access_denied\`. A superadmin always gets in. When the licence ends while
+the user works (the trial ended), the next token says \`none\` and the app shows what to do. An app made with the CLI ("App for an existing DafkeDD OIDC server") learns the product with the link
 code and checks it in its own API (\`OIDC_PRODUCT\`). The link answer has it as \`client.product\`.
 
 ### Roles per app

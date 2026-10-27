@@ -159,6 +159,16 @@ describe('Apps on /admin (e2e)', () => {
                 .type('form')
                 .send({ csrf: csrfOf(done.text), decision: 'allow' })
         expect(done.status).toBe(303)
+        return redeem(done, client, verifier, secret)
+    }
+
+    /** The code of a 303 back to the client, exchanged for its tokens. */
+    async function redeem(
+        done: request.Response,
+        client: { id: string; redirect: string },
+        verifier: string,
+        secret?: string
+    ): Promise<{ access_token: string; refresh_token?: string }> {
         const code = new URL(done.headers.location as string).searchParams.get('code') ?? ''
         const exchange = http().post('/oidc/token').type('form')
         const body = { grant_type: 'authorization_code', code, redirect_uri: client.redirect, code_verifier: verifier }
@@ -169,6 +179,30 @@ describe('Apps on /admin (e2e)', () => {
             : await exchange.send({ ...body, client_id: client.id })
         expect(answer.status).toBe(200)
         return answer.body as { access_token: string; refresh_token?: string }
+    }
+
+    /** A login to an app that sells a product, without a licence of it: the "no licence" screen, no code. */
+    async function noLicense(email: string, client: { id: string; redirect: string }) {
+        const verifier = randomBytes(32).toString('base64url')
+        const start = await http().get(authorizeUrl(client, verifier)).expect(303)
+        const page = new URL(start.headers.location as string).pathname
+        const cookie = cookieOf(start, 'oidc_ia_')
+        const form = await http().get(page).set('Cookie', cookie).expect(200)
+        const done = await http()
+            .post(page + '/login')
+            .set('Cookie', cookie)
+            .type('form')
+            .send({ csrf: csrfOf(form.text), email, password: PASSWORD })
+            .expect(200)
+        expect(done.headers.location).toBeUndefined()
+        expect(done.text).toContain('No licence for')
+        return {
+            done,
+            page,
+            verifier,
+            cookie: cookieOf(done, 'oidc_ia_') || cookie,
+            session: cookieOf(done, 'oidc_session')
+        }
     }
 
     const create = (body: Record<string, unknown>) =>
@@ -472,13 +506,28 @@ describe('Apps on /admin (e2e)', () => {
             })
             .expect(200)
 
-        // A login never starts a demo by itself: Alice has none until she asks it
+        // A login never starts a demo by itself, and without a licence it does not get into the app: the "no licence"
+        // screen, with "Ask a demo" and the way to the apps on the portal
         const shop = { id: 'shop.app', redirect: APP.redirectUris[0]! }
-        const none = await login('alice@example.com', shop)
-        expect(claims(none.access_token).license).toEqual({ product: 'shop', status: 'none' })
-        expect(claims(none.access_token).roles).toEqual([])
-        await http().post('/me/licenses/shop/trial').set(bearer(tokens.alice)).expect(201)
-        const first = await login('alice@example.com', shop)
+        const refused = await noLicense('alice@example.com', shop)
+        expect(refused.done.text).toContain('Ask a demo')
+        expect(refused.done.text).toContain('http://localhost:3000/apps')
+        // Logged in at the server meanwhile (single sign-on): still no code, the screen again; prompt=none: access_denied
+        const sso = await http().get(authorizeUrl(shop, refused.verifier)).set('Cookie', refused.session).expect(303)
+        expect(sso.headers.location).not.toContain('code=')
+        const silent = await http()
+            .get(authorizeUrl(shop, refused.verifier, { prompt: 'none' }))
+            .set('Cookie', refused.session)
+            .expect(303)
+        expect(new URL(silent.headers.location as string).searchParams.get('error')).toBe('access_denied')
+        // "Ask a demo" there: her demo starts and the login goes on into the app
+        const demo = await http()
+            .post(refused.page + '/demo')
+            .set('Cookie', refused.cookie)
+            .type('form')
+            .send({ csrf: csrfOf(refused.done.text) })
+            .expect(303)
+        const first = await redeem(demo, shop, refused.verifier)
         const license = claims(first.access_token).license as { product: string; status: string; ends_at: number }
         expect(license).toMatchObject({ product: 'shop', status: 'trial' })
         // A demo: the default roles of the app
@@ -746,9 +795,8 @@ describe('Apps on /admin (e2e)', () => {
         expect(hank.body.apps).toEqual([
             { clientId: 'agenda.app', name: 'Agenda', url: 'https://planner.partner.com', seat: false }
         ])
-        const hankClaims = claims((await login('hank@example.com', agenda)).access_token)
-        expect(hankClaims.roles).toEqual([])
-        expect(hankClaims.license).toEqual({ product: 'agenda', status: 'none' })
+        // Without a licence he does not get into the app: the "no licence" screen
+        await noLicense('hank@example.com', agenda)
         // A demo (the token first: two requests at once share the test server)
         const hankAccess = (await login('hank@example.com')).access_token
         await http().post('/me/licenses/agenda/trial').set(bearer(hankAccess)).expect(201)

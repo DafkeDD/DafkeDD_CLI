@@ -176,7 +176,7 @@ test('ask: server, port, the code and the own database; a wrong code is asked ag
     const summary = linked.summary(answers).map(line => line.text)
     assert.ok(summary[0].includes('Gekoppeld aan http://localhost:4000/oidc'))
     assert.ok(summary.some(line => line.includes('Verbonden met PostgreSQL op localhost:5432/planner')))
-    assert.ok(summary.some(line => line.includes('een eigen database (planner_t_<id>)')))
+    assert.ok(summary.some(line => line.includes('een eigen database (planner_<organisatie>, bv. planner_de_linde)')))
     assert.ok(summary.some(line => line.startsWith('Mail: MailService')))
     assert.ok(!summary.some(line => line.startsWith('Bestanden')))
     assert.ok(linked.next(answers).includes('npm run start:dev'))

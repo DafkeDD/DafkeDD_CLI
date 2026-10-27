@@ -17,6 +17,10 @@ export interface LicenseSource {
     claim(tenantId: string | null, userId: string, code: string, superadmin: boolean): Promise<LicenseClaim>
     /** Gives a member one of the free seats of the product (an accepted invitation); false when none is free. */
     assign(actor: { tenantId: string; userId: string }, code: string, userId: string): Promise<boolean>
+    /** May this member still ask a demo of the product (its demo is on, and the member never had one)? */
+    demoAvailable(tenantId: string, userId: string, code: string): Promise<boolean>
+    /** The member asks its demo (once per product); false when that is not possible. */
+    requestDemo(tenantId: string, userId: string, code: string): Promise<boolean>
 }
 
 /**
@@ -43,5 +47,13 @@ export class AppLicenses {
 
     assign(actor: { tenantId: string; userId: string }, code: string, userId: string): Promise<boolean> {
         return this.source ? this.source.assign(actor, code, userId) : Promise.resolve(false)
+    }
+
+    demoAvailable(tenantId: string, userId: string, code: string): Promise<boolean> {
+        return this.source ? this.source.demoAvailable(tenantId, userId, code) : Promise.resolve(false)
+    }
+
+    requestDemo(tenantId: string, userId: string, code: string): Promise<boolean> {
+        return this.source ? this.source.requestDemo(tenantId, userId, code) : Promise.resolve(false)
     }
 }

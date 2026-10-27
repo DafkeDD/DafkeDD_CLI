@@ -366,6 +366,12 @@ export const MESSAGES = {
         ROLE_UNKNOWN: 'The app has no role {role}.',
         ROLES_INVALID: 'The roles of the app are not valid: {reason}.',
         CLIENT_PRODUCT_TAKEN: 'The product {product} is sold by the app {app} already: one product belongs to one app.',
+        NO_LICENSE_TITLE: 'No licence for {client}',
+        NO_LICENSE_TEXT: 'You are logged in, but you have no licence for {client} in {tenant}: no demo and no seat.',
+        NO_LICENSE_TEXT_PLATFORM: 'You are logged in, but {client} needs a licence of an organisation.',
+        NO_LICENSE_DEMO: 'Ask a demo',
+        NO_LICENSE_ASK: 'Ask the administrator of your organisation for a licence.',
+        NO_LICENSE_PORTAL: 'To my apps',
         CONSENT_TITLE: 'Allow {client}?',
         CONSENT_TEXT: '{client} wants to use your account {email}. It gets:',
         CONSENT_NOTE: 'You can take this back at any time on Security.',
@@ -492,6 +498,13 @@ export const MESSAGES = {
         ROLES_INVALID: 'De rollen van de app zijn niet geldig: {reason}.',
         CLIENT_PRODUCT_TAKEN:
             'Het product {product} wordt al verkocht door de app {app}: één product hoort bij één app.',
+        NO_LICENSE_TITLE: 'Geen licentie voor {client}',
+        NO_LICENSE_TEXT:
+            'Je bent ingelogd, maar je hebt geen licentie voor {client} in {tenant}: geen demo en geen plaats.',
+        NO_LICENSE_TEXT_PLATFORM: 'Je bent ingelogd, maar {client} heeft een licentie van een organisatie nodig.',
+        NO_LICENSE_DEMO: 'Demo aanvragen',
+        NO_LICENSE_ASK: 'Vraag de beheerder van je organisatie om een licentie.',
+        NO_LICENSE_PORTAL: 'Naar mijn apps',
         CONSENT_TITLE: '{client} toestaan?',
         CONSENT_TEXT: '{client} wil je account {email} gebruiken. Het krijgt:',
         CONSENT_NOTE: 'Je kunt dit altijd intrekken onder Beveiliging.',
@@ -619,6 +632,13 @@ export const MESSAGES = {
         ROLES_INVALID: "Les rôles de l'application ne sont pas valides : {reason}.",
         CLIENT_PRODUCT_TAKEN:
             "Le produit {product} est déjà vendu par l'application {app} : un produit appartient à une seule application.",
+        NO_LICENSE_TITLE: 'Pas de licence pour {client}',
+        NO_LICENSE_TEXT:
+            "Vous êtes connecté, mais vous n'avez pas de licence pour {client} dans {tenant} : ni démo, ni place.",
+        NO_LICENSE_TEXT_PLATFORM: "Vous êtes connecté, mais {client} nécessite une licence d'une organisation.",
+        NO_LICENSE_DEMO: 'Demander une démo',
+        NO_LICENSE_ASK: "Demandez une licence à l'administrateur de votre organisation.",
+        NO_LICENSE_PORTAL: 'Vers mes applications',
         CONSENT_TITLE: 'Autoriser {client} ?',
         CONSENT_TEXT: '{client} souhaite utiliser votre compte {email}. Il reçoit :',
         CONSENT_NOTE: 'Vous pouvez retirer cette autorisation à tout moment dans Sécurité.',
@@ -755,6 +775,13 @@ export const MESSAGES = {
         ROLES_INVALID: 'Die Rollen der App sind nicht gültig: {reason}.',
         CLIENT_PRODUCT_TAKEN:
             'Das Produkt {product} wird bereits von der App {app} verkauft: ein Produkt gehört zu einer App.',
+        NO_LICENSE_TITLE: 'Keine Lizenz für {client}',
+        NO_LICENSE_TEXT:
+            'Du bist angemeldet, hast aber keine Lizenz für {client} in {tenant}: keine Demo und keinen Platz.',
+        NO_LICENSE_TEXT_PLATFORM: 'Du bist angemeldet, aber {client} braucht eine Lizenz einer Organisation.',
+        NO_LICENSE_DEMO: 'Demo anfordern',
+        NO_LICENSE_ASK: 'Bitte den Administrator deiner Organisation um eine Lizenz.',
+        NO_LICENSE_PORTAL: 'Zu meinen Apps',
         CONSENT_TITLE: '{client} erlauben?',
         CONSENT_TEXT: '{client} möchte dein Konto {email} verwenden. Es erhält:',
         CONSENT_NOTE: 'Du kannst das jederzeit unter Sicherheit widerrufen.',
@@ -1897,6 +1924,23 @@ export const endpoints = ({ port = 4000 } = {}) => [
         response: {
             status: 200,
             example: { status: 'redirect', location: 'https://partner.example.com/callback?code=...&state=xyz&iss=...' }
+        },
+        errors: [[410, 'oidc.EXPIRED']]
+    },
+    {
+        method: 'POST',
+        path: '/oidc/interaction/:id/demo',
+        tag: 'oidc',
+        summary:
+            'The "no licence" screen. An app that sells a product (`product` on the app) only lets in an account with a licence of it in the organisation of the login (a running demo, a seat, or a superadmin); without one the login stops there (also with single sign-on; `prompt=none` gives `error=access_denied`), as `{ status: "no-license", csrf, clientName, tenantName, demo, portal }`. This route starts the own demo (`demo: true`: the demo of the product is on and the member never had one) and goes on to the app. `POST .../resume` goes on too once an admin gave a seat meanwhile; `portal` is My apps on the portal. Form-encoded (303) or JSON.',
+        form: true,
+        body: {
+            example: { csrf: 'from-the-page' },
+            fields: [['csrf', 'string', 'required, the hidden field of the page (or from GET /oidc/interaction/:id)']]
+        },
+        response: {
+            status: 200,
+            example: { status: 'redirect', location: 'https://planner.example.com/api/auth/callback?code=...&iss=...' }
         },
         errors: [[410, 'oidc.EXPIRED']]
     },

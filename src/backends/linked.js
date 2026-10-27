@@ -204,7 +204,7 @@ export const linked = {
                 ok: true,
                 text:
                     answers.appOptions?.isolation === 'database'
-                        ? `De API van de app (http://localhost:${APP_PORT}) aanvaardt enkel tokens van die login server voor deze app; elke organisatie krijgt een eigen database (${answers.database?.database ?? 'app'}_t_<id>) bij het eerste gebruik`
+                        ? `De API van de app (http://localhost:${APP_PORT}) aanvaardt enkel tokens van die login server voor deze app; elke organisatie krijgt een eigen database (${answers.database?.database ?? 'app'}_<organisatie>, bv. ${answers.database?.database ?? 'app'}_de_linde) bij het eerste gebruik`
                         : `De API van de app (http://localhost:${APP_PORT}) aanvaardt enkel tokens van die login server voor deze app; de data staat per organisatie in ${answers.database?.database ?? 'de eigen database'} (Row-Level Security)`
             },
             ...(answers.appOptions?.mail

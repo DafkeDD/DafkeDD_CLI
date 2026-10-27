@@ -28,12 +28,21 @@ const interaction = (overrides: Partial<Interaction> = {}): Interaction => ({
     eidNonce: null,
     passkeyChallenge: null,
     consent: null,
+    license: null,
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/141.0',
     expiresAt: Date.now() + 60_000,
     ...overrides
 })
 
 describe('login cookie (interaction)', () => {
+    it('keeps the "no licence" screen of a login (its session and organisation)', () => {
+        const original = interaction({ userId: 'user-1', license: { sessionId: 's-1', tenantId: 't-1' } })
+        expect(openInteraction(original.id, sealInteraction(original, key), key)?.license).toEqual({
+            sessionId: 's-1',
+            tenantId: 't-1'
+        })
+    })
+
     it('opens what it sealed', () => {
         const original = interaction({ userId: 'user-1', mfaPending: true, amr: ['pwd'] })
         expect(openInteraction(original.id, sealInteraction(original, key), key)).toEqual(original)

@@ -26,6 +26,7 @@ import { type LogoutResult, SessionsService } from './sessions.service.js'
 import { TokensService } from './tokens.service.js'
 import {
     consentPage,
+    noLicensePage,
     loginPage,
     logoutPage,
     messagePage,
@@ -313,7 +314,8 @@ export class OidcController {
             return this.loginAnswer(id ?? '', result, request, response, i18n)
         // The login page of the frontend goes on (GET .../interaction/<id> says "pending", or shows the error)
         if ('cookie' in result && result.cookie) this.setInteractionCookie(response, result.cookie)
-        if (result.kind === 'consent' && result.sessionId) this.setSessionCookie(response, result.sessionId)
+        if ((result.kind === 'consent' || result.kind === 'no-license') && result.sessionId)
+            this.setSessionCookie(response, result.sessionId)
         const location = new URL(ui)
         location.searchParams.set('interaction', id)
         if (typeof request.query.lang === 'string') location.searchParams.set('lang', request.query.lang)
@@ -354,6 +356,20 @@ export class OidcController {
         @I18n() i18n: I18nContext
     ) {
         const result = await this.oidc.consent(id, this.interactionCookie(request, id), (request.body ?? {}) as Params)
+        this.loginAnswer(id, result, request, response, i18n)
+    }
+
+    @Post('interaction/:id/demo')
+    @ApiOperation({
+        summary:
+            'On the "no licence" screen of an app that sells a product (form-encoded or JSON { csrf }): the own demo of that product (once, when its demo is on), then on to the app'
+    })
+    @ApiProduces('text/html', 'application/json')
+    @ApiResponse({ status: 303, description: 'Into the app with a code' })
+    @ApiOkResponse({ description: '{ status: "redirect", location }, or { status: "no-license", ... } without a demo' })
+    @ApiResponse({ status: 410, description: 'The login request expired, or the session ended meanwhile' })
+    async demo(@Param('id') id: string, @Req() request: Request, @Res() response: Response, @I18n() i18n: I18nContext) {
+        const result = await this.oidc.demo(id, this.interactionCookie(request, id), (request.body ?? {}) as Params)
         this.loginAnswer(id, result, request, response, i18n)
     }
 
@@ -639,7 +655,7 @@ export class OidcController {
     /** Action URL of a form on the login page; keeps ?lang= so errors come back in the same language. */
     private action(
         id: string,
-        step: 'login' | 'mfa' | 'continue' | 'tenant' | 'external' | 'consent',
+        step: 'login' | 'mfa' | 'continue' | 'tenant' | 'external' | 'consent' | 'demo',
         request: Request
     ): string {
         const url = new URL(this.config.issuer + '/interaction/' + encodeURIComponent(id) + '/' + step)
@@ -701,8 +717,9 @@ export class OidcController {
     private loginAnswer(id: string, result: LoginResult, request: Request, response: Response, i18n: I18nContext) {
         const t = translator(i18n)
         if ('cookie' in result && result.cookie) this.setInteractionCookie(response, result.cookie)
-        // Logged in just now, the consent screen follows: the browser keeps the session either way
-        if (result.kind === 'consent' && result.sessionId) this.setSessionCookie(response, result.sessionId)
+        // Logged in just now, the consent or "no licence" screen follows: the browser keeps the session either way
+        if ((result.kind === 'consent' || result.kind === 'no-license') && result.sessionId)
+            this.setSessionCookie(response, result.sessionId)
         if (result.kind === 'external') {
             response.cookie(result.cookieName, result.external, {
                 ...this.externalCookieOptions(),
@@ -783,6 +800,18 @@ export class OidcController {
                         csrf: result.interaction.csrf,
                         memberships: result.memberships,
                         platform: result.platform
+                    })
+                })
+            case 'no-license':
+                return sendPage(response, {
+                    lang: i18n.lang,
+                    ...noLicensePage(t, {
+                        action: this.action(id, 'demo', request),
+                        csrf: result.interaction.csrf,
+                        clientName: result.client.name,
+                        tenantName: result.tenantName,
+                        demo: result.demo,
+                        portal: this.config.appUrl + '/apps'
                     })
                 })
             case 'consent':
@@ -867,6 +896,17 @@ export class OidcController {
                 return this.json(response, 200, { status: 'redirect', location: result.location })
             case 'passkey-challenge':
                 return this.json(response, 200, { status: 'passkey-challenge', options: result.options })
+            case 'no-license':
+                return this.json(response, 200, {
+                    status: 'no-license',
+                    csrf: result.interaction.csrf,
+                    clientName: result.client.name,
+                    tenantName: result.tenantName,
+                    // POST .../demo starts the own demo and goes on to the app
+                    demo: result.demo,
+                    // My apps on the portal: the apps this account may open, buy one, ask the admin
+                    portal: this.config.appUrl + '/apps'
+                })
             case 'consent':
                 return this.json(response, 200, {
                     status: 'consent',

@@ -37,6 +37,8 @@ type State =
     | { step: 'recovery-codes'; csrf: string; codes: string[] }
     /** An application that is not our own asks for data of the account: allow or not. */
     | { step: 'consent'; csrf: string; clientName: string; email: string; scopes: string[] }
+    /** Logged in, but no licence for the app (it sells a product): ask a demo, or to the apps on the portal. */
+    | { step: 'no-license'; csrf: string; clientName: string; tenantName: string | null; demo: boolean; portal: string }
     | { step: 'fatal'; message: string }
 
 type Answer = {
@@ -64,6 +66,9 @@ type Answer = {
     scopes?: string[]
     email?: string
     platform?: boolean
+    tenantName?: string | null
+    demo?: boolean
+    portal?: string
 }
 
 /** What a scope gives an application, in words (the consent screen and /security). */
@@ -246,7 +251,17 @@ export function OidcLogin({
             setBusy(false)
             return
         }
-        if (answer.status === 'consent' && answer.csrf) {
+        if (answer.status === 'no-license' && answer.csrf) {
+            setState({
+                step: 'no-license',
+                csrf: answer.csrf,
+                clientName: answer.clientName ?? '',
+                tenantName: answer.tenantName ?? null,
+                demo: answer.demo === true,
+                portal: answer.portal ?? '/apps'
+            })
+            setError(null)
+        } else if (answer.status === 'consent' && answer.csrf) {
             setState({
                 step: 'consent',
                 csrf: answer.csrf,
@@ -347,7 +362,7 @@ export function OidcLogin({
         const { status, answer } = await call('/eid', { csrf: state.csrf, token })
         // The card and PIN are the first factor only: the authenticator code (or its setup) follows
         if (
-            ['redirect', 'choose-tenant', 'no-tenant', 'expired', 'mfa', 'mfa-setup', 'consent'].includes(
+            ['redirect', 'choose-tenant', 'no-tenant', 'expired', 'mfa', 'mfa-setup', 'consent', 'no-license'].includes(
                 answer.status ?? ''
             )
         ) {
@@ -598,6 +613,52 @@ export function OidcLogin({
                         onClick={() => void submit('/continue', { csrf: state.csrf })}
                     >
                         {busy ? t('busy') : t('continue')}
+                    </Btn>
+                </div>
+            </>
+        )
+
+    if (state.step === 'no-license')
+        return layout(
+            <>
+                <AuthHeading
+                    title={t('noLicenseTitle', { client: state.clientName })}
+                    text={
+                        state.tenantName
+                            ? t('noLicenseText', { client: state.clientName, tenant: state.tenantName })
+                            : t('noLicenseTextPlatform', { client: state.clientName })
+                    }
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <ErrorNote>{error}</ErrorNote>
+                    {state.demo ? (
+                        <Btn
+                            variant='primary'
+                            size='lg'
+                            className='btn-block'
+                            icon='sparkles'
+                            disabled={busy}
+                            onClick={() => void submit('/demo', { csrf: state.csrf })}
+                        >
+                            {busy ? t('busy') : t('noLicenseDemo')}
+                        </Btn>
+                    ) : (
+                        <div className='card card-pad' style={{ background: 'var(--surface-2)', fontSize: 13.5 }}>
+                            {t('noLicenseAsk')}
+                        </div>
+                    )}
+                    <a href={state.portal} className='btn btn-secondary btn-lg btn-block'>
+                        <Icon name='layers' size={16} /> {t('noLicensePortal')}
+                    </a>
+                    {/* An admin gave a seat meanwhile: try again */}
+                    <Btn
+                        variant='ghost'
+                        size='sm'
+                        icon='refresh'
+                        disabled={busy}
+                        onClick={() => void submit('/resume', { csrf: state.csrf })}
+                    >
+                        {t('noLicenseAgain')}
                     </Btn>
                 </div>
             </>

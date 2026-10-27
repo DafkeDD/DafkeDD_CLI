@@ -206,7 +206,14 @@ export class TokensService {
         const tenantVisible = client.firstParty || grant.scope.split(' ').includes('tenant')
         const tenantClaim =
             membership && tenantVisible
-                ? { tenant: { id: membership.tenantId, name: membership.name, role: membership.role } }
+                ? {
+                      tenant: {
+                          id: membership.tenantId,
+                          name: membership.name,
+                          slug: membership.slug,
+                          role: membership.role
+                      }
+                  }
                 : {}
         const superadmin = user.isSuperadmin && tenantVisible ? { superadmin: true } : {}
         // An app that sells a product: may this user use it in this organisation? Checked again at every refresh.

@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { HttpStatus, Inject, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { AppLicenses } from './app-licenses.js'
 import { decrypt, deriveKey, encrypt, PKCE_CHALLENGE, randomToken, safeEqual, sha256 } from './crypto.js'
 import { PasskeyService } from './passkeys/passkey.service.js'
 import { type ExternalAttempt, type ExternalIdentity, ExternalService } from './external/external.service.js'
@@ -101,6 +102,20 @@ export type LoginResult =
           sessionId?: string
           cookie: InteractionCookie
       }
+    /**
+     * Logged in, but the app sells a product and this account has no licence of it in this organisation: it does not
+     * get into the app. `demo`: it may ask its demo at once (POST .../demo); otherwise to the portal (my apps, buy one,
+     * ask the admin). `sessionId`: the new session cookie when the login just happened.
+     */
+    | {
+          kind: 'no-license'
+          interaction: Interaction
+          client: OidcClient
+          tenantName: string | null
+          demo: boolean
+          sessionId?: string
+          cookie: InteractionCookie
+      }
     /** Back to the client (after the consent screen: with a code, or with error=access_denied). */
     | { kind: 'redirect'; location: string; cookie: InteractionCookie }
     | { kind: 'mfa'; interaction: Interaction; client: OidcClient; cookie: InteractionCookie; errorKey?: string }
@@ -171,7 +186,8 @@ export class OidcService implements OnApplicationBootstrap, OnModuleDestroy {
         private readonly env: ConfigService,
         private readonly audit: AuditService,
         private readonly external: ExternalService,
-        private readonly passkeys: PasskeyService
+        private readonly passkeys: PasskeyService,
+        private readonly licenses: AppLicenses
     ) {}
 
     onApplicationBootstrap() {
@@ -363,6 +379,21 @@ export class OidcService implements OnApplicationBootstrap, OnModuleDestroy {
 
         const session = sessionId ? await this.usableSession(sessionId, params) : null
         if (session) {
+            // An app that sells a product, and no licence of it here: the "no licence" screen, not the app
+            if (await this.licenseMissing(client, session.user, session.membership)) {
+                if (params.prompt.includes('none'))
+                    return this.errorRedirect(
+                        redirectUri,
+                        new OAuthError('access_denied', 'The user has no licence for this application'),
+                        params.state
+                    )
+                return this.startInteraction(params, userAgent, {
+                    userId: session.user.id,
+                    amr: session.session.amr,
+                    consent: null,
+                    license: { sessionId: session.session.id, tenantId: session.membership?.tenantId ?? null }
+                })
+            }
             if (!(await this.needsConsent(client, session.user.id, params, session.membership?.tenantId ?? null)))
                 return this.issueCode(params, session.session, session.user, session.membership)
             // Logged in already, but this application may not have the data yet: the consent screen
@@ -393,7 +424,12 @@ export class OidcService implements OnApplicationBootstrap, OnModuleDestroy {
     private startInteraction(
         params: AuthorizationParams,
         userAgent: string,
-        known: Pick<Interaction, 'userId' | 'amr' | 'consent'> = { userId: null, amr: [], consent: null }
+        known: Pick<Interaction, 'userId' | 'amr' | 'consent' | 'license'> = {
+            userId: null,
+            amr: [],
+            consent: null,
+            license: null
+        }
     ): AuthorizeResult {
         const id = randomToken()
         const sealed = this.seal({
@@ -834,12 +870,110 @@ export class OidcService implements OnApplicationBootstrap, OnModuleDestroy {
         const user = interaction.userId ? await this.store.findUserById(interaction.userId) : null
         if (user?.status !== 'active') return { kind: 'expired' }
         const cookie = { id, value: sealed ?? null }
+        if (interaction.license) return this.licenseStep(interaction, client, user)
         if (interaction.consent)
             return { kind: 'consent', interaction, client, scopes: interaction.params.scope, email: user.email, cookie }
         if (interaction.mfaPending && interaction.enrolling)
             return { kind: 'mfa-setup', interaction, client, setup: await this.mfa.pendingSetup(user), cookie }
         if (interaction.mfaPending) return { kind: 'mfa', interaction, client, cookie }
         return this.authenticated(interaction, user)
+    }
+
+    // ------------------------------------------------------------------ licence (apps that sell a product)
+
+    /**
+     * An app that sells a product (its `product`) only lets in an account with a licence of it in the organisation of
+     * the login: a running demo, a seat, or a superadmin. Without one the login stops on the "no licence" screen: the
+     * account never gets into the app (and never gets a token of it).
+     */
+    private async licenseMissing(client: OidcClient, user: StoredUser, membership: Membership | null) {
+        if (!client.product) return false
+        const claim = await this.licenses.claim(
+            membership?.tenantId ?? null,
+            user.id,
+            client.product,
+            user.isSuperadmin
+        )
+        return claim.status === 'none'
+    }
+
+    /** The "no licence" screen: what the login remembers (its session and organisation) and what it shows. */
+    private async noLicense(
+        interaction: Interaction,
+        client: OidcClient,
+        user: StoredUser,
+        pending: { sessionId: string; tenantId: string | null },
+        sessionId?: string
+    ): Promise<LoginResult> {
+        const next: Interaction = { ...interaction, consent: null, license: pending }
+        const tenant = pending.tenantId ? await this.store.findTenant(pending.tenantId) : null
+        const demo =
+            pending.tenantId !== null && client.product
+                ? await this.licenses.demoAvailable(pending.tenantId, user.id, client.product)
+                : false
+        return {
+            kind: 'no-license',
+            interaction: next,
+            client,
+            tenantName: tenant?.name ?? null,
+            demo,
+            ...(sessionId ? { sessionId } : {}),
+            cookie: { id: interaction.id, value: this.seal(next) }
+        }
+    }
+
+    /**
+     * On the "no licence" screen (POST .../resume, or after POST .../demo): with a licence now (a demo, a seat an admin
+     * gave meanwhile) the login goes on to the app; otherwise the screen again.
+     */
+    private async licenseStep(interaction: Interaction, client: OidcClient, user: StoredUser): Promise<LoginResult> {
+        const pending = interaction.license
+        if (!pending) return { kind: 'expired' }
+        const session = await this.store.findSessionById(pending.sessionId)
+        // The session must still run (not logged out meanwhile), for the same active account
+        if (!session || session.userId !== user.id) return { kind: 'expired' }
+        let membership: Membership | null = null
+        if (pending.tenantId !== null) {
+            membership = (await this.memberships(user)).find(item => item.tenantId === pending.tenantId) ?? null
+            if (!membership) return { kind: 'expired' }
+        }
+        if (await this.licenseMissing(client, user, membership))
+            return this.noLicense(interaction, client, user, pending)
+        const params = interaction.params
+        if (await this.needsConsent(client, user.id, params, pending.tenantId)) {
+            const next: Interaction = { ...interaction, license: null, consent: pending }
+            return {
+                kind: 'consent',
+                interaction: next,
+                client,
+                scopes: params.scope,
+                email: user.email,
+                cookie: { id: interaction.id, value: this.seal(next) }
+            }
+        }
+        // Into the app once: a copy of the login cookie cannot get a second code
+        if (!(await this.store.useInteraction(sha256('license:' + interaction.id), new Date(interaction.expiresAt))))
+            return { kind: 'expired' }
+        const result = await this.issueCode(params, session, user, membership)
+        return {
+            kind: 'redirect',
+            location: result.kind === 'redirect' ? result.location : '',
+            cookie: { id: interaction.id, value: null }
+        }
+    }
+
+    /** "Ask a demo" on the "no licence" screen (JSON or form { csrf }): the own demo, then into the app. */
+    async demo(id: string, sealed: string | undefined, form: Params): Promise<LoginResult> {
+        const found = await this.findInteraction(id, sealed)
+        if (!found || typeof form.csrf !== 'string' || !safeEqual(form.csrf, found.interaction.csrf))
+            return { kind: 'expired' }
+        const { interaction, client } = found
+        const pending = interaction.license
+        const user = interaction.userId ? await this.store.findUserById(interaction.userId) : null
+        if (!pending || user?.status !== 'active') return { kind: 'expired' }
+        if (pending.tenantId !== null && client.product)
+            await this.licenses.requestDemo(pending.tenantId, user.id, client.product)
+        return this.licenseStep(interaction, client, user)
     }
 
     // ------------------------------------------------------------------ consent (applications that are not our own)
@@ -1129,6 +1263,14 @@ export class OidcService implements OnApplicationBootstrap, OnModuleDestroy {
         presence.setIdle(user.id, false)
         await this.store.setPresence(user.id, 'available').catch(() => undefined)
         const client = await this.store.findClient(interaction.params.clientId)
+        if (client && (await this.licenseMissing(client, user, membership)))
+            return this.noLicense(
+                { ...interaction, userId: user.id, mfaPending: false, enrolling: false, consent: null },
+                client,
+                user,
+                { sessionId: session.id, tenantId: membership?.tenantId ?? null },
+                sessionId
+            )
         if (client && (await this.needsConsent(client, user.id, interaction.params, membership?.tenantId ?? null))) {
             const next: Interaction = {
                 ...interaction,

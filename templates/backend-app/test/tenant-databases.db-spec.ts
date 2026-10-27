@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { ConfigService } from '@nestjs/config'
 import pg from 'pg'
-import { DatabaseService } from '../src/database/database.service.js'
+import { DatabaseService, rememberTenantSlug } from '../src/database/database.service.js'
 import { PgNotesStore } from '../src/notes/pg-notes.store.js'
 
 /**
@@ -44,7 +44,7 @@ async function admin<T extends pg.QueryResultRow>(sql: string, params?: unknown[
 /** Removes the database of the test and the ones of its organisations. */
 async function dropAll() {
     const { rows } = await admin<{ datname: string }>(
-        "SELECT datname FROM pg_database WHERE datname = $1 OR datname LIKE $1 || '\\_t\\_%'",
+        "SELECT datname FROM pg_database WHERE datname = $1 OR datname LIKE $1 || '\\_%'",
         [settings.DATABASE_NAME]
     )
     for (const row of rows) await admin(`DROP DATABASE IF EXISTS "${row.datname}" WITH (FORCE)`)
@@ -114,6 +114,28 @@ describe('a database per organisation (real PostgreSQL, TENANT_ISOLATION=databas
         }
         const { rows } = await database.query<{ count: number }>('SELECT count(*)::int AS count FROM tenant_databases')
         expect(rows[0]?.count).toBe(2)
+    })
+
+    it('names a new database after the slug of the organisation, and never takes a database that exists already', async () => {
+        const linde = randomUUID()
+        const other = randomUUID()
+        rememberTenantSlug(linde, 'de-linde')
+        await new PgNotesStore(database).create(linde, randomUUID(), 'Van De Linde')
+        const name = await database.withTenant(linde, db =>
+            db.query<{ name: string }>('SELECT current_database() AS name')
+        )
+        expect(name.rows[0]?.name).toBe(`${settings.DATABASE_NAME}_de_linde`)
+        // Another organisation with the same slug (renamed, or another one later): the start of its id is added
+        rememberTenantSlug(other, 'de-linde')
+        await new PgNotesStore(database).create(other, randomUUID(), 'Van de andere')
+        const second = await database.withTenant(other, db =>
+            db.query<{ name: string }>('SELECT current_database() AS name')
+        )
+        expect(second.rows[0]?.name).toBe(`${settings.DATABASE_NAME}_de_linde_${other.replaceAll('-', '').slice(0, 8)}`)
+        // The register decides afterwards: a new slug changes nothing
+        rememberTenantSlug(linde, 'nieuwe-naam')
+        expect((await new PgNotesStore(database).list(linde)).map(note => note.text)).toEqual(['Van De Linde'])
+        expect(database.tenantDatabaseNames(other, 'x'.repeat(63)).every(item => item.length <= 63)).toBe(true)
     })
 
     it('refuses a tenant id that is not a uuid, before any database is touched', async () => {

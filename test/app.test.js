@@ -251,7 +251,7 @@ test('a database per organisation: TENANT_ISOLATION, the register in MAIN_MIGRAT
     assert.ok(full['.env'].includes('\nTENANT_ISOLATION=database\n'))
     const service = full['src/database/database.service.ts']
     assert.match(service, /config\.get<string>\('TENANT_ISOLATION'\) \|\| 'rls'/)
-    assert.match(service, /this\.withLock\('tenant-database:' \+ name/)
+    assert.match(service, /this\.withLock\('tenant-database:' \+ tenantId/)
     assert.match(service, /CREATE DATABASE "\$\{name\}"/)
     assert.match(full['src/database/migrations.ts'], /export const MAIN_MIGRATIONS[\s\S]+CREATE TABLE tenant_databases/)
     assert.match(

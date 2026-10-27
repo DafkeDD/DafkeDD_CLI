@@ -206,6 +206,35 @@ export function consentPage(
     }
 }
 
+/** "No licence for <app>": the account is logged in, but may not use this app in this organisation. */
+export function noLicensePage(
+    t: Translate,
+    options: {
+        action: string
+        csrf: string
+        clientName: string
+        tenantName: string | null
+        demo: boolean
+        portal: string
+    }
+) {
+    const text = options.tenantName
+        ? t('oidc.NO_LICENSE_TEXT', { client: options.clientName, tenant: options.tenantName })
+        : t('oidc.NO_LICENSE_TEXT_PLATFORM', { client: options.clientName })
+    return {
+        title: t('oidc.NO_LICENSE_TITLE', { client: options.clientName }),
+        body:
+            `<h1>${escapeHtml(t('oidc.NO_LICENSE_TITLE', { client: options.clientName }))}</h1>` +
+            `<p class="muted">${escapeHtml(text)}</p>` +
+            (options.demo
+                ? `<form method="post" action="${escapeHtml(options.action)}">` +
+                  `<input type="hidden" name="csrf" value="${escapeHtml(options.csrf)}">` +
+                  `<button type="submit">${escapeHtml(t('oidc.NO_LICENSE_DEMO'))}</button></form>`
+                : `<p class="muted">${escapeHtml(t('oidc.NO_LICENSE_ASK'))}</p>`) +
+            `<p><a href="${escapeHtml(options.portal)}">${escapeHtml(t('oidc.NO_LICENSE_PORTAL'))}</a></p>`
+    }
+}
+
 export function messagePage(t: Translate, titleKey: string, textKey: string) {
     return {
         title: t(titleKey),

@@ -17,7 +17,12 @@ export class MeController {
         schema: {
             example: {
                 sub: '1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9',
-                tenant: { id: '0f9e8d7c-6b5a-4493-8271-605f4e3d2c1b', name: 'Praktijk De Linde', role: 'admin' },
+                tenant: {
+                    id: '0f9e8d7c-6b5a-4493-8271-605f4e3d2c1b',
+                    name: 'Praktijk De Linde',
+                    slug: 'de-linde',
+                    role: 'admin'
+                },
                 superadmin: false,
                 license: { product: 'planner', status: 'trial', endsAt: '2026-11-03T08:00:00.000Z' },
                 roles: ['editor']

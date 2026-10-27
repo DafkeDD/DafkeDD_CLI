@@ -136,6 +136,20 @@ export class BillingService implements OnModuleInit {
                         if (error instanceof AppException) return false
                         throw error
                     }
+                ),
+            // The "no licence" screen of the login: ask the own demo at once
+            demoAvailable: async (tenantId, userId, code) => {
+                const product = await this.store.findProductByCode(code)
+                if (!product?.active || !product.demoEnabled) return false
+                return (await this.store.findTrial(tenantId, product.id, userId)) === null
+            },
+            requestDemo: (tenantId, userId, code) =>
+                this.requestDemo(tenantId, code, userId).then(
+                    () => true,
+                    (error: unknown) => {
+                        if (error instanceof AppException) return false
+                        throw error
+                    }
                 )
         })
     }
