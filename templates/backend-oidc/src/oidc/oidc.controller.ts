@@ -10,6 +10,7 @@ import {
 } from '@nestjs/swagger'
 import type { Request, Response } from 'express'
 import { I18n, I18nContext } from 'nestjs-i18n'
+import { AppException } from '../common/app.exception.js'
 import { ExternalService } from './external/external.service.js'
 import { interactionCookieName, interactionCookiePath } from './interaction.js'
 import { LoginLimiter } from './login-limiter.js'
@@ -362,13 +363,17 @@ export class OidcController {
     @Post('interaction/:id/demo')
     @ApiOperation({
         summary:
-            'On the "no licence" screen of an app that sells a product (form-encoded or JSON { csrf }): the own demo of that product (once, when its demo is on), then on to the app'
+            'On the "no licence" screen of an app that sells a product (form-encoded or JSON { csrf }): the own demo of that product (once, when its demo is on), then on to the app. Rate limited.'
     })
     @ApiProduces('text/html', 'application/json')
     @ApiResponse({ status: 303, description: 'Into the app with a code' })
     @ApiOkResponse({ description: '{ status: "redirect", location }, or { status: "no-license", ... } without a demo' })
     @ApiResponse({ status: 410, description: 'The login request expired, or the session ended meanwhile' })
+    @ApiResponse({ status: 429, description: 'oidc.TOO_MANY_ATTEMPTS' })
     async demo(@Param('id') id: string, @Req() request: Request, @Res() response: Response, @I18n() i18n: I18nContext) {
+        // Like a login attempt: limited per IP address
+        if (!this.limiter.allow(['ip:' + (request.ip ?? 'unknown')]))
+            throw new AppException('oidc.TOO_MANY_ATTEMPTS', HttpStatus.TOO_MANY_REQUESTS)
         const result = await this.oidc.demo(id, this.interactionCookie(request, id), (request.body ?? {}) as Params)
         this.loginAnswer(id, result, request, response, i18n)
     }
@@ -805,6 +810,8 @@ export class OidcController {
             case 'no-license':
                 return sendPage(response, {
                     lang: i18n.lang,
+                    // After "Ask a demo" the browser goes on to the client (form-action also covers that redirect)
+                    formTargets: [new URL(result.interaction.params.redirectUri).origin],
                     ...noLicensePage(t, {
                         action: this.action(id, 'demo', request),
                         csrf: result.interaction.csrf,

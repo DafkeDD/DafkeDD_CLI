@@ -10,6 +10,7 @@ import {
     codeFiles,
     formatLike,
     frontendMessages,
+    isStarter,
     moveReadmesToDocs,
     untouchedSinceFirstCommit,
     updateEnv,
@@ -93,6 +94,19 @@ test('codeFiles: the code of the login server and its frontend, never .env, pack
     assert.ok(!Object.values(files).some(content => content.includes('Zq7-only-in-env')))
     // The users table is named after the database, like when the project was made
     assert.match(files['backend/src/database/database.constants.ts'], /'dafkedd_kidsusers'/)
+    // The starting points (your home page, pages in the rail, the example notes, the modules, the roles) are in the
+    // code (and the manifest), update leaves them alone when they are there (see update.test.js)
+    assert.ok(files['backend/src/app.module.ts'])
+    assert.ok(isStarter('backend/src/app.module.ts', 'app'))
+    // The login server: its module list is the CLI's (it adds modules), only the examples and config are yours
+    assert.ok(!isStarter('backend/src/app.module.ts', 'pasport'))
+    assert.ok(isStarter('backend/src/examples/examples.controller.ts', 'pasport'))
+    assert.ok(isStarter('backend/config/app-roles.json', 'app'))
+    assert.ok(!isStarter('backend/src/oidc/oidc.service.ts', 'pasport'))
+    // The portal of the login server is the CLI's: its home page is kept in step, the one of an app is yours
+    assert.equal(isStarter('frontend/src/app/[locale]/page.tsx', 'pasport'), false)
+    assert.equal(isStarter('frontend/src/app/[locale]/page.tsx', 'app'), true)
+    assert.equal(isStarter('backend/src/notes/notes.controller.ts', 'app'), true)
     // Without DATABASE_NAME the code of the login server is not known: left alone
     const empty = await tempDir(t)
     assert.ok(!Object.keys(codeFiles(PASPORT, empty)).some(rel => rel.startsWith('backend/')))
@@ -174,6 +188,13 @@ test('updateEnv: the new settings with their comment at the end, never one that 
     assert.ok(!env.includes('OIDC_MASTER_KEY=change-me'), 'never a placeholder over a secret')
     // Again: nothing more
     assert.deepEqual(await updateEnv({ projectDir: dir, project: PASPORT }), [])
+    // A missing secret comes as a comment, never as a placeholder value the API would start with
+    const bare = await tempDir(t)
+    await writeAll(bare, { 'backend/.env': 'DATABASE_NAME=dafkedd_kids\n' })
+    await updateEnv({ projectDir: bare, project: PASPORT })
+    const added = await fs.readFile(path.join(bare, 'backend/.env'), 'utf8')
+    assert.match(added, /^# OIDC_MASTER_KEY=change-me/m)
+    assert.ok(!/^OIDC_MASTER_KEY=/m.test(added))
 })
 
 test('updatePackages: missing scripts with the indentation of the file, missing packages installed', async t => {
@@ -211,14 +232,21 @@ test('untouchedSinceFirstCommit: only files of the first commit that never chang
     const dir = await tempDir(t)
     const git = (...args) =>
         execFileSync('git', ['-c', 'user.email=a@b.c', '-c', 'user.name=a', ...args], { cwd: dir, stdio: 'pipe' })
-    await writeAll(dir, { 'a.ts': 'a', 'b.ts': 'b', 'c.ts': 'c' })
+    await writeAll(dir, { 'a.ts': 'a', 'b.ts': 'b', 'c.ts': 'c', 'sub/d with space.ts': 'd' })
     git('init', '-q')
     git('add', '-A')
     git('commit', '-qm', 'first')
     await fs.writeFile(path.join(dir, 'b.ts'), 'mine')
     git('commit', '-qam', 'mine')
     await fs.writeFile(path.join(dir, 'c.ts'), 'not committed')
-    assert.deepEqual([...(await untouchedSinceFirstCommit(dir, ['a.ts', 'b.ts', 'c.ts']))], ['a.ts'])
+    // Added later by you: not of the first commit
+    await writeAll(dir, { 'e.ts': 'e' })
+    git('add', '-A')
+    git('commit', '-qm', 'later')
+    assert.deepEqual(
+        [...(await untouchedSinceFirstCommit(dir, ['a.ts', 'b.ts', 'c.ts', 'sub/d with space.ts', 'e.ts']))].sort(),
+        ['a.ts', 'sub/d with space.ts']
+    )
     // Without git: nothing is known
     const plain = await tempDir(t)
     assert.equal((await untouchedSinceFirstCommit(plain, ['a.ts'])).size, 0)

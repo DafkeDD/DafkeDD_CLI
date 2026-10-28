@@ -125,10 +125,8 @@ export class VaultAppService {
         for (const id of new Set(ids)) {
             const owner = id === user.id ? user : await this.doctor(id, tenantId)
             if (!owner) continue
-            const ready = await this.vault.reveal(id).then(
-                () => true,
-                () => false
-            )
+            // Whether it is ready, without decrypting anything
+            const ready = await this.vault.ready(id)
             result.push({ id, name: owner.name, email: owner.email, self: id === user.id, ready })
         }
         return result

@@ -512,6 +512,10 @@ describe('Apps on /admin (e2e)', () => {
         const refused = await noLicense('alice@example.com', shop)
         expect(refused.done.text).toContain('Ask a demo')
         expect(refused.done.text).toContain('http://localhost:3000/apps')
+        // Its form-action allows the way on to the app after "Ask a demo" (the 303 to the client)
+        expect(refused.done.headers['content-security-policy']).toContain(
+            "form-action 'self' " + new URL(shop.redirect).origin
+        )
         // Logged in at the server meanwhile (single sign-on): still no code, the screen again; prompt=none: access_denied
         const sso = await http().get(authorizeUrl(shop, refused.verifier)).set('Cookie', refused.session).expect(303)
         expect(sso.headers.location).not.toContain('code=')
@@ -520,6 +524,19 @@ describe('Apps on /admin (e2e)', () => {
             .set('Cookie', refused.session)
             .expect(303)
         expect(new URL(silent.headers.location as string).searchParams.get('error')).toBe('access_denied')
+        // "Ask a demo" is limited per IP address like a login attempt (OIDC_LOGIN_RATE_LIMIT a minute)
+        process.env.OIDC_LOGIN_RATE_LIMIT = '0'
+        try {
+            await http()
+                .post(refused.page + '/demo')
+                .set('Cookie', refused.cookie)
+                .type('form')
+                .send({ csrf: csrfOf(refused.done.text) })
+                .expect(429)
+        } finally {
+            process.env.OIDC_LOGIN_RATE_LIMIT = '1000'
+            app.get(LoginLimiter).clear()
+        }
         // "Ask a demo" there: her demo starts and the login goes on into the app
         const demo = await http()
             .post(refused.page + '/demo')

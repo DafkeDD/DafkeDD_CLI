@@ -1932,7 +1932,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/oidc/interaction/:id/demo',
         tag: 'oidc',
         summary:
-            'The "no licence" screen. An app that sells a product (`product` on the app) only lets in an account with a licence of it in the organisation of the login (a running demo, a seat, or a superadmin); without one the login stops there (also with single sign-on; `prompt=none` gives `error=access_denied`), as `{ status: "no-license", csrf, clientName, tenantName, demo, portal }`. This route starts the own demo (`demo: true`: the demo of the product is on and the member never had one) and goes on to the app. `POST .../resume` goes on too once an admin gave a seat meanwhile; `portal` is My apps on the portal. Form-encoded (303) or JSON.',
+            'The "no licence" screen. An app that sells a product (`product` on the app) only lets in an account with a licence of it in the organisation of the login (a running demo, a seat, or a superadmin); without one the login stops there (also with single sign-on; `prompt=none` gives `error=access_denied`), as `{ status: "no-license", csrf, clientName, tenantName, demo, portal }`. This route starts the own demo (`demo: true`: the demo of the product is on and the member never had one) and goes on to the app. `POST .../resume` goes on too once an admin gave a seat meanwhile; `portal` is My apps on the portal. Form-encoded (303) or JSON. Limited per IP address like a login attempt (`OIDC_LOGIN_RATE_LIMIT` a minute).',
         form: true,
         body: {
             example: { csrf: 'from-the-page' },
@@ -1942,7 +1942,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
             status: 200,
             example: { status: 'redirect', location: 'https://planner.example.com/api/auth/callback?code=...&iss=...' }
         },
-        errors: [[410, 'oidc.EXPIRED']]
+        errors: [[410, 'oidc.EXPIRED'], TOO_MANY]
     },
     {
         method: 'POST',
@@ -3714,7 +3714,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/vault/doctors',
         tag: 'eHealth vault',
         summary:
-            'For an app (server to server, like `POST /vault/credentials`): the doctors whose certificate the logged in account may use. Itself when it is a doctor (`self`), and the doctors of the organisation of the token who chose it (`PUT /me/vault/colleagues`). `ready`: certificate and password are there. Same Basic authentication, product and licence checks; never cached.',
+            'For an app (server to server, like `POST /vault/credentials`): the doctors whose certificate the logged in account may use. Itself when it is a doctor (`self`), and the doctors of the organisation of the token who chose it (`PUT /me/vault/colleagues`). `ready`: certificate and password are there and it has not expired (nothing is decrypted for this). Same Basic authentication, product and licence checks; never cached.',
         basic: '$CLIENT_ID',
         body: {
             example: { accessToken: 'eyJhbGciOiJFUzI1NiIs…' },

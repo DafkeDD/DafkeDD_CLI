@@ -15,6 +15,7 @@ import { buildManifest, inferProject, managedFiles, manifestProject, MANIFEST, r
 import {
     codeFiles,
     formatLike,
+    isStarter,
     moveReadmesToDocs,
     frontendMessages,
     untouchedSinceFirstCommit,
@@ -37,10 +38,13 @@ export const OLD_SUFFIX = '.dafkedd-old'
  * - `updated`: on disk exactly as the CLI wrote it last time: replaced;
  * - `changed`: changed by you (or no manifest to tell): the new version next to it as `<file>.dafkedd-new`;
  * - `removed`: in the manifest, no longer made by the CLI: left alone and reported.
+ * `skip`: the starting points of the project that are on disk (yours): left out entirely.
  */
-export function planUpdate({ disk, remembered = {}, wanted }) {
+export function planUpdate({ disk, remembered = {}, wanted, skip = new Set() }) {
     const plan = []
     for (const [rel, content] of Object.entries(wanted)) {
+        // A starting point that is there is yours: not compared, not reported
+        if (skip.has(rel)) continue
         const current = disk[rel]
         // Made before and deleted since: by you, on purpose; it does not come back
         if (current === undefined && remembered[rel]) plan.push({ rel, action: 'deleted' })
@@ -50,7 +54,7 @@ export function planUpdate({ disk, remembered = {}, wanted }) {
         else plan.push({ rel, action: 'changed' })
     }
     for (const rel of Object.keys(remembered))
-        if (!(rel in wanted) && disk[rel] !== undefined) plan.push({ rel, action: 'removed' })
+        if (!(rel in wanted) && !skip.has(rel) && disk[rel] !== undefined) plan.push({ rel, action: 'removed' })
     return plan.sort((a, b) => a.rel.localeCompare(b.rel))
 }
 
@@ -138,7 +142,11 @@ export async function update({
     const unknown = Object.keys(wanted).filter(rel => disk[rel] !== undefined && remembered[rel] === undefined)
     const untouched = await untouchedSinceFirstCommit(projectDir, unknown)
     for (const rel of untouched) remembered[rel] = disk[rel]
-    const plan = planUpdate({ disk, remembered, wanted })
+    // Your starting points (the home page, APP_NAV, the example notes, app.module.ts, ...): only written when missing
+    const skip = new Set(Object.keys(wanted).filter(rel => isStarter(rel, project.kind) && disk[rel] !== undefined))
+    // The code of a part Prettier could not format is not compared this time: not reported as removed either
+    for (const rel of Object.keys(code)) if (!(rel in wanted)) skip.add(rel)
+    const plan = planUpdate({ disk, remembered, wanted, skip })
     // Without git history to tell (no repository, or committed together with your changes) the code of an older
     // project is not known: one question for all of it. Yes: the new version, yours kept as <file>.dafkedd-old
     const unsure = plan.filter(
@@ -200,6 +208,9 @@ export async function update({
         // Remembered, so it stays deleted next time too
         if (action === 'deleted') next.files[rel] = manifest.files[rel]
     }
+    // What was left out this time (code Prettier could not format) stays remembered as it was
+    for (const rel of skip)
+        if (next.files[rel] === undefined && manifest?.files?.[rel]) next.files[rel] = manifest.files[rel]
     next.project = manifestProject(project)
     await fs.writeFile(path.join(projectDir, MANIFEST), JSON.stringify(next, null, 4) + '\n')
 

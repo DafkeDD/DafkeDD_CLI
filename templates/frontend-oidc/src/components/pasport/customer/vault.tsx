@@ -513,11 +513,9 @@ function Colleagues() {
                                 disabled={busy}
                                 onChange={() => toggle(c.userId)}
                             />
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontWeight: 600, fontSize: 14 }}>{c.name ?? c.email}</div>
-                                <div className='t-muted' style={{ fontSize: 12.5 }}>
-                                    {c.email}
-                                </div>
+                            {/* The name; the email address only for a colleague without one */}
+                            <div style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 14 }}>
+                                {c.name || c.email}
                             </div>
                         </label>
                     ))}

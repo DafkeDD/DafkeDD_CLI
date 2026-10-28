@@ -50,7 +50,8 @@ async function Shell({ children, wide }: { children: ReactNode; wide: boolean })
                 organisation: !session.tenant ? t('superadmin') : session.tenant.name,
                 profile: '/profile',
                 security: ACCOUNT_URL + '/security',
-                external
+                external,
+                superadmin: session.superadmin
             }}
         >
             {children}
