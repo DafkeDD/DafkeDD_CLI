@@ -126,6 +126,13 @@ test('an app is a product: migration 11, the licence claim in its tokens, the pr
     }
     // A catalogue app sells its product (its code); an internal app sells none
     assert.match(frontend['src/components/pasport/admin/connection.tsx'], /\{ product: clientId \}/)
+    // The link code right after making a catalogue app: the connection sells the product of the app too (else it is
+    // free for everyone), also when the connection was made earlier without it
+    assert.match(frontend['src/components/pasport/admin/connection.tsx'], /firstParty: true,\s+product: code\s+\}\)/)
+    assert.match(
+        frontend['src/components/pasport/admin/connection.tsx'],
+        /!existing\.product && existing\.source === 'admin'/
+    )
     // Documented: the field, the errors, the claim
     const create = endpoints({ database: DB, oidc: true }).find(e => e.method === 'POST' && e.path === '/admin/clients')
     assert.ok(create.body.fields.some(([name]) => name === 'product'))

@@ -77,8 +77,10 @@ export function ConnectSection({
     const make = async () => {
         setBusy(true)
         try {
-            const clients = await api<{ clientId: string }[]>('admin/clients')
-            if (!clients.some(c => c.clientId === code))
+            const clients = await api<Client[]>('admin/clients')
+            const existing = clients.find(c => c.clientId === code)
+            // A catalogue app sells its product (the app code): without it the app would be free for everyone
+            if (!existing)
                 await api('admin/clients', 'POST', {
                     clientId: code,
                     name,
@@ -86,7 +88,19 @@ export function ConnectSection({
                     redirectUris: [redirectFor()],
                     scopes: ['openid', 'profile', 'email', 'tenant'],
                     refreshTokens: true,
-                    firstParty: true
+                    firstParty: true,
+                    product: code
+                })
+            else if (!existing.product && existing.source === 'admin')
+                await api(`admin/clients/${encodeURIComponent(code)}`, 'PUT', {
+                    name: existing.name,
+                    redirectUris: existing.redirectUris,
+                    postLogoutRedirectUris: existing.postLogoutRedirectUris,
+                    backchannelLogoutUri: existing.backchannelLogoutUri ?? '',
+                    scopes: existing.scopes,
+                    refreshTokens: existing.grantTypes.includes('refresh_token'),
+                    firstParty: existing.firstParty,
+                    product: code
                 })
             setLink(await api<LinkInfo>(`admin/clients/${encodeURIComponent(code)}/link-code`, 'POST'))
         } catch (e) {

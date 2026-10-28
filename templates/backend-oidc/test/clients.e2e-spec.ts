@@ -565,6 +565,14 @@ describe('Apps on /admin (e2e)', () => {
         const root = await login('root@example.com', shop, { tenant_hint: tenantId })
         expect(claims(root.access_token).license).toEqual({ product: 'shop', status: 'superadmin' })
 
+        // Changing the app without `product` (an older admin page): it keeps selling its product
+        await http()
+            .put('/admin/clients/shop.app')
+            .set(bearer(tokens.root))
+            .send({ ...APP, firstParty: true })
+            .expect(200)
+            .expect(response => expect(response.body.product).toBe('shop'))
+
         // Without a product: no licence claim at all
         await http()
             .put('/admin/clients/shop.app')

@@ -736,6 +736,12 @@ git switch developer
 
 ## Changelog
 
+- **0.54.1**: an app of the catalogue is no longer free by mistake.
+    - The link code right after making an app in the catalogue made its connection without the product of the app: the
+      app was free for everyone of the organisation, and the CLI linked it without `OIDC_PRODUCT`. The connection now
+      sells the product of the app, also when it was made earlier without it (the next link code fixes it).
+    - `PUT /admin/clients/:clientId` without `product` keeps the product the app sells; only `""` or `null` makes it
+      free.
 - **0.54.0**: `update` also brings the code.
     - The code of the backend (login server, linked app, API) and the frontend (all its pages and components) as this
       version makes it, formatted with the Prettier of the project. Unchanged files are replaced; a file you changed

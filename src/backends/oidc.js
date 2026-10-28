@@ -2876,7 +2876,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
         method: 'PUT',
         path: '/admin/clients/:clientId',
         tag: 'apps (superadmin)',
-        summary: 'Changes an app made on /admin: the same fields as making one, except its id and type.',
+        summary:
+            'Changes an app made on /admin: the same fields as making one, except its id and type. Without `product` it keeps the product it sells; `""` or `null` makes it free.',
         pathExample: '/admin/clients/partner.planner',
         bearer: true,
         body: {

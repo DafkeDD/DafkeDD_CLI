@@ -151,7 +151,9 @@ export class ClientsService {
     async update(clientId: string, body: ClientFieldsDto) {
         const before = await this.editable(clientId)
         const fields = this.fields(body)
-        const product = await this.product(body.product, clientId)
+        // Without `product` in the body the app keeps the one it sells: only "" or null makes it free
+        const product =
+            body.product === undefined ? (before.product ?? null) : await this.product(body.product, clientId)
         await this.store.updateClient(clientId, { ...fields, product })
         await this.revokeLinkCodes(clientId)
         await this.audit.record('platform.client_updated', {
