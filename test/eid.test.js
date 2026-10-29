@@ -143,8 +143,11 @@ test('the frontend contacts the eID program only after a click, and never reads 
     assert.match(eid, /from '@dafkedd\/eid\/react'/)
     assert.match(eid, /<EidProvider autoRead=\{false\} photo=\{false\}>/)
     assert.match(eid, /https:\/\/github\.com\/DafkeDD\/DafkeDD_EID\/releases\/latest/)
-    // The PIN is cleared after every attempt
-    assert.match(eid, /if \(field instanceof HTMLInputElement\) field\.value = ''/)
+    // The PIN: four masked boxes, cleared after every attempt, the button only with four digits
+    assert.match(eid, /<OtpInput\s+length=\{4\}\s+value=\{pin\}\s+setValue=\{setPin\}\s+masked/)
+    assert.match(eid, /setPin\(''\)/)
+    assert.match(eid, /disabled=\{busy \|\| pin\.length !== 4\}/)
+    assert.match(frontend['src/components/pasport/widgets.tsx'], /type=\{masked \? 'password' : 'text'\}/)
     const login = frontend['src/components/oidc-login.tsx']
     assert.match(login, /call\('\/eid\/challenge', \{ csrf: state\.csrf \}\)/)
     assert.match(login, /call\('\/eid', \{ csrf: state\.csrf, token \}\)/)

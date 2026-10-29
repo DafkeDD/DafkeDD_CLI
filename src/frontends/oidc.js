@@ -110,7 +110,8 @@ export const OIDC_MESSAGES = {
         passkeyFailed: 'Logging in with the passkey failed. Please try again.',
         passkeyCancelled: 'The passkey request was cancelled or timed out.',
         eidPin: 'PIN code',
-        eidPinHint: '4 to 12 digits. It goes straight to your card, never to this website.',
+        eidPinHint: '4 digits. It goes straight to your card, never to this website.',
+        eidPinDigit: 'Digit {n} of your PIN',
         eidConnecting: 'Looking for the eID program on this computer…',
         eidNoBridge:
             'The DafkeDD eID program is not running on this computer. Install it once and start it: this page continues by itself.',
@@ -275,7 +276,8 @@ export const OIDC_MESSAGES = {
         passkeyFailed: 'Inloggen met de passkey is mislukt. Probeer het opnieuw.',
         passkeyCancelled: 'De passkey-aanvraag is geannuleerd of verlopen.',
         eidPin: 'Pincode',
-        eidPinHint: '4 tot 12 cijfers. Ze gaat rechtstreeks naar je kaart, nooit naar deze website.',
+        eidPinHint: '4 cijfers. Ze gaat rechtstreeks naar je kaart, nooit naar deze website.',
+        eidPinDigit: 'Cijfer {n} van je pincode',
         eidConnecting: 'Het eID-programma op deze computer zoeken…',
         eidNoBridge:
             'Het DafkeDD eID-programma draait niet op deze computer. Installeer het één keer en start het: deze pagina gaat dan vanzelf verder.',
@@ -443,7 +445,8 @@ export const OIDC_MESSAGES = {
         passkeyFailed: "La connexion avec la clé d'accès a échoué. Veuillez réessayer.",
         passkeyCancelled: "La demande de clé d'accès a été annulée ou a expiré.",
         eidPin: 'Code PIN',
-        eidPinHint: '4 à 12 chiffres. Il va directement à votre carte, jamais à ce site web.',
+        eidPinHint: '4 chiffres. Il va directement à votre carte, jamais à ce site web.',
+        eidPinDigit: 'Chiffre {n} de votre code PIN',
         eidConnecting: 'Recherche du programme eID sur cet ordinateur…',
         eidNoBridge:
             "Le programme DafkeDD eID ne tourne pas sur cet ordinateur. Installez-le une fois et démarrez-le : cette page continue d'elle-même.",
@@ -613,7 +616,8 @@ export const OIDC_MESSAGES = {
         passkeyFailed: 'Die Anmeldung mit dem Passkey ist fehlgeschlagen. Bitte versuche es erneut.',
         passkeyCancelled: 'Die Passkey-Anfrage wurde abgebrochen oder ist abgelaufen.',
         eidPin: 'PIN',
-        eidPinHint: '4 bis 12 Ziffern. Sie geht direkt an deine Karte, nie an diese Website.',
+        eidPinHint: '4 Ziffern. Sie geht direkt an deine Karte, nie an diese Website.',
+        eidPinDigit: 'Ziffer {n} deiner PIN',
         eidConnecting: 'Das eID-Programm auf diesem Computer wird gesucht…',
         eidNoBridge:
             'Das DafkeDD eID-Programm läuft nicht auf diesem Computer. Installiere es einmal und starte es: Diese Seite macht dann von selbst weiter.',

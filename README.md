@@ -869,6 +869,10 @@ git switch developer
 
 ## Changelog
 
+- **0.54.6**: the eID PIN in four boxes.
+    - The PIN of the eID is typed in four masked boxes (`OtpInput` with `masked`), like the code of the two-step
+      verification, on the login screen, the registration and "Link eID". "Read card" only works with four digits; the
+      boxes are emptied after every try. A PIN longer than four digits can no longer be typed.
 - **0.54.5**: no login without a licence, also for the apps linked before 0.54.1.
     - The clients of catalogue apps made with the admin page before 0.54.1 had no product, so the login server let
       everyone of an organisation in. Migration 24 gives them the product of their code again (not when another app

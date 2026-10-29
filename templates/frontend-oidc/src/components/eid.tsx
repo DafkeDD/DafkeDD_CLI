@@ -3,7 +3,8 @@
 import { type FormEvent, type ReactNode, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { EidProvider, useEid, useEidLogin } from '@dafkedd/eid/react'
-import { BUTTON, Field, LINK, Notice } from '@/components/account-ui'
+import { BUTTON, LINK, Notice } from '@/components/account-ui'
+import { OtpInput } from '@/components/pasport/widgets'
 
 /** The token of the bridge after the PIN (EidAuthToken): sent as it is to the login server. */
 export type EidToken = NonNullable<ReturnType<typeof useEidLogin>['token']>
@@ -72,14 +73,15 @@ export function EidPin({
     const signer = useEidLogin()
     const [busy, setBusy] = useState(false)
     const [error, setError] = useState('')
+    // The PIN: four boxes, kept only until the card signed (or refused)
+    const [pin, setPin] = useState('')
     // The card refused (wrong PIN, ...): the reason is in the state of useEidLogin, shown below
     const [signFailed, setSignFailed] = useState(false)
 
     async function onSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
         const form = event.currentTarget
-        const values = Object.fromEntries([...new FormData(form)].map(([key, value]) => [key, String(value)]))
-        const { pin = '', ...rest } = values
+        const rest = Object.fromEntries([...new FormData(form)].map(([key, value]) => [key, String(value)]))
         setBusy(true)
         setError('')
         setSignFailed(false)
@@ -98,9 +100,8 @@ export function EidPin({
         } catch {
             setError(t('eidFailed'))
         }
-        // The PIN is never kept, also not in the field
-        const field = form.elements.namedItem('pin')
-        if (field instanceof HTMLInputElement) field.value = ''
+        // The PIN is never kept, also not in the boxes
+        setPin('')
         setBusy(false)
     }
 
@@ -123,20 +124,24 @@ export function EidPin({
         <form onSubmit={event => void onSubmit(event)} className='flex flex-col gap-5'>
             {children}
             {eid.phase === 'error' && <Notice tone='error'>{t('eidCardError')}</Notice>}
-            <Field
-                label={t('eidPin')}
-                hint={t('eidPinHint')}
-                name='pin'
-                type='password'
-                inputMode='numeric'
-                pattern='[0-9]{4,12}'
-                minLength={4}
-                maxLength={12}
-                autoComplete='off'
-                required
-            />
+            <div className='field' role='group' aria-labelledby='eid-pin-label' aria-describedby='eid-pin-hint'>
+                <span id='eid-pin-label' className='label'>
+                    {t('eidPin')}
+                </span>
+                <OtpInput
+                    length={4}
+                    value={pin}
+                    setValue={setPin}
+                    masked
+                    error={!!message}
+                    label={n => t('eidPinDigit', { n })}
+                />
+                <span id='eid-pin-hint' className='hint'>
+                    {t('eidPinHint')}
+                </span>
+            </div>
             {message && <Notice tone='error'>{message}</Notice>}
-            <button type='submit' disabled={busy} className={BUTTON}>
+            <button type='submit' disabled={busy || pin.length !== 4} className={BUTTON}>
                 {busy ? t('busy') : submitLabel}
             </button>
         </form>
