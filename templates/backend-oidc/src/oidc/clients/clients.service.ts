@@ -105,11 +105,28 @@ export class ClientsService {
         return `${base}-${randomBytes(3).toString('hex')}`
     }
 
-    /** Makes the app; a confidential one gets its secret here, the only time it is shown. */
+    /**
+     * The product of a catalogue app, whose client id is the code of its product: what it sells when the body says
+     * nothing about it (an older admin page), so it is never free by mistake. Null when no product has that code, or
+     * when another app sells it already.
+     */
+    private async catalogue(clientId: string): Promise<string | null> {
+        if (!(await this.licenses.productExists(clientId))) return null
+        const owner = (await this.store.listClients()).find(client => client.product === clientId)
+        return owner ? null : clientId
+    }
+
+    /**
+     * Makes the app; a confidential one gets its secret here, the only time it is shown. When the body has no product
+     * and a product has the client id as its code (a catalogue app), the app sells that product.
+     */
     async create(createdBy: string, body: CreateClientDto) {
         const fields = this.fields(body)
         const clientId = await this.clientId(body)
-        const product = await this.product(body.product, null)
+        const product = await this.product(
+            body.product === undefined ? await this.catalogue(clientId) : body.product,
+            null
+        )
         const secret = body.type === 'confidential' ? newSecret() : null
         const client: OidcClient = {
             clientId,
@@ -152,9 +169,12 @@ export class ClientsService {
     async update(clientId: string, body: ClientFieldsDto) {
         const before = await this.editable(clientId)
         const fields = this.fields(body)
-        // Without `product` in the body the app keeps the one it sells: only "" or null makes it free
+        // Without `product` in the body the app keeps the one it sells (a catalogue app without one gets its own): only
+        // "" or null makes it free
         const product =
-            body.product === undefined ? (before.product ?? null) : await this.product(body.product, clientId)
+            body.product === undefined
+                ? (before.product ?? (await this.catalogue(clientId)))
+                : await this.product(body.product, clientId)
         await this.store.updateClient(clientId, { ...fields, product })
         await this.revokeLinkCodes(clientId)
         await this.audit.record('platform.client_updated', {

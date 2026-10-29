@@ -600,6 +600,59 @@ describe('Apps on /admin (e2e)', () => {
         expect(claims((await login('alice@example.com', shop)).access_token)).not.toHaveProperty('license')
     })
 
+    it('a catalogue app is never free by mistake: without product in the body it sells the product of its code', async () => {
+        await http()
+            .post('/admin/products')
+            .set(bearer(tokens.root))
+            .send({ code: 'kids', name: 'Kids', priceMonthCents: 1000, priceYearCents: 10000 })
+            .expect(201)
+        // An older admin page made the client of a catalogue app without its product
+        const made = await create({ clientId: 'kids', name: 'Kids', firstParty: true }).expect(201)
+        expect(made.body.client.product).toBe('kids')
+        const kids = { id: 'kids', redirect: APP.redirectUris[0]! }
+        const refused = await noLicense('alice@example.com', kids)
+        expect(refused).toBeDefined()
+        // Made free on purpose (""), then changed by an older admin page (no product): it sells its product again
+        await http()
+            .put('/admin/clients/kids')
+            .set(bearer(tokens.root))
+            .send({ ...APP, name: 'Kids', firstParty: true, product: '' })
+            .expect(200)
+            .expect(response => expect(response.body.product).toBeNull())
+        await http()
+            .put('/admin/clients/kids')
+            .set(bearer(tokens.root))
+            .send({ ...APP, name: 'Kids', firstParty: true })
+            .expect(200)
+            .expect(response => expect(response.body.product).toBe('kids'))
+        // An id that is no product code: a free (internal) app, as before
+        const internal = await create({ clientId: 'intern.tool', name: 'Intern', firstParty: true }).expect(201)
+        expect(internal.body.client.product).toBeNull()
+        // Free on purpose when it is made: product ""
+        await http()
+            .post('/admin/products')
+            .set(bearer(tokens.root))
+            .send({ code: 'notes', name: 'Notes', priceMonthCents: 1000, priceYearCents: 10000 })
+            .expect(201)
+        const free = await create({ clientId: 'notes', name: 'Notes', firstParty: true, product: '' }).expect(201)
+        expect(free.body.client.product).toBeNull()
+        // Another app sells the product already: the app with its code stays free, never a 409
+        await http()
+            .post('/admin/products')
+            .set(bearer(tokens.root))
+            .send({ code: 'agenda2', name: 'Agenda 2', priceMonthCents: 1000, priceYearCents: 10000 })
+            .expect(201)
+        await create({ clientId: 'agenda2.app', name: 'Agenda 2', firstParty: true, product: 'agenda2' }).expect(201)
+        const second = await create({ clientId: 'agenda2', name: 'Agenda 2 copy', firstParty: true }).expect(201)
+        expect(second.body.client.product).toBeNull()
+        await http()
+            .put('/admin/clients/agenda2')
+            .set(bearer(tokens.root))
+            .send({ ...APP, name: 'Agenda 2 copy', firstParty: true })
+            .expect(200)
+            .expect(response => expect(response.body.product).toBeNull())
+    })
+
     it('roles per app: the developer sends them, the admins give them, the tokens carry them', async () => {
         const claims = (token: string) =>
             JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as Record<string, unknown>

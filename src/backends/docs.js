@@ -716,7 +716,8 @@ at every login and every refresh (so at most 10 minutes old):
 With \`OIDC_PRODUCT\` set${app.product ? ` (here \`${app.product}\`)` : ''}, \`member\` and \`admin\` routes need a licence of that product (a claim of
 another product, or none, is refused); \`account\` routes such as \`GET /me\` do not, so the frontend can tell the user what
 to do. \`@CurrentCaller()\` has it as \`license: { product, status, endsAt }\` (\`null\` without a claim). Leave
-\`OIDC_PRODUCT\` empty for a free app.
+\`OIDC_PRODUCT\` empty for a free app. A token whose claim says \`none\` is refused on those routes also when
+\`OIDC_PRODUCT\` is empty: the login server decides that the app sells a product.
 
 The login server already stops a user without a licence: the login of this app ends on its **no-licence screen** (also
 with single sign-on), where the user can ask a demo or go to My apps; with \`prompt=none\` the app gets

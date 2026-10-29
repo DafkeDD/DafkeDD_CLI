@@ -869,6 +869,16 @@ git switch developer
 
 ## Changelog
 
+- **0.54.5**: no login without a licence, also for the apps linked before 0.54.1.
+    - The clients of catalogue apps made with the admin page before 0.54.1 had no product, so the login server let
+      everyone of an organisation in. Migration 24 gives them the product of their code again (not when another app
+      already sells that product: one app per product; that app stays free until an admin gives it one). Run `update`,
+      then start the login server once.
+    - A client made or changed without `product` whose id is the code of a product sells that product (unless another
+      app sells it already), so an older admin page can no longer make a catalogue app free by mistake (only
+      `product: ""` does that).
+    - The API of a linked app refuses a token whose licence claim says `none` (403 `errors.NO_LICENSE`), also when
+      `OIDC_PRODUCT` is still empty in `backend/.env`.
 - **0.54.4**: the documentation checked against the code, everywhere.
     - The colleagues card of the eHealth vault works: `/api/backend` lets `me/vault/colleagues` through (it answered
       404).

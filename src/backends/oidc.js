@@ -2971,7 +2971,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 [
                     'product',
                     'string',
-                    'optional, the product code of the app catalogue (/admin/catalog) this app sells (one licence per user, one app per product); empty or `null`: a free app'
+                    'optional, the product code of the app catalogue (/admin/catalog) this app sells (one licence per user, one app per product); left out: the product whose code is the client id, when there is one and no other app sells it (a catalogue app); empty or `null`: a free app'
                 ]
             ]
         },
@@ -3019,7 +3019,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 [
                     'product',
                     'string',
-                    'optional, the product code of the app catalogue (/admin/catalog) this app sells; left out: keeps the existing product; empty or `null`: a free app'
+                    'optional, the product code of the app catalogue (/admin/catalog) this app sells; left out: keeps the existing product (none yet: the product whose code is the client id, when there is one and no other app sells it); empty or `null`: a free app'
                 ]
             ]
         },

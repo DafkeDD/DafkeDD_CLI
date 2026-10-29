@@ -73,6 +73,7 @@ test('the backend gets the OIDC server, its tests, scripts and the multi-tenant 
         'scripts/oidc-user.mjs',
         'test/oidc.e2e-spec.ts',
         'test/tenant-isolation.db-spec.ts',
+        'test/catalogue-products.db-spec.ts',
         'vitest.config.db.ts',
         'src/oidc/jose.spec.ts',
         'src/oidc/crypto.spec.ts',
