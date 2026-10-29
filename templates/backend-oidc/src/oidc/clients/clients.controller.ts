@@ -53,7 +53,9 @@ export class ClientsController {
     @ApiOperation({ summary: 'Changes an app made here (not its id or type)' })
     @ApiOkResponse({ description: CLIENT })
     @ApiNotFoundResponse({ description: 'oidc.CLIENT_NOT_FOUND' })
-    @ApiBadRequestResponse({ description: 'oidc.CLIENT_INVALID_URI, oidc.CLIENT_UNKNOWN_PRODUCT or validation' })
+    @ApiBadRequestResponse({
+        description: 'oidc.CLIENT_INVALID_URI, oidc.CLIENT_NO_REDIRECT, oidc.CLIENT_UNKNOWN_PRODUCT or validation'
+    })
     @ApiConflictResponse({
         description:
             'oidc.CLIENT_FROM_FILE: change it in config/oidc-clients.json; oidc.CLIENT_PRODUCT_TAKEN: another app sells it'
@@ -67,6 +69,7 @@ export class ClientsController {
     @ApiOperation({ summary: 'A new secret for a confidential app: the old one stops at once. In this answer only.' })
     @ApiOkResponse({ description: `{ client: ${CLIENT}, secret }` })
     @ApiConflictResponse({ description: 'oidc.CLIENT_PUBLIC (no secret) or oidc.CLIENT_FROM_FILE' })
+    @ApiNotFoundResponse({ description: 'oidc.CLIENT_NOT_FOUND' })
     rotate(@Param('clientId') clientId: string) {
         return this.clients.rotateSecret(clientId)
     }
@@ -77,6 +80,7 @@ export class ClientsController {
             'Disables or enables an app made here. Disabled: nobody can log in with it, its refresh tokens and codes stop at once.'
     })
     @ApiOkResponse({ description: CLIENT })
+    @ApiNotFoundResponse({ description: 'oidc.CLIENT_NOT_FOUND' })
     @ApiConflictResponse({ description: 'oidc.CLIENT_FROM_FILE' })
     status(@Param('clientId') clientId: string, @Body() body: ClientStatusDto) {
         return this.clients.setEnabled(clientId, body.enabled)
@@ -89,6 +93,7 @@ export class ClientsController {
             'A one-time link code (15 minutes) for an app made here: the CLI links a new project to this app with it. An earlier unused code stops.'
     })
     @ApiOkResponse({ description: '{ code: "K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE", expiresAt, issuer }' })
+    @ApiNotFoundResponse({ description: 'oidc.CLIENT_NOT_FOUND (also a disabled app)' })
     @ApiConflictResponse({ description: 'oidc.CLIENT_FROM_FILE' })
     linkCode(@Auth() auth: AuthContext, @Param('clientId') clientId: string) {
         return this.clients.linkCode(clientId, auth.userId)
@@ -99,6 +104,7 @@ export class ClientsController {
     @ApiOperation({ summary: 'Removes a disabled app made here, with its codes, refresh tokens and consents' })
     @ApiNoContentResponse({ description: 'Removed' })
     @ApiConflictResponse({ description: 'oidc.CLIENT_DISABLE_FIRST or oidc.CLIENT_FROM_FILE' })
+    @ApiNotFoundResponse({ description: 'oidc.CLIENT_NOT_FOUND' })
     async remove(@Param('clientId') clientId: string) {
         await this.clients.remove(clientId)
     }

@@ -53,7 +53,7 @@ export class PasportGuard implements CanActivate {
             throw new AppException('errors.NO_LICENSE', HttpStatus.FORBIDDEN, { product })
         if (level === 'admin' && caller.tenant.role !== 'admin' && !caller.superadmin)
             throw new AppException('errors.FORBIDDEN', HttpStatus.FORBIDDEN)
-        // The roles of this app (config/app-roles.json), given by the beheerder on the login server
+        // The roles of this app (config/app-roles.json), given by an admin on the login server
         const roles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [context.getHandler(), context.getClass()])
         if (roles?.length && !caller.superadmin && !roles.some(role => caller.roles?.includes(role)))
             throw new AppException('errors.ROLE_REQUIRED', HttpStatus.FORBIDDEN, { roles: roles.join(', ') })

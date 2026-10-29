@@ -9,8 +9,8 @@ const DAY = 24 * 60 * 60 * 1000
 /**
  * The licence of the user for the product this app sells, as the login server put it in the tokens: a running demo
  * (how many days are left, until when), a seat, a superadmin, or none. Without one: start a demo here (once per
- * product), the apps of the portal, and for the beheerder (admin) the users of the organisation (seats); a member is
- * told to ask the beheerder.
+ * product), the apps of the portal, and for the admin the users of the organisation (seats); a member is
+ * told to ask the admin.
  */
 export async function AppLicense({ license, admin }: { license: License; admin: boolean }) {
     const t = await getTranslations('AppLicense')
@@ -67,7 +67,7 @@ export async function AppLicense({ license, admin }: { license: License; admin: 
     )
 }
 
-/** A licence, but no role in this app (the beheerder gave none): what to do instead of an error of the API. */
+/** A licence, but no role in this app (the admin gave none): what to do instead of an error of the API. */
 export async function NoRoles({ admin }: { admin: boolean }) {
     const t = await getTranslations('AppLicense')
     return (

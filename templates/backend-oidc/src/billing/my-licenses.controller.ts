@@ -1,5 +1,12 @@
 import { Controller, Get, Param, Post } from '@nestjs/common'
-import { ApiConflictResponse, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
+import {
+    ApiConflictResponse,
+    ApiCreatedResponse,
+    ApiNotFoundResponse,
+    ApiOkResponse,
+    ApiOperation,
+    ApiTags
+} from '@nestjs/swagger'
 import { Access, Auth, type AuthContext } from '../access/access.js'
 import { BillingService } from './billing.service.js'
 import { ProductCodePipe } from './product-code.pipe.js'
@@ -23,6 +30,9 @@ export class MyLicensesController {
         summary: 'Ask a demo: a trial of the product for myself (BILLING_TRIAL_DAYS, 14), once per product'
     })
     @ApiCreatedResponse({ description: '{ userId, endsAt }' })
+    @ApiNotFoundResponse({
+        description: 'billing.PRODUCT_NOT_FOUND, or billing.NOT_A_MEMBER (not a member of the organisation)'
+    })
     @ApiConflictResponse({
         description:
             'billing.DEMO_USED: the demo of this product was used already; billing.DEMO_DISABLED: it has no demo'

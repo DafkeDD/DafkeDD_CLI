@@ -6,7 +6,9 @@ import {
     ApiNotFoundResponse,
     ApiOkResponse,
     ApiOperation,
+    ApiServiceUnavailableResponse,
     ApiTags,
+    ApiTooManyRequestsResponse,
     ApiUnauthorizedResponse
 } from '@nestjs/swagger'
 import { Access, Auth, type AuthContext, EidOptional } from '../access/access.js'
@@ -48,6 +50,7 @@ export class EidController {
         summary: 'Start linking: a nonce for the eID bridge and an encrypted challenge (5 minutes, this account only)'
     })
     @ApiOkResponse({ description: '{ challenge, nonce, expiresAt }' })
+    @ApiNotFoundResponse({ description: 'oidc.EID_DISABLED (OIDC_EID=off)' })
     challenge(@Auth() auth: AuthContext) {
         return this.accounts.linkChallenge(auth.userId)
     }
@@ -61,6 +64,11 @@ export class EidController {
     @ApiConflictResponse({
         description:
             'oidc.EID_ALREADY_LINKED (another account has this eID) or oidc.EID_OTHER_LINKED (unlink the old eID first)'
+    })
+    @ApiNotFoundResponse({ description: 'oidc.EID_DISABLED (OIDC_EID=off)' })
+    @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS' })
+    @ApiServiceUnavailableResponse({
+        description: 'oidc.EID_UNAVAILABLE: the OCSP service of the eID could not be reached'
     })
     link(@Auth() auth: AuthContext, @Body() body: EidTokenDto) {
         return this.accounts.linkEid(auth.userId, body)

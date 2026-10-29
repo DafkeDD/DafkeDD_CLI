@@ -12,7 +12,9 @@ You own the database of this project: plain SQL through `pg`, no ORM, migrations
 - **Migrations** run in order at start-up, each in its own transaction, under an advisory lock, with a checksum. A
   migration that ran somewhere is **never** changed: add one with the next id.
 - **Multi-tenant**: every table with data of an organisation has `tenant_id uuid NOT NULL`, an index starting with
-  `tenant_id`, Row-Level Security through `isolate('<table>')` and is listed in `TENANT_TABLES`
+  `tenant_id`, Row-Level Security through `isolate('<table>')` (in an app; it is exported from `migrations.ts`, the column
+  defaults to `tenant_id`; on the login server it is local to `migrations.ts` and takes two arguments,
+  `isolate('<table>', 'tenant_id')`) and is listed in `TENANT_TABLES`
   (`backend/src/database/database.constants.ts`; the db test checks it). Its queries run through
   `DatabaseService.withTenant()` and still say `WHERE tenant_id = $1`. With `TENANT_ISOLATION=database` the same
   migrations run in the database of every organisation: write them so they work in both.

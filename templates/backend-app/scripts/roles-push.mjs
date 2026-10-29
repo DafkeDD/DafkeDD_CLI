@@ -1,6 +1,6 @@
 // Sends the roles of this app (config/app-roles.json) to the login server: npm run roles:push -- --code K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE
-// Make the link code on the login server: /admin -> Apps -> Koppelcode (one time, 15 minutes). The roles replace the
-// roles of the app there; the beheerders of every organisation then give them to their members (/members).
+// Make the link code on the login server: /admin/catalog, tab "Connection", "Link code" (one time, 15 minutes). The
+// roles replace the roles of the app there; the admins of every organisation then give them to their members (/users).
 import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 

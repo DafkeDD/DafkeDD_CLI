@@ -1,7 +1,8 @@
 # DafkeDD_CLI
 
-An interactive CLI that installs a frontend into `./frontend` and a backend into `./backend`, **per project**.
-Everything is installed **locally in the project**, never globally.
+An interactive CLI that installs a frontend into `./frontend` and a backend into `./backend`, **per project**, and
+optionally a central `./docs`, Claude Code, Google Cloud and a GitHub repository. Everything is installed **locally in
+the project**, never globally. The CLI asks its questions and prints its progress in Dutch.
 
 ## What does it install?
 
@@ -17,13 +18,22 @@ The CLI asks its questions first, then shows **one progress bar** for all steps:
 install next-intl, the fonts of the design and Prettier, fetch and install DafkeDD UI, configure Prettier and run a
 build check. Optionally the project is pushed to GitHub as the very last step.
 
-Order of the questions:
+Order of the questions (`src/index.js`):
 
 1. Which frontend (or none)? Next.js has no questions of its own: every project gets DafkeDD UI and the Pasport design.
-2. Which backend (or none)? Currently only NestJS. Then the backend options: which database (PostgreSQL or none), Docker
-   or local, and the connection details (see [Database](#database-postgresql)).
-3. Push to a repo right away? If yes: platform (GitHub only for now), repository name (the CLI checks that the name is
-   still free) and private/public.
+2. Which backend (or none)? Currently only NestJS. Then the backend options:
+    - which database (PostgreSQL, or "Geen database (later)");
+    - Docker or local, host (local only), port, user, password and database name, and what to do with a database of an
+      earlier install with the same name (see [Database](#database-postgresql));
+    - "Login toevoegen?" (Add a login?) and its own questions (see [Login](#login)).
+3. "Claude Code toevoegen?" (Add Claude Code?, default yes; see
+   [Claude Code in the project](#claude-code-in-the-project)).
+4. "Klaar zetten voor Google Cloud?" (Ready for Google Cloud?, default yes; see
+   [Google Cloud](#google-cloud-terraform)).
+5. Push to a repo right away (default yes)? If yes: platform (GitHub only for now), repository name (the CLI checks that
+   the name is still free) and private/public.
+
+Claude Code and Google Cloud are only asked when a frontend or a backend was chosen.
 
 ### DafkeDD UI and the Pasport design
 
@@ -93,7 +103,7 @@ to the endpoint list in `src/backends/docs.js`, and add a test for it. When you 
 
 ## Installation
 
-Requirements: [Node.js](https://nodejs.org) 20 or newer and Git.
+Requirements: [Node.js](https://nodejs.org) 22 or newer and Git.
 
 ### Without installing (recommended)
 
@@ -134,11 +144,26 @@ Update by running the same install command again.
 If the repository is private you must be logged in to GitHub on that machine (`gh auth login` or an SSH key). You can
 also use `git+ssh://git@github.com/DafkeDD/DafkeDD_CLI.git`.
 
+### Commands
+
+| Command                        | What it does                                                                        |
+| ------------------------------ | ----------------------------------------------------------------------------------- |
+| `DafkeDD_CLI`                  | A new project in this folder (frontend, backend, Claude Code, Google Cloud, GitHub) |
+| `DafkeDD_CLI --answers <file>` | The same project again with the answers of an earlier run (also `-a <file>`)        |
+| `DafkeDD_CLI update`           | Brings an existing project up to this version                                       |
+| `DafkeDD_CLI doctor`           | Checks what the project needs; exits with code 1 when a check fails                 |
+| `DafkeDD_CLI --version` (`-v`) | Prints the version                                                                  |
+| `DafkeDD_CLI --help` (`-h`)    | Prints the help                                                                     |
+
+Anything else (an unknown command, or `--answers` without a file) prints the help and exits with code 1. With `npx`, put
+the command after the package: `npx --allow-git=all github:DafkeDD/DafkeDD_CLI doctor`. See
+[`--answers`](#the-same-project-again---answers) and [`update` and `doctor`](#an-existing-project-update-and-doctor).
+
 ## Usage
 
 1. Go to the folder of your project.
 2. Start the CLI (see above).
-3. Choose the frontend (only Next.js for now, or none) and answer its questions (such as DafkeDD UI).
+3. Choose the frontend (only Next.js for now, or none); it has no questions of its own.
 4. Choose the backend (only NestJS for now, or none) and answer its questions (database, port, user, password, ...).
 5. Choose whether the project gets **Claude Code** (agents, skills, hooks and GitHub pipelines; see below).
 6. Choose whether the project is made ready for **Google Cloud** (Terraform, Dockerfiles and a button on GitHub to start
@@ -171,7 +196,8 @@ npx --allow-git=all github:DafkeDD/DafkeDD_CLI --answers ../shop/.dafkedd-answer
 Every question the file answers is shown with "(antwoordbestand)"; a question it does not have, or whose answer no
 longer fits (a link code that was used, a choice that is gone), is asked as usual. **Passwords are never kept**: they
 are always asked. The file is JSON (`{ "version", "answers": [{ "question", "answer" }] }`), so you can also write or
-change one yourself, for example for every new customer app.
+change one yourself, for example for every new customer app; a plain JSON array of `{ "question", "answer" }` works too.
+A question is matched by its exact text.
 
 ### An existing project: `update` and `doctor`
 
@@ -186,18 +212,23 @@ npx --allow-git=all github:DafkeDD/DafkeDD_CLI doctor
   login server, a linked app or an API, and its pages, as the CLI makes them now, formatted with the Prettier of the
   project), the agents, skills, hooks, `CLAUDE.md`, the pipelines, `.mcp.json` and, with Google Cloud, Terraform, the
   workflows and the Dockerfiles. It also adds what is missing and never changes what is there: the texts of the frontend
-  (`messages/*.json`), the npm scripts and packages (`package.json`, `npm install`), and the new settings of
-  `backend/.env` and `.env.example` (with their comment, never a secret). `.env` values, `package.json` otherwise and
-  `docker-compose.yml` stay yours, and so do your starting points (the home page and `APP_NAV` of an app, the example
-  notes, `app.module.ts`, `config/app-roles.json`: only written when missing; on the login server, whose portal and
-  module list the CLI keeps in step, only the examples and `config/` are yours). The READMEs go to `./docs` like when
-  the project was made. The manifest `.dafkedd.json` (committed) remembers the version, what the project is made of and
-  a hash of every such file:
+  (`messages/*.json`), the npm scripts and packages (`package.json`, `npm install`; the frontend scripts only for an
+  OpenID Connect frontend), the security `overrides` of the backend (`SECURITY_OVERRIDES`), and the new settings of
+  `backend/.env` and `.env.example` (with their comment, never a secret). The code of the backend is only compared when
+  `backend/.env` (or `.env.example`) has `DATABASE_NAME`, except for a plain API without a database. `.env` values,
+  `package.json` otherwise and `docker-compose.yml` stay yours, and so do your starting points (`STARTERS` in
+  `src/update-code.js`: the home page and `APP_NAV` of an app, the example notes, `app.module.ts`, the app controller
+  and service, `config/` such as `config/app-roles.json`, the e2e starter and a few components: only written when
+  missing; on the login server, whose portal and module list the CLI keeps in step, only `backend/src/examples/` and
+  `backend/config/` are yours). The READMEs go to `./docs` like when the project was made. The manifest `.dafkedd.json`
+  (committed) remembers the version, what the project is made of and a hash of every such file:
     - a file that is still as the CLI wrote it is replaced;
     - a file you changed is never overwritten: the new version lands next to it as `<file>.dafkedd-new` (ignored by
       git), to compare with `git diff --no-index <file> <file>.dafkedd-new`;
     - a missing file, and missing pages of the knowledge base, are added; a file the CLI no longer makes is reported,
-      not deleted.
+      not deleted;
+    - a file the manifest knows but you deleted stays deleted (reported as such); remove its line from `.dafkedd.json`
+      to get it back.
 
     A frontend without the OpenID Connect login (a site, an API, the simple login) gets the Pasport design this way too.
     One made before 0.50.0 also gets, once, what a new project has: its home page in the shell, `APP_NAV`, the account
@@ -206,11 +237,12 @@ npx --allow-git=all github:DafkeDD/DafkeDD_CLI doctor
     reported, not deleted.
 
     Code of a project made before 0.54.0 (its manifest did not know the code yet) that git knows from one commit only,
-    the first one of the CLI, and that did not change since, counts as written by the CLI: it is replaced. Without git
-    to tell (no repository), `update` asks once for all of that code whether you changed it: no, then the new version
-    replaces it and yours stays as `<file>.dafkedd-old`; yes, then the new version comes next to it as
-    `<file>.dafkedd-new`. Run `npm install` in `./backend` and `./frontend` first (Prettier is needed to compare); after
-    the update `npm run build` and `npm test`, the new migrations run at the next start of the API.
+    the first one of the CLI, and that did not change since, counts as written by the CLI: it is replaced. For the rest
+    of that code git cannot vouch for (no repository, or touched after the first commit), `update` asks once for all of
+    it whether you left it unchanged (default no): yes, then the new version replaces it and yours stays as
+    `<file>.dafkedd-old`; no, then the new version comes next to it as `<file>.dafkedd-new`. Run `npm install` in
+    `./backend` and `./frontend` first (Prettier is needed to compare); after the update `npm run build` and `npm test`,
+    the new migrations run at the next start of the API.
 
     Run the version you want: `npx --allow-git=all github:DafkeDD/DafkeDD_CLI#developer update` for `developer`, or
     `node <folder of the CLI>/bin/cli.js update`.
@@ -255,7 +287,7 @@ The CLI asks which database you want (PostgreSQL for now, or none). No ORM: the 
 3. **Port** (default `5432`; with Docker this is the port on your machine, so you can pick another one if 5432 is
    taken).
 4. **User** (default `postgres`), **password** (hidden while typing, required) and **database name** (default: the name
-   of your project folder).
+   of your project folder in lower case, other characters as `_`, at most 50 characters).
 5. Only when that **database already exists** (a project of earlier with the same name): local, when it has tables;
    Docker, when the volume of the project is there. Its data would stay, also the superadmin and the passwords of then,
    so the CLI asks: **another name** (local), **empty it and start again** (`DROP DATABASE`, or the Docker volume and
@@ -296,10 +328,17 @@ With a database the CLI asks _"Add a login?"_:
 
 ### OpenID Connect server (multi-tenant)
 
-The backend becomes an **OpenID Connect provider** (phases 1 and 2 of the plan): other applications let their users log
-in here and receive signed tokens. Everything is our own TypeScript code on `node:crypto`: no OIDC, OAuth or JWT
-library. The CLI only asks the email address of the **superadmin**; it shows a temporary password **once** at the end.
-No organisation is created: the superadmin logs in to the platform (`/admin`) and creates organisations there.
+The backend becomes an **OpenID Connect provider**: other applications let their users log in here and receive signed
+tokens. Everything is our own TypeScript code on `node:crypto`: no OIDC, OAuth or JWT library. The CLI asks:
+
+- the email address of the **superadmin**; it shows a temporary password **once** at the end;
+- "Ook inloggen via een bestaande OIDC-server…?" (Also log in through an existing OIDC server?): no, next to email and
+  password, or only that; then per server which one (Google, Microsoft for every organisation, Microsoft for one
+  directory, or another with its issuer), the client id and secret and the text of the button, and "Nog een server
+  toevoegen…?" (Add another server?) for the next one (see "Log in with another OpenID Connect server" below);
+- "Demodata toevoegen…?" (Add demo data?, default no; see "Demo data" below).
+
+No organisation is created: the superadmin logs in to the platform and creates organisations there (`/admin/tenants`).
 
 - **Endpoints** (`/oidc/...`): discovery, JWKS, authorize (authorization code flow, **PKCE S256 required**, no implicit
   flow), the login page (four languages, CSRF token, strict Content-Security-Policy, no JavaScript), the organisation
@@ -314,9 +353,9 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   table with tenant data has PostgreSQL **Row-Level Security**: `DatabaseService.withTenant()` runs queries as a
   separate role (`<database>_tenant`) that only sees the rows of that tenant, even without a `WHERE`.
 - **Database**: the users table (always `<database>users`), `tenants`, `tenant_members`, `tenant_invitations`,
-  `user_identifiers` (linked eIDs) and four `oidc_*` tables (clients, signing keys, sessions, codes), created by
-  numbered migrations (checksum, advisory lock) at start. A running login is not a table: it is an encrypted, httpOnly
-  cookie per login (10 minutes, no replay).
+  `user_identifiers` (linked eIDs), the `oidc_*` tables (clients, signing keys, sessions, codes) and the tables of every
+  other feature (licences, invoices, audit, tickets, ...), created by numbered migrations (checksum, advisory lock) at
+  start. A running login is not a table: it is an encrypted, httpOnly cookie per login (10 minutes, no replay).
 - **Security**: scrypt passwords, the same error and timing for an unknown email, login rate limit per IP and per email,
   exact redirect URIs (https, http only on localhost), `iss` in every redirect (RFC 9207), client authentication with
   `client_secret_basic`, `client_secret_post` or none (public clients with PKCE), codes and session ids only as hashes.
@@ -343,14 +382,20 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   is checked in the database on every request. An organisation always keeps an admin, the platform a superadmin. A
   superadmin needs no organisation: it logs in to the platform and opens any organisation without a new password.
 - **Accounts**: registration (a new organisation, you become its admin), email verification, forgotten password (the
-  link works once), and for superadmins every organisation on `/admin`.
-- **Management** (`/members`, "Management" in the header): admins invite people by email, see open invitations (send
-  again, withdraw), change roles, disable or enable members, remove them, and see who is online and when someone was
-  last seen. The links are encrypted tokens: no extra tables. Answers never reveal which addresses have an account.
+  link works once), and for superadmins every organisation on `/admin/tenants`.
+- **My apps**: after a login on the portal the user lands on `/apps`, the apps of the organisation.
+- **Management** (`/users`; the old `/members` redirects there): admins invite people by email, see open invitations
+  (send again, withdraw), change roles, disable or enable members, remove them, and see who is online and when someone
+  was last seen. The links are encrypted tokens: no extra tables. Answers never reveal which addresses have an account.
 - **Email**: `nodemailer` over SMTP (`SMTP_*` in `.env`, fill in your own for production). During development
   `npm run mail:dev` starts Mailpit in Docker: every email on http://localhost:8025. Texts in four languages.
-- **Users**: `npm run oidc:user -- --email ... --tenant ... --role admin` adds users and organisations (`--superadmin`,
-  `--reset-mfa`).
+- **Users**: `npm run oidc:user -- --email ... --tenant ... --role admin` adds users and organisations (`--name`,
+  `--password`, `--tenant-name`, `--superadmin`, `--reset-mfa`).
+- **Demo data** (development only): with "Demodata toevoegen" the install adds it, and `npm run demo:data` in
+  `./backend` adds it again at any time (nothing changes when it is there): two organisations with users, apps in the
+  catalogue, subscriptions, invoices, support tickets and a discount code, every account `@demo.example.com` with the
+  same password (`--password <text>`, otherwise a random one shown once). `npm run demo:clear` (`demo:data --remove`)
+  takes it all away again. The script refuses to run with `NODE_ENV=production`.
 - **Tests**: unit tests (JOSE, PKCE with the RFC 7636 vector, keys, migrations, pages), end-to-end tests of the whole
   flow in memory (`npm run test:e2e`) and `npm run test:db` against the real PostgreSQL (isolation between tenants,
   codes used once, the first admin). Checked with the independent libraries `openid-client` and `jose` as client.
@@ -359,11 +404,12 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   (RFC 7009) and introspection (RFC 7662). Every token carries its session (`sid`): ending a session stops its tokens at
   once. `/security` shows where you are logged in and ends one or all other sessions.
 - **Licences and payments (Mollie)**: products are sold per organisation, per product and per user (seat), per month or
-  per year (always cheaper). A member asks a 14-day demo once ("Ask a demo" on `/profile`; nothing starts by itself);
-  admins buy seats on `/licenses`, give them to members and take them back. Superadmins manage products, make discount
-  codes (a percentage or an amount, once, for some periods or forever; 100% is free), give free seats and extend trials.
-  `@License('planner')` protects an endpoint. `PAYMENTS=fake` (the default `.env`) has its own checkout page for
-  development; `PAYMENTS=mollie` with a `test_...` key uses the real checkout of Mollie.
+  per year (always cheaper). A member asks a 14-day demo once ("Ask a demo" in Discover apps, `/marketplace`, and in the
+  wizard, `/wizard`; nothing starts by itself); admins buy seats and give them to members and take them back on `/users`
+  (the old `/licenses` redirects there). Superadmins manage products, make discount codes (a percentage or an amount,
+  once, for some periods or forever; 100% is free), give free seats and extend trials. `@License('planner')` protects an
+  endpoint. `PAYMENTS=fake` (the default `.env`) has its own checkout page for development; `PAYMENTS=mollie` with a
+  `test_...` key uses the real checkout of Mollie; `PAYMENTS=off` sells nothing (trials and free seats still work).
 - **Audit log**: who did what, when, in which organisation, from which IP address and browser: logins (also failed
   ones), accounts, members, the platform and licences. Append-only in PostgreSQL (a trigger refuses changes), kept
   `AUDIT_RETENTION_DAYS` (365) days. Admins read their organisation on `/audit`, superadmins the whole platform, every
@@ -386,34 +432,42 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
   and takes access back (their refresh tokens stop at once). **Back-channel logout** (OpenID Connect Back-Channel Logout
   1.0): when a session ends, every client that was used in it and has a `backchannelLogoutUri` gets a signed logout
   token, with retries; the frontend is one of them and logs the browser out too.
-- **Apps on /admin**: superadmins make, change, disable and remove apps (OpenID Connect clients) in the frontend instead
-  of editing `config/oidc-clients.json`: redirect URIs, scopes, refresh tokens, own app or of others, back-channel
-  logout URI, and for a confidential app a secret that is shown once (only its hash is stored). The apps of the file
-  stay read-only there.
+- **Apps in the catalogue** (`/admin/catalog`, tab "Connection"; the old `/admin/apps` redirects there): superadmins
+  make, change, disable and remove apps (OpenID Connect clients) in the frontend instead of editing
+  `config/oidc-clients.json`: redirect URIs, scopes, refresh tokens, own app or of others, back-channel logout URI, and
+  for a confidential app a secret that is shown once (only its hash is stored). The apps of the file stay read-only
+  there.
 - **An app for an existing login server**: choose Next.js, NestJS, a database and at _"Add a login?"_ **"Inloggen via je
   bestaande Pasport OIDC-server (koppelcode)"**. The CLI asks the address of that API, the port of the app's frontend
-  (3001) and a one-time link code that a superadmin makes on `/admin` → Apps → "Koppelcode"; the app's own database is
-  the one chosen before the login question (Docker or local). It adds the addresses of the new frontend to that app and
-  writes `.env.local`: the frontend logs in there with single sign-on, is logged out with back-channel logout, and links
-  to the account pages of that server. The app gets its **own NestJS API** in `./backend` (port 4001) with its own
-  database: it has no users of its own, accepts only the access tokens of that login server for this app
+  (3001) and a one-time link code that a superadmin makes on `/admin/catalog` → the app → "Make link code"; the app's
+  own database is the one chosen before the login question (Docker or local). It adds the addresses of the new frontend
+  to that app and writes `.env.local`: the frontend logs in there with single sign-on, is logged out with back-channel
+  logout, and links to the account pages of that server. The app gets its **own NestJS API** in `./backend` (port 4001)
+  with its own database: it has no users of its own, accepts only the access tokens of that login server for this app
   (`PasportGuard`: signature with its keys, `iss`, `aud`, `typ`, `client_id`), takes the organisation from the token,
-  and keeps its data per organisation with Row-Level Security. The example is `notes` (`GET/POST /notes`,
-  `DELETE /notes/:id` for the beheerder), shown on the home page of the frontend through `/api/app/...` (the token is
-  added on the server). See "Login through the login server" in `docs/api.md`. The CLI also asks:
+  and keeps its data per organisation (a database per organisation by default, see below). The example is `notes`
+  (`GET/POST /notes`, `DELETE /notes/:id` for an admin), shown on the home page of the frontend through `/api/app/...`
+  (the token is added on the server). See "Login through the login server" in `docs/api.md`. The CLI also asks:
     - **modules**: **Mail** (`MailService` with SMTP, Mailpit during development, `npm run mail:dev`) and **Files**
       (`/files`: images and PDFs per organisation, raw uploads, in `./storage` or a Google Cloud Storage bucket);
     - nothing about how the data of the organisations is kept apart: every organisation gets a **database of its own**
-      for the app (`<name>_t_<organisation id>`, made and migrated the first time it is used; the database user needs
-      `CREATEDB`). One database with Row-Level Security is still possible: `TENANT_ISOLATION=rls` in `.env`. Every page
+      for the app, made and migrated the first time it is used (the database user needs `CREATEDB`):
+      `<DATABASE_NAME>_<organisation slug>` (for example `dafkedd_kids_de_linde`),
+      `<DATABASE_NAME>_<slug>_<first 8 hex of the id>` when that name is taken, and `<DATABASE_NAME>_t_<id>` without a
+      slug (and for databases made before 0.53.4). The register `tenant_databases` keeps which database belongs to which
+      organisation. One database with Row-Level Security is still possible: `TENANT_ISOLATION=rls` in `.env`. Every page
       of the linked frontend is protected: without a login it goes to the login server and comes back.
-- **Apps are products**: on `/admin` → Apps a superadmin picks the product an app sells; every user then needs a licence
-  of it in their organisation (a trial first, then a seat bought per month or per year). The tokens of the app say so
-  (`license` claim) and the API of an app made with the CLI checks it (`OIDC_PRODUCT`).
+- **Apps are products**: in the catalogue (`/admin/catalog`) a superadmin picks the product an app sells; every user
+  then needs a licence of it in their organisation (a trial first, then a seat bought per month or per year). The tokens
+  of the app say so (`license` claim) and the API of an app made with the CLI checks it (`OIDC_PRODUCT`).
+- **Licence gate**: the login server only lets an account into an app that sells a product when it has a licence (a
+  demo, a seat, or it is a superadmin), also with single sign-on. Without one the login stops on a screen of the login
+  server: "Ask a demo" (when a demo is available) or "Ask the administrator of your organisation for a licence.", "To my
+  apps", and "I have a licence now: try again". With `prompt=none` the app gets `error=access_denied`.
 - **Roles per app**: the developer of an app defines its roles (`config/app-roles.json`, sent with the link code or
-  `npm run roles:push`); the beheerders give them to their members on `/members`; the tokens of the app carry them
-  (`roles`) and its API checks them with `@Roles(...)`.
-- **Invitations with apps**: a beheerder who invites someone ticks the apps, the roles in each app and "Give a licence";
+  `npm run roles:push`); the admins give them to their members on `/users`; the tokens of the app carry them (`roles`)
+  and its API checks them with `@Roles(...)`.
+- **Invitations with apps**: an admin who invites someone ticks the apps, the roles in each app and "Give a licence";
   the email names the apps, accepting gives the roles and a free seat, and the invitation page offers "Open <app>".
 - **One design everywhere (Pasport)**: the frontend of the login server and every linked frontend get the same login
   screens and the same shell, on the desktop and on the phone, built in `src/styles/pasport.css` (the tokens and every
@@ -423,8 +477,9 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
       eID, the six boxes of the code, the language and theme at the bottom right;
     - the shell: an icon rail (collapsible; a drawer on a phone) with the app's own pages (`src/lib/nav.ts`), the
       organisation (its admins) and the platform (superadmins); a topbar with the search for a page (⌘K), light or dark
-      and the user menu (profile, security, language, log out); the superadmin panel (`/admin`, `/admin/catalog`,
-      `/admin/apps`, `/admin/audit`) in the same shell with the dark mark;
+      and the user menu (profile, security, language, log out); the superadmin panel in the same shell with the dark
+      mark (`/admin` opens `/admin/stats`; `/admin/tenants`, `/admin/users`, `/admin/tickets`, `/admin/catalog`,
+      `/admin/codes`, `/admin/audit`, `/admin/ratings`, `/admin/profile`, `/admin/security`);
     - every page starts with a `PageHead`.
 
     A linked app has no login or registration form: `/login` goes straight to the login screen of the server, where
@@ -432,8 +487,54 @@ No organisation is created: the superadmin logs in to the platform (`/admin`) an
     agents of Claude Code (`frontend`, `qa`, `reviewer`) are told that this is the design to follow, at 1440 and 390
     pixels wide.
 
-- **Protected by default**: every page needs a login. `src/proxy.ts` sends a browser without a session to `/login` and
-  back to the page afterwards; only `PUBLIC_PATHS` (login, registration, password, email and invitation pages) are open.
+- **eHealth vault** (`/vault`): only for doctors (the profession of their membership). A doctor keeps an eHealth
+  certificate there and may choose colleagues (the secretariat) who use it for them. A linked app reaches the vault
+  through `PasportVault` in its API (`GET /vault`, `GET /vault/doctors`), with `OIDC_CLIENT_SECRET` in `backend/.env`.
+- **eID required** (`OIDC_EID_REQUIRED`, on by default when `OIDC_EID` is `on` or `test`): every account links its eID,
+  also an account of Google or Microsoft and with `OIDC_EXTERNAL_ONLY=true`; superadmins never. When it is off, an
+  account without an eID (not a superadmin) gets a reminder banner with a button to read the card.
+- **Protected by default**: every page of the login server's frontend and of a linked frontend needs a login.
+  `src/proxy.ts` sends a browser without a session to `/login` and back to the page afterwards; only `PUBLIC_PATHS`
+  (login, registration, password, email and invitation pages) are open.
+
+**Settings of the login server** (`backend/.env`; `.env.example` has the same keys without secrets):
+
+| Key                                                                                | Meaning                                                                                                                                              |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OIDC_ISSUER`                                                                      | The public base URL of the login server (`http://localhost:4000/oidc`)                                                                               |
+| `OIDC_AUDIENCE`                                                                    | The API that accepts the access tokens (their `aud`)                                                                                                 |
+| `OIDC_MASTER_KEY`                                                                  | Encrypts the private signing keys: 64 hex characters, generated by the CLI; never commit it, keep a backup                                           |
+| `OIDC_LOGIN_UI_URL`                                                                | With a frontend: its login page; empty for the HTML page of the API                                                                                  |
+| `OIDC_LOGIN_RATE_LIMIT`                                                            | Login attempts per minute, per IP address and per email address (10)                                                                                 |
+| `OIDC_BOOTSTRAP_ADMIN_EMAIL`, `..._PASSWORD_HASH`                                  | The superadmin, created at the first start when there are no users yet                                                                               |
+| `OIDC_MFA`                                                                         | `required` (default) or `optional` (tests and demos only)                                                                                            |
+| `OIDC_REGISTRATION`                                                                | `open`, `eid` (only with the eID) or `closed` (only by invitation)                                                                                   |
+| `OIDC_EID`                                                                         | `off`, `on` (real cards, OCSP) or `test` (also the virtual card); unset: `off`. The CLI writes `test` in `.env`, `on` in `.env.example`              |
+| `OIDC_EID_REQUIRED`                                                                | `on` or `off`; unset: on when `OIDC_EID` is `on` or `test`. The CLI writes `off`                                                                     |
+| `OIDC_PASSKEYS`, `OIDC_PASSKEY_RP_ID`, `..._ORIGINS`                               | Passkeys `on` or `off`, their domain and websites (default: from `APP_URL`)                                                                          |
+| `OIDC_BACKCHANNEL_INTERVAL`                                                        | Seconds between deliveries of back-channel logout tokens (5; 0: never)                                                                               |
+| `OIDC_EXTERNAL_*`, `OIDC_EXTERNAL_2_*` to `_9_*`                                   | Another OpenID Connect server each: `ISSUER`, `CLIENT_ID` (empty: off), `CLIENT_SECRET`, `NAME` (the button), `MFA` (`external`, `trust` or `local`) |
+| `OIDC_EXTERNAL_ONLY`                                                               | `true`: only those servers (no password, no eID login, no registration here)                                                                         |
+| `APP_URL`, `APP_NAME`                                                              | The frontend the links in emails go to, and the name of the application in emails                                                                    |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | Email; Mailpit (`localhost:1025`) during development, an empty `SMTP_HOST` prints the mails in the console                                           |
+| `PAYMENTS`                                                                         | `mollie`, `fake` (development only, the default `.env`) or `off`                                                                                     |
+| `BILLING_TRIAL_DAYS`, `BILLING_VAT_PERCENT`                                        | Days of a demo (14) and the VAT added to every payment (21)                                                                                          |
+| `MOLLIE_API_KEY`, `PUBLIC_API_URL`                                                 | The key of Mollie (`test_...` or `live_...`) and the public address of this API for its webhook                                                      |
+| `INVOICE_SELLER_NAME`, `_ADDRESS`, `_VAT`, `_EMAIL`, `_IBAN`                       | Who sends the invoices (the address lines separated by `\|`)                                                                                         |
+| `AUDIT_RETENTION_DAYS`                                                             | Days an audit event is kept (365; 0 keeps everything)                                                                                                |
+| `TRUST_PROXY`                                                                      | Proxies that may tell the IP address of the user (`loopback`)                                                                                        |
+
+**Settings of a linked app's API** (`backend/.env`, next to the database):
+
+| Key                                       | Meaning                                                                                                        |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `OIDC_ISSUER`, `OIDC_AUDIENCE`            | The login server whose access tokens are accepted, and their `aud` (its API)                                   |
+| `OIDC_CLIENT_IDS`                         | The apps whose tokens are accepted (comma separated): the frontend of this app                                 |
+| `OIDC_PRODUCT`                            | The product (licence) the app sells; empty: a free app                                                         |
+| `OIDC_CLIENT_SECRET`                      | The key of this app at the login server, for the eHealth vault; empty: a public app, no vault; never commit it |
+| `TENANT_ISOLATION`                        | `database` (the CLI's choice: a database per organisation) or `rls` (one database with Row-Level Security)     |
+| `FILES_DRIVER`, `FILES_DIR`               | Files module: `local` (a folder, `./storage`) or `gcs`                                                         |
+| `GCS_BUCKET`, `GCS_PROJECT`, `GCS_PREFIX` | Files module with `gcs`: the private bucket (the login comes from the environment, no key here)                |
 
 The TypeScript files of this feature live as real files in `templates/backend-oidc` and `templates/frontend-oidc` (see
 Development).
@@ -466,9 +567,9 @@ PostgreSQL 13 or newer (`gen_random_uuid()`).
   email in four languages, login, wrong password, `me`, forged cookie, logout, rate limit).
 
 **Frontend** (`./frontend`): `/login`, `/register` and `/profile` (shows your name, email and member-since date from the
-database and a log out button; anonymous visitors are sent to the login page). The home page gets links ("Log in" and
-"Register", or "Signed in as ..."). All texts exist in four languages, and error messages come from the API in the
-selected language.
+database and a log out button; anonymous visitors are sent to the login page). The home page shows an account card ("Log
+in" and "Register", or who is signed in), and the account is in the topbar. All texts exist in four languages, and error
+messages come from the API in the selected language.
 
 For production: use HTTPS, set a long random `JWT_SECRET` and your real `CORS_ORIGIN`, and serve the frontend and the
 API from the same site (for example `app.example.com` and `api.example.com`) so the `SameSite=Lax` cookie is sent.
@@ -482,9 +583,9 @@ When you install a frontend **and** a backend, the frontend is connected to the 
   `http://localhost:4000` (override with `NEXT_PUBLIC_API_URL`) and send the selected language as `Accept-Language`, so
   server errors come back in the language the user picked in the frontend.
 - The example page shows a **backend status card** (`src/components/api-status.tsx`, translated in four languages): is
-  the API reachable, the message the API answered with and the language it answered in (change the language in the pill
-  and the answer changes too), and, with a database, whether the database is connected. When the database is down the
-  card shows the translated error message of the server.
+  the API reachable, the message the API answered with and the language it answered in (change the language in the
+  topbar or the user menu and the answer changes too), and, with a database, whether the database is connected. When the
+  database is down the card shows the translated error message of the server.
 - CORS is already configured in the backend for `http://localhost:3000`.
 
 Start both: `cd backend && npm run start:dev` and, in another terminal, `cd frontend && npm run dev`.
@@ -514,7 +615,7 @@ way this CLI is built: nothing has to be installed.
 | `.github/ISSUE_TEMPLATE/`                                            | Forms for a feature and a bug; `pull_request_template.md` with the checklist (tests, docs, four languages, Pasport design, knowledge base, approvals); `CODEOWNERS` with your GitHub account (asked for every pull request); `SECURITY.md` (how to report a vulnerability)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `.github/workflows/ci.yml`                                           | On every pull request to `developer` and `main` and every push to `developer` (`release.yml` runs it for `main`): the backend (format, lint, build, unit, e2e, and the database tests against PostgreSQL 17), the frontend (format, lint, build, **Lighthouse** on the pages without login: accessibility at least 0.95, best practices 0.9, performance 0.8, `frontend/lighthouserc.json`; and the Playwright tests with axe and the **visual tests** once installed) and **security** (gitleaks over the code and the history with `.gitleaks.toml`, `npm audit` for high and critical)                                                                                                                                                                                                                     |
 | `.github/workflows/release.yml`                                      | On every push to `main` except the first one of the repository: the CI once more, then a GitHub release `v<version>` (the version of `backend/package.json`, or the frontend; the next patch when that tag exists)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `.github/workflows/codeql.yml`                                       | CodeQL code scanning (security queries) on pull requests and weekly: public repositories, or private ones with GitHub Advanced Security (variable `CODEQL=on`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `.github/workflows/codeql.yml`                                       | CodeQL code scanning (security queries) on pull requests, on pushes to `developer` and weekly: public repositories, or private ones with GitHub Advanced Security (variable `CODEQL=on`); the weekly run only with `CODEQL=on`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `.github/workflows/screenshots.yml`                                  | Actions → Screenshots on an issue branch: the screenshots of `docs/kb` made again on Linux by `frontend/e2e/screens.spec.ts` and committed; the CI compares them on every pull request (the visual tests)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `.dafkedd.json`                                                      | The manifest for `update` (also without Claude Code, with Google Cloud)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
@@ -538,8 +639,8 @@ The hook `guard-git.mjs` enforces this:
 - `gh release` and `gh repo delete` never.
 
 When the project is pushed, the CLI also pushes `developer` and makes it the default branch, so `closes #n` closes the
-issue at the merge. Protect `developer` and `main` on GitHub (Settings → Branches) with the CI checks as required
-checks.
+issue at the merge, and protects `developer` and `main` (`protect-branches.mjs`). On GitHub Free a private repository
+cannot be protected: the CLI says so, and you run the script once the repository allows it.
 
 ### Google Cloud (Terraform)
 
@@ -580,6 +681,7 @@ your checkout.
 
 | Command                | What it does                                                      |
 | ---------------------- | ----------------------------------------------------------------- |
+| `npm start`            | Starts the CLI from the checkout (`node bin/cli.js`)              |
 | `npm test`             | Runs the whole test suite                                         |
 | `npm run format`       | Formats the repository with Prettier                              |
 | `npm run format:check` | Checks the formatting without changing files                      |
@@ -602,20 +704,27 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how the tests are written.
 
 ### Checking generated projects (`npm run verify`)
 
-`npm test` checks the generated files; `npm run verify` checks that they really work. It generates three projects with
+`npm test` checks the generated files; `npm run verify` checks that they really work. It generates four projects with
 the real steps of the CLI (no questions) in a temporary folder:
 
-- `pasport`: the login server;
-- `app`: an app without modules;
+- `pasport`: the login server, with the demo data;
+- `plain`: an API with the simple login and PostgreSQL;
+- `app`: an app without modules (one database with Row-Level Security);
 - `app-full`: an app with mail, files and a database per organisation.
 
-Each one gets the build, lint, unit and e2e tests the CLI runs itself, plus TypeScript, Prettier and, with a database,
-`npm run test:db`. The database comes from `VERIFY_DB_HOST`, `VERIFY_DB_PORT`, `VERIFY_DB_USER` and `VERIFY_DB_PASSWORD`
-(default `localhost:5432`, `postgres`/`postgres`; the user needs `CREATEDB`). Options:
+Each one gets the build, lint, unit and e2e tests the CLI runs itself, plus TypeScript, Prettier, the lint and
+`npm run check:design` of the frontend, `npm audit` (high and critical) and, with a database, `npm run test:db`. It also
+checks the files of Claude Code, the knowledge base and Google Cloud, that `update` changes nothing on a fresh project,
+that `doctor` finds no failure, and that the built backend answers `/health` on `PORT` 8080 as on Cloud Run; for the
+login server also that the superadmin exists after the first start and that `demo:data` and `demo:clear` work. The
+database comes from `VERIFY_DB_HOST`, `VERIFY_DB_PORT`, `VERIFY_DB_USER` and `VERIFY_DB_PASSWORD` (default
+`localhost:5432`, `postgres`/`postgres`; the user needs `CREATEDB`). Options:
 
-- `-- --only app-full` runs one variant;
+- `-- --only app-full` runs one variant (or several: `--only app,app-full`);
 - `-- --keep` keeps the projects;
-- `-- --require-db` fails instead of skipping the database tests.
+- `-- --require-db` fails instead of skipping the database tests;
+- `-- --lighthouse` also runs Lighthouse as in the CI (needs Chrome; `CHROME_PATH` for another one);
+- `VERIFY_GITLEAKS=<path to gitleaks>` also runs gitleaks over a first commit of every project, as in the CI.
 
 It needs the network and takes several minutes.
 
@@ -643,7 +752,7 @@ Everything Claude Code needs is in this repository; nothing has to be installed.
 
 | Agent        | Role                                                                                                  |
 | ------------ | ----------------------------------------------------------------------------------------------------- |
-| `frontend`   | Builds the UI of the generated frontends, always in the Pasport design with the Dafke UI components   |
+| `frontend`   | Builds the UI of the generated frontends, always in the Pasport design with the DafkeDD UI components |
 | `nestjs`     | Builds the generated NestJS backends: endpoints, modules, DTOs, errors, Swagger, their tests and docs |
 | `postgresql` | Builds migrations, tables, Row-Level Security, a database per organisation, queries and db tests      |
 | `reviewer`   | Checks the staged change against the ticket and the rules (read-only)                                 |
@@ -660,11 +769,14 @@ are kept in `.git/claude-approvals` and are never committed.
 - `guard-git.mjs` runs before every shell command:
     - a `git commit` needs the approvals of review, tests, docs and i18n, plus security when a staged path touches
       login, tokens, tenants, billing, uploads, the database or the hooks;
-    - a commit only on the branch of an issue (`issue/<n>-<words>`), made from `developer`;
-    - `git push` only of an issue branch (or `release/<version>`), never forced and never deleting;
-    - `gh pr merge` only into `developer`, from an issue branch, when every check of the CI is green and every approval
-      is there for the last commit;
-    - `gh release` and a merge into `main` are refused: a release is done by a person.
+    - a commit only on the branch of an issue (`issue/<n>-<words>`, made from `developer`), of a release
+      (`release/<x.y.z>`) or of Dependabot (`dependabot/...`); the approvals cover every file the branch changed since
+      `origin/developer`, not only the staged ones;
+    - `git push` only of such a branch, never forced and never deleting (no `--tags`, `--mirror`, `--all` or `--prune`);
+    - `gh pr merge` only with the number of the pull request, into `developer`, from such a branch, when every check of
+      the CI is green and every approval is there for the last commit; never `--admin`;
+    - `gh release create`, `gh release delete`, `gh repo delete` and a merge into `main` are refused: a release is done
+      by a person.
 - `format.mjs` runs Prettier on a file after every edit.
 
 So Claude works on a branch per issue, opens a pull request into `developer` and merges it itself when the CI is green,
@@ -675,19 +787,30 @@ Protect `developer` and `main` on GitHub with the CI as a required check.
 
 - `npm run labels` creates their labels: `spec`, `type:*`, `area:*`, `status:*`.
 - `.github/ISSUE_TEMPLATE/` has a form for a feature and one for a bug.
-- `developer` is the default branch, so a commit with `closes #n` closes its ticket when it is pushed.
+- `developer` is the default branch, so a commit with `closes #n` closes its ticket when its pull request is merged into
+  `developer`.
 
 ### Structure
 
 ```
 bin/cli.js               # entry point
 src/index.js             # questions and flow
+src/prompts.js           # the question wrappers (select, input, password, confirm, checkbox) and the answers file
 src/progress.js          # one progress bar for all steps
 src/runner.js            # runs commands quietly
 src/repo.js              # push questions + git / GitHub steps
 src/frontends/index.js   # list of available frontends
 src/frontends/nextjs.js  # Next.js + Tailwind + next-intl + Prettier + DafkeDD UI in the Pasport design
+src/frontends/site.js    # the Pasport design of a frontend without the OIDC login (a site, an API, the simple login), for update
+src/frontends/auth.js    # the pages of the simple login in the frontend
+src/frontends/docs.js    # generated frontend documentation (how to call the API)
+src/frontends/pasport-messages.js # texts of the Pasport design (four languages)
+src/frontends/portal-messages.js  # texts of the portal and the superadmin panel (four languages)
 src/backends/nestjs.js   # NestJS backend (+ database, login)
+src/backends/auth.js     # the simple login of the backend (users table, scrypt, JWT cookie)
+src/databases/index.js   # list of available databases
+src/databases/postgres.js # PostgreSQL: questions, .env, DatabaseModule, Docker
+src/databases/existing.js # checks for a database of an earlier install with the same name
 src/backends/oidc.js     # own OpenID Connect server: questions, .env, docs, copies templates/backend-oidc
 src/backends/docs.js     # generated backend documentation (every endpoint)
 src/backends/linked.js   # an app for an existing login server: link code, own database, delegates to nestjs.js
@@ -695,14 +818,20 @@ src/backends/app.js      # the API of such an app: errors, .env, endpoints, copi
 src/eid.js               # DafkeDD eID: the release that is installed and the virtual card reader script
 templates/backend-oidc/  # TypeScript of the OIDC server, copied into ./backend (placeholders like __USERS_TABLE__)
 templates/backend-app/   # TypeScript of an app's API (Pasport tokens, notes per tenant), copied into ./backend
+templates/backend-app-files/ # the files module of an app's API
+templates/frontend-site/ # the Pasport design (shell, account) of a frontend without the OIDC login
 templates/frontend-oidc/ # login page, login routes and profile of the frontend (OIDC), copied into ./frontend
 templates/frontend-oidc-linked/ # the files of a linked app's frontend that differ (home with notes, /api/app)
 templates/project-claude/ # Claude Code for a generated project: agents, skills, hooks, design, issue forms
 src/claude.js            # the question, CLAUDE.md and the CI/release/CodeQL/Screenshots workflows of a generated project
 src/manifest.js          # .dafkedd.json of a generated project (what it is, a hash per managed file)
 src/update.js            # DafkeDD_CLI update: an existing project to this version, never over your changes
+src/update-code.js       # the generated code for update: what the project is made of, starting points, packages
 src/doctor.js            # DafkeDD_CLI doctor: are the tools, MCP servers, database and GitHub settings there?
 src/kb.js                # the knowledge base of a generated project (docs/kb, four languages)
+src/docs.js              # ./docs of a generated project: the READMEs gathered, the index, serve.mjs
+src/docs-site.js         # ./docs/index.html: the documentation as one self-contained web page
+src/npm.js               # npm settings of generated projects (allowScripts: the install scripts that may run)
 src/cloud.js             # Google Cloud of a generated project: Terraform, Dockerfiles, the Cloud and Preview workflows
 src/frontends/oidc.js    # texts and .env.local of the frontend login, copies templates/frontend-oidc
 test/                    # test suite (node:test)
@@ -722,8 +851,9 @@ run in the generated project.
 
 ## Branches and releases
 
-- `developer` is the default branch; this is where you work. Everything goes to `developer` first.
-- Merging into `main` is only done on request. A push to `main` automatically creates a new GitHub release
+- `developer` is the default branch. Work happens on a branch per issue (`issue/<n>-<words>`, made from `developer`),
+  merged into `developer` with a pull request.
+- Only Davey merges `developer` into `main`. A push to `main` automatically creates a new GitHub release
   (`.github/workflows/release.yml`), after the tests passed.
 - The version number automatically bumps the patch number. If you want a higher version (for example `0.2.0`), raise
   `version` in `package.json` before pushing to `main`.
@@ -739,6 +869,18 @@ git switch developer
 
 ## Changelog
 
+- **0.54.4**: the documentation checked against the code, everywhere.
+    - The colleagues card of the eHealth vault works: `/api/backend` lets `me/vault/colleagues` through (it answered
+      404).
+    - README, CONTRIBUTING and CLAUDE.md: the commands, the order of the questions, Node.js 22, the four verify
+      variants, the `.env` keys of the login server and of a linked app, the licence gate, eID required, the vault, My
+      apps, the names of the databases per organisation and the current pages (`/users`, `/admin/catalog`,
+      `/admin/tenants`).
+    - The docs of a project (`docs/api.md`, `docs/frontend.md`): the errors of the login steps and `EID_REQUIRED`,
+      Google and Microsoft, `demo:clear`, the tables, every page and call of the frontends as they are now; the Swagger
+      answers of the endpoints follow the code.
+    - The CLAUDE.md, agents and brand book of a project; the eID reminder and the vault card have no coloured left
+      border (the design); a linked app has an English title in the docs.
 - **0.54.3**: the rest of the review.
     - `update` leaves your starting points alone: the home page and the pages in the rail of an app, the example notes,
       `app.module.ts`, `config/app-roles.json` and the e2e starter are only written when they are missing, never

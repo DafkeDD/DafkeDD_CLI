@@ -164,7 +164,11 @@ const curlFor = (endpoint, { port }) => {
 
 const errorTable = (list, messages) => {
     if (list.length === 0) return ''
-    const rows = list.map(([status, key]) => `| ${status} | \`${key}\` | ${messages[key] ?? ''} |`)
+    // The third element says when it happens (shown after the message)
+    const rows = list.map(
+        ([status, key, when]) =>
+            `| ${status} | \`${key}\` | ${[messages[key], when && `(${when})`].filter(Boolean).join(' ')} |`
+    )
     return [
         '**Errors** (the `message` is translated):',
         '',
@@ -229,14 +233,18 @@ export function backendReadme({
         // A second way to call the same endpoint (for example the refresh_token grant of /oidc/token)
         for (const variant of endpoint.variants ?? []) {
             lines.push(
-                `**${variant.title}** (form-encoded):`,
+                `**${variant.title}** (${endpoint.form ? 'form-encoded' : 'JSON'}):`,
                 '',
                 '| Field | Type | Rules |',
                 '| --- | --- | --- |',
                 ...variant.body.fields.map(([name, type, rules]) => `| \`${name}\` | ${type} | ${rules} |`),
                 '',
                 `${fence}bash`,
-                curlFor({ ...endpoint, body: variant.body }, { port }),
+                // A variant may authenticate otherwise (basic: null: client_secret in the body instead of Basic)
+                curlFor(
+                    { ...endpoint, body: variant.body, basic: 'basic' in variant ? variant.basic : endpoint.basic },
+                    { port }
+                ),
                 fence,
                 ''
             )
@@ -366,12 +374,25 @@ export function backendReadme({
                   ],
                   [
                       'OIDC_EXTERNAL_ISSUER',
-                      '(empty)',
-                      'Another OpenID Connect server to log in with (Entra ID, Keycloak, Google, ...); empty: off'
+                      'https://accounts.google.com',
+                      'Another OpenID Connect server to log in with (Google, Entra ID, Keycloak, ...): the server you chose in the CLI, else Google. It is only on with a client id'
                   ],
-                  ['OIDC_EXTERNAL_CLIENT_ID', '(empty)', 'Our client id at that server'],
+                  [
+                      'OIDC_EXTERNAL_CLIENT_ID',
+                      '(empty)',
+                      'Our client id at that server; an empty OIDC_EXTERNAL_CLIENT_ID keeps it off'
+                  ],
                   ['OIDC_EXTERNAL_CLIENT_SECRET', '(empty)', 'Our secret there; empty: a public client (PKCE)'],
-                  ['OIDC_EXTERNAL_NAME', '(its host name)', 'The button: "Log in with <name>"'],
+                  [
+                      'OIDC_EXTERNAL_NAME',
+                      'Google',
+                      'The button: "Log in with <name>" (left empty: the host name of the issuer)'
+                  ],
+                  [
+                      'OIDC_EXTERNAL_2_*',
+                      'https://login.microsoftonline.com/organizations/v2.0, Microsoft',
+                      'A second server with the same settings (`OIDC_EXTERNAL_2_ISSUER`, `_CLIENT_ID`, `_CLIENT_SECRET`, `_NAME`, `_MFA`, ...), up to `OIDC_EXTERNAL_9_*`; an empty client id keeps it off. For Microsoft Entra ID the optional claim `xms_edov` counts as a verified email address'
+                  ],
                   [
                       'OIDC_EXTERNAL_ONLY',
                       'false',
@@ -440,7 +461,52 @@ export function backendReadme({
                       'OIDC_PRODUCT',
                       app.product ?? '(empty)',
                       'The product (licence code on the login server) this app sells: members need a trial or a seat of it; empty: a free app'
-                  ]
+                  ],
+                  [
+                      'OIDC_CLIENT_SECRET',
+                      '(from the link code)',
+                      'The key of this app at the login server (a confidential app): the eHealth vault of a doctor (`POST /vault/credentials`); empty: a public app, no vault. Never commit it'
+                  ],
+                  [
+                      'TENANT_ISOLATION',
+                      appOptions?.isolation ?? 'rls',
+                      'How the data of the organisations is kept apart: `rls` (one database, Row-Level Security) or `database` (a PostgreSQL database per organisation, needs CREATEDB)'
+                  ],
+                  ...(appOptions?.files
+                      ? [
+                            [
+                                'FILES_DRIVER',
+                                'local',
+                                'Where the files are: `local` (a folder on this machine) or `gcs` (a private Google Cloud Storage bucket)'
+                            ],
+                            ['FILES_DIR', './storage', 'The folder of `local`'],
+                            [
+                                'GCS_BUCKET',
+                                '(empty)',
+                                'The bucket of `gcs` (the login is the one of the environment: no key in .env)'
+                            ],
+                            ['GCS_PROJECT', '(empty)', 'The Google Cloud project of `gcs` (optional)'],
+                            ['GCS_PREFIX', '(empty)', 'A folder in the bucket (optional)']
+                        ]
+                      : []),
+                  ...(appOptions?.mail
+                      ? [
+                            [
+                                'SMTP_HOST',
+                                'localhost',
+                                'Mail server; empty prints the mails in the console (development only)'
+                            ],
+                            [
+                                'SMTP_PORT',
+                                '1025',
+                                'Port of the mail server (1025 is Mailpit; usually 587 or 465 in production)'
+                            ],
+                            ['SMTP_SECURE', 'false', '`true` for TLS from the start (port 465)'],
+                            ['SMTP_USER', '(empty)', 'Login of the mail server, when it needs one'],
+                            ['SMTP_PASSWORD', '(empty)', 'Password of the mail server'],
+                            ['MAIL_FROM', '(app name) <no-reply@example.com>', 'Sender of every email']
+                        ]
+                      : [])
               ]
             : [])
     ]
@@ -460,17 +526,21 @@ export function backendReadme({
             ? [
                   ['npm run test:db', 'Tests against the real PostgreSQL: tenant isolation (RLS) and storage'],
                   ['npm run oidc:user', 'Add a user to a tenant (see "OpenID Connect")'],
-                  [
-                      'npm run demo:data',
-                      'Demo organisations, users, apps, invoices and tickets (development; -- --remove)'
-                  ],
+                  ['npm run demo:data', 'Demo organisations, users, apps, invoices and tickets (development)'],
+                  ['npm run demo:clear', 'Remove the demo data again'],
                   ['npm run mail:dev', 'Start Mailpit in Docker: every email at http://localhost:8025']
               ]
             : []),
         ...(app
             ? [
-                  ['npm run test:db', 'Tests against the real PostgreSQL: tenant isolation (RLS) of the notes'],
-                  ['npm run roles:push', 'Send config/app-roles.json to the login server (-- --code <link code>)']
+                  [
+                      'npm run test:db',
+                      `Tests against the real PostgreSQL: tenant isolation (RLS) of the notes${appOptions?.files ? ' and the files' : ''}, and the database per organisation (tenant_databases)`
+                  ],
+                  ['npm run roles:push', 'Send config/app-roles.json to the login server (-- --code <link code>)'],
+                  ...(appOptions?.mail
+                      ? [['npm run mail:dev', 'Start Mailpit in Docker: every email at http://localhost:8025']]
+                      : [])
               ]
             : []),
         ...(database?.mode === 'docker'
@@ -624,41 +694,46 @@ Nothing is looked up: who calls comes from the token (\`@CurrentCaller()\`: \`su
 | \`@Public()\` | everyone, without a token (\`/\`, \`/health\`, \`/examples\`, \`/docs\`) |
 | \`@Access('account')\` | any valid token, also without an organisation (\`/me\`) |
 | \`@Access('member')\` | the default: a valid token **with** an organisation (and a licence, see below) |
-| \`@Access('admin')\` | the beheerder (admin) of that organisation, or a superadmin (and a licence) |
+| \`@Access('admin')\` | an admin of that organisation, or a superadmin (and a licence) |
 
 A missing or wrong token gives \`401 errors.UNAUTHORIZED\`, a token without organisation \`403 errors.NO_ORGANISATION\`, no
 licence \`403 errors.NO_LICENSE\`, a member on an admin route \`403 errors.FORBIDDEN\` (translated, like every error).
 
 ### Licences (the product of this app)
 
-One app is one product on the login server: a superadmin chooses it on \`/admin\` → Apps ("Product"), and every user
-needs a licence of it in their organisation, bought per month or per year (\`/licenses\` on the login server). The
-access tokens of this app then carry the claim \`license: { product, status, ends_at }\`, worked out by the login server
+One app is one product on the login server: a superadmin makes it in the app catalogue (\`/admin/catalog\`): every app
+there is a product. Every user needs a licence of it in their organisation, bought per month or per year (bought on
+\`/marketplace\`, given on \`/users\` of the login server). The access tokens of this app then carry the claim \`license: { product, status, ends_at }\`, worked out by the login server
 at every login and every refresh (so at most 10 minutes old):
 
 | \`status\` | Meaning |
 | --- | --- |
-| \`trial\` | the trial of the user runs, until \`ends_at\` (seconds): a demo the user asked (on the profile page of the login server) or an admin started; a login never starts one |
+| \`trial\` | the trial of the user runs, until \`ends_at\` (seconds): a demo the user asked (on \`/marketplace\`, or "Ask a demo" on the no-licence screen or in the app) or an admin started; a login never starts one |
 | \`seat\` | the user has one of the (paid or free) seats of the organisation |
 | \`superadmin\` | a superadmin of the login server: always |
-| \`none\` | no licence: the beheerder gives a seat on \`/licenses\`, or buys more |
+| \`none\` | no licence: an admin gives a seat on \`/users\`, or buys more |
 
 With \`OIDC_PRODUCT\` set${app.product ? ` (here \`${app.product}\`)` : ''}, \`member\` and \`admin\` routes need a licence of that product (a claim of
 another product, or none, is refused); \`account\` routes such as \`GET /me\` do not, so the frontend can tell the user what
 to do. \`@CurrentCaller()\` has it as \`license: { product, status, endsAt }\` (\`null\` without a claim). Leave
 \`OIDC_PRODUCT\` empty for a free app.
 
+The login server already stops a user without a licence: the login of this app ends on its **no-licence screen** (also
+with single sign-on), where the user can ask a demo or go to My apps; with \`prompt=none\` the app gets
+\`error=access_denied\`. A token whose licence turned \`none\` meanwhile (a seat taken back, a trial that ended, seen at
+the next refresh) is refused here with \`403 errors.NO_LICENSE\`.
+
 ### Roles
 
 The roles of this app are defined in **\`config/app-roles.json\`** (a key for the code, a name in en, nl, fr and de, and
-\`default\` for the roles a member has until the beheerder gives others). The login server learned them with the link
-code; after a change, make a new link code on \`/admin\` → Apps and run \`npm run roles:push -- --code <code>\`. The
-beheerders of each organisation give the roles on \`/members\` of the login server; the access token carries them
+\`default\` for the roles a member has until an admin gives others). The login server learned them with the link
+code; after a change, make a new link code on \`/admin/catalog\`, tab "Connection", and run
+\`npm run roles:push -- --code <code>\`. The admins of each organisation give the roles on \`/users\` of the login server; the access token carries them
 (\`roles\`), \`@CurrentCaller()\` has them as \`roles\` (\`null\` when the token has none).
 
 Protect a route with **\`@Roles('editor')\`** (\`src/pasport/access.ts\`, one of the given roles is enough, superadmins always
 pass): otherwise 403 \`errors.ROLE_REQUIRED\`. The example: \`GET /notes\` needs \`editor\` or \`viewer\`, \`POST /notes\`
-needs \`editor\`, and \`DELETE /notes/:id\` the beheerder of the organisation (\`@Access('admin')\`).
+needs \`editor\`, and \`DELETE /notes/:id\` an admin of the organisation (\`@Access('admin')\`).
 
 ### Data per organisation (multi-tenant)
 
@@ -679,7 +754,7 @@ Where that data lives is \`TENANT_ISOLATION\` in \`.env\` (here **\`${isolation}
 request) at a time, for example for a monthly job. \`runMigrations(db, migrations, { lock, table })\` takes its own lock key
 and migrations table.
 
-The example is \`notes\` (\`src/notes\`): everyone of the organisation reads and adds notes, only its beheerder removes
+The example is \`notes\` (\`src/notes\`): everyone of the organisation reads and adds notes, only its admins remove
 them. Copy it for your own data.
 ${choice.files ? filesSection() : ''}${choice.mail ? mailSection() : ''}`
 }
@@ -729,8 +804,9 @@ finds all endpoints there.
 1. Start Mailpit (\`npm run mail:dev\`, needs Docker) and the API (\`npm run start:dev\`). The first start creates the
    tables, the signing keys, the clients of \`config/oidc-clients.json\` and the **superadmin** (the email and temporary
    password the CLI showed). There is no organisation yet: the superadmin needs none.
-2. With the Next.js frontend: start it (\`npm run dev\` in \`./frontend\`) and open **http://localhost:3000**. "Log in" goes
-   through this server and comes back to the frontend; \`/profile\` shows the user, the tenant and what the API answered.
+2. With the Next.js frontend: start it (\`npm run dev\` in \`./frontend\`) and open **http://localhost:3000**. Every page
+   needs a login, so it goes to \`/login\` through this server and comes back to My apps (\`/apps\`); \`/profile\` is the
+   own profile.
    The login page itself is the page \`/login\` of the frontend (\`OIDC_LOGIN_UI_URL\`), which talks to the JSON variant of
    \`/oidc/interaction/...\`. Without a frontend the API shows its own HTML login page.
 3. Log in as superadmin: the first login asks you to set up **two-step verification** (scan the QR code with an
@@ -776,8 +852,8 @@ finds all endpoints there.
 | Access token | JWT, ES256, \`typ: at+jwt\` (RFC 9068), \`aud\` = \`OIDC_AUDIENCE\` | 10 minutes, and stops when its session ends | \`sub\`, \`client_id\`, \`scope\`, \`sid\`, \`tenant\`, \`superadmin\`, \`license\` (an app that sells a product, see "Apps are products"), \`roles\` (an app with roles, see "Roles per app") |
 | Refresh token | Random (only its sha256 is stored) | As long as its session (at most 12 hours), one use | Only for clients with the \`refresh_token\` grant (see "Sessions, refresh tokens and logout") |
 
-The \`tenant\` claim is \`{ "id": "...", "name": "Acme", "role": "admin" }\`: the tenant the user chose, with the role
-of the user there (\`user\` or \`admin\`). \`superadmin: true\` is only present for superadmins. Verify tokens with the
+The \`tenant\` claim is \`{ "id": "...", "name": "Acme", "slug": "acme", "role": "admin" }\`: the tenant the user chose
+(its \`slug\` is the short name in addresses), with the role of the user there (\`user\` or \`admin\`). \`superadmin: true\` is only present for superadmins. Verify tokens with the
 keys of \`/oidc/jwks\`, check \`iss\`, \`aud\` and \`exp\`, and take the tenant only from a verified token, never from a
 header or the URL.
 
@@ -887,7 +963,7 @@ and demos.
 
 ### Belgian eID (card reader and PIN)
 
-Log in and register with the Belgian eID, like the federal login (CSAM) and Corilus Passport. The card and its PIN are
+Log in and register with the Belgian eID, like the federal login (CSAM). The card and its PIN are
 only the **first factor**: two-step verification always means the code of the **authenticator app**, also after an
 eID login (\`OIDC_MFA=required\`: set up at the first login). The eID is never a second factor. It uses the **DafkeDD eID** library
 (\`@dafkedd/eid\`, installed from https://github.com/DafkeDD/DafkeDD_EID) and the DafkeDD eID program (the *bridge*) on
@@ -1049,15 +1125,15 @@ was already so for the \`oidc_session\` cookie (single sign-on).
 ### Clients
 
 Apps come from two places. \`config/oidc-clients.json\` lists the applications that may use the login (applied at every
-start; on \`/admin\` they are read-only), and **superadmins make apps on \`/admin\`** of the frontend (\`/admin/clients\`,
-stored with \`source: admin\`): the same fields, a client id of their choice (or made from the name), and for a
-confidential app a **secret of 32 random bytes that is shown once** (only its sha256 is stored; "New secret" stops the
+start; in the catalogue they are read-only), and **superadmins make apps on \`/admin\`** of the frontend: in the app
+catalogue (\`/admin/catalog\`, tab "Connection", or an internal app; API \`/admin/clients\`, stored with
+\`source: admin\`): the same fields, a client id of their choice (or made from the name), and for a confidential app a **secret of 32 random bytes that is shown once** (only its sha256 is stored; "New secret" stops the
 old one at once). An app made there can be changed, disabled (nobody logs in with it, its refresh tokens and codes stop
 at once, its access tokens no longer reach the API) and, once disabled, removed with its codes, refresh tokens and
-consents. The clients file never overwrites an app made on \`/admin\` with the same id (a warning in the log). Every
+consents. The clients file never overwrites an app made in the catalogue (\`/admin/catalog\`) with the same id (a warning in the log). Every
 change is in the audit log (\`platform.client_*\`).
 
-**Link a new project to an app with a link code**: on \`/admin\` → Apps, "Link code" makes a one-time code of 24
+**Link a new project to an app with a link code**: on \`/admin/catalog\`, tab "Connection", "Link code" makes a one-time code of 24
 characters (\`K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE\`, 120 random bits, valid 15 minutes; the short codes of 12 characters of
 older servers still work, only its sha256 is stored; a new code stops the
 previous one). In DafkeDD_CLI choose the frontend Next.js and the backend **"App for an existing DafkeDD OIDC server
@@ -1068,7 +1144,7 @@ account pages). A confidential app gets a new secret in that answer (the old one
 with single sign-on and is logged out with back-channel logout. Mark the app as "our own application" when that
 frontend may call this API as the user. Audit log: \`platform.client_link_code\` and \`platform.client_linked\`.
 
-The fields (in the file, and on \`/admin\`):
+The fields (in the file, and in the catalogue, \`/admin/catalog\`):
 
 | Field | Meaning |
 | --- | --- |
@@ -1082,13 +1158,13 @@ The fields (in the file, and on \`/admin\`):
 | \`firstParty\` | \`true\`: your own application (no consent screen). \`false\` (default): an application of others, which asks the user once which data it may have |
 | \`backchannelLogoutUri\` | Optional: where the server POSTs a logout token when a session with this client ends (https; http only on localhost) |
 | \`backchannelLogoutSessionRequired\` | Optional, \`true\` when the client needs \`sid\` in the logout token (it is always there) |
-| \`product\` | Optional: the product (licence code of \`/licenses\`) this app sells; see "Apps are products" |
+| \`product\` | Optional: the product (its code in the app catalogue, \`/admin/catalog\`) this app sells; see "Apps are products" |
 | \`roles\` | Optional: the roles of the app (\`key\`, \`names\`, \`default\`); see "Roles per app" |
 
 ### Apps are products (one licence per user per app)
 
-An app can **sell a product**: on \`/admin\` → Apps a superadmin picks one of the products of \`/licenses\` ("Product
-(licence)"; \`"product": "planner"\` in the clients file). One product belongs to one app (409
+An app can **sell a product**: in the app catalogue (\`/admin/catalog\`) every app is a product (\`product\` of
+\`/admin/clients\`; \`"product": "planner"\` in the clients file). One product belongs to one app (409
 \`oidc.CLIENT_PRODUCT_TAKEN\`), and it must exist (400 \`oidc.CLIENT_UNKNOWN_PRODUCT\`). Organisations buy it per month
 or per year, per user, like every product (see "Licences").
 
@@ -1111,7 +1187,8 @@ server shows the "no licence" screen instead of sending a code: "Ask a demo" whe
 member never had one (\`POST /oidc/interaction/:id/demo\`: the demo starts and the login goes on into the app), otherwise
 "ask your administrator", and always "To my apps" (\`/apps\` of the portal) and "try again" (an admin gave a seat
 meanwhile). \`prompt=none\` answers \`error=access_denied\`. A superadmin always gets in. When the licence ends while
-the user works (the trial ended), the next token says \`none\` and the app shows what to do. An app made with the CLI ("App for an existing DafkeDD OIDC server") learns the product with the link
+the user works (the trial ended, a seat taken back), the next token (at the refresh) says \`none\`: the API of the app
+refuses it with 403 \`errors.NO_LICENSE\` and the app shows what to do. An app made with the CLI ("App for an existing DafkeDD OIDC server") learns the product with the link
 code and checks it in its own API (\`OIDC_PRODUCT\`). The link answer has it as \`client.product\`.
 
 ### Roles per app
@@ -1130,7 +1207,7 @@ The login server learns them with the link code (\`POST /oidc/link\` with \`role
 \`npm run roles:push -- --code <link code>\` in the backend of the app (\`POST /oidc/link/roles\`) after a change; or
 \`"roles"\` in the clients file. At most 20 roles; a wrong list gives 400 \`oidc.ROLES_INVALID\` with the reason.
 
-The **admins (beheerders)** of an organisation give the roles to their members on \`/members\` ("Roles per app",
+The **admins** of an organisation give the roles to their members on \`/users\` ("Roles per app",
 \`/tenants/current/apps/...\`). A member they never gave roles has the **default roles**; an empty list is no role at
 all. The tokens of the app carry the roles of the user in the organisation of the login (\`"roles": ["editor"]\`),
 worked out at every login and refresh, so a change reaches the app within 10 minutes. Roles an app no longer defines
@@ -1141,9 +1218,9 @@ from \`superadmin\`: an app can look at all three. Changes are in the audit log 
 ### Invitations with apps
 
 An admin who invites someone can choose the **apps** the invitation gives access to (\`apps\` of
-\`POST /tenants/current/invitations\`; on \`/members\` a checkbox per app). Per app: the **roles** the new member gets
+\`POST /tenants/current/invitations\`; on \`/users\` a checkbox per app). Per app: the **roles** the new member gets
 (\`null\`: the default roles of the app) and, for an app that sells a product, a **seat** (one of the free seats of
-the organisation). The apps are every app made on \`/admin\` and every app with roles (\`GET /tenants/current/apps\`);
+the organisation). The apps are every app made in the catalogue (\`/admin/catalog\`) and every app with roles (\`GET /tenants/current/apps\`);
 an app that is not one of them gives 400 \`oidc.INVITATION_APP_UNKNOWN\`, a role the app does not have 400
 \`oidc.ROLE_UNKNOWN\`.
 
@@ -1203,9 +1280,9 @@ stored keys cannot be used (new keys are then created and existing tokens stop w
 
 Products are sold **per organisation, per product and per user** (a seat), per month or per year (a year is always
 cheaper than twelve months). A user can ask a **free demo of 14 days** (\`BILLING_TRIAL_DAYS\`) of a product, once
-(\`POST /me/licenses/:productCode/trial\`, "Ask a demo" on \`/profile\`); nothing starts by itself (not at
-registration, eID registration, invitation or the first login to an app). After the demo the user needs a seat; an admin buys seats and gives them to members (and takes them back to give them to someone else)
-on \`/licenses\` of the frontend.
+(\`POST /me/licenses/:productCode/trial\`, "Ask a demo" on \`/marketplace\`); nothing starts by itself (not at
+registration, eID registration, invitation or the first login to an app). After the demo the user needs a seat; an admin buys seats (on \`/marketplace\`) and gives them to members (and takes them back to give them to someone else)
+on \`/users\` of the frontend.
 
 | Who | Can |
 | --- | --- |
@@ -1277,8 +1354,8 @@ subscription \`past_due\` (the seats stop at the end of the period).
 Each organisation uses a code once; the code is reserved at the checkout and given back when that is not paid. **100% makes it free**: the seats are active at once, without a payment, for the
 periods of the code. Leave the code empty to get a random one (\`K7QM-2XPD\`).
 
-- No account gets a trial automatically: the member asks a demo (\`/profile\`), or an admin starts it on
-  \`/licenses\` (\`POST /tenants/current/licenses/:productCode/trials/:userId\`).
+- No account gets a trial automatically: the member asks a demo (\`/marketplace\`), or an admin starts it on
+  \`/users\` (\`POST /tenants/current/licenses/:productCode/trials/:userId\`).
 - Tests: the e2e tests run without a database, so override \`BILLING_STORE\` with \`MemoryBillingStore\` (like
   \`test/billing.e2e-spec.ts\`).
 
@@ -1301,7 +1378,7 @@ failed login), **what** (\`login.succeeded\`, \`members.role_changed\`, \`licenc
 | Who | Reads |
 | --- | --- |
 | Admin of an organisation | \`GET /tenants/current/audit\` (\`/audit\` in the frontend): the events of the organisation, read with Row-Level Security |
-| Superadmin | \`GET /admin/audit\` (\`/audit?scope=platform\`): everything, also the events without an organisation (failed logins, accounts, platform) |
+| Superadmin | \`GET /admin/audit\` (\`/admin/audit\`): everything, also the events without an organisation (failed logins, accounts, platform) |
 | Every account | \`GET /me/audit\` ("Recent activity" on \`/security\`): what it did, and what happened to it (also failed logins with its email address) |
 
 Record your own events with \`AuditService\` (global, inject it anywhere); add the action to
@@ -1383,10 +1460,6 @@ users (seen in the last 30 days), apps bought and the revenue of the month (paid
 with the change from the month before and the last 8 months, revenue and new organisations per month, the 4 apps with
 the most environments (the rest is \`other\`) and how often each discount code was used.
 
-### Not in this version yet
-
-Passkeys, a consent screen for external clients and back-channel logout to other clients follow in the next phases.
-
 ## Multi-tenant (Row-Level Security)
 
 Every table with customer data has a \`tenant_id\` and a PostgreSQL **Row-Level Security** policy. Run tenant code with
@@ -1416,11 +1489,11 @@ ${fence}
 | \`tenants\` | Organisations: \`slug\`, name, status (\`active\` or \`suspended\`), plan, city, contact name, billing details | yes |
 | \`tenant_members\` | Which user is in which tenant: role (\`user\` or \`admin\`), status (\`active\` or \`disabled\`), profession (\`doctor\` or \`staff\`), last seen | yes |
 | \`tenant_invitations\` | Open invitations (email, role, who invited, expiry) | yes |
-| \`user_identifiers\` | Linked eIDs: an HMAC of the national register number per account (one eID per account, one account per eID), linked and last used | no |
+| \`user_identifiers\` | Linked eIDs and accounts of other OpenID Connect servers: an HMAC of the national register number (or of the issuer and subject at the other server) per account (one of each kind per account, one account per identifier), linked and last used | no |
 | \`user_passkeys\` | Passkeys: the credential id (unique), public key (SPKI), COSE algorithm, signature counter, name, synced or not, transports, added and last used; no secrets | no |
-| \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\` and /admin), with their back-channel logout URI and the product they sell | no |
+| \`oidc_clients\` | Registered clients (from \`config/oidc-clients.json\` and the catalogue, \`/admin/catalog\`), with their roles, their back-channel logout URI and the product they sell | no |
 | \`oidc_consents\` | What an account allowed an application of others: the scopes (with \`tenant\`: the organisations), when, until revoked | no |
-| \`oidc_link_codes\` | One-time link codes of \`/admin\` (sha256, the app, who made it, 15 minutes, used or not) | no |
+| \`oidc_link_codes\` | One-time link codes of \`/admin/catalog\` (sha256, the app, who made it, 15 minutes, used or not) | no |
 | \`oidc_used_interactions\` | Consent screens answered already (until their login expires): a copy of the login cookie cannot answer twice | no |
 | \`oidc_session_clients\` | Which clients got a code in which session (they hear about its end) | no |
 | \`oidc_logout_queue\` | Logout tokens still to deliver (back-channel logout), with the number of tries and the next try; filled by a trigger on \`oidc_sessions\` | no |
@@ -1439,6 +1512,9 @@ ${fence}
 | \`invoice_numbers\`, \`invoices\` | The last invoice number per year; the invoices (\`FAC-<year>-<number>\`, amounts with and without VAT, the billing details as issued, status) | \`invoices\`: yes |
 | \`user_vault\` | The eHealth certificate of an account and its password, both encrypted, and what the certificate says | no |
 | \`vault_delegates\` | Which colleagues of the organisation may use the certificate of a doctor in the apps | yes |
+| \`app_role_assignments\` | The roles of a member in an app, given by the admins of the organisation (no row: the default roles of the app) | yes |
+| \`notifications\` | The notifications of an account (the bell): kind, params, the screen it opens, read or not | yes (\`NULL\`: platform) |
+| \`notification_reads\` | Which computed notifications (a contract or a discount code that ends soon) an account read | no |
 | \`tickets\`, \`ticket_messages\`, \`ticket_attachments\` | Support tickets, their conversation and their images | yes |
 | \`ticket_notes\` | The internal notes of the support team (with mentions) | no: support only |
 | \`audit_events\` | The audit log: who, what, about whom, organisation, details, IP address, browser, when (append-only) | yes (\`NULL\`: platform and accounts) |

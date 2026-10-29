@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@ne
 import {
     ApiBadRequestResponse,
     ApiConflictResponse,
+    ApiCreatedResponse,
     ApiNotFoundResponse,
     ApiOkResponse,
     ApiOperation,
@@ -45,8 +46,10 @@ export class PasskeysController {
     @ApiOperation({
         summary: 'Adding a passkey, step 2: the answer of navigator.credentials.create() (max 20 per account)'
     })
-    @ApiOkResponse({ description: '{ id, name, synced, createdAt, lastUsedAt }' })
-    @ApiBadRequestResponse({ description: 'oidc.PASSKEY_EXPIRED (token) or oidc.PASSKEY_INVALID (checks failed)' })
+    @ApiCreatedResponse({ description: '{ id, name, synced, createdAt, lastUsedAt }' })
+    @ApiBadRequestResponse({
+        description: 'oidc.PASSKEY_EXPIRED (token), oidc.PASSKEY_INVALID (checks failed) or errors.BAD_REQUEST'
+    })
     @ApiConflictResponse({ description: 'oidc.PASSKEY_EXISTS: already added, or 20 passkeys' })
     add(@Auth() auth: AuthContext, @Body() body: AddPasskeyDto) {
         return this.passkeys.register(auth.userId, body)
@@ -55,6 +58,7 @@ export class PasskeysController {
     @Patch(':id')
     @ApiOperation({ summary: 'Renames a passkey of the account' })
     @ApiOkResponse({ description: '{ id, name }' })
+    @ApiBadRequestResponse({ description: 'errors.BAD_REQUEST: no name, or more than 60 characters' })
     @ApiNotFoundResponse({ description: 'oidc.PASSKEY_NOT_FOUND' })
     rename(@Auth() auth: AuthContext, @Param('id') id: string, @Body() body: RenamePasskeyDto) {
         return this.passkeys.rename(auth.userId, id, body.name)

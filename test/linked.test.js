@@ -151,6 +151,9 @@ test('ask: server, port, the code and the own database; a wrong code is asked ag
                 assert.equal(config.default, 'planner', 'named after the app')
                 return config.default
             }
+            // Where the code is made on the server: the catalogue of the superadmin panel (not the old /admin → Apps)
+            assert.match(config.message, /\/admin\/catalog → Verbinding → Koppelcode maken/)
+            assert.doesNotMatch(config.message, /Apps →/)
             // The prompt keeps asking until validate says yes
             assert.match(await config.validate('nonsense'), /K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE/)
             assert.equal(await config.validate('aaaa-bbbb-cccc'), 'Deze koppelcode is onbekend')

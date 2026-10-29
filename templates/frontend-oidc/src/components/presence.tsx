@@ -20,7 +20,7 @@ function lastUse() {
 }
 
 /**
- * The own presence. Every minute a heartbeat (POST /me/heartbeat through /api/backend): online, and idle after 15
+ * The own presence. Every minute a heartbeat (POST /me/heartbeat through /api/backend): online, and idle after 5
  * minutes without use. The chosen status and the out-of-office reply come from GET /me/status; a new status shows at
  * once and goes back when the API refuses it. `shown` is what others see.
  */

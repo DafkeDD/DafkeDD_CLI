@@ -121,7 +121,7 @@ describe('Pasport access tokens and notes per organisation (e2e)', () => {
             .set(bearer(accessToken({ tenant, roles: ['editor'] })))
             .send({ text: 'Mag wel' })
             .expect(201)
-        // No role at all (the beheerder took them away), or a token without roles
+        // No role at all (an admin took them away), or a token without roles
         for (const roles of [[], undefined])
             expect(
                 (
@@ -180,7 +180,7 @@ describe('Pasport access tokens and notes per organisation (e2e)', () => {
         expect(response.body.error).toBe('errors.BAD_REQUEST')
     })
 
-    it('only the beheerder (admin) removes a note, and only one of the own organisation', async () => {
+    it('only an admin removes a note, and only one of the own organisation', async () => {
         const admin = bearer(accessToken({ tenant: TENANT_A }))
         const member = bearer(accessToken({ tenant: { ...TENANT_A, role: 'user' } }))
         const otherAdmin = bearer(accessToken({ tenant: { ...TENANT_B, role: 'admin' } }))

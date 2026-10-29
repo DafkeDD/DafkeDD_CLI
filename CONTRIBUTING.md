@@ -2,7 +2,8 @@
 
 ## Workflow
 
-- Work on the `developer` branch. Merging into `main` (which creates a release) is only done on request.
+- Work on a branch per issue (`issue/<n>-<words>`, made from `developer`, the default branch) and merge it into
+  `developer` with a pull request. Merging into `main` (which creates a release) is only done by Davey.
 - Documentation (README, this file, code comments) is written in English.
 - Format with Prettier (`npm run format`); the settings live in `.prettierrc` and apply to everything in this
   repository.
@@ -29,9 +30,12 @@ Nothing in the tests touches the network, GitHub or the real `npm`:
 - **Commands** are run through `exec` (default: `run` from `src/runner.js`). Functions such as `nextjs.steps()` and
   `repoSteps()` accept an `exec` parameter, so tests pass a fake that records the commands and simulates what the real
   tools do on disk (for example creating `next.config.ts` like `create-next-app` does).
-- **Prompts** (`@inquirer/prompts`) are injected as `prompts` in `askRepo()`, `nextjs.ask()`, `nestjs.ask()` and
-  `postgres.ask()`, and `main()` takes `prompts`, `ask`, `registry`, `backendRegistry`, `execute` and `log`. A new
-  database goes in `src/databases/` and is registered in `src/databases/index.js`.
+- **Prompts** are injected as `prompts` in `askRepo()`, `nestjs.ask()`, `postgres.ask()`, `linked.ask()`, `oidc.ask()`,
+  `askClaude()`, `askCloud()` and `update()` (`nextjs.ask()` asks nothing), and `main()` takes `projectDir`, `prompts`,
+  `ask`, `askClaude`, `askCloud`, `registry`, `backendRegistry`, `execute`, `log` and `answersFile`. A new database goes
+  in `src/databases/` and is registered in `src/databases/index.js`.
+- **Every question of a new project** uses the wrappers of `src/prompts.js` (`select`, `input`, `password`, `confirm`,
+  `checkbox`), never `@inquirer/prompts` directly: otherwise `--answers` and `.dafkedd-answers.json` skip it.
 - **Files** are written to a temporary folder (`fs.mkdtemp`) that is removed after each test.
 
 ### Documentation

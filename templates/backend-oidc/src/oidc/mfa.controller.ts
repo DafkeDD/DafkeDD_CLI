@@ -1,5 +1,13 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common'
-import { ApiBadRequestResponse, ApiConflictResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
+import {
+    ApiBadRequestResponse,
+    ApiConflictResponse,
+    ApiForbiddenResponse,
+    ApiOkResponse,
+    ApiOperation,
+    ApiTags,
+    ApiTooManyRequestsResponse
+} from '@nestjs/swagger'
 import { Access, Auth, type AuthContext } from '../access/access.js'
 import { MfaCodeDto } from './mfa.dto.js'
 import { MfaService } from './mfa.service.js'
@@ -37,6 +45,7 @@ export class MfaController {
     })
     @ApiOkResponse({ description: '{ enabled: true, recoveryCodes }' })
     @ApiBadRequestResponse({ description: 'oidc.MFA_INVALID_CODE or oidc.MFA_SETUP_FIRST' })
+    @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS' })
     enable(@Auth() auth: AuthContext, @Body() body: MfaCodeDto) {
         return this.mfa.enable(auth.userId, body.code, auth.sessionId || null)
     }
@@ -46,6 +55,11 @@ export class MfaController {
     @ApiOperation({ summary: 'Turn two-factor authentication off (needs a code or a recovery code)' })
     @ApiOkResponse({ description: '{ enabled: false }' })
     @ApiBadRequestResponse({ description: 'oidc.MFA_INVALID_CODE' })
+    @ApiForbiddenResponse({
+        description:
+            'oidc.MFA_REQUIRED: OIDC_MFA=required, it cannot be turned off (or errors.FORBIDDEN: the account is blocked, or oidc.EID_REQUIRED: OIDC_EID_REQUIRED and no eID linked yet)'
+    })
+    @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS' })
     disable(@Auth() auth: AuthContext, @Body() body: MfaCodeDto) {
         return this.mfa.disable(auth.userId, body.code)
     }
@@ -55,6 +69,7 @@ export class MfaController {
     @ApiOperation({ summary: 'Ten new recovery codes (the old ones stop working; needs a code)' })
     @ApiOkResponse({ description: '{ recoveryCodes }' })
     @ApiBadRequestResponse({ description: 'oidc.MFA_INVALID_CODE' })
+    @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS' })
     recoveryCodes(@Auth() auth: AuthContext, @Body() body: MfaCodeDto) {
         return this.mfa.regenerateRecoveryCodes(auth.userId, body.code)
     }

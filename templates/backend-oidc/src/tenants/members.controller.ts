@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common'
 import {
     ApiAcceptedResponse,
+    ApiBadRequestResponse,
     ApiConflictResponse,
     ApiNoContentResponse,
     ApiNotFoundResponse,
@@ -42,6 +43,10 @@ export class MembersController {
     @HttpCode(HttpStatus.ACCEPTED)
     @ApiOperation({ summary: 'Invite someone by email as user or admin (the link is valid for 7 days)' })
     @ApiAcceptedResponse({ description: '{ status: "invited", email, id }' })
+    @ApiBadRequestResponse({
+        description:
+            'oidc.INVITATION_APP_UNKNOWN (an app it cannot give), oidc.ROLE_UNKNOWN (a role the app does not have) or validation'
+    })
     @ApiConflictResponse({ description: 'oidc.ALREADY_MEMBER' })
     invite(@Auth() auth: AuthContext, @Body() body: InviteDto, @I18n() i18n: I18nContext) {
         return this.members.invite(auth.userId, this.tenant(auth), body, i18n.lang)

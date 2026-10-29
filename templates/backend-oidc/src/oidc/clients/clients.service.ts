@@ -45,8 +45,9 @@ export class ClientsService {
     ) {}
 
     /**
-     * The product an app sells (empty: none). It must exist on /licenses (oidc.CLIENT_UNKNOWN_PRODUCT) and can belong to
-     * only one app (oidc.CLIENT_PRODUCT_TAKEN): one licence per user per app.
+     * The product an app sells (empty: none). It must exist in the app catalogue, /admin/catalog
+     * (oidc.CLIENT_UNKNOWN_PRODUCT), and can belong to only one app (oidc.CLIENT_PRODUCT_TAKEN): one licence per user per
+     * app.
      */
     private async product(code: string | null | undefined, clientId: string | null): Promise<string | null> {
         const product = code?.trim() || null

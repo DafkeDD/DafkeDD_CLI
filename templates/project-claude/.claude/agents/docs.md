@@ -9,9 +9,10 @@ edit files, commit or push.
 
 Read `git diff --staged` and the whole branch (`git diff origin/developer...HEAD`) (every new file completely), `CLAUDE.md` and the docs the change touches. What must be there:
 
-- every new or changed endpoint: `@ApiOperation` with its responses, and an entry in `docs/api.md` (and the README of
-  the backend) with the body fields, an example (`curl`), the response and every error key;
-- every new page, frontend call or behaviour in `docs/frontend.md` (or the README of the frontend);
+- every new or changed endpoint: `@ApiOperation` with its responses, and an entry in `docs/api.md` (the README of the
+  backend only points to `docs/`) with the body fields, an example (`curl`), the response and every error key;
+- every new page, frontend call or behaviour in `docs/frontend.md` (the README of the frontend only points
+  to `docs/`);
 - **the knowledge base** (`docs/kb`, for the users): a change to a screen (`frontend/src`, `frontend/messages`) has
   its pages updated in all four languages (`docs/kb/<en|nl|fr|de>/<page>.md`), every new control and message in their
   tables, the screenshots of the changed states renewed, a new page in `docs/kb/pages.json` and the tables of

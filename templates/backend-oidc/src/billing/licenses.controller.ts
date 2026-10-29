@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPi
 import {
     ApiBadRequestResponse,
     ApiConflictResponse,
+    ApiCreatedResponse,
     ApiNotFoundResponse,
     ApiOkResponse,
     ApiOperation,
@@ -52,10 +53,11 @@ export class LicensesController {
         summary:
             'Buy seats of a product, per month or per year: answers the checkout of Mollie (or nothing when a discount code makes it free)'
     })
-    @ApiOkResponse({
+    @ApiCreatedResponse({
         description:
             '{ status: "pending" | "active", checkoutUrl, subscriptionId }: active (checkoutUrl null) when a discount code makes it free'
     })
+    @ApiNotFoundResponse({ description: 'billing.PRODUCT_NOT_FOUND' })
     @ApiConflictResponse({ description: 'billing.SUBSCRIPTION_EXISTS: change the seats instead' })
     @ApiBadRequestResponse({
         description:
@@ -69,7 +71,12 @@ export class LicensesController {
     @Patch('subscriptions/:productCode')
     @ApiOperation({ summary: 'More seats (a payment for the rest of the period) or fewer (at once, no refund)' })
     @ApiOkResponse({ description: '{ status: "pending" | "updated" | "unchanged", checkoutUrl }' })
-    @ApiConflictResponse({ description: 'billing.NO_SUBSCRIPTION, billing.FREE_SUBSCRIPTION or billing.SEATS_IN_USE' })
+    @ApiNotFoundResponse({ description: 'billing.PRODUCT_NOT_FOUND' })
+    @ApiConflictResponse({
+        description:
+            'billing.NO_SUBSCRIPTION, billing.FREE_SUBSCRIPTION, billing.RENEWAL_PENDING or billing.SEATS_IN_USE'
+    })
+    @ApiServiceUnavailableResponse({ description: 'billing.PAYMENTS_DISABLED (PAYMENTS=off)' })
     seats(@Auth() auth: AuthContext, @Param('productCode', ProductCodePipe) code: string, @Body() body: SeatsDto) {
         return this.billing.changeSeats(auth, code, body.seats)
     }
@@ -77,7 +84,9 @@ export class LicensesController {
     @Delete('subscriptions/:productCode')
     @ApiOperation({ summary: 'Cancel: no more renewals; the seats stay until the end of the paid period' })
     @ApiOkResponse({ description: '{ status: "canceled", endsAt }' })
+    @ApiNotFoundResponse({ description: 'billing.PRODUCT_NOT_FOUND' })
     @ApiConflictResponse({ description: 'billing.NO_SUBSCRIPTION' })
+    @ApiServiceUnavailableResponse({ description: 'billing.PAYMENTS_DISABLED (PAYMENTS=off)' })
     cancel(@Auth() auth: AuthContext, @Param('productCode', ProductCodePipe) code: string) {
         return this.billing.cancel(auth, code)
     }
@@ -95,7 +104,10 @@ export class LicensesController {
 
     @Post(':productCode/trials/:userId')
     @ApiOperation({ summary: 'Start the trial of a member (once per product)' })
-    @ApiOkResponse({ description: '{ userId, endsAt }' })
+    @ApiCreatedResponse({ description: '{ userId, endsAt }' })
+    @ApiNotFoundResponse({
+        description: 'billing.PRODUCT_NOT_FOUND, or billing.NOT_A_MEMBER (not a member of the organisation)'
+    })
     @ApiConflictResponse({
         description: 'billing.TRIAL_USED, or billing.DEMO_DISABLED: the demo of this product is off'
     })
@@ -111,7 +123,10 @@ export class LicensesController {
     @ApiOperation({
         summary: 'Take a seat yourself (the admin that bought the product); nothing changes when you have one'
     })
-    @ApiOkResponse({ description: '{ userId, assigned: true }' })
+    @ApiCreatedResponse({ description: '{ userId, assigned: true }' })
+    @ApiNotFoundResponse({
+        description: 'billing.PRODUCT_NOT_FOUND, or billing.NOT_A_MEMBER (not a member of the organisation)'
+    })
     @ApiConflictResponse({ description: 'billing.NO_FREE_SEAT: buy more seats, or take one back' })
     takeSeat(@Auth() auth: AuthContext, @Param('productCode', ProductCodePipe) code: string) {
         return this.billing.assign(auth, code, auth.userId)
@@ -119,7 +134,10 @@ export class LicensesController {
 
     @Post(':productCode/seats/:userId')
     @ApiOperation({ summary: 'Give a member a seat (paid or free)' })
-    @ApiOkResponse({ description: '{ userId, assigned: true }' })
+    @ApiCreatedResponse({ description: '{ userId, assigned: true }' })
+    @ApiNotFoundResponse({
+        description: 'billing.PRODUCT_NOT_FOUND, or billing.NOT_A_MEMBER (not a member of the organisation)'
+    })
     @ApiConflictResponse({ description: 'billing.NO_FREE_SEAT: buy more seats, or take one back' })
     assign(
         @Auth() auth: AuthContext,
@@ -132,7 +150,7 @@ export class LicensesController {
     @Delete(':productCode/seats/:userId')
     @ApiOperation({ summary: 'Take a seat back: it is free for another member' })
     @ApiOkResponse({ description: '{ userId, assigned: false }' })
-    @ApiNotFoundResponse({ description: 'billing.SEAT_NOT_FOUND' })
+    @ApiNotFoundResponse({ description: 'billing.PRODUCT_NOT_FOUND or billing.SEAT_NOT_FOUND' })
     unassign(
         @Auth() auth: AuthContext,
         @Param('productCode', ProductCodePipe) code: string,

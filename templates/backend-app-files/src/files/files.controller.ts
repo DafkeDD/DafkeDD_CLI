@@ -13,16 +13,21 @@ import {
     Res
 } from '@nestjs/common'
 import {
+    ApiBadRequestResponse,
     ApiBearerAuth,
     ApiBody,
+    ApiConflictResponse,
     ApiConsumes,
     ApiForbiddenResponse,
     ApiNoContentResponse,
     ApiNotFoundResponse,
+    ApiOkResponse,
     ApiOperation,
+    ApiPayloadTooLargeResponse,
     ApiProperty,
     ApiTags,
-    ApiUnauthorizedResponse
+    ApiUnauthorizedResponse,
+    ApiUnsupportedMediaTypeResponse
 } from '@nestjs/swagger'
 import { IsOptional, IsString, MaxLength } from 'class-validator'
 import type { Request, Response } from 'express'
@@ -65,6 +70,7 @@ export class FilesController {
     @Get(':id')
     @Roles('editor', 'viewer')
     @ApiOperation({ summary: 'The file itself; its type follows from its content. With If-None-Match: 304' })
+    @ApiBadRequestResponse({ description: 'errors.BAD_REQUEST: the id is not a uuid' })
     @ApiNotFoundResponse({ description: 'errors.FILE_NOT_FOUND' })
     async download(
         @CurrentCaller() caller: Caller,
@@ -94,6 +100,15 @@ export class FilesController {
     @ApiOperation({ summary: `Save a file: JPEG, PNG, WebP or PDF, at most ${MAX_FILE_BYTES / 1024 / 1024} MB` })
     @ApiConsumes('application/octet-stream', 'image/jpeg', 'image/png', 'image/webp', 'application/pdf')
     @ApiBody({ schema: { type: 'string', format: 'binary' } })
+    @ApiOkResponse({ description: '{ id, name, contentType, size, sha256, createdBy, createdAt }' })
+    @ApiBadRequestResponse({
+        description: 'errors.FILE_EMPTY, or errors.BAD_REQUEST (the id is not a uuid, a name over 200 characters)'
+    })
+    @ApiConflictResponse({ description: 'errors.CONFLICT: other content under the same id' })
+    @ApiPayloadTooLargeResponse({
+        description: `errors.FILE_TOO_LARGE (over ${MAX_FILE_BYTES / 1024 / 1024} MB), or errors.PAYLOAD_TOO_LARGE (a body over ${MAX_FILE_BYTES / 1024 / 1024 + 1} MB)`
+    })
+    @ApiUnsupportedMediaTypeResponse({ description: 'errors.FILE_TYPE_NOT_ALLOWED: only JPEG, PNG, WebP or PDF' })
     save(
         @CurrentCaller() caller: Caller,
         @Param('id', ParseUUIDPipe) id: string,
@@ -111,6 +126,7 @@ export class FilesController {
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiOperation({ summary: 'Remove a file' })
     @ApiNoContentResponse({ description: 'Removed' })
+    @ApiBadRequestResponse({ description: 'errors.BAD_REQUEST: the id is not a uuid' })
     @ApiNotFoundResponse({ description: 'errors.FILE_NOT_FOUND' })
     remove(@CurrentCaller() caller: Caller, @Param('id', ParseUUIDPipe) id: string) {
         return this.files.remove(caller.tenant!.id, id)

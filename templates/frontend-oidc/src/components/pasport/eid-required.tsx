@@ -107,6 +107,7 @@ export function EidReminder({ href }: { href: string }) {
         }
         setHidden(true)
     }
+    // A tinted notice (accent-tint with its hairline and an icon tile), never a coloured left border
     return (
         <div
             className='card card-pad fade-in'
@@ -117,19 +118,30 @@ export function EidReminder({ href }: { href: string }) {
                 gap: 14,
                 flexWrap: 'wrap',
                 marginBottom: 18,
-                borderLeft: '3px solid var(--accent)'
+                background: 'var(--accent-tint)',
+                borderColor: 'var(--accent-border)'
             }}
         >
-            <div style={{ color: 'var(--accent)', flex: 'none' }}>
-                <Icon name='eid' size={22} />
+            <div
+                aria-hidden
+                style={{
+                    display: 'grid',
+                    placeItems: 'center',
+                    width: 40,
+                    height: 40,
+                    flex: 'none',
+                    borderRadius: 'var(--r-md)',
+                    background: 'var(--surface)',
+                    color: 'var(--accent)'
+                }}
+            >
+                <Icon name='eid' size={20} />
             </div>
-            <div style={{ flex: 1, minWidth: 220 }}>
-                <div style={{ fontWeight: 650, fontSize: 14.5 }}>{t('reminderTitle')}</div>
-                <div className='t-muted' style={{ fontSize: 13, marginTop: 2 }}>
-                    {t('reminderText')}
-                </div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontWeight: 650, fontSize: 14.5, color: 'var(--text)' }}>{t('reminderTitle')}</div>
+                <div style={{ fontSize: 13, marginTop: 2, color: 'var(--text-2)' }}>{t('reminderText')}</div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <Btn variant='ghost' size='sm' onClick={later}>
                     {t('reminderLater')}
                 </Btn>

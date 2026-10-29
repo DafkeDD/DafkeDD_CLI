@@ -460,6 +460,7 @@ export class AuthGuard implements CanActivate {
     'src/auth/auth.controller.ts': `import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  ApiBadRequestResponse,
   ApiConflictResponse,
   ApiCookieAuth,
   ApiCreatedResponse,
@@ -502,6 +503,7 @@ export class AuthController {
   @Post('register')
   @ApiOperation({ summary: 'Create an account and log in (sets the session cookie)' })
   @ApiCreatedResponse({ description: 'The new user, without the password' })
+  @ApiBadRequestResponse({ description: 'errors.BAD_REQUEST: invalid input, translated per field' })
   @ApiConflictResponse({ description: 'errors.EMAIL_TAKEN, translated' })
   @ApiTooManyRequestsResponse({ description: 'errors.TOO_MANY_REQUESTS, translated' })
   @UseGuards(ThrottlerGuard)
@@ -515,6 +517,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Log in (sets the session cookie)' })
   @ApiOkResponse({ description: 'The user, without the password' })
+  @ApiBadRequestResponse({ description: 'errors.BAD_REQUEST: invalid input, translated per field' })
   @ApiUnauthorizedResponse({ description: 'errors.INVALID_CREDENTIALS, translated' })
   @ApiTooManyRequestsResponse({ description: 'errors.TOO_MANY_REQUESTS, translated' })
   @UseGuards(ThrottlerGuard)

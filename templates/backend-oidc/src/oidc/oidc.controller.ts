@@ -1,6 +1,7 @@
 import { Controller, Get, HttpStatus, Param, Post, Req, Res } from '@nestjs/common'
 import {
     ApiBadRequestResponse,
+    ApiForbiddenResponse,
     ApiOkResponse,
     ApiOperation,
     ApiProduces,
@@ -62,6 +63,13 @@ const LOGIN_ERRORS: Record<string, { status: number; error: string }> = {
     'oidc.EXTERNAL_EMAIL_TAKEN': { status: 409, error: 'EXTERNAL_EMAIL_TAKEN' },
     'oidc.EXTERNAL_OTHER_LINKED': { status: 409, error: 'EXTERNAL_OTHER_LINKED' }
 }
+
+/** Swagger: a login that expired (10 minutes) or a wrong csrf. */
+const EXPIRED =
+    'oidc.EXPIRED: the login request expired (JSON { status: "expired", message }; the HTML page answers 400)'
+/** Swagger: the account belongs to no organisation (and is no superadmin). */
+const NO_TENANT = 'oidc.NO_TENANT: the account belongs to no organisation (JSON { status: "no-tenant", message })'
+const TOO_MANY = 'oidc.TOO_MANY_ATTEMPTS (JSON { status: "error", error: "TOO_MANY_ATTEMPTS", message })'
 
 /** The cookies of logins at another OpenID Connect server (oidc_ext_<...>): only sent to our callback. */
 const EXTERNAL_PATH = OIDC.COOKIE_PATH + '/external'
@@ -129,12 +137,9 @@ export class OidcController {
     @ApiProduces('text/html', 'application/json')
     @ApiOkResponse({
         description:
-            'The login form, or { step, clientId, clientName, registration, password, eid, external, externals, pending, csrf, loginHint }'
+            'The login form, or { step, clientId, clientName, registration, password, eid, passkey, external, externals, pending, csrf, loginHint }'
     })
-    @ApiResponse({
-        status: 410,
-        description: 'The login request expired (HTML page or { status: "expired", message })'
-    })
+    @ApiResponse({ status: 410, description: EXPIRED })
     async interaction(
         @Param('id') id: string,
         @Req() request: Request,
@@ -201,7 +206,20 @@ export class OidcController {
     })
     @ApiProduces('text/html', 'application/json')
     @ApiResponse({ status: 303, description: 'Logged in: back to the client with a code' })
-    @ApiOkResponse({ description: 'The login form again with a translated error, or the organisation choice' })
+    @ApiOkResponse({
+        description:
+            'The next step (second factor, organisation choice, consent, "no licence" for an app that sells a product), or JSON { status: "redirect", location }'
+    })
+    @ApiUnauthorizedResponse({
+        description:
+            'oidc.INVALID_CREDENTIALS: the form again with the error (JSON { status: "error", error, message })'
+    })
+    @ApiForbiddenResponse({
+        description:
+            'oidc.EMAIL_NOT_VERIFIED, oidc.PASSWORD_LOGIN_OFF (OIDC_EXTERNAL_ONLY) or oidc.NO_TENANT (no organisation)'
+    })
+    @ApiResponse({ status: 410, description: EXPIRED })
+    @ApiResponse({ status: 429, description: TOO_MANY })
     async login(
         @Param('id') id: string,
         @Req() request: Request,
@@ -222,7 +240,7 @@ export class OidcController {
     })
     @ApiOkResponse({ description: '{ status: "eid-challenge", nonce }' })
     @ApiResponse({ status: 404, description: 'oidc.EID_DISABLED (OIDC_EID=off)' })
-    @ApiResponse({ status: 410, description: 'The login request expired' })
+    @ApiResponse({ status: 410, description: EXPIRED })
     async eidChallenge(
         @Param('id') id: string,
         @Req() request: Request,
@@ -243,11 +261,18 @@ export class OidcController {
             'Log in with the Belgian eID, step 2 (JSON { csrf, token }): the token of the bridge after the PIN. Only the first factor: the code of the authenticator app follows (or its setup). Rate limited.'
     })
     @ApiOkResponse({ description: '{ status: "redirect", location } or the organisation choice' })
+    @ApiResponse({ status: 400, description: 'oidc.EID_EXPIRED: no challenge in this login (ask a new one)' })
+    @ApiResponse({ status: 401, description: 'oidc.EID_INVALID: signature, origin, nonce or certificate' })
     @ApiResponse({
-        status: 401,
-        description:
-            'EID_INVALID (signature, origin, nonce or certificate) or 404 EID_NOT_LINKED (no account has this eID)'
+        status: 403,
+        description: 'oidc.EMAIL_NOT_VERIFIED, oidc.ACCOUNT_DISABLED or oidc.NO_TENANT (no organisation)'
     })
+    @ApiResponse({
+        status: 404,
+        description: 'oidc.EID_NOT_LINKED (no account has this eID) or oidc.EID_DISABLED (OIDC_EID=off)'
+    })
+    @ApiResponse({ status: 410, description: EXPIRED })
+    @ApiResponse({ status: 429, description: TOO_MANY })
     @ApiResponse({ status: 503, description: 'EID_UNAVAILABLE: the OCSP service of the eID could not be reached' })
     async eidLogin(
         @Param('id') id: string,
@@ -272,6 +297,7 @@ export class OidcController {
     })
     @ApiResponse({ status: 303, description: 'To the other server (form), or JSON { status: "redirect", location }' })
     @ApiResponse({ status: 404, description: 'oidc.EXTERNAL_DISABLED: no other server is set up' })
+    @ApiResponse({ status: 410, description: EXPIRED })
     async externalStart(
         @Param('id') id: string,
         @Req() request: Request,
@@ -293,7 +319,8 @@ export class OidcController {
     })
     @ApiResponse({
         status: 303,
-        description: 'Back to the client, or to the login page (second factor, organisation, error)'
+        description:
+            'Back to the client, or to the login page (second factor, organisation, error: oidc.EXTERNAL_FAILED, oidc.EXTERNAL_NO_EMAIL, oidc.EXTERNAL_EMAIL_UNVERIFIED, oidc.ACCOUNT_DISABLED, oidc.EXTERNAL_EMAIL_TAKEN, oidc.EXTERNAL_OTHER_LINKED)'
     })
     async externalCallback(@Req() request: Request, @Res() response: Response, @I18n() i18n: I18nContext) {
         // The cookie of the login with this state (other logins in other tabs stay as they are)
@@ -387,6 +414,7 @@ export class OidcController {
         description: '{ status: "passkey-challenge", options: { challenge, rpId, userVerification, timeout } }'
     })
     @ApiResponse({ status: 404, description: 'oidc.PASSKEYS_DISABLED' })
+    @ApiResponse({ status: 410, description: EXPIRED })
     async passkeyChallenge(
         @Param('id') id: string,
         @Req() request: Request,
@@ -407,7 +435,15 @@ export class OidcController {
             'Log in with a passkey, step 2 (JSON { csrf, credential }): the answer of navigator.credentials.get(). Counts as two-step verification. Rate limited.'
     })
     @ApiOkResponse({ description: '{ status: "redirect", location } or the organisation choice' })
+    @ApiResponse({ status: 400, description: 'oidc.PASSKEY_EXPIRED: no challenge in this login (ask a new one)' })
     @ApiResponse({ status: 401, description: 'PASSKEY_INVALID (signature, origin, challenge) or PASSKEY_UNKNOWN' })
+    @ApiResponse({
+        status: 403,
+        description: 'oidc.ACCOUNT_DISABLED, oidc.EMAIL_NOT_VERIFIED or oidc.NO_TENANT (no organisation)'
+    })
+    @ApiResponse({ status: 404, description: 'oidc.PASSKEYS_DISABLED' })
+    @ApiResponse({ status: 410, description: EXPIRED })
+    @ApiResponse({ status: 429, description: TOO_MANY })
     async passkeyLogin(
         @Param('id') id: string,
         @Req() request: Request,
@@ -432,6 +468,9 @@ export class OidcController {
     @ApiProduces('text/html', 'application/json')
     @ApiResponse({ status: 303, description: 'Back to the client with a code, or the organisation choice' })
     @ApiResponse({ status: 401, description: 'Wrong or used code (the page again, or { status: "mfa", error })' })
+    @ApiResponse({ status: 403, description: NO_TENANT })
+    @ApiResponse({ status: 410, description: EXPIRED })
+    @ApiResponse({ status: 429, description: 'oidc.TOO_MANY_ATTEMPTS (the page again, or { status: "mfa", error })' })
     async mfa(@Param('id') id: string, @Req() request: Request, @Res() response: Response, @I18n() i18n: I18nContext) {
         const result = await this.oidc.verifyMfa(
             id,
@@ -448,6 +487,8 @@ export class OidcController {
     })
     @ApiProduces('text/html', 'application/json')
     @ApiResponse({ status: 303, description: 'Back to the client with a code, or the organisation choice' })
+    @ApiResponse({ status: 403, description: NO_TENANT })
+    @ApiResponse({ status: 410, description: EXPIRED })
     async continue(
         @Param('id') id: string,
         @Req() request: Request,
@@ -468,6 +509,7 @@ export class OidcController {
     })
     @ApiProduces('text/html', 'application/json')
     @ApiResponse({ status: 303, description: 'Back to the client with a code' })
+    @ApiResponse({ status: 410, description: EXPIRED })
     async tenant(
         @Param('id') id: string,
         @Req() request: Request,
@@ -555,16 +597,22 @@ export class OidcController {
 
     @Get('userinfo')
     @ApiOperation({ summary: 'Claims about the logged in user (needs the access token as a Bearer token)' })
-    @ApiOkResponse({ description: '{ sub, name, email, email_verified, tenant }, depending on the scopes' })
+    @ApiOkResponse({
+        description: '{ sub, name, locale?, email, email_verified, tenant, superadmin? }, depending on the scopes'
+    })
     @ApiUnauthorizedResponse({ description: 'invalid_token' })
+    @ApiForbiddenResponse({ description: 'insufficient_scope: the token has no openid scope' })
     async userinfo(@Req() request: Request, @Res() response: Response) {
         await this.answerUserinfo(this.bearer(request), response)
     }
 
     @Post('userinfo')
     @ApiOperation({ summary: 'Same as GET /oidc/userinfo; the token may also be sent as access_token in a form body' })
-    @ApiOkResponse({ description: '{ sub, name, email, email_verified, tenant }, depending on the scopes' })
+    @ApiOkResponse({
+        description: '{ sub, name, locale?, email, email_verified, tenant, superadmin? }, depending on the scopes'
+    })
     @ApiUnauthorizedResponse({ description: 'invalid_token' })
+    @ApiForbiddenResponse({ description: 'insufficient_scope: the token has no openid scope' })
     async userinfoPost(@Req() request: Request, @Res() response: Response) {
         const body = (request.body ?? {}) as Params
         const token = this.bearer(request) ?? (typeof body.access_token === 'string' ? body.access_token : undefined)

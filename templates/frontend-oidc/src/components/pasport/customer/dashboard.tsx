@@ -31,7 +31,7 @@ function VaultWidget() {
             tabIndex={0}
             onClick={() => router.push('/vault')}
             onKeyDown={e => e.key === 'Enter' && router.push('/vault')}
-            style={{ borderLeft: hasCert ? '3px solid var(--accent)' : '3px solid var(--border)' }}
+            style={hasCert ? { borderColor: 'var(--accent-border)' } : undefined}
         >
             <div
                 style={{

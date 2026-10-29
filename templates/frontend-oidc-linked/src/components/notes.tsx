@@ -15,8 +15,8 @@ async function problem(response: Response, offline: string): Promise<string> {
 
 /**
  * The notes of the organisation: the example of data of THIS app (its own API and database), per tenant. Everyone of
- * the organisation with the role editor or viewer reads them, an editor adds them (`canEdit`); only its beheerder
- * (admin) removes them. Through /api/app (token on the server).
+ * the organisation with the role editor or viewer reads them, an editor adds them (`canEdit`); only its admin removes
+ * them. Through /api/app (token on the server).
  */
 export function Notes({ admin, me, canEdit = true }: { admin: boolean; me: string; canEdit?: boolean }) {
     const t = useTranslations('Notes')

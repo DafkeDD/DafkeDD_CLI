@@ -32,8 +32,8 @@ export const DIR = 'frontend'
 export const LOCALES = ['en', 'nl', 'fr', 'de']
 export const DEFAULT_LOCALE = 'en'
 
-// DafkeDD UI: componentenbibliotheek met een eigen CLI (dafke-ui). De CLI staat nog niet op npm,
-// dus halen we de repo tijdelijk op, draaien de CLI in ./frontend en ruimen de kloon weer op.
+// DafkeDD UI: a component library with a CLI of its own (dafke-ui). That CLI is not on npm yet,
+// so the repository is fetched temporarily, its CLI runs in ./frontend and the clone is removed again.
 export const UI_REPO = 'https://github.com/DafkeDD/DafkeDD_UI.git'
 export const UI_BRANCH = 'developer'
 export const UI_CONFIG = {
@@ -66,8 +66,8 @@ export const PRETTIERRC = `{
 }
 `
 
-// De DafkeDD UI-bestanden blijven ongemoeid, anders ziet 'dafke-ui update' ze als "zelf aangepast".
-// AGENTS.md en next-env.d.ts worden door Next.js zelf herschreven (ook bij 'next dev').
+// The DafkeDD UI files are left alone, otherwise 'dafke-ui update' sees them as "modified".
+// AGENTS.md and next-env.d.ts are rewritten by Next.js itself (also by 'next dev').
 export const PRETTIERIGNORE = `node_modules
 .next
 out
@@ -79,7 +79,7 @@ dafke-ui.lock.json
 src/components/ui
 `
 
-// Alle teksten bestaan in elke taal. Voeg je een taal toe aan LOCALES, voeg dan ook hier een vertaling toe.
+// Every text exists in every language. When you add a language to LOCALES, add its translation here too.
 export const MESSAGES = {
     en: {
         HomePage: {
@@ -158,7 +158,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
 });
 `,
 
-    // Next.js 16 gebruikt proxy.ts (voorheen middleware.ts)
+    // Next.js 16 uses proxy.ts (formerly middleware.ts)
     'src/proxy.ts': `import createMiddleware from 'next-intl/middleware';
 import { routing } from './i18n/routing';
 
@@ -169,7 +169,7 @@ export const config = {
 };
 `,
 
-    // Vertalingen: altijd in alle talen (en, nl, fr, de)
+    // Translations: always in every language (en, nl, fr, de)
     ...Object.fromEntries(
         LOCALES.map(locale => [`messages/${locale}.json`, JSON.stringify(MESSAGES[locale], null, 2) + '\n'])
     )
@@ -177,8 +177,8 @@ export const config = {
 
 // The theme before the first paint (DafkeDD UI): every frontend, its layout comes with the Pasport design.
 export const uiFiles = {
-    // Zelfde opslagsleutels als de ThemeProvider van DafkeDD UI ('lui-theme'), zodat het script en de provider overeenkomen.
-    // Bij een taalwissel zet Next de attributen van <html> terug: thema en dichtheid worden dan opnieuw toegepast.
+    // The same storage keys as the ThemeProvider of DafkeDD UI ('lui-theme'), so the script and the provider agree.
+    // On a language switch Next resets the attributes of <html>: the theme and the density are then applied again.
     'src/components/theme-script.tsx': `'use client';
 
 import { useEffect } from 'react';
@@ -214,7 +214,7 @@ export function ThemeScript() {
 `
 }
 
-// Met DafkeDD UI komen kleuren en lettertype uit de tokens van de bibliotheek (base.css stijlt de body).
+// With DafkeDD UI the colours and the font come from the tokens of the library (base.css styles the body).
 export const UI_GLOBALS_CSS = `@import 'tailwindcss';
 @import '../components/ui/ui.css';
 
@@ -549,7 +549,7 @@ export async function setPort(root, port) {
     await fs.writeFile(file, JSON.stringify(pkg, null, 2) + '\n')
 }
 
-// next.config.ts van create-next-app bevat o.a. de Tailwind-koppeling: nooit overschrijven, enkel next-intl toevoegen.
+// The next.config.ts of create-next-app holds the Tailwind setup among others: never overwrite it, only add next-intl.
 export async function patchNextConfig(root) {
     const file = path.join(root, 'next.config.ts')
     let content = await fs.readFile(file, 'utf8')
@@ -566,7 +566,7 @@ export async function patchNextConfig(root) {
     await fs.writeFile(file, content)
 }
 
-// Dark mode via data-theme (zoals DafkeDD UI) in plaats van enkel prefers-color-scheme.
+// Dark mode through data-theme (like DafkeDD UI) instead of only prefers-color-scheme.
 export async function patchGlobalsCss(root) {
     const file = path.join(root, 'src/app/globals.css')
     let content = await fs.readFile(file, 'utf8')
@@ -625,7 +625,7 @@ export async function setupDafkeUi({ root, exec = run, cli, all = true }) {
     await exec('node', [cli, 'init', '--yes'], { cwd: root })
     await ignoreUiInEslint(root)
     if (all) await exec('node', [cli, 'add', '--all'], { cwd: root })
-    // CSS-verzamelbestand van DafkeDD UI laden in de globale stylesheet
+    // Load the CSS bundle of DafkeDD UI in the global stylesheet
     const css = path.join(root, 'src/app/globals.css')
     const importLine = '@import "../components/ui/ui.css";'
     let content = await fs.readFile(css, 'utf8')
@@ -752,7 +752,7 @@ export const nextjs = {
                 title: 'next-intl configureren',
                 weight: 1,
                 run: async () => {
-                    // Standaard template-pagina's vervangen door de [locale]-versie
+                    // Replace the default pages of the template by the [locale] version
                     await fs.rm(path.join(root, 'src/app/page.tsx'), { force: true })
                     await fs.rm(path.join(root, 'src/app/layout.tsx'), { force: true })
                     const withUi = ui === 'all'

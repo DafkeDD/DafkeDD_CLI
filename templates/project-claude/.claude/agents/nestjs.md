@@ -21,7 +21,7 @@ apply to the parts this project has (the login server, a linked app, a database)
   server its guards); the organisation comes from the session or the access token (`@CurrentCaller()` in a linked app),
   never from the request; its data always through `withTenant()` when the project has organisations.
 - **Swagger and docs**: `@ApiOperation` and the response decorators on every route; the endpoint (body, example,
-  response, errors) in `docs/api.md` and the README of the backend.
+  response, errors) in `docs/api.md` (the README of the backend only points to `docs/`).
 - **Tests**: unit specs next to the code, an e2e spec over HTTP (`test/*.e2e-spec.ts`, supertest, in-memory stores, the
   test keys of `test/token.ts` in a linked app), a db spec (`test/*.db-spec.ts`) for every query.
 - No warnings in `npm run build`, `npm run lint` or the tests; Prettier formats every file you edit.

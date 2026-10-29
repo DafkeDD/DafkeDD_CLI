@@ -432,7 +432,13 @@ export class CreateExampleDto {
 `,
 
     'src/examples/examples.controller.ts': `import { Body, Controller, Get, HttpStatus, Param, Post } from '@nestjs/common';
-import { ApiNotFoundResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBadRequestResponse,
+  ApiCreatedResponse,
+  ApiNotFoundResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AppException } from '../common/app.exception.js';
 import { CreateExampleDto } from './dto/create-example.dto.js';
 
@@ -442,6 +448,8 @@ import { CreateExampleDto } from './dto/create-example.dto.js';
 export class ExamplesController {
   @Post()
   @ApiOperation({ summary: 'Example with validation: invalid input gives a translated 400' })
+  @ApiCreatedResponse({ schema: { example: { id: 1, name: 'Ada', email: 'ada@example.com' } } })
+  @ApiBadRequestResponse({ description: 'errors.BAD_REQUEST, with a translated message per field' })
   create(@Body() dto: CreateExampleDto) {
     return { id: 1, name: dto.name, email: dto.email };
   }

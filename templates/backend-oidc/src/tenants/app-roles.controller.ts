@@ -26,10 +26,10 @@ export class AppRolesDto {
     roles!: string[] | null
 }
 
-const APP = '{ clientId, name, roles: [{ key, names: { en, nl, fr, de }, default }] }'
+const APP = '{ clientId, name, url, product, roles: [{ key, names: { en, nl, fr, de }, default }] }'
 
 /**
- * The roles per app in the current organisation, for its admins (beheerders): which apps have roles, who has which,
+ * The roles per app in the current organisation, for its admins: which apps have roles, who has which,
  * and giving them. The developer of an app defines its roles; the tokens of that app carry the roles of the user.
  */
 @ApiTags('tenant members')

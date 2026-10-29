@@ -20,7 +20,14 @@ in the project are the design, and a new screen looks as if it was always part o
      `Toggle`, `Badge`, `Avatar`, `AppIcon`, `ErrorNote`, `OkNote`, `Skeleton`), `widgets.tsx` (`Modal`, `OtpInput`,
      `QrCode`, the charts), `page-state.tsx` (`Loading`, `LoadError`, `Notice`), `toast.tsx` (`useToast`,
      `ThemeToggle`, `LocaleFloat`), `auth-layout.tsx` (the login screen), `shell.tsx` (`Shell`, the rail, the topbar,
-     the user's menu; on the login server `CustomerShell` and `AdminShell`);
+     the user's menu), `portal-shell.tsx` (`PortalShell` with the bell and the own status, `useMe`; on the login server
+     `CustomerShell` and `AdminShell` with their rails), `eid-required.tsx` (`EidRequired`, `EidReminder`,
+     `EidBackBanner`, `useEidStatus`), `page-state.tsx` also has `ClientRedirect`, `i18n.ts` (`useT`), `out-of-office.tsx`
+     (`OutOfOfficeDialog`, `OutOfOfficeNotice`) and `tour.tsx` (`Tour`, the first-time tour). Only on the login server:
+     `password-card.tsx` (`PasswordCard`) and `customer/my-apps.tsx` (`MyApps`) next to the other pages of `customer`,
+     `admin` and `tickets`. Only in a linked app: `page-head.tsx` (`PageHead`: `title`, `text`, `actions`) and
+     `profile.tsx`;
+   - `frontend/src/lib/portal.ts`: the types of the API and `useApi` / `useData` (the calls of the pages);
    - the pages: on the login server the route groups `src/app/[locale]/(portal)` (the customer portal) and
      `src/app/[locale]/admin/(panel)` (the superadmin panel), whose `layout.tsx` draws the shell, with their
      components in `src/components/pasport/customer`, `admin` and `tickets`; in a linked app `AppPage`
@@ -38,7 +45,7 @@ in the project are the design, and a new screen looks as if it was always part o
   `var(--text-2)`, `var(--r-md)`, `var(--sh-sm)`, …). No hex values, no Tailwind colour classes, no new fonts. Light and
   dark must both look right.
 - **One shell**: on the login server every page in the route group of the portal or the panel (its layout draws
-  `CustomerShell` or `AdminShell`; a new page in the rail goes in `shell.tsx`), in a linked app every page in
+  `CustomerShell` or `AdminShell`; a new page in the rail goes in their `nav` in `portal-shell.tsx`), in a linked app every page in
   `AppPage` with a new page in the rail through `APP_NAV` (`src/lib/nav.ts`). A linked app
   never gets a login or registration of its own: that is the login server's. The login and account screens use
   `AuthLayout`.
