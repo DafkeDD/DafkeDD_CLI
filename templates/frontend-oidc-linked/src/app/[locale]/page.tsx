@@ -33,7 +33,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
 
 /**
  * The licence and the notes, for whoever is logged in with an organisation: the notes only with a licence and a role in
- * this app (roles: the login server gives none without a licence; the beheerder can give none).
+ * this app (roles: the login server gives none without a licence; the admin can give none).
  */
 async function OrganisationNotes() {
     const session = await getSession()

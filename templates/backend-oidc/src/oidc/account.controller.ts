@@ -8,6 +8,7 @@ import {
     ApiNotFoundResponse,
     ApiOperation,
     ApiQuery,
+    ApiServiceUnavailableResponse,
     ApiTags,
     ApiTooManyRequestsResponse,
     ApiUnauthorizedResponse
@@ -85,8 +86,12 @@ export class AccountController {
     @ApiBadRequestResponse({ description: 'oidc.EID_EXPIRED: the challenge expired or is invalid' })
     @ApiUnauthorizedResponse({ description: 'oidc.EID_INVALID: the token of the bridge is not valid' })
     @ApiForbiddenResponse({ description: 'oidc.REGISTRATION_CLOSED' })
+    @ApiNotFoundResponse({ description: 'oidc.EID_DISABLED (OIDC_EID=off)' })
     @ApiConflictResponse({ description: 'oidc.EID_ALREADY_LINKED: this eID belongs to an account already' })
     @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS' })
+    @ApiServiceUnavailableResponse({
+        description: 'oidc.EID_UNAVAILABLE: the OCSP service of the eID could not be reached'
+    })
     registerWithEid(@Body() body: RegisterEidDto, @Req() request: Request, @I18n() i18n: I18nContext) {
         return this.accounts.registerWithEid(body, i18n.lang, ip(request))
     }
@@ -155,6 +160,9 @@ export class AccountController {
     @ApiNotFoundResponse({ description: 'oidc.EID_DISABLED (OIDC_EID=off)' })
     @ApiConflictResponse({ description: 'oidc.EID_ALREADY_LINKED: this eID belongs to an account already' })
     @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS' })
+    @ApiServiceUnavailableResponse({
+        description: 'oidc.EID_UNAVAILABLE: the OCSP service of the eID could not be reached'
+    })
     invitationEid(@Body() body: InvitationEidDto, @Req() request: Request) {
         return this.accounts.invitationEid(body, ip(request))
     }

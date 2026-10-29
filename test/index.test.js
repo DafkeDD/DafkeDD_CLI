@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { main, version } from '../src/index.js'
+import { docsParts, main, version } from '../src/index.js'
 
 /** Builds a fake frontend/backend plus injectable prompts that answer from `choices`. */
 function setup({ frontend = 'demo-fe', backend = 'demo-be', repo = null, claude = false } = {}) {
@@ -234,4 +234,16 @@ test('the real registry offers NestJS, not the linked app as a separate choice',
     const { backends } = await import('../src/backends/index.js')
     assert.equal(backends.linked.hidden, true)
     assert.ok(!backends.nestjs.hidden)
+})
+
+test('the pages in ./docs get an English title: docsTitle, otherwise the label of the choice', async () => {
+    const { backends } = await import('../src/backends/index.js')
+    const { frontends } = await import('../src/frontends/index.js')
+    const parts = docsParts(frontends.nextjs, backends.linked, { id: 'x', label: 'No docs' })
+    assert.deepEqual(
+        parts.map(part => part.title),
+        ['Next.js', 'App linked to a Pasport login server']
+    )
+    assert.doesNotMatch(parts[1].title, /koppelcode|bestaande/i)
+    assert.equal(docsParts({ dir: 'backend', docsFile: 'api.md', label: 'NestJS' })[0].title, 'NestJS')
 })

@@ -95,6 +95,21 @@ test('CLAUDE.md of a project: its parts, the rules, the branch per issue, the me
     assert.ok(!text.includes('- Files:'), 'no files module')
     assert.match(projectClaudeMd(pasport), /the \*\*Pasport login server\*\*/)
     assert.ok(!projectClaudeMd(frontendOnly).includes('`./backend`'))
+    // The docs live in docs/ (the READMEs only point there); update brings the code too; the seed of each kind
+    assert.match(text, /every endpoint in `docs\/api\.md` \(body, example, response, errors; the READMEs of/)
+    assert.ok(!text.includes('the README of the backend'))
+    assert.match(
+        text,
+        /`\.\.\. update` brings the agents, hooks, pipelines and the code of `\.\/backend`, `\.\/frontend` and/
+    )
+    assert.match(text, /`<file>\.dafkedd-new`/)
+    assert.match(projectClaudeMd(frontendOnly), /the code of `\.\/frontend` and `\.\/docs`/)
+    assert.ok(!text.includes('npm run seed'))
+    assert.match(text, /it creates a seed script in `\.\/backend`/)
+    assert.match(
+        projectClaudeMd(pasport),
+        /`npm run demo:data` and `npm run demo:clear` in `\.\/backend` already exist/
+    )
 })
 
 test('the CI checks every part on pushes and pull requests, with PostgreSQL for the database tests', () => {

@@ -6,10 +6,10 @@ import { freshSession } from '@/lib/refresh'
 /**
  * Only these parts of the API can be called through this route: members, the platform, the own two-step verification,
  * the eID, the own sessions, passkeys and allowed applications, licences and audit log, the heartbeat (who is online),
- * the own profile, the eHealth vault and the notifications.
+ * the own profile, the eHealth vault (its password and the colleagues who may use it) and the notifications.
  */
 const ALLOWED =
-    /^(?:(?:tenants\/current|admin)\/[A-Za-z0-9/_-]+|me\/(?:mfa|eid|sessions|passkeys)(?:\/[A-Za-z0-9/_-]+)?|me\/licenses(?:\/[a-z0-9-]+\/trial)?|me\/(?:audit|heartbeat|status|out-of-office|profile|vault|vault\/password|password))$/
+    /^(?:(?:tenants\/current|admin)\/[A-Za-z0-9/_-]+|me\/(?:mfa|eid|sessions|passkeys)(?:\/[A-Za-z0-9/_-]+)?|me\/licenses(?:\/[a-z0-9-]+\/trial)?|me\/(?:audit|heartbeat|status|out-of-office|profile|vault|vault\/password|vault\/colleagues|password))$/
 /**
  * The notifications: the list, all read, or one read. The id of a computed notification has colons and dots
  * (contract:<id>:<date>), never an empty or ".." segment.

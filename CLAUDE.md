@@ -30,14 +30,18 @@ how the code is made testable.
   `templates/project-claude/.claude/design/pasport.md`, the tokens are
   `templates/project-claude/.claude/design/pasport-tokens.json`, and the source is the Claude Design System "Pasport"
   (https://claude.ai/artifact/QD82mLA9dWSEgtpubjgChq). It is built in `templates/frontend-oidc/src/styles/pasport.css`
-  and `templates/frontend-oidc/src/components/pasport/` (ported from `D:\test`, the reference), with the shell in
-  `templates/frontend-oidc/src/components/shell/`: every generated screen uses those (`AppPage`, `PageHead`,
-  `AuthLayout`, `Btn`, ...), never another look, and works at phone width (390px) too.
-  `templates/frontend-oidc/scripts/check-design.mjs` checks it in every project (`npm run check:design`, also in the
-  CI), and `update` keeps the files of `DESIGN_FILES` (`src/frontends/oidc.js`) in step: a new design file goes in that
-  list.
+  and `templates/frontend-oidc/src/components/pasport/` (ported from `D:\test`, the reference). The shells: the login
+  server uses `PortalShell`, `CustomerShell` and `AdminShell` (`templates/frontend-oidc/src/components/pasport/`), and
+  `templates/frontend-oidc/src/components/shell/` holds its login redirects; the `AppPage` shell of the other frontends
+  is in `templates/frontend-oidc-linked/src/components/shell/` and `templates/frontend-site/src/components/shell/`, and
+  `PageHead` of a linked app in `templates/frontend-oidc-linked/src/components/pasport/page-head.tsx`. Every generated
+  screen uses those (`AppPage`, `PageHead`, `AuthLayout`, `Btn`, ...), never another look, and works at phone width
+  (390px) too. `templates/frontend-oidc/scripts/check-design.mjs` checks it in every project (`npm run check:design`,
+  also in the CI), and `update` keeps the files of `DESIGN_FILES` (`src/frontends/oidc.js`) and `SITE_DESIGN_FILES`
+  (`src/frontends/site.js`) in step: a new design file goes in those lists.
 - **Protected by default**: every page of a generated frontend needs a login (`src/proxy.ts` sends it to `/login`); only
-  `PUBLIC_PATHS` are open.
+  `PUBLIC_PATHS` are open. Known gap: today only the OpenID Connect frontends (the login server, a linked app) do this;
+  a site, an API frontend and the simple login still have a plain next-intl proxy (issue #4).
 - **Prettier everywhere** (`.prettierrc`: 4 spaces, no semicolons, single quotes, width 120). There are no warnings in
   the build, lint or tests of a generated project.
 - **Multi-tenant everywhere.**
@@ -93,9 +97,11 @@ The hooks in `.claude/settings.json` enforce this (`.claude/git-policy.json`: `i
     - blocks a commit that lacks an approval (review, tests, docs, i18n, and security when a staged path touches login,
       tokens, tenants, billing, uploads, the database or the hooks), and a commit that is not on an issue branch;
     - blocks `git commit -a`, and staging and committing in one command;
-    - blocks every push except a normal push of an issue branch (or `release/<version>`);
-    - allows `gh pr merge` only into `developer`, from an issue branch, with every check green and every approval;
-    - blocks `gh release` and `gh repo delete`.
+    - blocks every push except a normal push of an issue branch, `release/<x.y.z>` or `dependabot/...` (never forced or
+      deleting, no `--tags`, `--mirror`, `--all` or `--prune`);
+    - allows `gh pr merge` only with a pull request number, into `developer`, from such a branch, with every check green
+      and every approval (for every file the branch changed since `origin/developer`), never with `--admin`;
+    - blocks `gh release create`, `gh release delete` and `gh repo delete`.
 - `format.mjs` runs Prettier on every file that is edited.
 - The git hook `.githooks/pre-push` and the CI (`.github/workflows/ci.yml`) run the format check and the tests once
   more.
@@ -112,21 +118,26 @@ The hooks in `.claude/settings.json` enforce this (`.claude/git-policy.json`: `i
 - The hooks of this repository (`.claude/hooks/`) are copies of `templates/project-claude/.claude/hooks/`: change the
   template, then copy them (`test/claude-hooks.test.js` fails when they differ).
 - A change to an agent or a skill of the CLI often belongs in the projects' version too, and the other way round.
-- Every file the CLI keeps up to date in a project comes from `managedFiles()` (`src/manifest.js`: Claude Code and
-  Google Cloud). Existing projects get a change with `update` (`src/update.js`), which never overwrites a file the user
-  changed; `doctor` (`src/doctor.js`) checks a project. A new managed file goes in `projectClaudeFiles()` or
-  `cloudFiles()`, never written by a step of its own.
+- Every file the CLI keeps up to date in a project comes from `managedFiles()` (`src/manifest.js`): the generated code
+  (`codeFiles()` and `moveReadmesToDocs()`, `src/update-code.js`), Claude Code, Google Cloud, `designFiles()` and
+  `siteDesignFiles()`. Existing projects get a change with `update` (`src/update.js`), which never overwrites a file the
+  user changed; `doctor` (`src/doctor.js`) checks a project. A new managed file goes in `projectClaudeFiles()`,
+  `cloudFiles()`, `DESIGN_FILES` / `SITE_DESIGN_FILES`, or is part of the generated code, never written by a step of its
+  own.
 
 ## Checking generated projects
 
-- `npm run verify` generates three variants with the real steps of the CLI, in a temporary folder:
-    - `pasport`: the login server;
-    - `app`: an app without modules;
+- `npm run verify` generates four variants with the real steps of the CLI, in a temporary folder:
+    - `pasport`: the login server (with the demo data);
+    - `plain`: an API with the simple login and PostgreSQL;
+    - `app`: an app without modules (Row-Level Security);
     - `app-full`: an app with mail, files and a database per organisation.
 - Options:
-    - `-- --only app-full` runs one variant;
+    - `-- --only app-full` runs one variant (a comma list runs several);
     - `-- --keep` keeps the projects;
-    - `-- --require-db` fails when the database cannot be reached.
+    - `-- --require-db` fails when the database cannot be reached;
+    - `-- --lighthouse` also runs Lighthouse (needs Chrome, or `CHROME_PATH`);
+    - `VERIFY_GITLEAKS=<path to gitleaks>` also runs gitleaks, as in the CI.
 - The database comes from `VERIFY_DB_HOST`, `VERIFY_DB_PORT`, `VERIFY_DB_USER` and `VERIFY_DB_PASSWORD`. The user needs
   `CREATEDB`. Without a database, `test:db` is skipped and the tester agent reports that.
 - It needs the network (npm, GitHub for DafkeDD UI and the eID package) and takes several minutes.

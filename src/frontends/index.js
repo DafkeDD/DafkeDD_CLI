@@ -1,4 +1,4 @@
 import { nextjs } from './nextjs.js'
 
-// Voeg hier later extra frontends toe (vite, nuxt, ...)
+// Add more frontends here later (vite, nuxt, ...)
 export const frontends = { [nextjs.id]: nextjs }

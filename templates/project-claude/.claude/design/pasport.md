@@ -30,7 +30,7 @@ design to follow: use those, and build anything new from those classes and token
 
 - `bg` is the page, `surface` every card, the sidebar and the topbar; `surface-2` nests inside a card, `surface-3` is
   the hover ground.
-- `accent` (teal) is the one brand colour: the primary `Button`, links, the active `SidebarItem`, focus, the brand mark.
+- `accent` (teal) is the one brand colour: the primary `Btn`, links, the active `SidebarItem`, focus, the brand mark.
   Use it sparingly; one primary action per view.
 - The active sidebar item is `accent-active` text on `accent-tint` with a 3px `accent` bar on the left.
 - Status: `green` success, `amber` warning, `red` danger, `blue` info, `violet` new. Each comes with a `-tint` ground
@@ -67,16 +67,20 @@ design to follow: use those, and build anything new from those classes and token
 
 ## The two Pasport screens
 
-### The login screen (`PasportLogin`)
+### The login screen (`oidc-login.tsx` in `AuthLayout`)
 
 The only login of the platform. Every linked app sends its users to the login server, which shows this screen; an app
 never has a login or registration form of its own.
 
 - `AuthLayout` (split): the teal `accent` gradient aside on the left with the brand mark, the glass eID card, a title,
-  one sentence and "Versleuteld · GDPR"; the form on the right in an `AuthCard`.
-- The card says which app the user logs in to: "Inloggen bij Planner".
-- Order: `SsoButton` "Aanmelden met eID", `AuthDivider` "of met e-mail", e-mail and password `Field`s, the primary
-  `Button`, then "Nog geen account? Account maken" in the footer. Registering always happens here, on the login server.
+  one sentence and "Versleuteld · GDPR"; the form on the right in the `auth-card`, under an `AuthHeading`.
+- The heading says which app the user logs in to: "Inloggen bij Planner".
+- Two tabs (`seg`) when there is more than e-mail: "eID" and "E-mail". The first tab, in this order: the primary `Btn`
+  "Aanmelden met eID", then an "Aanmelden met <name>" ("Log in with <name>") `Btn` for every other login server (Google,
+  Microsoft, itsme®; primary only when there is no eID), then "Inloggen met een passkey" ("Log in with a passkey",
+  secondary, when passkeys are on and the browser can). The e-mail tab: e-mail and password `Field`s, "Wachtwoord
+  vergeten?", the primary `Btn`. Then a `Divider` "Nog geen account?" and "Account aanmaken". Registering always happens
+  here, on the login server.
 - One login screen for everybody, superadmins too: after the login a superadmin chooses "Platform management" (or one of
   its organisations). `/admin/login` is only an old link to `/login`.
 - On narrow screens the aside disappears and the card fills the screen.
@@ -99,10 +103,21 @@ Every app, the login server's own portal included, uses the same shell (`Shell` 
   app), then the page.
 - **On the phone** (≤ 860px) the rail is a drawer behind the menu button with a backdrop, the topbar keeps the menu
   button, the bell and the user, and the content gets smaller padding; forms and grids go to one column.
-- Only the rail items and the content belong to the app. Account and organisation pages (profile, security, users,
-  invoices, support) live on the login server; an app links there. On the login server the customer portal
+- Only the rail items and the content belong to the app. Account and organisation pages (security, users, invoices,
+  support) live on the login server; an app links there. A linked app does have its own `/profile` (the same `Profile`
+  of the login server, with the licences of the user in that app). On the login server the customer portal
   (`src/app/[locale]/(portal)`, `CustomerShell`) and the superadmin panel (`src/app/[locale]/admin/(panel)`,
   `AdminShell`, the dark mark) are route groups whose layout draws the shell.
+
+### The screens around the content
+
+- **My apps** (`/apps`, `MyApps` in `customer/my-apps.tsx`): the first page after a login at the portal, the apps the
+  user may open as cards with their `AppIcon` and a `Badge` (licence or demo).
+- **The eID**: until the eID is linked, `EidReminder` (a tinted notice with an icon above the content, a link to
+  security) asks for it; when an API answers that the eID is required, `EidRequired` replaces the page with the eID
+  screen, and `EidBackBanner` leads back afterwards.
+- **No licence**: in a linked app without a licence (or without a role) the home page shows `AppLicense` / `NoRoles` (a
+  `Notice` saying what to do: start a demo, or ask the admin) instead of the content.
 
 ### The login screens
 
@@ -122,9 +137,9 @@ only the form.
 
 - In this project: `frontend/src/styles/pasport.css` (imported once by the root layout, after the DafkeDD UI styles) and
   the components of `frontend/src/components/pasport/`. DafkeDD_CLI generates both for the login server and for every
-  linked app; `npx --allow-git=all github:DafkeDD/DafkeDD_CLI update` keeps them in step (the styles, the components,
-  the shell, the protected routes and their texts; a file you changed gets the new version next to it as
-  `<file>.dafkedd-new`).
+  linked app; `npx --allow-git=all github:DafkeDD/DafkeDD_CLI update` keeps the code (design, pages, components) in step
+  (the styles, the components, the shell, the pages, the protected routes and their texts; a file you changed gets the
+  new version next to it as `<file>.dafkedd-new`).
 - `npm run check:design` in `./frontend` (also in the CI) checks the rules a machine can check: every page in `AppPage`
   or in a route group whose `layout.tsx` draws `CustomerShell` or `AdminShell` (a page that only redirects is fine), or
   in the login screen (`AuthLayout`) when it is in `PUBLIC_PATHS`; no other component library, icon set or CSS

@@ -23,11 +23,18 @@ export const { version } = JSON.parse(readFileSync(new URL('../package.json', im
 
 const NONE = 'none'
 
+/**
+ * The parts that document themselves, with the title of their page in ./docs: `docsTitle` (English, like the docs),
+ * otherwise the label of the choice (the linked app has a Dutch label for the question, an English title).
+ */
+export const docsParts = (...items) =>
+    items
+        .filter(item => item?.docsFile)
+        .map(item => ({ dir: item.dir, file: item.docsFile, title: item.docsTitle ?? item.label }))
+
 /** One step that gathers the READMEs of the installed parts into ./docs (only for parts that document themselves). */
 function docsSteps({ projectDir, frontend, backend }) {
-    const parts = [frontend, backend]
-        .filter(item => item?.docsFile)
-        .map(item => ({ dir: item.dir, file: item.docsFile, title: item.label }))
+    const parts = docsParts(frontend, backend)
     if (parts.length === 0) return []
     const swagger = backend?.api ? `http://localhost:${backend.api.port}/docs` : null
     return [docsStep({ projectDir, parts, swagger, kb: Boolean(frontend) })]
@@ -42,8 +49,8 @@ const choicesOf = (registry, noneLabel) => [
 ]
 
 /**
- * Entry point of the CLI. Order of the questions: frontend (+ its options, e.g. DafkeDD UI), backend,
- * and last the (optional) GitHub push. Order of the steps: frontend, backend, git/GitHub.
+ * Entry point of the CLI. Order of the questions: frontend, backend (+ its database and login), Claude Code, Google
+ * Cloud, and last the (optional) GitHub push. Order of the steps: frontend, backend, git/GitHub.
  * Everything is injectable so the tests can run it without prompts.
  */
 export async function main({

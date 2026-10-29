@@ -49,7 +49,7 @@ async function renew(session: Session): Promise<Session | null> {
         sid: sid ?? session.sid,
         // Bought or given meanwhile, or the trial ended: as the login server says now
         license,
-        // Given or taken away by the beheerder meanwhile
+        // Given or taken away by an admin meanwhile
         roles
     }
 }

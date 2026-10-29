@@ -127,8 +127,9 @@ export function projectClaudeMd(project) {
         '',
         '- **Tests are mandatory**: every change gets tests (unit, e2e, and db specs for SQL); a bug fix starts with a',
         '  failing test. Nothing is merged while a check is red.',
-        '- **Documentation is mandatory**: every endpoint in `docs/api.md` and the README of the backend (body, example,',
-        '  response, errors), every page and call of the frontend in `docs/frontend.md`, every setting in `.env.example`.',
+        '- **Documentation is mandatory**: every endpoint in `docs/api.md` (body, example, response, errors; the READMEs of',
+        '  backend and frontend only point to `docs/`), every page and call of the frontend in `docs/frontend.md`, every',
+        '  setting in `.env.example`.',
         '- **Four languages**: every text in en, nl, fr and de with the same keys (English is the default).',
         ...(project.kind === 'pasport' || project.kind === 'app'
             ? [
@@ -136,7 +137,7 @@ export function projectClaudeMd(project) {
                   '  the Claude Design System "Pasport", https://claude.ai/artifact/QD82mLA9dWSEgtpubjgChq), built in',
                   '  `frontend/src/styles/pasport.css` and `frontend/src/components/pasport/` with the shell in',
                   '  `frontend/src/components/shell/`. That is the design to follow on every screen, on desktop and on the phone (390px).',
-                  '  `npm run check:design` in `./frontend` (also in the CI) checks it; `update` of DafkeDD_CLI keeps the design files current.',
+                  '  `npm run check:design` in `./frontend` (also in the CI) checks it; `update` of DafkeDD_CLI keeps the code (design, pages, components) current.',
                   '- **Protected by default**: every page needs a login; `frontend/src/proxy.ts` sends the browser to `/login`. Only the',
                   '  pages in `PUBLIC_PATHS` are open.'
               ]
@@ -193,7 +194,7 @@ export function projectClaudeMd(project) {
                   '- Cloud: `infra` (Terraform in `infra/terraform`, the Dockerfiles, the workflow `Cloud`; see `infra/README.md`).'
               ]
             : []),
-        `- Around it: \`seed\` (test data and test accounts${project.backend ? ', `npm run seed` in `./backend`' : ''}), \`support\` (a message of a user`,
+        `- Around it: \`seed\` (test data and test accounts${project.kind === 'pasport' ? '; `npm run demo:data` and `npm run demo:clear` in `./backend` already exist' : project.backend ? '; it creates a seed script in `./backend`' : ''}), \`support\` (a message of a user`,
         '  to an answer and a reproducible issue), `architect` (decisions that are hard to undo, `docs/adr`)' +
             (project.cloud ? ', `observability` (logs, alerts, budget) and `backup` (the monthly restore test).' : '.'),
         '- Upkeep: `dependencies` (the weekly Dependabot pull requests, `.github/dependabot.yml`) and `release` (prepares',
@@ -202,7 +203,16 @@ export function projectClaudeMd(project) {
         '- GitHub (once, when the CLI did not make the repository): `node .claude/scripts/setup-labels.mjs` (the labels)',
         '  and `node .claude/scripts/protect-branches.mjs` (`developer` and `main` protected, vulnerability reporting).',
         '- The CLI: `npx --allow-git=all github:DafkeDD/DafkeDD_CLI doctor` checks the tools, the MCP servers and GitHub;',
-        '  `... update` brings the agents, hooks and pipelines to a newer CLI (`.dafkedd.json`; your changes stay yours).',
+        `  \`... update\` brings the agents, hooks, pipelines and the code of ${[
+            project.backend && '`./backend`',
+            project.frontend && '`./frontend`',
+            '`./docs`'
+        ]
+            .filter(Boolean)
+            .join(', ')
+            .replace(/, ([^,]*)$/, ' and $1')}`,
+        '  to a newer CLI (`.dafkedd.json`; a file you changed gets `<file>.dafkedd-new`; your starting points such as the',
+        '  home page, nav, notes and config stay yours).',
         '',
         ...mcpLines(project)
     )

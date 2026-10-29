@@ -8,8 +8,10 @@ export const LICENSE_STATUSES: readonly LicenseStatus[] = ['trial', 'seat', 'sup
 export interface Caller {
     /** The id of the account at the login server. */
     sub: string
-    /** The organisation (tenant) the user logged in with, and the role there. Null: no organisation. */
-    /** slug: null from a login server before 0.53.4. */
+    /**
+     * The organisation (tenant) the user logged in with, and the role there. Null: no organisation. `slug` is null from
+     * a login server before 0.53.4.
+     */
     tenant: { id: string; name: string; slug: string | null; role: 'user' | 'admin' } | null
     superadmin: boolean
     /** The session at the login server. */
@@ -22,7 +24,7 @@ export interface Caller {
      */
     license: { product: string; status: LicenseStatus; endsAt: string | null } | null
     /**
-     * The roles of the user in this app (the `roles` claim): given by the beheerder of the organisation on the login
+     * The roles of the user in this app (the `roles` claim): given by an admin of the organisation on the login
      * server, or the default roles of config/app-roles.json. Null: the token has none (the app has no roles there yet).
      */
     roles: string[] | null
@@ -33,7 +35,7 @@ export interface Caller {
  * - `public`: everyone, without a token
  * - `account`: any valid token, also without an organisation
  * - `member` (the default): a valid token with an organisation, and a licence when the app sells a product
- * - `admin`: the beheerder of that organisation (or a superadmin), also with a licence
+ * - `admin`: an admin of that organisation (or a superadmin), also with a licence
  */
 export type AccessLevel = 'public' | 'account' | 'member' | 'admin'
 export const ACCESS_KEY = 'pasport:access'

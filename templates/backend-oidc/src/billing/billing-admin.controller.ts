@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common'
 import {
+    ApiBadRequestResponse,
     ApiConflictResponse,
     ApiCreatedResponse,
     ApiNoContentResponse,
@@ -44,6 +45,7 @@ export class BillingAdminController {
     @Post('products')
     @ApiOperation({ summary: 'A new product, sold per user (seat): a price per month and a (cheaper) price per year' })
     @ApiCreatedResponse({ description: 'The product' })
+    @ApiBadRequestResponse({ description: 'billing.YEAR_NOT_CHEAPER: a year must cost less than twelve months' })
     @ApiConflictResponse({ description: 'billing.PRODUCT_EXISTS' })
     createProduct(@Body() body: ProductDto) {
         return this.billing.createProduct(body)
@@ -52,6 +54,8 @@ export class BillingAdminController {
     @Patch('products/:code')
     @ApiOperation({ summary: 'Change a product: name, description, prices (new purchases), or stop selling it' })
     @ApiOkResponse({ description: 'The product' })
+    @ApiBadRequestResponse({ description: 'billing.YEAR_NOT_CHEAPER: a year must cost less than twelve months' })
+    @ApiNotFoundResponse({ description: 'billing.PRODUCT_NOT_FOUND' })
     async updateProduct(@Param('code', ProductCodePipe) code: string, @Body() body: UpdateProductDto) {
         const updated = await this.billing.updateProduct(code, body)
         // The OIDC app of this product (client id = code) follows: off with the product, and its link codes stop
@@ -67,6 +71,7 @@ export class BillingAdminController {
             'Remove a product from the catalogue, with its free seats and trials, and the OIDC app with the same code'
     })
     @ApiNoContentResponse({ description: 'Removed' })
+    @ApiNotFoundResponse({ description: 'billing.PRODUCT_NOT_FOUND' })
     @ApiConflictResponse({ description: 'billing.PRODUCT_IN_USE: an organisation still has a running subscription' })
     async deleteProduct(@Param('code', ProductCodePipe) code: string) {
         await this.billing.deleteProduct(code)
@@ -87,6 +92,11 @@ export class BillingAdminController {
             'Make a discount code: a percentage (100 = free) or an amount, for one product or all, once, for N periods or forever'
     })
     @ApiCreatedResponse({ description: 'The code (a random one when none was given)' })
+    @ApiBadRequestResponse({
+        description:
+            'billing.DISCOUNT_AMOUNT (not exactly one of percentOff and amountOffCents) or billing.DISCOUNT_PERIODS (durationPeriods only and always with repeating)'
+    })
+    @ApiNotFoundResponse({ description: 'billing.PRODUCT_NOT_FOUND' })
     @ApiConflictResponse({ description: 'billing.DISCOUNT_EXISTS' })
     createDiscount(@Auth() auth: AuthContext, @Body() body: DiscountDto) {
         return this.billing.createDiscount(auth.userId, body)
@@ -95,6 +105,7 @@ export class BillingAdminController {
     @Patch('discounts/:code')
     @ApiOperation({ summary: 'Switch a discount code off (or on again); purchases that used it keep their discount' })
     @ApiOkResponse({ description: '{ code, active }' })
+    @ApiNotFoundResponse({ description: 'billing.DISCOUNT_INVALID: no such code' })
     setDiscount(@Param('code') code: string, @Body() body: DiscountActiveDto) {
         return this.billing.setDiscountActive(code, body.active)
     }
@@ -109,6 +120,7 @@ export class BillingAdminController {
     @Post('tenants/:id/grants')
     @ApiOperation({ summary: 'Give an organisation free seats of a product, until a date or for good' })
     @ApiCreatedResponse({ description: 'The grant' })
+    @ApiNotFoundResponse({ description: 'billing.PRODUCT_NOT_FOUND, or errors.NOT_FOUND: no such organisation' })
     grant(@Auth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: GrantDto) {
         return this.billing.grant(auth.userId, id, body)
     }
@@ -116,6 +128,7 @@ export class BillingAdminController {
     @Delete('tenants/:id/grants/:grantId')
     @ApiOperation({ summary: 'Take free seats back' })
     @ApiOkResponse({ description: '{ id, deleted: true }' })
+    @ApiNotFoundResponse({ description: 'errors.NOT_FOUND: no such free seats in this organisation' })
     revokeGrant(@Param('id', ParseUUIDPipe) id: string, @Param('grantId', ParseUUIDPipe) grantId: string) {
         return this.billing.revokeGrant(id, grantId)
     }
@@ -126,6 +139,7 @@ export class BillingAdminController {
             'Extend the trial of a member by a number of days (or start one, also after an ended one); also when the demo of the product is off'
     })
     @ApiCreatedResponse({ description: '{ userId, endsAt }' })
+    @ApiNotFoundResponse({ description: 'billing.PRODUCT_NOT_FOUND, or billing.NOT_A_MEMBER (not a member there)' })
     extendTrial(@Param('id', ParseUUIDPipe) id: string, @Body() body: ExtendTrialDto) {
         return this.billing.extendTrial(id, body.productCode, body.userId, body.days)
     }
@@ -133,7 +147,7 @@ export class BillingAdminController {
     @Delete('tenants/:id/trials/:productCode/:userId')
     @ApiOperation({ summary: 'End the running trial of a member now (it stays: it counts as used)' })
     @ApiOkResponse({ description: '{ userId, endsAt }' })
-    @ApiNotFoundResponse({ description: 'billing.TRIAL_NOT_FOUND: no running trial' })
+    @ApiNotFoundResponse({ description: 'billing.TRIAL_NOT_FOUND: no running trial, or billing.PRODUCT_NOT_FOUND' })
     endTrial(
         @Param('id', ParseUUIDPipe) id: string,
         @Param('productCode', ProductCodePipe) code: string,

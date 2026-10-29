@@ -3,7 +3,8 @@ import { Injectable } from '@nestjs/common'
 /**
  * The `license` claim in the tokens of an app that sells a product: whether the user may use it in the organisation of
  * the token. `trial`: the trial runs (until `ends_at`, seconds since 1970); `seat`: one of the seats of the
- * organisation; `superadmin`: always; `none`: no licence (the app refuses its data, the user buys one on /licenses).
+ * organisation; `superadmin`: always; `none`: no licence (the login stops on the no-licence screen; a token that turns
+ * none meanwhile is refused by the app).
  */
 export interface LicenseClaim {
     product: string

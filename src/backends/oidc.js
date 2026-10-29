@@ -360,7 +360,8 @@ export const MESSAGES = {
         CLIENT_FROM_FILE: 'This app comes from config/oidc-clients.json: change it in that file.',
         CLIENT_PUBLIC: 'A public app has no secret.',
         CLIENT_DISABLE_FIRST: 'Disable the app first, then remove it.',
-        CLIENT_UNKNOWN_PRODUCT: 'The product {product} does not exist: make it on /licenses first.',
+        CLIENT_UNKNOWN_PRODUCT:
+            'The product {product} does not exist: make it in the app catalogue (/admin/catalog) first.',
         APP_NOT_FOUND: 'This app does not exist or has no roles.',
         INVITATION_APP_UNKNOWN: 'The app {app} does not exist or cannot be given in an invitation.',
         ROLE_UNKNOWN: 'The app has no role {role}.',
@@ -491,7 +492,8 @@ export const MESSAGES = {
         CLIENT_FROM_FILE: 'Deze app komt uit config/oidc-clients.json: pas ze in dat bestand aan.',
         CLIENT_PUBLIC: 'Een publieke app heeft geen secret.',
         CLIENT_DISABLE_FIRST: 'Schakel de app eerst uit en verwijder ze daarna.',
-        CLIENT_UNKNOWN_PRODUCT: 'Het product {product} bestaat niet: maak het eerst aan op /licenses.',
+        CLIENT_UNKNOWN_PRODUCT:
+            'Het product {product} bestaat niet: maak het eerst aan in de app-catalogus (/admin/catalog).',
         APP_NOT_FOUND: 'Deze app bestaat niet of heeft geen rollen.',
         INVITATION_APP_UNKNOWN: 'De app {app} bestaat niet of kan niet meegegeven worden in een uitnodiging.',
         ROLE_UNKNOWN: 'De app heeft geen rol {role}.',
@@ -625,7 +627,8 @@ export const MESSAGES = {
         CLIENT_FROM_FILE: 'Cette application vient de config/oidc-clients.json : modifiez-la dans ce fichier.',
         CLIENT_PUBLIC: "Une application publique n'a pas de secret.",
         CLIENT_DISABLE_FIRST: "Désactivez d'abord l'application, puis supprimez-la.",
-        CLIENT_UNKNOWN_PRODUCT: "Le produit {product} n'existe pas : créez-le d'abord sur /licenses.",
+        CLIENT_UNKNOWN_PRODUCT:
+            "Le produit {product} n'existe pas : créez-le d'abord dans le catalogue d'applications (/admin/catalog).",
         APP_NOT_FOUND: "Cette application n'existe pas ou n'a pas de rôles.",
         INVITATION_APP_UNKNOWN: "L'application {app} n'existe pas ou ne peut pas être donnée dans une invitation.",
         ROLE_UNKNOWN: "L'application n'a pas de rôle {role}.",
@@ -768,7 +771,8 @@ export const MESSAGES = {
         CLIENT_FROM_FILE: 'Diese App stammt aus config/oidc-clients.json: ändere sie in dieser Datei.',
         CLIENT_PUBLIC: 'Eine öffentliche App hat kein Secret.',
         CLIENT_DISABLE_FIRST: 'Deaktiviere die App zuerst und entferne sie dann.',
-        CLIENT_UNKNOWN_PRODUCT: 'Das Produkt {product} gibt es nicht: lege es zuerst unter /licenses an.',
+        CLIENT_UNKNOWN_PRODUCT:
+            'Das Produkt {product} gibt es nicht: lege es zuerst im App-Katalog (/admin/catalog) an.',
         APP_NOT_FOUND: 'Diese App gibt es nicht oder sie hat keine Rollen.',
         INVITATION_APP_UNKNOWN: 'Die App {app} gibt es nicht oder sie kann nicht in einer Einladung vergeben werden.',
         ROLE_UNKNOWN: 'Die App hat keine Rolle {role}.',
@@ -1224,7 +1228,8 @@ const DISCOVERY_EXAMPLE = port => ({
     '...': '...'
 })
 
-const TENANT = { id: '6b1d7c4e-0f1a-4c55-9e1e-2b9c1f3d8a10', name: 'Acme', role: 'admin' }
+/** The tenant claim of a token (also in userinfo and introspection). */
+const TENANT = { id: '6b1d7c4e-0f1a-4c55-9e1e-2b9c1f3d8a10', name: 'Acme', slug: 'acme', role: 'admin' }
 const USER_ID = '1fb82908-476c-4460-951a-0fae1f01fcc6'
 const INVITATION_ID = '9d2c4e7a-3b1f-4c8e-a5d6-0e7f8a9b1c2d'
 const PROFILE_EXAMPLE = {
@@ -1430,10 +1435,24 @@ const INVITATION_APPS = [
     }
 ]
 const TOO_MANY = [429, 'oidc.TOO_MANY_ATTEMPTS']
+const EID_REQUIRED = [403, 'oidc.EID_REQUIRED', 'OIDC_EID_REQUIRED and no eID linked yet']
+/**
+ * The answers of @Access(level). The AccessGuard also refuses an account without a linked eID while
+ * OIDC_EID_REQUIRED is on (never a superadmin, never an @EidOptional() route).
+ */
 const ACCESS = level => [
     [401, 'errors.UNAUTHORIZED'],
-    [403, 'errors.FORBIDDEN', `not ${level}`]
+    [403, 'errors.FORBIDDEN', `not ${level}`],
+    ...(level === 'superadmin' ? [] : [EID_REQUIRED])
 ]
+/** @Access('account') on a route that is not @EidOptional(). */
+const ACCOUNT_ACCESS = [[401, 'errors.UNAUTHORIZED'], [403, 'errors.FORBIDDEN', 'the account is blocked'], EID_REQUIRED]
+/** The outcome of a login step in an app that sells a product, for an account without a licence of it. */
+const NO_LICENSE_STEP =
+    ' An app that sells a product stops an account without a licence of it on the "no licence" screen: `{ status: "no-license", csrf, clientName, tenantName, demo, portal }` (JSON) or that page (see `POST .../demo`); with `prompt=none` the client gets `error=access_denied`.'
+/** A login that expired (10 minutes) or a wrong csrf. */
+const LOGIN_EXPIRED = [410, 'oidc.EXPIRED', 'JSON `{ status: "expired", message }`; the HTML page answers 400']
+const NO_TENANT = [403, 'oidc.NO_TENANT', 'JSON `{ status: "no-tenant", message }`']
 const PASSWORD_RULE = 'required, 12 to 128 characters'
 /** A page of the audit log. */
 const AUDIT_PAGE = {
@@ -1691,7 +1710,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/oidc/interaction/:id',
         tag: 'oidc',
         summary:
-            'The login page (HTML, in the language of the browser or ui_locales) of a running login. Valid 10 minutes. With `Accept: application/json` (the login page of the frontend): what the page shows — the app that asks (`clientId`, `clientName`), email and password (`password`), the eID, "Log in with <name>" (`external`) — and `pending: true` when the login came back from the other server halfway (then POST .../resume).',
+            'The login page (HTML, in the language of the browser or ui_locales) of a running login. Valid 10 minutes. With `Accept: application/json` (the login page of the frontend): what the page shows — the app that asks (`clientId`, `clientName`), email and password (`password`), the eID, a passkey (`passkey`), "Log in with <name>" (`externals`, one per other server; `external` is the first) — and `pending: true` when the login came back from the other server halfway (then POST .../resume).',
         response: {
             status: 200,
             example: {
@@ -1701,20 +1720,23 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 registration: true,
                 password: true,
                 eid: true,
-                external: { name: 'Contoso' },
+                passkey: true,
+                external: { name: 'Google' },
+                externals: [{ id: '1', name: 'Google' }],
                 pending: false,
                 csrf: 'from-the-page',
                 loginHint: ''
             }
         },
-        errors: []
+        errors: [LOGIN_EXPIRED]
     },
     {
         method: 'POST',
         path: '/oidc/interaction/:id/login',
         tag: 'oidc',
         summary:
-            'The login form (form-encoded). Rate limited per IP and per email. On success: a session cookie and a 303 back to the client with a code.',
+            'The login form (form-encoded from the HTML page, or JSON from the login page of the frontend). Rate limited per IP and per email. On success: a session cookie and a 303 back to the client with a code (JSON: `{ status: "redirect", location }`), or the next step: `mfa`, `mfa-setup`, `choose-tenant` or the consent screen. A refused login shows the form again with the error (JSON: `{ status: "error", error, message }`).' +
+            NO_LICENSE_STEP,
         form: true,
         body: {
             example: { csrf: 'from-the-page', email: 'ada@example.com', password: 'a-long-password' },
@@ -1725,7 +1747,14 @@ export const endpoints = ({ port = 4000 } = {}) => [
             ]
         },
         response: null,
-        errors: []
+        errors: [
+            [401, 'oidc.INVALID_CREDENTIALS', 'wrong email or password, or a blocked account'],
+            [403, 'oidc.EMAIL_NOT_VERIFIED'],
+            [403, 'oidc.PASSWORD_LOGIN_OFF', 'OIDC_EXTERNAL_ONLY'],
+            NO_TENANT,
+            LOGIN_EXPIRED,
+            TOO_MANY
+        ]
     },
     {
         method: 'POST',
@@ -1738,7 +1767,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
             fields: [['csrf', 'string', 'required, from GET /oidc/interaction/:id']]
         },
         response: { status: 200, example: { status: 'eid-challenge', nonce: 'q8Xz…44 characters…' } },
-        errors: [EID_DISABLED]
+        errors: [EID_DISABLED, LOGIN_EXPIRED]
     },
     {
         method: 'POST',
@@ -1759,8 +1788,10 @@ export const endpoints = ({ port = 4000 } = {}) => [
             [401, 'oidc.EID_INVALID', 'as `error: "EID_INVALID"`'],
             [403, 'oidc.EMAIL_NOT_VERIFIED', 'as `error: "EMAIL_NOT_VERIFIED"`'],
             [403, 'oidc.ACCOUNT_DISABLED', 'as `error: "ACCOUNT_DISABLED"`'],
+            NO_TENANT,
             [404, 'oidc.EID_NOT_LINKED', 'as `error: "EID_NOT_LINKED"`'],
             EID_DISABLED,
+            LOGIN_EXPIRED,
             TOO_MANY,
             [503, 'oidc.EID_UNAVAILABLE', 'as `error: "EID_UNAVAILABLE"`']
         ]
@@ -1770,7 +1801,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/oidc/interaction/:id/mfa',
         tag: 'oidc',
         summary:
-            'The second factor (form-encoded, or JSON from the frontend) after the right password, when two-step verification is on: a code of the authenticator app or a recovery code. Each code works once; rate limited.',
+            'The second factor (form-encoded, or JSON from the frontend) after the right password, when two-step verification is on: a code of the authenticator app or a recovery code. Each code works once; rate limited. A wrong code shows the step again (JSON: `{ status: "mfa", csrf, error, message }`); during the setup the first code confirms it and the recovery codes follow (`recovery-codes`).' +
+            NO_LICENSE_STEP,
         form: true,
         body: {
             example: { csrf: 'from-the-page', code: '492039' },
@@ -1780,21 +1812,22 @@ export const endpoints = ({ port = 4000 } = {}) => [
             ]
         },
         response: null,
-        errors: []
+        errors: [[401, 'oidc.MFA_INVALID_CODE'], NO_TENANT, LOGIN_EXPIRED, TOO_MANY]
     },
     {
         method: 'POST',
         path: '/oidc/interaction/:id/continue',
         tag: 'oidc',
         summary:
-            'After setting up two-step verification during the login and showing the recovery codes: continue to the organisation choice or back to the client.',
+            'After setting up two-step verification during the login and showing the recovery codes: continue to the organisation choice or back to the client.' +
+            NO_LICENSE_STEP,
         form: true,
         body: {
             example: { csrf: 'from-the-page' },
             fields: [['csrf', 'string', 'required, the hidden field of the page']]
         },
         response: null,
-        errors: []
+        errors: [NO_TENANT, LOGIN_EXPIRED]
     },
     {
         method: 'POST',
@@ -1818,10 +1851,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 }
             }
         },
-        errors: [
-            [404, 'oidc.PASSKEYS_DISABLED'],
-            [410, 'oidc.EXPIRED']
-        ]
+        errors: [[404, 'oidc.PASSKEYS_DISABLED'], LOGIN_EXPIRED]
     },
     {
         method: 'POST',
@@ -1859,7 +1889,9 @@ export const endpoints = ({ port = 4000 } = {}) => [
             [401, 'oidc.PASSKEY_UNKNOWN'],
             [403, 'oidc.ACCOUNT_DISABLED'],
             [403, 'oidc.EMAIL_NOT_VERIFIED'],
+            NO_TENANT,
             [404, 'oidc.PASSKEYS_DISABLED'],
+            LOGIN_EXPIRED,
             [429, 'oidc.TOO_MANY_ATTEMPTS']
         ]
     },
@@ -1871,11 +1903,14 @@ export const endpoints = ({ port = 4000 } = {}) => [
             '"Log in with <name>": to the other OpenID Connect server (OIDC_EXTERNAL_ISSUER), with PKCE, state and nonce. Form-encoded (303 to that server) or JSON (`{ status: "redirect", location }`). The login waits in a cookie `oidc_ext_<...>` named after its state (only sent to the callback).',
         form: true,
         body: {
-            example: { csrf: 'from-the-page' },
-            fields: [['csrf', 'string', 'required, the hidden field of the page']]
+            example: { csrf: 'from-the-page', provider: '1' },
+            fields: [
+                ['csrf', 'string', 'required, the hidden field of the page'],
+                ['provider', 'string', 'optional, 1 to 9: which server of OIDC_EXTERNAL_<n> (default 1)']
+            ]
         },
         response: null,
-        errors: [[404, 'oidc.EXTERNAL_DISABLED']]
+        errors: [[404, 'oidc.EXTERNAL_DISABLED'], LOGIN_EXPIRED]
     },
     {
         method: 'GET',
@@ -1890,6 +1925,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
             [401, 'oidc.EXTERNAL_FAILED'],
             [400, 'oidc.EXTERNAL_NO_EMAIL'],
             [403, 'oidc.EXTERNAL_EMAIL_UNVERIFIED'],
+            [403, 'oidc.ACCOUNT_DISABLED'],
             [409, 'oidc.EXTERNAL_EMAIL_TAKEN'],
             [409, 'oidc.EXTERNAL_OTHER_LINKED']
         ]
@@ -1948,7 +1984,9 @@ export const endpoints = ({ port = 4000 } = {}) => [
         method: 'POST',
         path: '/oidc/interaction/:id/tenant',
         tag: 'oidc',
-        summary: 'The organisation choice (form-encoded), only for users that belong to several tenants.',
+        summary:
+            'The organisation choice (form-encoded, or JSON from the frontend), only for users that belong to several tenants (a superadmin can also choose `platform`). An unknown tenant shows the choice again.' +
+            NO_LICENSE_STEP,
         form: true,
         body: {
             example: { csrf: 'from-the-page', tenant: TENANT.id },
@@ -1958,7 +1996,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
             ]
         },
         response: null,
-        errors: []
+        errors: [LOGIN_EXPIRED]
     },
     {
         method: 'POST',
@@ -1987,6 +2025,31 @@ export const endpoints = ({ port = 4000 } = {}) => [
                         ['scope', 'string', 'optional, the same or smaller than before']
                     ]
                 }
+            },
+            {
+                title: 'Confidential client with client_secret_post (instead of Basic)',
+                body: {
+                    example: {
+                        grant_type: 'authorization_code',
+                        code: 'code-from-the-redirect',
+                        redirect_uri: 'https://planner.partner.com/callback',
+                        client_id: 'partner.planner',
+                        client_secret: 'the-client-secret',
+                        code_verifier: 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'
+                    },
+                    fields: [
+                        ['grant_type', 'string', '`authorization_code` or `refresh_token`'],
+                        ['code', 'string', 'required for `authorization_code`'],
+                        ['redirect_uri', 'string', 'required for `authorization_code`'],
+                        ['client_id', 'string', 'required'],
+                        [
+                            'client_secret',
+                            'string',
+                            'required for a confidential client that does not use Basic (never both); a public client sends none'
+                        ],
+                        ['code_verifier', 'string', 'required for `authorization_code`']
+                    ]
+                }
             }
         ],
         body: {
@@ -2001,7 +2064,11 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 ['grant_type', 'string', '`authorization_code`'],
                 ['code', 'string', 'required, valid 60 seconds and only once'],
                 ['redirect_uri', 'string', 'required, the same as in /oidc/authorize'],
-                ['client_id', 'string', 'required for public clients'],
+                [
+                    'client_id',
+                    'string',
+                    'required for public clients; a confidential client uses Basic or sends `client_secret` too (below)'
+                ],
                 ['code_verifier', 'string', 'required, 43 to 128 characters']
             ]
         },
@@ -2030,16 +2097,19 @@ export const endpoints = ({ port = 4000 } = {}) => [
         method: 'GET',
         path: '/oidc/userinfo',
         tag: 'oidc',
-        summary: 'Claims about the logged in user, depending on the scopes. Needs the access token as Bearer token.',
+        summary:
+            'Claims about the logged in user, depending on the scopes. Needs the access token as Bearer token. `profile`: `name`, and `locale` when the account chose a language; `email`: `email`, `email_verified`; `tenant`: `tenant`, and `superadmin: true` only for a superadmin. Without the `openid` scope: 403 `insufficient_scope`.',
         bearer: true,
         response: {
             status: 200,
             example: {
                 sub: '1fb82908-476c-4460-951a-0fae1f01fcc6',
                 name: 'Ada Lovelace',
+                locale: 'en',
                 email: 'ada@example.com',
                 email_verified: true,
-                tenant: TENANT
+                tenant: TENANT,
+                superadmin: true
             }
         },
         oauthErrors: ['invalid_token', 'insufficient_scope'],
@@ -2072,9 +2142,36 @@ export const endpoints = ({ port = 4000 } = {}) => [
             fields: [
                 ['token', 'string', 'required, the refresh token'],
                 ['token_type_hint', 'string', 'optional, `refresh_token`'],
-                ['client_id', 'string', 'required for public clients (confidential clients authenticate)']
+                [
+                    'client_id',
+                    'string',
+                    'required for public clients (confidential clients authenticate: Basic, or `client_secret` below)'
+                ]
             ]
         },
+        variants: [
+            {
+                title: 'Confidential client with client_secret_post (instead of Basic)',
+                body: {
+                    example: {
+                        token: 'refresh-token',
+                        token_type_hint: 'refresh_token',
+                        client_id: 'partner.planner',
+                        client_secret: 'the-client-secret'
+                    },
+                    fields: [
+                        ['token', 'string', 'required, the refresh token'],
+                        ['token_type_hint', 'string', 'optional, `refresh_token`'],
+                        ['client_id', 'string', 'required'],
+                        [
+                            'client_secret',
+                            'string',
+                            'required for a confidential client that does not use Basic (never both)'
+                        ]
+                    ]
+                }
+            }
+        ],
         response: { status: 200, example: {} },
         oauthErrors: ['invalid_request', 'invalid_client', 'unsupported_token_type'],
         errors: []
@@ -2091,6 +2188,24 @@ export const endpoints = ({ port = 4000 } = {}) => [
             example: { token: 'eyJhbGciOiJFUzI1NiIs…' },
             fields: [['token', 'string', 'required, an access token or a refresh token']]
         },
+        variants: [
+            {
+                title: 'With client_secret_post (instead of Basic)',
+                basic: null,
+                body: {
+                    example: {
+                        token: 'eyJhbGciOiJFUzI1NiIs…',
+                        client_id: 'server-app',
+                        client_secret: 'the-client-secret'
+                    },
+                    fields: [
+                        ['token', 'string', 'required, an access token or a refresh token'],
+                        ['client_id', 'string', 'required, a confidential client'],
+                        ['client_secret', 'string', 'required (never together with Basic)']
+                    ]
+                }
+            }
+        ],
         response: {
             status: 200,
             example: {
@@ -2164,13 +2279,17 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 name: 'Ada Lovelace',
                 email: 'ada@example.com',
                 password: 'correct-horse-battery',
-                organisation: 'Acme'
+                organisation: 'Acme',
+                phone: '+32 470 12 34 56',
+                locale: 'en'
             },
             fields: [
                 ['name', 'string', 'required, 2 to 100 characters'],
                 ['email', 'string', 'required, a valid email address (at most 254), stored in lower case'],
                 ['password', 'string', PASSWORD_RULE],
-                ['organisation', 'string', 'required, 2 to 100 characters: the name of the new tenant']
+                ['organisation', 'string', 'required, 2 to 100 characters: the name of the new tenant'],
+                ['phone', 'string', 'optional, digits, spaces and `+ ( ) . / -`, at most 30 characters'],
+                ['locale', 'string', 'optional, `en`, `nl`, `fr` or `de` (default: the language of the request)']
             ]
         },
         response: CHECK_EMAIL,
@@ -2449,6 +2568,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
             [401, 'errors.UNAUTHORIZED'],
             [403, 'errors.FORBIDDEN', 'the account is blocked'],
             [403, 'oidc.EID_REQUIRED', 'OIDC_EID_REQUIRED and no eID linked yet'],
+            [404, 'errors.NOT_FOUND'],
             [409, 'oidc.EMAIL_TAKEN'],
             [429, 'oidc.TOO_MANY_ATTEMPTS']
         ]
@@ -2462,11 +2582,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
             'The billing details of the organisation of the token, printed on its invoices: company name, VAT number, address and the email address for invoices (`null` when not filled in). Every member reads them.',
         bearer: true,
         response: { status: 200, example: BILLING_DETAILS_EXAMPLE },
-        errors: [
-            [401, 'errors.UNAUTHORIZED'],
-            [403, 'errors.FORBIDDEN', 'not a member'],
-            [404, 'oidc.TENANT_NOT_FOUND']
-        ]
+        errors: [...ACCESS('a member'), [404, 'oidc.TENANT_NOT_FOUND']]
     },
     {
         method: 'PATCH',
@@ -2549,7 +2665,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         pathExample: `/tenants/current/members/${USER_ID}`,
         response: null,
-        errors: [...ACCESS('admin'), [404, 'oidc.MEMBER_NOT_FOUND'], [409, 'oidc.LAST_ADMIN']]
+        errors: [BAD_REQUEST, ...ACCESS('admin'), [404, 'oidc.MEMBER_NOT_FOUND'], [409, 'oidc.LAST_ADMIN']]
     },
     {
         method: 'GET',
@@ -2673,7 +2789,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         pathExample: `/tenants/current/invitations/${INVITATION_ID}/resend`,
         response: { status: 202, example: { status: 'invited', email: 'bob@example.com', id: INVITATION_ID } },
-        errors: [...ACCESS('admin'), [404, 'oidc.INVITATION_NOT_FOUND']]
+        errors: [BAD_REQUEST, ...ACCESS('admin'), [404, 'oidc.INVITATION_NOT_FOUND']]
     },
     {
         method: 'DELETE',
@@ -2683,7 +2799,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         pathExample: `/tenants/current/invitations/${INVITATION_ID}`,
         response: null,
-        errors: [...ACCESS('admin'), [404, 'oidc.INVITATION_NOT_FOUND']]
+        errors: [BAD_REQUEST, ...ACCESS('admin'), [404, 'oidc.INVITATION_NOT_FOUND']]
     },
     {
         method: 'POST',
@@ -2855,7 +2971,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 [
                     'product',
                     'string',
-                    'optional, the product code of /licenses this app sells (one licence per user, one app per product); empty or `null`: a free app'
+                    'optional, the product code of the app catalogue (/admin/catalog) this app sells (one licence per user, one app per product); empty or `null`: a free app'
                 ]
             ]
         },
@@ -2864,6 +2980,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
             example: { client: APP_EXAMPLE, secret: '<the secret of the app, shown only once>' }
         },
         errors: [
+            BAD_REQUEST,
             [400, 'oidc.CLIENT_INVALID_URI'],
             [400, 'oidc.CLIENT_NO_REDIRECT'],
             [400, 'oidc.CLIENT_UNKNOWN_PRODUCT'],
@@ -2892,19 +3009,25 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 product: 'planner'
             },
             fields: [
-                ['name', 'string', 'required'],
-                ['redirectUris', 'string[]', 'required'],
-                ['postLogoutRedirectUris', 'string[]', 'optional'],
-                ['backchannelLogoutUri', 'string', 'optional'],
-                ['scopes', 'string[]', 'required'],
-                ['refreshTokens', 'boolean', 'required'],
-                ['firstParty', 'boolean', 'required'],
-                ['product', 'string', 'optional, the product this app sells; empty or `null`: none']
+                ['name', 'string', 'required, 2 to 100 characters'],
+                ['redirectUris', 'string[]', 'required, 1 to 10 exact addresses'],
+                ['postLogoutRedirectUris', 'string[]', 'optional, 0 to 10'],
+                ['backchannelLogoutUri', 'string', 'optional, back-channel logout; empty: none'],
+                ['scopes', 'string[]', '`openid`, `profile`, `email`, `tenant`'],
+                ['refreshTokens', 'boolean', 'required, also refresh tokens'],
+                ['firstParty', 'boolean', 'required, `true`: your own app (no consent screen, may call this API)'],
+                [
+                    'product',
+                    'string',
+                    'optional, the product code of the app catalogue (/admin/catalog) this app sells; left out: keeps the existing product; empty or `null`: a free app'
+                ]
             ]
         },
         response: { status: 200, example: APP_EXAMPLE },
         errors: [
+            BAD_REQUEST,
             [400, 'oidc.CLIENT_INVALID_URI'],
+            [400, 'oidc.CLIENT_NO_REDIRECT'],
             [400, 'oidc.CLIENT_UNKNOWN_PRODUCT'],
             ...ACCESS('superadmin'),
             [404, 'oidc.CLIENT_NOT_FOUND'],
@@ -2972,6 +3095,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
             }
         },
         errors: [
+            BAD_REQUEST,
             [400, 'oidc.LINK_CODE_INVALID'],
             [400, 'oidc.CLIENT_INVALID_URI'],
             [400, 'oidc.ROLES_INVALID'],
@@ -2987,7 +3111,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         body: {
             example: { code: 'K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE', roles: APP_ROLES },
             fields: [
-                ['code', 'string', 'required, a link code of the app (/admin → Apps)'],
+                ['code', 'string', 'required, a link code of the app (/admin/catalog, tab "Connection")'],
                 [
                     'roles',
                     'object[]',
@@ -2996,7 +3120,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
             ]
         },
         response: { status: 200, example: { clientId: 'planner', roles: ['editor', 'viewer'] } },
-        errors: [[400, 'oidc.LINK_CODE_INVALID'], [400, 'oidc.ROLES_INVALID'], TOO_MANY]
+        errors: [BAD_REQUEST, [400, 'oidc.LINK_CODE_INVALID'], [400, 'oidc.ROLES_INVALID'], TOO_MANY]
     },
     {
         method: 'POST',
@@ -3009,7 +3133,12 @@ export const endpoints = ({ port = 4000 } = {}) => [
             status: 200,
             example: { client: APP_EXAMPLE, secret: '<the new secret of the app, shown only once>' }
         },
-        errors: [...ACCESS('superadmin'), [404, 'oidc.CLIENT_NOT_FOUND'], [409, 'oidc.CLIENT_PUBLIC']]
+        errors: [
+            ...ACCESS('superadmin'),
+            [404, 'oidc.CLIENT_NOT_FOUND'],
+            [409, 'oidc.CLIENT_PUBLIC'],
+            [409, 'oidc.CLIENT_FROM_FILE']
+        ]
     },
     {
         method: 'PATCH',
@@ -3021,7 +3150,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         body: { example: { enabled: false }, fields: [['enabled', 'boolean', 'required']] },
         response: { status: 200, example: { ...APP_EXAMPLE, disabled: true } },
-        errors: [...ACCESS('superadmin'), [404, 'oidc.CLIENT_NOT_FOUND'], [409, 'oidc.CLIENT_FROM_FILE']]
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), [404, 'oidc.CLIENT_NOT_FOUND'], [409, 'oidc.CLIENT_FROM_FILE']]
     },
     {
         method: 'DELETE',
@@ -3310,7 +3439,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         pathExample: `/admin/superadmins/${USER_ID}`,
         response: null,
-        errors: [...ACCESS('superadmin'), [404, 'oidc.USER_NOT_FOUND'], [409, 'oidc.LAST_SUPERADMIN']]
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), [404, 'oidc.USER_NOT_FOUND'], [409, 'oidc.LAST_SUPERADMIN']]
     },
     {
         method: 'DELETE',
@@ -3321,7 +3450,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         pathExample: `/admin/users/${USER_ID}/mfa`,
         response: null,
-        errors: [...ACCESS('superadmin'), [404, 'oidc.USER_NOT_FOUND']]
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), [404, 'oidc.USER_NOT_FOUND']]
     },
     {
         method: 'GET',
@@ -3373,7 +3502,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         summary: 'Is two-step verification on for the logged in account, and how many recovery codes are left?',
         bearer: true,
         response: { status: 200, example: { enabled: true, recoveryCodesLeft: 9 } },
-        errors: [[401, 'errors.UNAUTHORIZED']]
+        errors: ACCOUNT_ACCESS
     },
     {
         method: 'POST',
@@ -3391,10 +3520,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 qrSvg: '<svg xmlns="http://www.w3.org/2000/svg" …>…</svg>'
             }
         },
-        errors: [
-            [401, 'errors.UNAUTHORIZED'],
-            [409, 'oidc.MFA_ALREADY_ENABLED']
-        ]
+        errors: [...ACCOUNT_ACCESS, [409, 'oidc.MFA_ALREADY_ENABLED']]
     },
     {
         method: 'POST',
@@ -3409,7 +3535,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
             BAD_REQUEST,
             [400, 'oidc.MFA_INVALID_CODE'],
             [400, 'oidc.MFA_SETUP_FIRST'],
-            [401, 'errors.UNAUTHORIZED'],
+            ...ACCOUNT_ACCESS,
             [409, 'oidc.MFA_ALREADY_ENABLED'],
             [429, 'oidc.TOO_MANY_ATTEMPTS']
         ]
@@ -3426,8 +3552,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
         errors: [
             BAD_REQUEST,
             [400, 'oidc.MFA_INVALID_CODE'],
-            [401, 'errors.UNAUTHORIZED'],
-            [403, 'oidc.MFA_REQUIRED'],
+            ...ACCOUNT_ACCESS,
+            [403, 'oidc.MFA_REQUIRED', 'OIDC_MFA=required'],
             [429, 'oidc.TOO_MANY_ATTEMPTS']
         ]
     },
@@ -3439,12 +3565,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         body: { example: { code: '492039' }, fields: [['code', 'string', 'required, a code or a recovery code']] },
         response: { status: 200, example: { recoveryCodes: ['k7qm-2xpd', 'a3fz-q8wn', '…'] } },
-        errors: [
-            BAD_REQUEST,
-            [400, 'oidc.MFA_INVALID_CODE'],
-            [401, 'errors.UNAUTHORIZED'],
-            [429, 'oidc.TOO_MANY_ATTEMPTS']
-        ]
+        errors: [BAD_REQUEST, [400, 'oidc.MFA_INVALID_CODE'], ...ACCOUNT_ACCESS, [429, 'oidc.TOO_MANY_ATTEMPTS']]
     },
     // ---------------------------------------------------------------- the eID of the own account
     {
@@ -3659,7 +3780,18 @@ export const endpoints = ({ port = 4000 } = {}) => [
             example: { userIds: ['1d2e…'] },
             fields: [['userIds', 'uuid[]', 'required, at most 500, active members of the organisation']]
         },
-        response: { status: 200, example: [{ userId: '1d2e…', name: 'Sara Secretariaat', allowed: true }] },
+        response: {
+            status: 200,
+            example: [
+                {
+                    userId: '1d2e…',
+                    name: 'Sara Secretariaat',
+                    email: 'sara@example.com',
+                    profession: 'staff',
+                    allowed: true
+                }
+            ]
+        },
         errors: [
             BAD_REQUEST,
             ...VAULT_ACCESS,
@@ -3797,7 +3929,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 }
             ]
         },
-        errors: [[401, 'errors.UNAUTHORIZED']]
+        errors: ACCOUNT_ACCESS
     },
     {
         method: 'DELETE',
@@ -3808,10 +3940,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         pathExample: '/me/consents/partner.app',
         bearer: true,
         response: { status: 200, example: { revoked: true } },
-        errors: [
-            [401, 'errors.UNAUTHORIZED'],
-            [404, 'oidc.CONSENT_NOT_FOUND']
-        ]
+        errors: [...ACCOUNT_ACCESS, [404, 'oidc.CONSENT_NOT_FOUND']]
     },
     // ---------------------------------------------------------------- passkeys of the own account
     {
@@ -3835,7 +3964,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 ]
             }
         },
-        errors: [[401, 'errors.UNAUTHORIZED']]
+        errors: ACCOUNT_ACCESS
     },
     {
         method: 'POST',
@@ -3868,10 +3997,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 }
             }
         },
-        errors: [
-            [401, 'errors.UNAUTHORIZED'],
-            [404, 'oidc.PASSKEYS_DISABLED']
-        ]
+        errors: [...ACCOUNT_ACCESS, [404, 'oidc.PASSKEYS_DISABLED']]
     },
     {
         method: 'POST',
@@ -3908,9 +4034,10 @@ export const endpoints = ({ port = 4000 } = {}) => [
             }
         },
         errors: [
+            BAD_REQUEST,
             [400, 'oidc.PASSKEY_EXPIRED'],
             [400, 'oidc.PASSKEY_INVALID'],
-            [401, 'errors.UNAUTHORIZED'],
+            ...ACCOUNT_ACCESS,
             [404, 'oidc.PASSKEYS_DISABLED'],
             [409, 'oidc.PASSKEY_EXISTS']
         ]
@@ -3924,10 +4051,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         body: { example: { name: 'Phone' }, fields: [['name', 'string', 'required, 1 to 60 characters']] },
         response: { status: 200, example: { id: '6a1d1f8e-3c55-4f7b-a1a8-0e2b1b9c2d11', name: 'Phone' } },
-        errors: [
-            [401, 'errors.UNAUTHORIZED'],
-            [404, 'oidc.PASSKEY_NOT_FOUND']
-        ]
+        errors: [BAD_REQUEST, ...ACCOUNT_ACCESS, [404, 'oidc.PASSKEY_NOT_FOUND']]
     },
     {
         method: 'DELETE',
@@ -3938,11 +4062,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         pathExample: '/me/passkeys/6a1d1f8e-3c55-4f7b-a1a8-0e2b1b9c2d11',
         bearer: true,
         response: { status: 200, example: { removed: true } },
-        errors: [
-            [401, 'errors.UNAUTHORIZED'],
-            [404, 'oidc.PASSKEY_NOT_FOUND'],
-            [409, 'oidc.PASSKEY_LAST_LOGIN']
-        ]
+        errors: [...ACCOUNT_ACCESS, [404, 'oidc.PASSKEY_NOT_FOUND'], [409, 'oidc.PASSKEY_LAST_LOGIN']]
     },
     // ---------------------------------------------------------------- the audit log
     {
@@ -3950,7 +4070,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         path: '/tenants/current/audit',
         tag: 'audit log',
         summary:
-            'The audit log of the current organisation, newest first: logins, members, licences. Who did it (`actor`, null for the payment provider), about whom (`target`), the details, the IP address and the browser. Query: `category` (login, account, members, platform, licences), `actor` (user id), `limit` (1 to 100, default 50) and `before` (the `next` of the page before). Read with Row-Level Security: never events of another organisation.',
+            'The audit log of the current organisation, newest first: logins, members, licences. Who did it (`actor`, null for the payment provider), about whom (`target`), the details, the IP address and the browser. Query: `category` (login, account, members, platform, licences, support, invoices), `actor` (user id), `limit` (1 to 100, default 50) and `before` (the `next` of the page before). Read with Row-Level Security: never events of another organisation.',
         bearer: true,
         pathExample: '/tenants/current/audit?category=members&limit=50',
         response: { status: 200, example: AUDIT_PAGE },
@@ -3994,7 +4114,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         pathExample: '/me/audit?limit=10',
         response: { status: 200, example: AUDIT_PAGE },
-        errors: [BAD_REQUEST, [401, 'errors.UNAUTHORIZED']]
+        errors: [BAD_REQUEST, ...ACCOUNT_ACCESS]
     },
     // ---------------------------------------------------------------- licences of the own organisation (admins)
     {
@@ -4083,7 +4203,8 @@ export const endpoints = ({ port = 4000 } = {}) => [
             [409, 'billing.NO_SUBSCRIPTION'],
             [409, 'billing.FREE_SUBSCRIPTION'],
             [409, 'billing.RENEWAL_PENDING'],
-            [409, 'billing.SEATS_IN_USE']
+            [409, 'billing.SEATS_IN_USE'],
+            [503, 'billing.PAYMENTS_DISABLED']
         ]
     },
     {
@@ -4095,7 +4216,12 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         pathExample: '/tenants/current/licenses/subscriptions/planner',
         response: { status: 200, example: { status: 'canceled', endsAt: '2027-10-14T08:00:00.000Z' } },
-        errors: [...ACCESS('admin'), [404, 'billing.PRODUCT_NOT_FOUND'], [409, 'billing.NO_SUBSCRIPTION']]
+        errors: [
+            ...ACCESS('admin'),
+            [404, 'billing.PRODUCT_NOT_FOUND'],
+            [409, 'billing.NO_SUBSCRIPTION'],
+            [503, 'billing.PAYMENTS_DISABLED', 'a subscription that renews through the payment provider']
+        ]
     },
     {
         method: 'POST',
@@ -4106,7 +4232,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         pathExample: `/tenants/current/licenses/subscriptions/${SUBSCRIPTION_ID}/sync`,
         response: { status: 200, example: { payment: 'paid', subscription: 'active', seats: 5 } },
-        errors: [...ACCESS('admin'), [404, 'billing.PAYMENT_NOT_FOUND']]
+        errors: [BAD_REQUEST, ...ACCESS('admin'), [404, 'billing.PAYMENT_NOT_FOUND']]
     },
     {
         method: 'POST',
@@ -4118,6 +4244,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         pathExample: `/tenants/current/licenses/planner/trials/${USER_ID}`,
         response: { status: 201, example: { userId: USER_ID, endsAt: '2026-10-28T08:00:00.000Z' } },
         errors: [
+            BAD_REQUEST,
             ...ACCESS('admin'),
             [404, 'billing.PRODUCT_NOT_FOUND'],
             [404, 'billing.NOT_A_MEMBER'],
@@ -4151,6 +4278,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         pathExample: `/tenants/current/licenses/planner/seats/${USER_ID}`,
         response: { status: 201, example: { userId: USER_ID, assigned: true } },
         errors: [
+            BAD_REQUEST,
             ...ACCESS('admin'),
             [404, 'billing.PRODUCT_NOT_FOUND'],
             [404, 'billing.NOT_A_MEMBER'],
@@ -4165,7 +4293,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         pathExample: `/tenants/current/licenses/planner/seats/${USER_ID}`,
         response: { status: 200, example: { userId: USER_ID, assigned: false } },
-        errors: [...ACCESS('admin'), [404, 'billing.PRODUCT_NOT_FOUND'], [404, 'billing.SEAT_NOT_FOUND']]
+        errors: [BAD_REQUEST, ...ACCESS('admin'), [404, 'billing.PRODUCT_NOT_FOUND'], [404, 'billing.SEAT_NOT_FOUND']]
     },
     // ---------------------------------------------------------------- the licences of the own account
     {
@@ -4182,7 +4310,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 { code: 'reports', name: 'Reports', access: false }
             ]
         },
-        errors: [[401, 'errors.UNAUTHORIZED']]
+        errors: ACCESS('a member')
     },
     {
         method: 'POST',
@@ -4194,8 +4322,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         pathExample: '/me/licenses/planner/trial',
         response: { status: 201, example: { userId: USER_ID, endsAt: '2026-11-03T08:00:00.000Z' } },
         errors: [
-            [401, 'errors.UNAUTHORIZED'],
-            [403, 'errors.FORBIDDEN', 'not a member'],
+            ...ACCESS('a member'),
             [404, 'billing.PRODUCT_NOT_FOUND'],
             [404, 'billing.NOT_A_MEMBER'],
             [409, 'billing.DEMO_USED'],
@@ -4401,12 +4528,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         pathExample: '/admin/products/planner',
         response: null,
-        errors: [
-            BAD_REQUEST,
-            ...ACCESS('superadmin'),
-            [404, 'billing.PRODUCT_NOT_FOUND'],
-            [409, 'billing.PRODUCT_IN_USE']
-        ]
+        errors: [...ACCESS('superadmin'), [404, 'billing.PRODUCT_NOT_FOUND'], [409, 'billing.PRODUCT_IN_USE']]
     },
     {
         method: 'GET',
@@ -4439,7 +4561,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 [
                     'percentOff',
                     'number',
-                    '1 to 100 (100: free). Instead of it: `amountOffCents`, cents off every discounted payment'
+                    '1 to 100 (100: free). Exactly one of `percentOff` and `amountOffCents` (below)'
                 ],
                 ['productCode', 'string', 'optional: left out is every product'],
                 ['duration', 'string', '`once`, `repeating` or `forever`'],
@@ -4448,11 +4570,28 @@ export const endpoints = ({ port = 4000 } = {}) => [
                 ['expiresAt', 'string', 'optional ISO date: no longer usable after it']
             ]
         },
+        variants: [
+            {
+                title: 'An amount instead of a percentage',
+                body: {
+                    example: { code: 'MINUS-5', amountOffCents: 500, duration: 'once' },
+                    fields: [
+                        ['code', 'string', 'optional, as above'],
+                        [
+                            'amountOffCents',
+                            'number',
+                            'instead of percentOff: cents off every discounted payment, 1 to 10 000 000'
+                        ],
+                        ['duration', 'string', '`once`, `repeating` or `forever` (and the other fields as above)']
+                    ]
+                }
+            }
+        ],
         response: { status: 201, example: DISCOUNT },
         errors: [
             BAD_REQUEST,
             ...ACCESS('superadmin'),
-            [400, 'billing.DISCOUNT_AMOUNT'],
+            [400, 'billing.DISCOUNT_AMOUNT', 'both or neither of percentOff and amountOffCents'],
             [400, 'billing.DISCOUNT_PERIODS'],
             [404, 'billing.PRODUCT_NOT_FOUND'],
             [409, 'billing.DISCOUNT_EXISTS']
@@ -4477,7 +4616,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         pathExample: `/admin/tenants/${TENANT.id}/licenses`,
         response: { status: 200, example: [OVERVIEW] },
-        errors: ACCESS('superadmin')
+        errors: [BAD_REQUEST, ...ACCESS('superadmin')]
     },
     {
         method: 'POST',
@@ -4507,7 +4646,7 @@ export const endpoints = ({ port = 4000 } = {}) => [
         bearer: true,
         pathExample: `/admin/tenants/${TENANT.id}/grants/${GRANT.id}`,
         response: { status: 200, example: { id: GRANT.id, deleted: true } },
-        errors: [...ACCESS('superadmin'), [404, 'errors.NOT_FOUND']]
+        errors: [BAD_REQUEST, ...ACCESS('superadmin'), [404, 'errors.NOT_FOUND']]
     },
     {
         method: 'POST',

@@ -75,7 +75,9 @@ export class TicketsController {
     @ApiOperation({ summary: 'Upload an image to put in a message (JSON with base64, at most 2 MiB)' })
     @ApiCreatedResponse({ description: ATTACHMENT })
     @ApiBadRequestResponse({ description: 'support.IMAGE_INVALID: not a PNG, JPEG, GIF or WebP' })
-    @ApiPayloadTooLargeResponse({ description: 'support.IMAGE_TOO_LARGE: more than 2 MiB' })
+    @ApiPayloadTooLargeResponse({
+        description: 'support.IMAGE_TOO_LARGE: more than 2 MiB, or errors.PAYLOAD_TOO_LARGE: a body over 3 MB'
+    })
     upload(@Auth() auth: AuthContext, @Body() body: TicketAttachmentDto) {
         return this.tickets.uploadForTenant(auth, body)
     }
@@ -166,7 +168,9 @@ export class SupportAdminController {
     @ApiCreatedResponse({ description: ATTACHMENT })
     @ApiBadRequestResponse({ description: 'support.IMAGE_INVALID: not a PNG, JPEG, GIF or WebP' })
     @ApiNotFoundResponse({ description: 'oidc.TENANT_NOT_FOUND' })
-    @ApiPayloadTooLargeResponse({ description: 'support.IMAGE_TOO_LARGE: more than 2 MiB' })
+    @ApiPayloadTooLargeResponse({
+        description: 'support.IMAGE_TOO_LARGE: more than 2 MiB, or errors.PAYLOAD_TOO_LARGE: a body over 3 MB'
+    })
     upload(@Auth() auth: AuthContext, @Body() body: SupportTicketAttachmentDto) {
         const { tenantId, ...image } = body
         return this.tickets.uploadAsSupport(auth.userId, tenantId, image)
@@ -244,6 +248,9 @@ export class SupportAdminController {
     @Post('tickets/:id/notes')
     @ApiOperation({ summary: 'An internal note (never shown to the organisation), mentioning superadmins' })
     @ApiCreatedResponse({ description: 'The ticket, with notes' })
+    @ApiBadRequestResponse({
+        description: 'support.MENTION_NOT_SUPPORT: a mention of someone outside the support team'
+    })
     @ApiNotFoundResponse({ description: 'support.TICKET_NOT_FOUND' })
     note(@Auth() auth: AuthContext, @Param('id', new ParseUUIDPipe()) id: string, @Body() body: TicketNoteDto) {
         return this.tickets.addNote(auth.userId, id, body)

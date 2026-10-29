@@ -313,6 +313,12 @@ test('the API proxy only forwards members, platform and two-step calls, with the
         'me/profile',
         'me/password',
         'me/vault',
+        'me/vault/password',
+        'me/vault/colleagues',
+        'me/eid/back',
+        'me/licenses/planner/trial',
+        'me/heartbeat',
+        'me/out-of-office',
         'me/status',
         'tenants/current/billing',
         'tenants/current/tickets'
@@ -324,6 +330,7 @@ test('the API proxy only forwards members, platform and two-step calls, with the
         'tenants/other/members',
         '../admin',
         'me/vaultx',
+        'me/vault/colleagues/x',
         'me/profile/x',
         'me/notifications/../read',
         'me/notificationsx'
@@ -573,6 +580,13 @@ test('security and profile: change the password, edit the profile, also in the s
     assert.match(linked['src/components/shell/shell-view.tsx'], /if \(eidRequired\) return <EidRequired/)
     assert.match(templates['src/lib/account.ts'], /result\.body\.error === 'oidc\.EID_REQUIRED'\) eidRequired\(\)/)
     assert.match(templates['src/components/pasport/eid-required.tsx'], /'\/api\/backend\/me\/eid'/)
+    // The eID reminder is a tinted notice with an icon, never a card with a coloured left border (pasport.md)
+    const reminder = templates['src/components/pasport/eid-required.tsx'].split('export function EidReminder')[1]
+    assert.ok(!/borderLeft/.test(reminder.split('export function EidRequired')[0]), 'no coloured left border')
+    assert.match(reminder, /background: 'var\(--accent-tint\)'/)
+    assert.match(reminder, /borderColor: 'var\(--accent-border\)'/)
+    // Nor the vault card of the dashboard
+    assert.ok(!/borderLeft/.test(templates['src/components/pasport/customer/dashboard.tsx']), 'dashboard left border')
     // A new account of an invitation can read its eID first (required with OIDC_EID_REQUIRED)
     assert.match(templates['src/components/account-forms.tsx'], /api\('invitation\/eid'/)
 })

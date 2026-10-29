@@ -1,7 +1,7 @@
 {
     "name": "dafkedd_cli",
-    "version": "0.54.3",
-    "description": "Interactieve CLI om per project een frontend te installeren (nooit globaal)",
+    "version": "0.54.4",
+    "description": "Interactive CLI that scaffolds a project (Next.js frontend, NestJS backend, Pasport login server or linked app, docs) locally, never globally",
     "type": "module",
     "bin": {
         "DafkeDD_CLI": "bin/cli.js"

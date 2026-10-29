@@ -1,6 +1,8 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, ParseUUIDPipe, Post } from '@nestjs/common'
 import {
+    ApiBadRequestResponse,
     ApiBearerAuth,
+    ApiCreatedResponse,
     ApiForbiddenResponse,
     ApiNoContentResponse,
     ApiNotFoundResponse,
@@ -23,8 +25,8 @@ const NOTE = {
 
 /**
  * Notes of the organisation of the caller: the example of data that belongs to one tenant. Editors and viewers read
- * the notes, editors add them (the roles of config/app-roles.json); only the beheerder (admin) of the organisation
- * removes them. The organisation comes from the access token.
+ * the notes, editors add them (the roles of config/app-roles.json); only an admin of the organisation removes
+ * them. The organisation comes from the access token.
  */
 @ApiTags('notes')
 @ApiBearerAuth()
@@ -48,7 +50,8 @@ export class NotesController {
     @Post()
     @Roles('editor')
     @ApiOperation({ summary: 'Add a note to the organisation of the caller (role editor)' })
-    @ApiOkResponse({ schema: { example: NOTE } })
+    @ApiCreatedResponse({ schema: { example: NOTE } })
+    @ApiBadRequestResponse({ description: 'errors.BAD_REQUEST: no text, or more than 2000 characters' })
     create(@CurrentCaller() caller: Caller, @Body() dto: CreateNoteDto) {
         return this.notes.create(caller.tenant!.id, caller.sub, dto.text.trim())
     }
@@ -56,8 +59,12 @@ export class NotesController {
     @Delete(':id')
     @Access('admin')
     @HttpCode(HttpStatus.NO_CONTENT)
-    @ApiOperation({ summary: 'Remove a note (only the beheerder of the organisation)' })
+    @ApiOperation({ summary: 'Remove a note (only an admin of the organisation)' })
     @ApiNoContentResponse({ description: 'Removed' })
+    @ApiBadRequestResponse({ description: 'errors.BAD_REQUEST: the id is not a uuid' })
+    @ApiForbiddenResponse({
+        description: 'errors.NO_ORGANISATION, errors.NO_LICENSE or errors.FORBIDDEN: not an admin of the organisation'
+    })
     @ApiNotFoundResponse({ description: 'errors.NOTE_NOT_FOUND: no such note in this organisation' })
     async remove(@CurrentCaller() caller: Caller, @Param('id', new ParseUUIDPipe()) id: string) {
         if (!(await this.notes.remove(caller.tenant!.id, id)))

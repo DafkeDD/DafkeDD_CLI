@@ -175,7 +175,7 @@ export const Access = (level: AccessLevel = 'user') =>
         ApiBearerAuth(),
         ApiUnauthorizedResponse({ description: 'errors.UNAUTHORIZED: no or an invalid/expired access token' }),
         ApiForbiddenResponse({
-            description: `errors.FORBIDDEN: ${level === 'account' ? 'the account is blocked' : 'not ' + (level === 'user' ? 'a member' : level)}`
+            description: `errors.FORBIDDEN: ${level === 'account' ? 'the account is blocked' : 'not ' + (level === 'user' ? 'a member' : level)}${level === 'superadmin' ? '' : ', or oidc.EID_REQUIRED (OIDC_EID_REQUIRED and no eID linked yet; not on @EidOptional() routes)'}`
         })
     )
 

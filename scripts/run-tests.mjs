@@ -1,4 +1,4 @@
-// Runs every test/*.test.js with the built-in Node test runner (works on every platform and Node >= 20).
+// Runs every test/*.test.js with the built-in Node test runner (works on every platform and Node >= 22).
 import { readdirSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'

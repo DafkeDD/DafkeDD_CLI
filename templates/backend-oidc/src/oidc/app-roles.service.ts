@@ -25,8 +25,8 @@ export function appUrl(client: Pick<OidcClient, 'redirectUris' | 'postLogoutRedi
 }
 
 /**
- * The roles per app inside an organisation: the developer of an app defines which roles it has, the admins
- * (beheerders) of an organisation give them to its members, and the tokens of the app carry them (`roles`). Also the
+ * The roles per app inside an organisation: the developer of an app defines which roles it has, the admins of an
+ * organisation give them to its members, and the tokens of the app carry them (`roles`). Also the
  * apps of an invitation: the admin chooses them when inviting, the new member gets their roles (and a seat) on joining.
  */
 @Injectable()

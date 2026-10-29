@@ -18,7 +18,7 @@ export const tenantRole = database => `${database}_tenant`
 
 /**
  * The roles of the example app (config/app-roles.json): the developer defines them, the login server learns them with
- * the link code (and later with npm run roles:push), and the beheerders give them to their members.
+ * the link code (and later with npm run roles:push), and the admins of each organisation give them to their members.
  */
 export const DEFAULT_ROLES = [
     {
@@ -355,7 +355,7 @@ const fileEndpoints = () => [
         pathExample: '/files/' + FILE.id,
         curl: `curl -H 'Accept-Language: nl' -H "Authorization: Bearer $ACCESS_TOKEN" -o contract.pdf http://localhost:${APP_PORT}/files/${FILE.id}`,
         response: null,
-        errors: [...TOKEN_ERRORS, [404, 'errors.FILE_NOT_FOUND']]
+        errors: [[400, 'errors.BAD_REQUEST', 'the id is not a uuid'], ...TOKEN_ERRORS, [404, 'errors.FILE_NOT_FOUND']]
     },
     {
         method: 'PUT',
@@ -368,11 +368,12 @@ const fileEndpoints = () => [
         curl: `curl -X PUT -H 'Accept-Language: nl' -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/pdf' --data-binary @contract.pdf 'http://localhost:${APP_PORT}/files/${FILE.id}?name=contract.pdf'`,
         response: { status: 200, example: FILE },
         errors: [
-            [400, 'errors.BAD_REQUEST'],
+            [400, 'errors.BAD_REQUEST', 'the id is not a uuid, or a name that is too long'],
             [400, 'errors.FILE_EMPTY'],
             ...TOKEN_ERRORS,
-            [409, 'errors.CONFLICT'],
+            [409, 'errors.CONFLICT', 'other content under the same id'],
             [413, 'errors.FILE_TOO_LARGE'],
+            [413, 'errors.PAYLOAD_TOO_LARGE', 'a body larger than MAX_FILE_BYTES + 1 MB, refused before it is read'],
             [415, 'errors.FILE_TYPE_NOT_ALLOWED']
         ]
     },
@@ -384,7 +385,7 @@ const fileEndpoints = () => [
         bearer: true,
         pathExample: '/files/' + FILE.id,
         response: null,
-        errors: [...TOKEN_ERRORS, [404, 'errors.FILE_NOT_FOUND']]
+        errors: [[400, 'errors.BAD_REQUEST', 'the id is not a uuid'], ...TOKEN_ERRORS, [404, 'errors.FILE_NOT_FOUND']]
     }
 ]
 
@@ -427,9 +428,10 @@ const baseEndpoints = () => [
         errors: [
             [401, 'errors.UNAUTHORIZED'],
             [403, 'errors.NO_ORGANISATION'],
+            [403, 'errors.NO_LICENSE', 'the app sells a product and the account has no licence of it'],
             [403, 'errors.VAULT_NOT_ALLOWED'],
-            [503, 'errors.VAULT_NOT_SET_UP', 'no OIDC_CLIENT_SECRET'],
-            [502, 'errors.VAULT_UNAVAILABLE']
+            [502, 'errors.VAULT_UNAVAILABLE'],
+            [503, 'errors.VAULT_NOT_SET_UP']
         ]
     },
     {
@@ -457,8 +459,10 @@ const baseEndpoints = () => [
             }
         },
         errors: [
+            [400, 'errors.BAD_REQUEST', '`doctor` is not a uuid'],
             [401, 'errors.UNAUTHORIZED'],
             [403, 'errors.NO_ORGANISATION'],
+            [403, 'errors.NO_LICENSE', 'the app sells a product and the account has no licence of it'],
             [403, 'errors.VAULT_NOT_ALLOWED'],
             [404, 'errors.VAULT_EMPTY'],
             [409, 'errors.VAULT_NOT_READY'],
@@ -490,11 +494,16 @@ const baseEndpoints = () => [
         method: 'DELETE',
         path: '/notes/:id',
         tag: 'notes',
-        summary: 'Remove a note. Only the beheerder (admin) of the organisation. Answers 204 without a body.',
+        summary: 'Remove a note. Only an admin of the organisation (or a superadmin). Answers 204 without a body.',
         bearer: true,
         pathExample: '/notes/' + NOTE.id,
         response: null,
-        errors: [...TOKEN_ERRORS.slice(0, 3), [403, 'errors.FORBIDDEN'], [404, 'errors.NOTE_NOT_FOUND']]
+        errors: [
+            [400, 'errors.BAD_REQUEST', 'the id is not a uuid'],
+            ...TOKEN_ERRORS.slice(0, 3),
+            [403, 'errors.FORBIDDEN', 'not an admin of the organisation'],
+            [404, 'errors.NOTE_NOT_FOUND']
+        ]
     }
 ]
 

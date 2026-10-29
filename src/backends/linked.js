@@ -75,17 +75,20 @@ export async function useLinkCode({ server, code, port, fetchImpl = fetch }) {
 
 /**
  * An app for an existing DafkeDD OIDC server (another project made with this CLI), linked with a one-time link code of
- * /admin → Apps. The frontend logs in there (same design, shell and login screen); the app gets its own NestJS API
+ * /admin/catalog → Connection → Make link code. The frontend logs in there (same design, shell and login screen); the app gets its own NestJS API
  * (./backend, port 4001) with its own PostgreSQL database on the same server, that accepts the access tokens of the
- * login server and keeps its data per organisation (Row-Level Security).
+ * login server and keeps its data per organisation (a database per organisation by default, Row-Level Security with
+ * TENANT_ISOLATION=rls).
  */
 export const linked = {
     id: 'linked',
     // Not a backend choice of its own: NestJS → a database → "Inloggen via je bestaande Pasport OIDC-server"
     hidden: true,
     label: 'App voor een bestaande DafkeDD OIDC-server (koppelcode)',
+    /** The title of its page in ./docs (the label above is the Dutch text of the CLI). */
+    docsTitle: 'App linked to a Pasport login server',
     description:
-        'Eigen NestJS-API en database (multi-tenant) voor een app die inlogt via je bestaande server (koppelcode via /admin → Apps)',
+        'Eigen NestJS-API en database (multi-tenant) voor een app die inlogt via je bestaande server (koppelcode via /admin/catalog → Verbinding → Koppelcode maken)',
     dir: DIR,
     docsFile: 'api.md',
     api: { port: APP_PORT },
@@ -123,7 +126,7 @@ export const linked = {
         )
         let link = null
         await prompts.input({
-            message: 'Koppelcode (op de server: /admin → Apps → Koppelcode):',
+            message: 'Koppelcode (op de server: /admin/catalog → Verbinding → Koppelcode maken):',
             validate: async value => {
                 const code = value.toUpperCase().replace(/\s+/g, '')
                 if (!LINK_CODE.test(code)) return 'Een koppelcode ziet eruit als K7QM-2XPD-9HRT-W4NB-C8ZF-3VJE'
@@ -226,11 +229,11 @@ export const linked = {
             link.product
                 ? {
                       ok: true,
-                      text: `De app verkoopt het product "${link.product}": enkel wie er een licentie van heeft (proefperiode of plaats) ziet de data; licenties beheer je op ${link.accountUrl}/licenses`
+                      text: `De app verkoopt het product "${link.product}": enkel wie er een licentie van heeft (proefperiode of plaats) ziet de data; licenties ken je toe op ${link.accountUrl}/users`
                   }
                 : {
                       ok: true,
-                      text: 'De app verkoopt (nog) geen product: kies er een op /admin → Apps en zet de code in OIDC_PRODUCT van ./backend/.env'
+                      text: 'De app verkoopt (nog) geen product: kies er een op /admin/catalog en zet de code in OIDC_PRODUCT van ./backend/.env'
                   },
             ...(link.firstParty
                 ? []

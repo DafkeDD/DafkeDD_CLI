@@ -1,5 +1,18 @@
 import { Controller, Get, ParseUUIDPipe, Query, Req } from '@nestjs/common'
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
+import {
+    ApiBadGatewayResponse,
+    ApiBadRequestResponse,
+    ApiBearerAuth,
+    ApiConflictResponse,
+    ApiForbiddenResponse,
+    ApiNotFoundResponse,
+    ApiOkResponse,
+    ApiOperation,
+    ApiQuery,
+    ApiServiceUnavailableResponse,
+    ApiTags,
+    ApiUnauthorizedResponse
+} from '@nestjs/swagger'
 import type { Request } from 'express'
 import { Access } from './access.js'
 import { PasportVault } from './pasport-vault.service.js'
@@ -10,6 +23,13 @@ import { PasportVault } from './pasport-vault.service.js'
  */
 @ApiTags('eHealth vault')
 @ApiBearerAuth()
+@ApiUnauthorizedResponse({ description: 'errors.UNAUTHORIZED: no or no valid access token of the login server' })
+@ApiForbiddenResponse({
+    description:
+        'errors.NO_ORGANISATION (no organisation), errors.NO_LICENSE (no licence of the product of this app) or errors.VAULT_NOT_ALLOWED (not a doctor, and not chosen by one)'
+})
+@ApiBadGatewayResponse({ description: 'errors.VAULT_UNAVAILABLE: the vault of the login server cannot be reached' })
+@ApiServiceUnavailableResponse({ description: 'errors.VAULT_NOT_SET_UP: no OIDC_CLIENT_SECRET' })
 @Controller('vault')
 export class VaultController {
     constructor(private readonly vault: PasportVault) {}
@@ -51,6 +71,9 @@ export class VaultController {
             }
         }
     })
+    @ApiBadRequestResponse({ description: 'errors.BAD_REQUEST: doctor is not a uuid' })
+    @ApiNotFoundResponse({ description: 'errors.VAULT_EMPTY: no certificate in the vault yet' })
+    @ApiConflictResponse({ description: 'errors.VAULT_NOT_READY: its password is missing or it has expired' })
     async certificate(
         @Req() request: Request,
         @Query('doctor', new ParseUUIDPipe({ optional: true })) doctor?: string

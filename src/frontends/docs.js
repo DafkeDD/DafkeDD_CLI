@@ -21,7 +21,8 @@ ${fence}bash
 npm run dev      # development server
 npm run build    # production build
 npm run lint     # ESLint
-npm run format   # Prettier (format:check only checks)${api?.oidc && !api.linked ? '\nnpm run eid:mock # virtual eID card reader for the eID login (PIN 1234)' : ''}
+npm run format   # Prettier (format:check only checks)
+npm run check:design # the Pasport design (also in the CI)${api?.oidc && !api.linked ? '\nnpm run eid:mock # virtual eID card reader for the eID login (PIN 1234)' : ''}
 ${fence}
 
 ## Structure
@@ -31,7 +32,7 @@ src/app/[locale]/        pages (the language is NOT part of the URL)
 src/components/          components (src/components/ui is DafkeDD UI: do not edit it, run dafke-ui update)
 src/i18n/                routing, request config and locale-aware navigation
 messages/<language>.json translated texts
-${api ? 'src/lib/                 API client (api.ts, use-api.ts)\n' : ''}${fence}
+${api ? `src/lib/                 API client (api.ts, use-api.ts)${api.oidc ? ', the login (oidc.ts, session.ts, refresh.ts, server-api.ts) and the calls to the login server (portal.ts, account.ts, pasport.ts)' : ''}\n` : ''}${fence}
 
 ## Languages
 
@@ -101,8 +102,20 @@ ${fence}
 
 Errors from the API always look like \`{ statusCode, error, message, path, timestamp }\` (\`error\` is a stable key, \`message\` is
 translated). A validation error (400) has a list of messages; \`ApiError.message\` joins them with a line break.
-The example page has a **status card** (\`src/components/api-status.tsx\`) that shows whether the API is reachable, the
-language it answered in and, with a database, whether the database works.
+${
+    api.oidc
+        ? `\`useApi\` and \`apiFetch\` only send a cookie, so they reach the public endpoints only. In this project call the
+protected API with \`useApi\`/\`useData\` of \`@/lib/portal\` (through \`/api/backend\`, the token is added on the
+server), with \`serverApi(session, '<path>')\` in a server component${api.linked ? ", and the API of this app with \`fetch('/api/app/<path>')\`" : ''}.${
+              api.linked
+                  ? `
+The home page has a **status card** (\`src/components/api-status.tsx\`) that shows whether the API is reachable, the
+language it answered in and, with a database, whether the database works.`
+                  : ''
+          }`
+        : `The example page has a **status card** (\`src/components/api-status.tsx\`) that shows whether the API is reachable, the
+language it answered in and, with a database, whether the database works.`
+}
 `)
         if (api.oidc) parts.push(pasportDesign(api.linked ?? null))
         if (api.oidc && api.linked) parts.push(linkedLogin(api.linked))
@@ -115,40 +128,41 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 
 | Path | What it does |
 | --- | --- |
-| \`/api/auth/login\` | Starts a login: state, nonce and a PKCE verifier go into an encrypted cookie, then to the login server |
+| \`/api/auth/login\` | Starts a login: state, nonce and a PKCE verifier go into an encrypted cookie, then to the login server. \`?returnTo=\` is the page to come back to, \`?tenant=<id\|slug\|platform>\` the organisation (see **Roles**) |
+| \`/api/auth/renew\` | POST (only from a page of this app): new tokens now, so a demo that just started (its licence and roles) shows at once; 401 without a session |
 | \`/login\` | Without a login request: starts one at once and comes back to \`?returnTo=\` (\`?error=\` stays and shows why the last login failed). Every page that is not public sends a browser without a session here (\`src/proxy.ts\`) |
 | \`/admin/login\` | An old link: \`/login\`, afterwards the platform (\`/admin\`). There is one login screen for everybody; a superadmin chooses "Platform management" after the login |
 | \`/login?interaction=<id>\` | The login screen of the login server, for this frontend and for every app linked to it ("Log in to <app>": eID, passkey, email and password, "Log in with <name>" for another OpenID Connect server, second factor, organisation choice, and "Allow <application>?" for applications of others), shown by this frontend. Back from the other server it goes on where the login is (\`pending\`); \`&error=EXTERNAL_...\` shows why that login failed |
 | \`/api/auth/callback\` | Back from the login server: checks state and \`iss\`, exchanges the code, verifies the ID token |
 | \`/api/auth/backchannel-logout\` | POST from the login server (back-channel logout): a signed logout token when a session ended there; every browser of that session is logged out here at its next request |
 | \`/api/auth/logout\` | POST: logs out: revokes the refresh token, forgets the session and logs out of the login server too (\`end_session_endpoint\`), then back to the home page |
-| \`/register\` | Create an account and a new organisation (you become its admin), with a password or with the Belgian eID; a confirmation email follows |
+| \`/register\` | Create an account and a new organisation (you become its admin), with a password or with the Belgian eID (with \`OIDC_EID_REQUIRED\` only with the eID, \`GET /oidc/account/registration\`); a confirmation email follows |
 | \`/verify-email?token=\` | The link in the confirmation email: confirms the address, then you can log in |
 | \`/forgot-password\` | Ask for a link to choose a new password |
 | \`/reset-password?token=\` | The link in that email: a new password (the link works once; you are logged out everywhere) |
-| \`/invite?token=\` | The link in an invitation: join the organisation, or create your account for it. Shows the apps of the invitation (their roles, "with a licence") and, once accepted, an "Open <app>" button per app |
+| \`/invite?token=\` | The link in an invitation: join the organisation, or create your account for it (also with the eID). Shows the apps of the invitation (their roles, "with a licence") and, once accepted, an "Open <app>" button per app |
 | \`/\` | My apps (\`/apps\`) when logged in, the superadmin panel (\`/admin\`) for a superadmin without an organisation, else \`/login\` |
-| \`/apps\` | **My apps**: the first page after a login at the portal itself, the apps the user may open (an own licence or a running demo) to click through, in the same tab. Without any: what to do (discover apps, or for the admin the licences). A login from an app goes straight back to that app |
-| \`/dashboard\` | **Customer portal** (\`src/app/[locale]/(portal)\`, every page in \`CustomerShell\`): the apps of the organisation, the licences and the open tickets at a glance |
-| \`/marketplace\` | "Discover apps": the app catalogue (search with the topbar), a demo per app (14 days, once), buying through the wizard |
-| \`/wizard\` | The purchase wizard (seats, monthly or yearly, a discount code, the billing details, the checkout of Mollie); \`/wizard?subscription=<id>\` shows the result after the checkout (\`/licenses/return\` comes back here) |
+| \`/apps\` | **My apps**: the first page after a login at the portal itself, the apps the user may open (an own licence or a running demo) to click through, in the same tab (\`MyApps\`, \`GET /tenants/current/catalog\`, the apps with \`access\`; a button to the portal \`/dashboard\`). Without any: what to do (discover apps, or for the admin the licences). A login from an app goes straight back to that app |
+| \`/dashboard\` | **Customer portal** (\`src/app/[locale]/(portal)\`, every page in \`CustomerShell\`; a member without an organisation sees a "no access" notice): the apps of the organisation and my own demos (seats; the admin takes a free seat with \`POST /tenants/current/licenses/<code>/seat\`, or buys a demo), the eHealth vault card for doctors, and up to three recommended apps |
+| \`/marketplace\` | "Discover apps": the app catalogue (search with the topbar), a demo per app (14 days, once, only for apps with the demo on), buying through the wizard only for admins (members see it disabled); a bought app without an own seat: the admin goes to \`/users\`, a member asks the admin |
+| \`/wizard\` | Admins only: the purchase wizard (\`/wizard?app=<code>\` for one app; seats, monthly or yearly, a discount code, the billing details, the checkout of Mollie); \`/wizard?subscription=<id>\` shows the result after the checkout (\`/licenses/return\` comes back here; \`POST .../subscriptions/<id>/sync\`), and the buyer gets one of the seats |
 | \`/vault\` | Only doctors (profession of the membership; a superadmin only when it is a doctor there, the rail shows it to nobody else): the eHealth certificate (PKCS#12), encrypted, for the apps that sign with it, and the colleagues of the organisation who may use it in the apps (shown by name, the email address only for one without a name) |
 | \`/users\` | Admins: the users of the organisation with their status (online, busy, out of office), invite by email (with apps: per app the roles and a licence), open invitations (send again, withdraw), role, profession, disable or remove, the licences per user and the **roles per app**. \`/members\` and \`/licenses\` (older links) come here |
-| \`/invoices\` | Admins: the invoices (FAC numbers, VAT), pay the open ones, the PDF, the contracts and when they renew |
+| \`/invoices\` | Admins: the invoices (FAC numbers, VAT), pay the open ones, the PDF, the contracts and when they renew, and stop a contract (no renewal, it keeps working to the end of the paid period: \`DELETE .../subscriptions/<code>\`) |
 | \`/support\` | The tickets of the organisation: ask a question, answer, images, close and rate the help |
 | \`/profile\` | The own profile: name, email (a new one after confirming), phone, language, the billing details of the organisation (its admins change them) and what the eID says |
-| \`/security\` | The password, two-step verification (status, recovery codes left, new recovery codes), passkeys (add, rename, remove), the eID (link, unlink), the applications of others with access (take back), where the account is logged in (end one session, or all others) and its recent activity |
+| \`/security\` | The password, two-step verification (status, recovery codes left, new recovery codes), passkeys (add, rename, remove), the eID (link, unlink), the applications of others with access (take back), where the account is logged in (end one session, or all others) and its recent activity (\`security.tsx\`). With \`?app=<client id>\` (sent by a linked app to read the eID) a banner with a button back to that app (\`EidBackBanner\`, \`GET /me/eid/back\`) |
 | \`/audit\` | Admins: the audit log of the organisation (who did what and when, from which IP address and browser), with a filter per kind of event and "Show more" |
-| \`/admin\` | **Superadmin panel** (\`src/app/[locale]/admin/(panel)\`, every page in \`AdminShell\`, the dark mark): opens on \`/admin/stats\`, the statistics of the platform |
-| \`/admin/tenants\` | Every organisation (create, suspend, search), \`/admin/tenants/<id>\`: its members, invitations, apps, licences (free seats, trials), billing details and "Open" (logs in to that organisation) |
-| \`/admin/users\` | Every account of the platform, superadmins included |
-| \`/admin/tickets\` | The support team: every ticket (claim, answer, internal notes with @mentions, close), the badge counts the open ones |
-| \`/admin/catalog\` | The app catalogue: the products for sale (prices, VAT, demo on or off) and per app its **connection** (the OpenID Connect client: redirect URIs, a link code, a new secret shown once, the roles its developer pushed); an internal app sells nothing. \`/admin/apps\` (older links) comes here |
+| \`/admin\` | **Superadmin panel** (\`src/app/[locale]/admin/(panel)\`, every page in \`AdminShell\`, the dark mark; somebody who is no superadmin is sent to \`/dashboard\`): opens on \`/admin/stats\`, the statistics of the platform |
+| \`/admin/tenants\` | Every organisation (create one with its contact, plan and city; search, also from the topbar \`?q=\`). \`/admin/tenants/<id>\`: its apps, its users (members and invitations, whether the eID is linked, reset the two-step verification) and the access (licences, free seats, demos per member) (\`?tab=apps\|users\|access\`), suspend or activate, and "Open" (logs in to that organisation) |
+| \`/admin/users\` | The users per organisation (choose one: invite, change, remove, reset the two-step verification) and the superadmins of the platform (add by email, remove) |
+| \`/admin/tickets\` | The support team: every ticket (a new one for an organisation, claim or take over, answer with images, internal notes with @mentions, close), the badge counts the open ones |
+| \`/admin/catalog\` | The app catalogue: the products for sale (prices, VAT, demo on or off) and per app its **connection** (\`ConnectSection\`: the OpenID Connect client is made on first use, confidential, with \`product\` = the app code; redirect URIs, a one-time link code with \`POST /admin/clients/<code>/link-code\` shown once, a new secret shown once, the roles its developer pushed; a connection can be turned off or removed); an internal app sells nothing. \`/admin/apps\` (older links) comes here |
 | \`/admin/codes\` | The discount codes (percentage or amount, 100% is free, per product, how often, until when) |
-| \`/admin/audit\` | The activity of the whole platform |
+| \`/admin/audit\` | The activity of the whole platform, with a filter per organisation |
 | \`/admin/ratings\` | How customers rated the help on their tickets |
 | \`/admin/profile\`, \`/admin/security\` | The own profile and security in the panel |
-| \`/api/backend/...\` | Route handler: calls \`/tenants/current/...\`, \`/admin/...\`, \`/me/mfa\`, \`/me/eid\`, \`/me/sessions\`, \`/me/passkeys\`, \`/me/consents\`, \`/admin/clients\`, \`/me/licenses\`, \`/me/audit\`, \`/me/status\`, \`/me/profile\`, \`/me/vault\` and \`/me/notifications\` of the API with the access token of the session (the token stays on the server; changes only from pages of this app) |
+| \`/api/backend/...\` | Route handler: calls \`/tenants/current/...\`, \`/admin/...\` (\`/admin/clients\` included), \`/me/mfa\`, \`/me/eid\` (also \`/me/eid/back\`), \`/me/sessions\`, \`/me/passkeys\`, \`/me/consents\`, \`/me/licenses\` (and \`/me/licenses/<code>/trial\`), \`/me/audit\`, \`/me/heartbeat\`, \`/me/status\`, \`/me/out-of-office\`, \`/me/profile\`, \`/me/password\`, \`/me/vault\` (\`/password\`, \`/colleagues\`) and \`/me/notifications\` of the API with the access token of the session (the token stays on the server; changes only from pages of this app). Other paths answer 404 \`not-found\`, a change from another origin 403 \`origin\`, no session 401 \`session\`, the API offline 502 \`offline\`; a PDF passes through as a file |
 
 **Flow**: "Log in" → \`/api/auth/login\` → the API (\`/oidc/authorize\`) → \`/login?interaction=...\` (this frontend talks to
 \`/oidc/interaction/...\` of the API with \`fetch\` and \`credentials: 'include'\`, so the browser sends the encrypted
@@ -157,15 +171,16 @@ login cookie of the API along) → back to the API → \`/api/auth/callback\`
 
 **Session**: an httpOnly cookie \`<client id>_session\` (named after \`OIDC_CLIENT_ID\`, so the apps on the ports of
 localhost never share one; the login flow uses \`<client id>_oidc\`), encrypted with \`AUTH_SECRET\` (AES-256-GCM), with the name, email,
-organisation (tenant) with the role, whether the user is superadmin, the access token (10 minutes), the refresh token
+organisation (tenant) with the role, whether the user is superadmin, \`sub\`, \`sid\`, the \`license\` and \`roles\` claims, the access token (10 minutes), the refresh token
 and the last ID token. It lives as long as the session of the login server (12 hours). \`src/proxy.ts\` renews the
 access token with the refresh token (\`src/lib/refresh.ts\`) before a page renders when it expires within a minute, and
 \`/api/backend\` does the same before it calls the API: pages and server components always see a valid token (they
 cannot set cookies themselves). When the login server refuses (logged out, session ended on \`/security\`), the cookie
 is deleted and the user logs in again.
 
-**Online**: the shell sends the heartbeat (\`src/components/presence.tsx\`, every minute while the page is visible)
-that shows a logged in user as online to their admins.
+**Online**: the shell sends the heartbeat (\`src/components/presence.tsx\`: \`POST /me/heartbeat\` every minute, also in a
+hidden tab, \`idle\` after 5 minutes without use) and keeps the chosen status (\`GET\`/\`PUT /me/status\`: available, busy,
+do not disturb, be right back, away, offline) and the out-of-office reply that admins and the support team see.
 
 **Roles**: \`session.tenant.role\` is \`user\` or \`admin\` (of the chosen organisation); \`session.superadmin\` is \`true\`
 for platform administrators (admin of every organisation). \`session.tenant\` is \`null\` when a superadmin logged in
@@ -209,7 +224,8 @@ backend (\`http://localhost:3000\`). During development the emails arrive in Mai
 with \`npm run mail:dev\` in \`./backend\`).
 
 **Use it**: in a server component \`const session = await getSession()\` (\`src/lib/session.ts\`); call your API with
-\`Authorization: Bearer \${session.accessToken}\`. The organisation is \`session.tenant\` (\`id\`, \`name\`, \`role\`). Never
+\`Authorization: Bearer \${session.accessToken}\`, or use \`serverApi(session, '<path>')\` (\`src/lib/server-api.ts\`): it adds
+the token and the language and returns \`null\` when the call fails. The organisation is \`session.tenant\` (\`id\`, \`name\`, \`role\`). Never
 trust a tenant id from the browser.
 
 **Settings** (\`.env.local\`, generated, never committed): \`OIDC_ISSUER\`, \`OIDC_CLIENT_ID\` (\`frontend\`, registered in
@@ -266,7 +282,7 @@ import { AppPage } from '@/components/shell/app-shell'
 export default function ReportsPage() {
     return (
         <AppPage>
-            <PageHead title='Reports' description='...' />
+            <PageHead title='Reports' text='...' />
         </AppPage>
     )
 }
@@ -297,14 +313,17 @@ element another size or look with the important variant (\`w-40!\`).
 /** The Pasport design: the same shell and login screen on the login server and in every app linked to it. */
 /** The files of the shell of a linked app (in the table of pasportDesign). */
 const LINKED_FILES_TABLE = `| \`src/components/shell/app-shell.tsx\` | \`<AppPage>\`: a page of this app in the shell. The rail has only this app's pages (\`APP_NAV\`); profile, security (on the login server), language and log out are in the user menu |
-| \`src/components/shell/shell-view.tsx\` | Puts the sections of \`AppPage\` in \`Shell\`; the bell and the security page open on the login server. \`EidReminder\`: the banner "Your eID has not been read yet" with a button to \`/security?app=<client id>\` of the login server (it sends the account back afterwards) while the account has no eID linked; never for a superadmin, which does not need one |
+| \`src/components/shell/shell-view.tsx\` | Puts the sections of \`AppPage\` in \`Shell\`; the bell and the security page open on the login server. \`EidReminder\` (of \`src/components/pasport/eid-required.tsx\`; only when the login server has the eID on, "Later" hides it for the browser session): the banner "Your eID has not been read yet" with a button to \`/security?app=<client id>\` of the login server (it sends the account back afterwards) while the account has no eID linked; never for a superadmin, which does not need one |
 | \`src/components/pasport/profile.tsx\` | \`Profile\`: the own profile (\`/profile\`): name, email, phone, language, the billing details of the organisation and what the eID says |
+| \`src/components/session-links.tsx\`, \`app-license.tsx\`, \`ask-demo.tsx\` | The home page: \`SessionLinks\` ("signed in as", the organisation, a link to the profile), the licence card, \`NoRoles\` (a licence but no role in this app: a notice, for the admin with a link to \`/users\` of the login server, instead of the notes) and \`AskDemo\` |
 | \`src/components/pasport/page-head.tsx\` | \`PageHead\`: the title, the sentence under it and the actions of a page |
 | \`src/lib/nav.ts\` | \`APP_NAV\`: the pages of this app in the sidebar |
 `
 
 /** The pages of the portal and the panel of the login server (in the table of pasportDesign). */
-const PORTAL_FILES_TABLE = `| \`src/components/pasport/customer/*\`, \`admin/*\`, \`tickets/*\` | The pages of the portal (my apps, dashboard, marketplace, wizard, vault, users, invoices, profile) and of the panel (statistics, tenants, users, catalogue and connection, codes, ratings), and the tickets of both |
+const PORTAL_FILES_TABLE = `| \`src/components/pasport/password-card.tsx\` | \`PasswordCard\`: change the password on \`/security\` and \`/admin/security\` (or set a first one for an eID-only account) |
+| \`src/components/oidc-login.tsx\` | The login screen behind \`/login?interaction=<id>\` (every step of the login, and the "No licence" screen of an app that sells a product: "Ask a demo", "To my apps", "Try again") |
+| \`src/components/pasport/customer/*\`, \`admin/*\`, \`tickets/*\` | The pages of the portal (my apps, dashboard, marketplace, wizard, vault, users, invoices, profile) and of the panel (statistics, tenants, users, catalogue and connection, codes, ratings), and the tickets of both |
 `
 
 /** A page of a linked app: in AppPage, in the sidebar through APP_NAV. */
@@ -365,7 +384,7 @@ export default function PlanningPage() {
 }
 ${'```'}
 
-Add it to the rail in \`CustomerShell\` (or \`AdminShell\`) of \`src/components/pasport/shell.tsx\`, and its texts in
+Add it to the rail in \`CustomerShell\` (or \`AdminShell\`) of \`src/components/pasport/portal-shell.tsx\`, and its texts in
 \`Portal.Planning\` of **every** \`messages/<language>.json\` (the texts are never hard-coded). Icons are the names of
 \`ICONS\` in \`src/components/pasport/ui.tsx\`; \`className='fade-in content-wide'\` uses the whole width.`
 
@@ -380,14 +399,14 @@ Hanken Grotesk, light and dark): its tokens and classes are in \`src/styles/pasp
 after the DafkeDD UI styles), its components in \`src/components/pasport\`. **This is the design every screen follows.**
 
 **Every page is protected**: \`src/proxy.ts\` sends a browser without a session to \`/login\` and, after the login, back
-to the page it asked for. Only the pages in \`PUBLIC_PATHS\` (the login, registration, password and invitation pages)
-are open; a new public page goes in that list.
+to the page it asked for. Only the pages in \`PUBLIC_PATHS\` (\`/login\`, \`/admin/login\`, \`/register\`, \`/forgot-password\`, \`/reset-password\`,
+\`/verify-email\`, \`/invite\`) are open${link ? ' (this app has only \`/login\` of them)' : ''}; a new public page goes in that list.
 
 **Checked**: \`npm run check:design\` (\`scripts/check-design.mjs\`, also in the CI) fails when a page is not in the
 shell (\`<AppPage>\`, or a \`layout.tsx\` above it with \`<CustomerShell>\` or \`<AdminShell>\`; a page that only redirects
 is fine) or, when it is public, in the login screen, when another component library, icon set or CSS framework is
 imported, or when a page or component writes a colour instead of a token (\`var(--accent)\`, \`var(--text-2)\`, ...).
-\`update\` of DafkeDD_CLI keeps the files of the design in step with the CLI; a file you changed gets the new version
+\`update\` of DafkeDD_CLI keeps the code (design, pages, components) in step with the CLI; a file you changed gets the new version
 next to it (\`<file>.dafkedd-new\`).
 
 | File | What it is |
@@ -399,13 +418,15 @@ next to it (\`<file>.dafkedd-new\`).
 | \`src/components/pasport/toast.tsx\` | \`useToast\` (a message at the bottom right), \`ThemeToggle\`, \`LocaleFloat\` |
 | \`src/components/pasport/auth-layout.tsx\` | \`AuthLayout\`: the login screen (one for everybody), the teal panel with the eID card on the left, the form on the right; only the form on a phone |
 | \`src/components/pasport/shell.tsx\` | \`Shell\`: the rail (collapsible, a drawer on a phone, badges), the topbar (search with ⌘K, the bell with toasts and a chime for tickets, light or dark, the user menu with its pages, the status and the out-of-office reply, the language and log out). The same in every project of the CLI |
-| \`src/components/pasport/portal-shell.tsx\` | \`PortalShell\`: \`Shell\` with the bell, the status and the out-of-office reply of the login server. \`CustomerShell\` and \`AdminShell\` fill it for the portal and the panel; \`useMe()\` is the logged in user inside them. \`CustomerShell\` shows \`EidReminder\` ("Your eID has not been read yet", a button to \`/security\`) while the account has no eID linked; never on \`/security\` itself and never for a superadmin |
-| \`src/components/pasport/out-of-office.tsx\`, \`tour.tsx\` | The out-of-office dialog and notice, and the tour of the portal (once per user, again from the user menu) |
-| \`src/components/pasport/password-card.tsx\` | \`PasswordCard\`: change the password on \`/security\` and \`/admin/security\` (or set a first one for an eID-only account) |
-| \`src/components/pasport/eid-required.tsx\` | The eID screen instead of the page while the account must still link its eID (\`OIDC_EID_REQUIRED=on\`) |
+| \`src/components/pasport/portal-shell.tsx\` | \`PortalShell\`: \`Shell\` with the bell, the status and the out-of-office reply of the login server. \`CustomerShell\` and \`AdminShell\` fill it for the portal and the panel; \`useMe()\` is the logged in user inside them. \`CustomerShell\` shows \`EidReminder\` ("Your eID has not been read yet", a button to \`/security\`) while the account has no eID linked and the login server has the eID on ("Later" hides it for the browser session); never on \`/security\` itself and never for a superadmin. \`AdminShell\` asks a superadmin without a real name to add one (a link to \`/admin/profile\`) |
+| \`src/components/pasport/out-of-office.tsx\`, \`tour.tsx\` | The out-of-office dialog and notice, and the tour of the portal (once per user, again from the user menu; not for superadmins) |
+| \`src/components/pasport/eid-required.tsx\` | \`EidRequired\`: the eID screen instead of the page while the account must still link its eID (\`OIDC_EID_REQUIRED=on\`); \`useEidStatus()\` (\`required\` and \`missing\` from \`GET /me/eid\`), \`EidReminder\`, \`useEidBack()\` and \`EidBackBanner\` (back to the app that sent the user to read the eID) |
 | \`src/components/pasport/i18n.ts\` | \`useT('<part>')\`: the texts of the portal (\`Portal.<part>\` in \`messages/<language>.json\`) |
 | \`src/lib/portal.ts\` | \`useApi\`, \`useData\` (load, reload, change locally), \`useFormat\` (money, dates) and the types of the API, through \`/api/backend\` |
+| \`src/lib/account.ts\` | \`useAccountApi()\` (the \`/oidc/account/...\` endpoints, no session) and \`useBackend()\` (\`/api/backend\`; a 403 \`oidc.EID_REQUIRED\` shows the eID screen) |
+| \`src/lib/server-api.ts\` | \`serverApi(session, '<path>')\`: the API of the login server from a server component (the layouts), with the token and the language; \`null\` when it fails |
 | \`src/components/shell/start-login.tsx\` | \`/login\` without a login request: starts one at once |
+| \`src/components/shell/login-redirect.tsx\` | \`LoginRedirect\`: a session that ended while a page was open: logs in again and comes back (stops after a failed try within 15 seconds) |
 ${link ? LINKED_FILES_TABLE : PORTAL_FILES_TABLE}| \`src/lib/brand.ts\` | \`BRAND\` (the platform, \`Pasport\`) and \`APP_NAME\` (${link ? `\`${link.name}\`` : '\`null\` on the login server'}) |
 
 ${link ? ownPage(name) : PORTAL_PAGE}
@@ -437,31 +458,36 @@ without a session within 15 seconds (cookies blocked, for example), it shows a "
 | \`/api/auth/login\` | Starts a login at the login server: state, nonce and a PKCE verifier go into an encrypted cookie |
 | \`/api/auth/callback\` | Back from the login server: checks state and \`iss\`, exchanges the code, verifies the ID token |
 | \`/api/auth/logout\` | POST: revokes the refresh token and logs out of the login server too |
+| \`/api/auth/renew\` | POST (only from a page of this app): new tokens now, so a demo that just started ("Ask a demo") shows its licence and roles at once; 401 without a session |
 | \`/api/auth/backchannel-logout\` | POST from the login server: a session ended there (logged out in another app, ended on its security page), so this browser is logged out here too |
 | \`/login\` | Starts a login at once: the login screen of the login server (the same in every app), where users also register; \`?error=\` stays here and shows why the last one failed (for example \`access_denied\` on the consent screen) |
-| \`/profile\` | Protected: name, email, organisation, role, and whether the login server accepts the access token |
+| \`/profile\` | Protected: the own profile (\`GET\`/\`PATCH /me/profile\`, the billing details of the organisation with \`PATCH /tenants/current/billing\` for its admins, what the eID says) and the licences of the user (\`GET /me/licenses\`), with "Ask a demo" for a product without one |
 | \`/api/backend/...\` | Calls the API of the login server with the access token of the session (only for apps marked "our own application") |
-| \`/api/app/...\` | Calls the API of **this app** (\`./backend\`) with the same access token, added on the server (the browser never sees it); changes only from a page of this app (Origin check). Bodies and answers pass as bytes (uploads, images, PDFs), with \`Content-Type\`, \`Accept\`, \`If-None-Match\`/\`ETag\` (304), \`Cache-Control\` and \`Content-Disposition\` |
+| \`/api/app/...\` | Calls the API of **this app** (\`./backend\`) with the same access token, added on the server (the browser never sees it); changes only from a page of this app (Origin check). Bodies and answers pass as bytes (uploads, images, PDFs), with \`Content-Type\`, \`Accept\`, \`If-None-Match\`/\`ETag\` (304), \`Cache-Control\`, \`Content-Disposition\`, \`Content-Security-Policy\` and \`X-Content-Type-Options\` |
 
 The home page shows the **notes of the organisation** (\`src/components/notes.tsx\`): the example of data of this app,
-stored by its own API in its own database, per organisation. Everyone of the organisation adds notes, only its
-beheerder (admin) removes them. Copy it for your own pages: \`fetch('/api/app/<path>')\`, and an \`@Access(...)\` route in
+stored by its own API in its own database, per organisation. Everyone of the organisation with a role in this app reads them, the role
+\`editor\` adds them (an app without roles: everyone), only its admin removes them. Copy it for your own pages: \`fetch('/api/app/<path>')\`, and an \`@Access(...)\` route in
 the backend (see its README, "Login through the login server").
 
 **Licence.** When the app sells a product (chosen in the app catalogue, \`/admin/catalog\`, of the login server), the session keeps the
 \`license\` claim of the ID token (\`session.license\`: \`trial\` until a date, \`seat\`, \`superadmin\` or \`none\`,
 renewed with the tokens). The home page shows it (\`src/components/app-license.tsx\`, namespace \`AppLicense\`); without
-a licence it hides the notes and tells a member to ask the beheerder, and gives the beheerder a link to the licences of
-the organisation on the login server. The API of the app checks the same claim (403 \`errors.NO_LICENSE\`).
+a licence it hides the notes and shows "Ask a demo" (\`POST /me/licenses/<code>/trial\`, then \`/api/auth/renew\`) and a
+link to the apps of the portal (\`/marketplace\`); a member is told to ask the admin, the admin gets a link to
+\`/users\` of the login server (the seats). A demo shows its days left with a "Buy" link. The API of the app checks the same claim (403 \`errors.NO_LICENSE\`).
 
 **Roles.** The session also keeps the \`roles\` claim (\`session.roles\`, renewed with the tokens): the roles of the user in
-this app, given by the beheerder on \`/users\` of the login server. The notes card only shows its form with the role
-\`editor\`; the API checks the roles itself (\`@Roles(...)\`, 403 \`errors.ROLE_REQUIRED\`). A beheerder who invites
+this app, given by the admin on \`/users\` of the login server. The notes card only shows its form with the role
+\`editor\`; the API checks the roles itself (\`@Roles(...)\`, 403 \`errors.ROLE_REQUIRED\`). An admin who invites
 someone on \`/users\` can tick this app with its roles and a licence: the invitation page then offers "Open <app>"
 (the home page of this app: the address after logout that the link code registered).
 
 The account and organisation pages (security, passkeys, users, invoices, support, the platform) are on the frontend of the login server
-(\`OIDC_ACCOUNT_URL\`): the sidebar, the user menu and the profile link there. This app has no login or registration
+(\`OIDC_ACCOUNT_URL\`): security in the user menu, the pages of the bell, and the links of the licence card. The sidebar
+holds only this app's pages, and the profile is this app's own \`/profile\`. The shell (bell, status, out-of-office,
+eID reminder), \`/profile\` and "Ask a demo" call the login server through \`/api/backend\`; the heartbeat shows the
+user as online there. This app has no login or registration
 form of its own: registering always happens on the login server.
 
 \`.env.local\`:
@@ -477,7 +503,7 @@ form of its own: registering always happens on the login server.
 | \`APP_URL\` | Where this frontend runs (\`http://localhost:${link.port}\`) |
 | \`AUTH_SECRET\` | Encrypts the session cookie (another one in production) |
 
-**In production**: add the https addresses of this frontend to the app on \`/admin\` (or make a new link code and run the
+**In production**: add the https addresses of this frontend to the app on \`/admin/catalog\` (tab "Connection") of the login server (or make a new link code and run the
 CLI again), and set \`APP_URL\`. The login server and this frontend must be on the same site (for example
 \`auth.example.com\` and \`planner.example.com\`), otherwise browsers do not send the session cookie of the login
 server and single sign-on asks for the password again. When the app is not "our own application", users see the consent

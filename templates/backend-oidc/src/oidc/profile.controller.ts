@@ -1,5 +1,12 @@
 import { Body, Controller, Get, Patch } from '@nestjs/common'
-import { ApiConflictResponse, ApiOkResponse, ApiOperation, ApiTags, ApiTooManyRequestsResponse } from '@nestjs/swagger'
+import {
+    ApiConflictResponse,
+    ApiNotFoundResponse,
+    ApiOkResponse,
+    ApiOperation,
+    ApiTags,
+    ApiTooManyRequestsResponse
+} from '@nestjs/swagger'
 import { I18n, I18nContext } from 'nestjs-i18n'
 import { Access, Auth, type AuthContext, EidOptional } from '../access/access.js'
 import { UpdateProfileDto } from './profile.dto.js'
@@ -34,6 +41,7 @@ export class ProfileController {
             'Change my profile. A new email address only changes after the link sent to it was opened (POST /oidc/account/verify-email). The national register number and the address come from the eID (read-only).'
     })
     @ApiOkResponse({ description: PROFILE })
+    @ApiNotFoundResponse({ description: 'errors.NOT_FOUND: the account has no profile' })
     @ApiConflictResponse({ description: 'oidc.EMAIL_TAKEN: another account has this email address' })
     @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS (email changes)' })
     update(@Auth() auth: AuthContext, @Body() body: UpdateProfileDto, @I18n() i18n: I18nContext) {

@@ -1,5 +1,11 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common'
-import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
+import {
+    ApiBadRequestResponse,
+    ApiOkResponse,
+    ApiOperation,
+    ApiTags,
+    ApiTooManyRequestsResponse
+} from '@nestjs/swagger'
 import type { Request } from 'express'
 import { AppException } from '../../common/app.exception.js'
 import { LoginLimiter } from '../login-limiter.js'
@@ -28,6 +34,7 @@ export class LinkController {
     @ApiBadRequestResponse({
         description: 'oidc.LINK_CODE_INVALID (unknown, used or expired), oidc.CLIENT_INVALID_URI or oidc.ROLES_INVALID'
     })
+    @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS (per IP address)' })
     link(@Req() request: Request, @Body() body: LinkDto) {
         if (!this.limiter.allow(['link:' + (request.ip ?? 'unknown')]))
             throw new AppException('oidc.TOO_MANY_ATTEMPTS', HttpStatus.TOO_MANY_REQUESTS)
@@ -42,6 +49,7 @@ export class LinkController {
     })
     @ApiOkResponse({ description: '{ clientId, roles: ["editor", "viewer"] }' })
     @ApiBadRequestResponse({ description: 'oidc.LINK_CODE_INVALID or oidc.ROLES_INVALID (with the reason)' })
+    @ApiTooManyRequestsResponse({ description: 'oidc.TOO_MANY_ATTEMPTS (per IP address)' })
     roles(@Req() request: Request, @Body() body: LinkRolesDto) {
         if (!this.limiter.allow(['link:' + (request.ip ?? 'unknown')]))
             throw new AppException('oidc.TOO_MANY_ATTEMPTS', HttpStatus.TOO_MANY_REQUESTS)
