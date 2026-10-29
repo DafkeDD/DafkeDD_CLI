@@ -106,6 +106,70 @@ test('planUpdate: new, same, updated by the CLI, changed by you, no longer neede
     assert.deepEqual(planUpdate({ disk: { c: sha('C1') }, wanted: { c: 'C2' } }), [{ rel: 'c', action: 'changed' }])
 })
 
+test('planUpdate: a starting point that is there is yours (skip): not compared, not "removed"; a deleted one stays deleted', () => {
+    const wanted = {
+        'backend/src/app.module.ts': 'new',
+        'backend/src/notes/a.ts': 'new',
+        'frontend/src/lib/nav.ts': 'new'
+    }
+    const plan = planUpdate({
+        // app.module.ts changed by you, notes deleted by you, nav.ts never there
+        disk: { 'backend/src/app.module.ts': sha('mine') },
+        // A manifest of 0.54.0 or 0.54.1 knows the starting points
+        remembered: { 'backend/src/app.module.ts': sha('old'), 'backend/src/notes/a.ts': sha('old') },
+        wanted,
+        skip: new Set(['backend/src/app.module.ts'])
+    })
+    assert.deepEqual(plan, [
+        { rel: 'backend/src/notes/a.ts', action: 'deleted' },
+        { rel: 'frontend/src/lib/nav.ts', action: 'new' }
+    ])
+})
+
+test('update leaves the starting points of a project alone, and a deleted one does not come back', async t => {
+    const dir = await tempDir(t)
+    // A linked app of 0.54.1 with its code in the manifest, made in a git repository
+    await writeAll(dir, {
+        'backend/.env': 'DATABASE_NAME=planner\nOIDC_ISSUER=https://login.example.com/oidc\n',
+        'backend/package.json': '{}',
+        'frontend/package.json': '{}',
+        'frontend/src/lib/brand.ts': "export const APP_NAME: string | null = 'Planner'\n",
+        'backend/src/app.module.ts': 'mine, with my own modules\n',
+        'backend/src/examples/examples.controller.ts': 'old example\n'
+    })
+    const manifest = {
+        version: '0.54.1',
+        project: manifestProject({ ...project, claude: false, cloud: false }),
+        files: {
+            'backend/src/app.module.ts': sha('as the CLI wrote it\n'),
+            'backend/src/examples/examples.controller.ts': sha('old example\n'),
+            'backend/src/notes/notes.controller.ts': sha('deleted by me\n')
+        }
+    }
+    await fs.writeFile(path.join(dir, MANIFEST), JSON.stringify(manifest))
+    const plan = await update({
+        projectDir: dir,
+        version: '0.54.3',
+        log: silent,
+        prompts: { confirm: async () => false }
+    })
+    const of = rel => plan.find(entry => entry.rel === rel)
+    // Changed by you: not compared, not reported, not touched
+    assert.equal(of('backend/src/app.module.ts'), undefined)
+    assert.equal(await fs.readFile(path.join(dir, 'backend/src/app.module.ts'), 'utf8'), 'mine, with my own modules\n')
+    assert.ok(!existsSync(path.join(dir, 'backend/src/app.module.ts' + NEW_SUFFIX)))
+    // Still as the CLI wrote it once: left alone too (never "removed")
+    assert.equal(of('backend/src/examples/examples.controller.ts'), undefined)
+    assert.ok(!plan.some(entry => entry.action === 'removed'))
+    // Deleted by you: stays deleted (here without Prettier in ./backend its code is not compared at all; with it the
+    // plan says `deleted`, see planUpdate)
+    assert.ok(!existsSync(path.join(dir, 'backend/src/notes/notes.controller.ts')))
+    // The manifest still remembers your starting points, so the next update knows them too
+    const next = readManifest(dir)
+    assert.equal(next.files['backend/src/app.module.ts'], sha('mine, with my own modules\n'))
+    assert.equal(next.files['backend/src/notes/notes.controller.ts'], sha('deleted by me\n'))
+})
+
 test('update replaces what the CLI wrote, never what you changed, and remembers the new version', async t => {
     const dir = await tempDir(t)
     const files = managedFiles(project)

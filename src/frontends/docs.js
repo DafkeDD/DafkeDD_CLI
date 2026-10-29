@@ -132,7 +132,7 @@ application that logs in through it. Everything runs on **http://localhost:3000*
 | \`/dashboard\` | **Customer portal** (\`src/app/[locale]/(portal)\`, every page in \`CustomerShell\`): the apps of the organisation, the licences and the open tickets at a glance |
 | \`/marketplace\` | "Discover apps": the app catalogue (search with the topbar), a demo per app (14 days, once), buying through the wizard |
 | \`/wizard\` | The purchase wizard (seats, monthly or yearly, a discount code, the billing details, the checkout of Mollie); \`/wizard?subscription=<id>\` shows the result after the checkout (\`/licenses/return\` comes back here) |
-| \`/vault\` | Only doctors (profession of the membership; a superadmin only when it is a doctor there, the rail shows it to nobody else): the eHealth certificate (PKCS#12), encrypted, for the apps that sign with it |
+| \`/vault\` | Only doctors (profession of the membership; a superadmin only when it is a doctor there, the rail shows it to nobody else): the eHealth certificate (PKCS#12), encrypted, for the apps that sign with it, and the colleagues of the organisation who may use it in the apps (shown by name, the email address only for one without a name) |
 | \`/users\` | Admins: the users of the organisation with their status (online, busy, out of office), invite by email (with apps: per app the roles and a licence), open invitations (send again, withdraw), role, profession, disable or remove, the licences per user and the **roles per app**. \`/members\` and \`/licenses\` (older links) come here |
 | \`/invoices\` | Admins: the invoices (FAC numbers, VAT), pay the open ones, the PDF, the contracts and when they renew |
 | \`/support\` | The tickets of the organisation: ask a question, answer, images, close and rate the help |
@@ -297,7 +297,7 @@ element another size or look with the important variant (\`w-40!\`).
 /** The Pasport design: the same shell and login screen on the login server and in every app linked to it. */
 /** The files of the shell of a linked app (in the table of pasportDesign). */
 const LINKED_FILES_TABLE = `| \`src/components/shell/app-shell.tsx\` | \`<AppPage>\`: a page of this app in the shell. The rail has only this app's pages (\`APP_NAV\`); profile, security (on the login server), language and log out are in the user menu |
-| \`src/components/shell/shell-view.tsx\` | Puts the sections of \`AppPage\` in \`Shell\`; the bell and the security page open on the login server |
+| \`src/components/shell/shell-view.tsx\` | Puts the sections of \`AppPage\` in \`Shell\`; the bell and the security page open on the login server. \`EidReminder\`: the banner "Your eID has not been read yet" with a button to \`/security?app=<client id>\` of the login server (it sends the account back afterwards) while the account has no eID linked; never for a superadmin, which does not need one |
 | \`src/components/pasport/profile.tsx\` | \`Profile\`: the own profile (\`/profile\`): name, email, phone, language, the billing details of the organisation and what the eID says |
 | \`src/components/pasport/page-head.tsx\` | \`PageHead\`: the title, the sentence under it and the actions of a page |
 | \`src/lib/nav.ts\` | \`APP_NAV\`: the pages of this app in the sidebar |
@@ -399,7 +399,7 @@ next to it (\`<file>.dafkedd-new\`).
 | \`src/components/pasport/toast.tsx\` | \`useToast\` (a message at the bottom right), \`ThemeToggle\`, \`LocaleFloat\` |
 | \`src/components/pasport/auth-layout.tsx\` | \`AuthLayout\`: the login screen (one for everybody), the teal panel with the eID card on the left, the form on the right; only the form on a phone |
 | \`src/components/pasport/shell.tsx\` | \`Shell\`: the rail (collapsible, a drawer on a phone, badges), the topbar (search with ⌘K, the bell with toasts and a chime for tickets, light or dark, the user menu with its pages, the status and the out-of-office reply, the language and log out). The same in every project of the CLI |
-| \`src/components/pasport/portal-shell.tsx\` | \`PortalShell\`: \`Shell\` with the bell, the status and the out-of-office reply of the login server. \`CustomerShell\` and \`AdminShell\` fill it for the portal and the panel; \`useMe()\` is the logged in user inside them |
+| \`src/components/pasport/portal-shell.tsx\` | \`PortalShell\`: \`Shell\` with the bell, the status and the out-of-office reply of the login server. \`CustomerShell\` and \`AdminShell\` fill it for the portal and the panel; \`useMe()\` is the logged in user inside them. \`CustomerShell\` shows \`EidReminder\` ("Your eID has not been read yet", a button to \`/security\`) while the account has no eID linked; never on \`/security\` itself and never for a superadmin |
 | \`src/components/pasport/out-of-office.tsx\`, \`tour.tsx\` | The out-of-office dialog and notice, and the tour of the portal (once per user, again from the user menu) |
 | \`src/components/pasport/password-card.tsx\` | \`PasswordCard\`: change the password on \`/security\` and \`/admin/security\` (or set a first one for an eID-only account) |
 | \`src/components/pasport/eid-required.tsx\` | The eID screen instead of the page while the account must still link its eID (\`OIDC_EID_REQUIRED=on\`) |

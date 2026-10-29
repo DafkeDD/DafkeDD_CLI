@@ -56,7 +56,8 @@ async function setup() {
     const audit = new AuditService(auditStore, new ConfigService({}))
     const access = { access: async () => ({ access: false }) } as unknown as BillingService
     const catalog = new CatalogService(billing, oidc, access)
-    const vault = new VaultService(new MemoryVaultStore(), oidc, catalog, config, audit)
+    const vaultStore = new MemoryVaultStore()
+    const vault = new VaultService(vaultStore, oidc, catalog, config, audit)
 
     await billing.createProduct({
         code: 'dossier',
@@ -123,7 +124,7 @@ async function setup() {
         return name
     }
     const owner = (userId: string) => ({ userId, tenantId: tenant.id, superadmin: false })
-    return { vault, service, auditStore, doctor, staff, token, licenseStatus, owner, tenant, oidc }
+    return { vault, vaultStore, service, auditStore, doctor, staff, token, licenseStatus, owner, tenant, oidc }
 }
 
 const ask = (
@@ -203,7 +204,7 @@ describe('VaultAppService', () => {
     })
 
     it('the secretariat uses the certificate of a doctor who chose it, only in that organisation', async () => {
-        const { service, vault, doctor, staff, token, owner, tenant, oidc, auditStore } = await setup()
+        const { service, vault, vaultStore, doctor, staff, token, owner, tenant, oidc, auditStore } = await setup()
         await vault.upload(owner(doctor.id), { filename: 'a.p12', dataBase64: p12Base64 })
         await vault.setPassword(owner(doctor.id), PASSWORD)
         const staffToken = token(staff.id, 'dossier-app')
@@ -233,6 +234,14 @@ describe('VaultAppService', () => {
                 ip: '1'
             })
         ).toEqual([{ id: doctor.id, name: 'Doc', email: 'doc@example.com', self: false, ready: true }])
+        // ready: a file, its password and not expired, without decrypting anything
+        expect(await vault.ready(doctor.id)).toBe(true)
+        expect(await vault.ready(staff.id)).toBe(false)
+        // An expired certificate is not ready either
+        const entry = (await vaultStore.find(doctor.id))!
+        await vaultStore.setPassword(doctor.id, entry.passwordEncrypted!, { ...entry, validUntil: new Date(0) })
+        expect(await vault.ready(doctor.id)).toBe(false)
+        await vaultStore.setPassword(doctor.id, entry.passwordEncrypted!, entry)
         // Without doctorId the colleague still has no certificate of its own
         expect((await errorOf(ask(service, staffToken)))?.key).toBe('oidc.VAULT_NOT_ALLOWED')
 

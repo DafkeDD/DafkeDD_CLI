@@ -35,6 +35,36 @@ const NEVER = new Set([
     'frontend/package.json'
 ])
 
+/**
+ * The starting points of a project: the code the CLI writes once for you to build on (your home page and pages in the
+ * rail, the example notes, the module list, the roles of your app). `update` only adds them when they are missing: one
+ * that is there is never compared with what the CLI makes now, one you deleted stays deleted (the manifest remembers
+ * it). Patterns: a folder ends with `/`.
+ */
+export const STARTERS = [
+    'backend/src/app.module.ts',
+    'backend/src/app.controller.ts',
+    'backend/src/app.service.ts',
+    'backend/src/app.controller.spec.ts',
+    'backend/src/examples/',
+    'backend/src/notes/',
+    'backend/config/',
+    'backend/test/app.e2e-spec.ts',
+    'frontend/src/app/[locale]/page.tsx',
+    'frontend/src/lib/nav.ts',
+    'frontend/src/components/notes.tsx',
+    'frontend/src/components/session-links.tsx',
+    'frontend/src/components/api-status.tsx'
+]
+
+/**
+ * On the login server the frontend is the portal and the backend is the server itself (the CLI adds its modules to
+ * app.module.ts): only the examples and the config folder are yours there.
+ */
+export const isStarter = (rel, kind = null) =>
+    (kind !== 'pasport' || rel.startsWith('backend/src/examples/') || rel.startsWith('backend/config/')) &&
+    STARTERS.some(starter => (starter.endsWith('/') ? rel.startsWith(starter) : rel === starter))
+
 const readEnv = file => (existsSync(file) ? parseEnvFile(readFileSync(file, 'utf8')) : {})
 
 /** The name of the app in a linked frontend (src/lib/brand.ts: APP_NAME), or null. */
@@ -234,11 +264,25 @@ export async function untouchedSinceFirstCommit(projectDir, rels) {
                 .filter(Boolean)
                 .map(line => line.slice(3).replace(/^"|"$/g, ''))
         )
+        // One log for everything: per file the commits that touched it
+        const { stdout: log } = await git('git', ['log', '--format=commit %H', '--name-only', '--no-renames'], {
+            cwd: projectDir,
+            maxBuffer: 256 * 1024 * 1024
+        })
+        const commitsOf = new Map()
+        let commit = ''
+        for (const line of log.split('\n')) {
+            if (line.startsWith('commit ')) commit = line.slice(7)
+            else if (line) {
+                const rel = line.replace(/^"|"$/g, '')
+                if (!commitsOf.has(rel)) commitsOf.set(rel, new Set())
+                commitsOf.get(rel).add(commit)
+            }
+        }
         for (const rel of rels) {
             if (changed.has(rel)) continue
-            const { stdout } = await git('git', ['log', '--format=%H', '--', rel], { cwd: projectDir })
-            const commits = stdout.split('\n').filter(Boolean)
-            if (commits.length === 1 && roots.has(commits[0])) untouched.add(rel)
+            const commits = commitsOf.get(rel)
+            if (commits?.size === 1 && roots.has([...commits][0])) untouched.add(rel)
         }
     } catch {
         // No git, or not a repository: nothing is known
@@ -371,7 +415,14 @@ export async function updateEnv({ projectDir, project }) {
         const known = new Set(Object.keys(parseEnvFile(text)))
         // Also a setting that is only there as a comment (# KEY=...): yours, on purpose
         for (const match of text.matchAll(/^#\s*([A-Z0-9_]+)=/gm)) known.add(match[1])
-        const missing = blocks.filter(block => !known.has(block.key))
+        // A secret (a placeholder in the example) is added as a comment: you fill it in, the API says when it is missing
+        const missing = blocks
+            .filter(block => !known.has(block.key))
+            .map(block =>
+                /^(OIDC_MASTER_KEY|OIDC_BOOTSTRAP_ADMIN_PASSWORD_HASH|JWT_SECRET)=/m.test(block.text)
+                    ? { ...block, text: block.text.replace(/^([A-Z0-9_]+=)/m, '# $1') }
+                    : block
+            )
         if (!missing.length) continue
         const addition =
             '\n# Added by DafkeDD_CLI update: new settings of this version\n' +

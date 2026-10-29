@@ -18,6 +18,8 @@ export type ShellUser = {
     profile: string
     security: string
     external: boolean
+    /** A superadmin never needs its eID: no reminder. */
+    superadmin?: boolean
 }
 
 /** The brand mark of the Pasport design: the shield on an accent tile (dark in the superadmin panel). */
@@ -103,7 +105,9 @@ export function ShellView({
             wide={wide}
             bell={<PortalBell accountUrl={accountUrl} admin={admin} />}
         >
-            <EidReminder href={accountUrl + '/security' + (app ? '?app=' + encodeURIComponent(app) : '')} />
+            {!user.superadmin && (
+                <EidReminder href={accountUrl + '/security' + (app ? '?app=' + encodeURIComponent(app) : '')} />
+            )}
             {children}
         </PortalShell>
     )

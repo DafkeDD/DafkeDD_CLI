@@ -188,8 +188,11 @@ npx --allow-git=all github:DafkeDD/DafkeDD_CLI doctor
   workflows and the Dockerfiles. It also adds what is missing and never changes what is there: the texts of the frontend
   (`messages/*.json`), the npm scripts and packages (`package.json`, `npm install`), and the new settings of
   `backend/.env` and `.env.example` (with their comment, never a secret). `.env` values, `package.json` otherwise and
-  `docker-compose.yml` stay yours. The READMEs go to `./docs` like when the project was made. The manifest
-  `.dafkedd.json` (committed) remembers the version, what the project is made of and a hash of every such file:
+  `docker-compose.yml` stay yours, and so do your starting points (the home page and `APP_NAV` of an app, the example
+  notes, `app.module.ts`, `config/app-roles.json`: only written when missing; on the login server, whose portal and
+  module list the CLI keeps in step, only the examples and `config/` are yours). The READMEs go to `./docs` like when
+  the project was made. The manifest `.dafkedd.json` (committed) remembers the version, what the project is made of and
+  a hash of every such file:
     - a file that is still as the CLI wrote it is replaced;
     - a file you changed is never overwritten: the new version lands next to it as `<file>.dafkedd-new` (ignored by
       git), to compare with `git diff --no-index <file> <file>.dafkedd-new`;
@@ -736,6 +739,21 @@ git switch developer
 
 ## Changelog
 
+- **0.54.3**: the rest of the review.
+    - `update` leaves your starting points alone: the home page and the pages in the rail of an app, the example notes,
+      `app.module.ts`, `config/app-roles.json` and the e2e starter are only written when they are missing, never
+      compared with what the CLI makes now. The login server is the CLI's (its portal and its module list stay in step);
+      only its examples and `config/` are yours.
+    - `update` checks the history of an older project with one `git log` instead of one per file.
+    - `POST /vault/doctors` says whether a certificate is ready without decrypting it.
+    - The colleagues a doctor chooses on `/vault` show their name; the email address only without one.
+    - No eID reminder for a superadmin (it never needs one).
+    - `POST /oidc/interaction/:id/demo` is limited per IP address like a login attempt.
+- **0.54.2**: two small fixes of the review.
+    - The HTML "no licence" page of the login server (used without `OIDC_LOGIN_UI_URL`) allows the redirect to the app
+      after "Ask a demo" in its Content-Security-Policy, like the consent page.
+    - `update` adds a missing secret (`OIDC_MASTER_KEY`, `OIDC_BOOTSTRAP_ADMIN_PASSWORD_HASH`, `JWT_SECRET`) to
+      `backend/.env` as a comment, never as a placeholder value.
 - **0.54.1**: an app of the catalogue is no longer free by mistake.
     - The link code right after making an app in the catalogue made its connection without the product of the app: the
       app was free for everyone of the organisation, and the CLI linked it without `OIDC_PRODUCT`. The connection now

@@ -143,6 +143,14 @@ export class VaultService {
         return this.status(viewer)
     }
 
+    /** Is the certificate of this account ready for the apps (a file, its password, not expired)? Nothing is decrypted. */
+    async ready(userId: string): Promise<boolean> {
+        const entry = await this.store.find(userId)
+        return Boolean(
+            entry && entry.passwordEncrypted && !(entry.validUntil && entry.validUntil.getTime() < Date.now())
+        )
+    }
+
     /**
      * The certificate file and its password in the clear, for an app that calls eHealth for this doctor (see
      * VaultAppService, which checks who may ask). 404 oidc.VAULT_EMPTY: no file; 409 oidc.VAULT_NO_PASSWORD: the

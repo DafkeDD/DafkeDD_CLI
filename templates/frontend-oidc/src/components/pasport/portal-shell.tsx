@@ -598,7 +598,7 @@ export function CustomerShell({ user, children }: { user: ShellUser; children: R
             bell={<PortalBell />}
         >
             <MeContext.Provider value={user}>
-                {!pathname.startsWith('/security') && <EidReminder href='/security' />}
+                {!user.superadmin && !pathname.startsWith('/security') && <EidReminder href='/security' />}
                 {children}
             </MeContext.Provider>
             {!user.superadmin && <Tour email={user.email} name={user.firstName || user.name} admin={admin} />}
