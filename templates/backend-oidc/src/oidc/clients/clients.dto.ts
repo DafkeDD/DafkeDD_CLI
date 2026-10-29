@@ -69,7 +69,7 @@ export class ClientFieldsDto {
     @ApiPropertyOptional({
         example: 'planner',
         description:
-            'The product (its code in the app catalogue, /admin/catalog) this app sells: one licence per user; empty or null: a free app; left out on PUT: keeps the product'
+            'The product (its code in the app catalogue, /admin/catalog) this app sells: one licence per user; empty or null: a free app; left out: the product whose code is the client id (a catalogue app) when no other app sells it, on PUT the product it has'
     })
     @IsOptional()
     @IsString({ message: i18nValidationMessage('validation.IS_STRING') })

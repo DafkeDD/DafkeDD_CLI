@@ -28,7 +28,8 @@ function license(value: unknown): Caller['license'] {
  * the issuer, the audience, that it is an access token (typ at+jwt), that it is not expired, and that it was issued
  * to an app this API trusts (OIDC_CLIENT_IDS). Access tokens live 10 minutes; the frontend renews them.
  * When the app sells a product (OIDC_PRODUCT), members and admins also need a licence of it: the `license` claim
- * the login server puts in the token (a running trial, a seat, or a superadmin). Otherwise 403 errors.NO_LICENSE.
+ * the login server puts in the token (a running trial, a seat, or a superadmin). Otherwise 403 errors.NO_LICENSE. A
+ * token whose claim says `none` is refused too, also without OIDC_PRODUCT.
  */
 @Injectable()
 export class PasportGuard implements CanActivate {
@@ -51,6 +52,10 @@ export class PasportGuard implements CanActivate {
         const product = this.config.product
         if (product && (caller.license?.product !== product || caller.license.status === 'none'))
             throw new AppException('errors.NO_LICENSE', HttpStatus.FORBIDDEN, { product })
+        // The login server says the app sells a product and the user has no licence of it: refused, also when
+        // OIDC_PRODUCT is still empty here (an app linked before its product was chosen)
+        if (caller.license?.status === 'none')
+            throw new AppException('errors.NO_LICENSE', HttpStatus.FORBIDDEN, { product: caller.license.product })
         if (level === 'admin' && caller.tenant.role !== 'admin' && !caller.superadmin)
             throw new AppException('errors.FORBIDDEN', HttpStatus.FORBIDDEN)
         // The roles of this app (config/app-roles.json), given by an admin on the login server

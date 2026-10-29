@@ -870,5 +870,17 @@ CREATE TABLE vault_delegates (
 CREATE INDEX vault_delegates_delegate ON vault_delegates (delegate_id, tenant_id);
 ${isolate('vault_delegates', 'tenant_id')}
 `
+    },
+    {
+        id: 24,
+        name: 'catalogue apps sell their product, again',
+        sql: `
+-- An app of the catalogue made between migration 21 and 0.54.1 got no product (its admin page did not send it), so
+-- everyone of an organisation could log in to it without a licence: it sells the product with its code from now on.
+-- Not when another app sells that product already (one app per product)
+UPDATE oidc_clients c SET product = c.client_id FROM license_products p
+  WHERE p.code = c.client_id AND COALESCE(c.product, '') = '' AND c.source = 'admin'
+    AND NOT EXISTS (SELECT 1 FROM oidc_clients o WHERE o.product = c.client_id);
+`
     }
 ]

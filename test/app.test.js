@@ -115,6 +115,9 @@ test('the data of every organisation is kept apart by Row-Level Security, as its
     assert.match(migrations, /\$\{isolate\('notes'\)\}/)
     assert.match(files['src/notes/pg-notes.store.ts'], /withTenant\(/)
     assert.ok(files['test/tenant-isolation.db-spec.ts'])
+    // The licence: a token that says "no licence" is refused, also without OIDC_PRODUCT
+    assert.ok(files['src/pasport/pasport.guard.spec.ts'])
+    assert.match(files['src/pasport/pasport.guard.ts'], /if \(caller\.license\?\.status === 'none'\)/)
     assert.ok(files['test/pasport.e2e-spec.ts'])
     assert.ok(files['vitest.config.db.ts'])
     assert.deepEqual(SCRIPTS, {
