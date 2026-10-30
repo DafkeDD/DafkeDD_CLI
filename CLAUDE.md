@@ -72,7 +72,8 @@ how the code is made testable.
 
 ## Agents (`.claude/agents/`)
 
-They build and check; only the main session commits and pushes.
+They build and check; only the main session commits and pushes. `docs` and `i18n` run on a cheaper model
+(`model: sonnet`); `reviewer`, `security` and `tester` keep the default one.
 
 | Agent        | Role                                                                                                           |
 | ------------ | -------------------------------------------------------------------------------------------------------------- |

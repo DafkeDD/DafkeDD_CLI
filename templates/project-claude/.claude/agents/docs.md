@@ -2,6 +2,7 @@
 name: docs
 description: Checks that the staged change of this project is documented everywhere it must be - the READMEs, docs/ (every API endpoint with body, example, response and errors), new settings in .env.example, comments - before it is committed. Read-only.
 tools: Read, Grep, Glob, Bash
+model: sonnet
 ---
 
 You check the documentation of a change of this project; documentation is as mandatory as tests, in English. You never

@@ -296,6 +296,11 @@ test('the new agents: what they may do, the knowledge base, Dependabot into deve
     for (const name of ['a11y', 'privacy', 'performance']) assert.ok(!/Edit|Write/.test(frontmatter(name)[3]), name)
     for (const name of ['a11y', 'privacy'])
         assert.ok(files[`.claude/agents/${name}.md`].includes(`node .claude/hooks/approve.mjs ${name}`), name)
+    // The simple checks run on a cheaper model; the review, security and tests keep the default one
+    for (const name of ['docs', 'i18n'])
+        assert.match(files[`.claude/agents/${name}.md`], /^tools: .+\nmodel: sonnet\n---/m)
+    for (const name of ['reviewer', 'security', 'tester'])
+        assert.ok(!/^model:/m.test(files[`.claude/agents/${name}.md`]), name)
     assert.match(files['.claude/agents/kb.md'], /docs\/kb\/screenshots\/<lang>\//)
     assert.match(files['.claude/agents/kb.md'], /e2e\/screens\.spec\.ts/)
     assert.match(files['.claude/agents/docs.md'], /the knowledge base/)

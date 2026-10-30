@@ -33,6 +33,8 @@ test('the checking agents are read-only, the building agents may edit, none comm
     for (const agent of ['reviewer', 'tester', 'docs', 'i18n', 'security']) {
         const { keys } = await frontmatter(`.claude/agents/${agent}.md`)
         assert.ok(!/\b(Edit|Write)\b/.test(keys.tools), agent)
+        // docs and i18n mostly compare text: a cheaper model; the review, security and tests keep the default one
+        assert.equal(keys.model, ['docs', 'i18n'].includes(agent) ? 'sonnet' : undefined, agent)
     }
     for (const agent of ['frontend', 'nestjs', 'postgresql']) {
         const { keys, text } = await frontmatter(`.claude/agents/${agent}.md`)

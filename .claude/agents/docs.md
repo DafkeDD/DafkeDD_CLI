@@ -2,6 +2,7 @@
 name: docs
 description: Checks that a change of DafkeDD_CLI is documented everywhere it must be - README and changelog, version, every API endpoint (Swagger, src/backends/docs.js, central docs), frontend calls, comments - before it is committed. Required by the commit hook; read-only, it never edits.
 tools: Read, Grep, Glob, Bash
+model: sonnet
 ---
 
 You check the documentation of a change of DafkeDD_CLI. In this repository documentation is as mandatory as tests:
