@@ -140,9 +140,9 @@ The hooks in `.claude/settings.json` enforce this (`.claude/git-policy.json`: `i
 - Every file the CLI keeps up to date in a project comes from `managedFiles()` (`src/manifest.js`): the generated code
   (`codeFiles()` and `moveReadmesToDocs()`, `src/update-code.js`), Claude Code, Google Cloud, `designFiles()` and
   `siteDesignFiles()`. Existing projects get a change with `update` (`src/update.js`), which never overwrites a file the
-  user changed; `doctor` (`src/doctor.js`) checks a project. A new managed file goes in `projectClaudeFiles()`,
-  `cloudFiles()`, `DESIGN_FILES` / `SITE_DESIGN_FILES`, or is part of the generated code, never written by a step of its
-  own.
+  user changed, and removes a file of `.claude/` the CLI no longer makes only when the user did not change it; `doctor`
+  (`src/doctor.js`) checks a project. A new managed file goes in `projectClaudeFiles()`, `cloudFiles()`, `DESIGN_FILES`
+  / `SITE_DESIGN_FILES`, or is part of the generated code, never written by a step of its own.
 
 ## Checking generated projects
 

@@ -225,8 +225,10 @@ npx --allow-git=all github:DafkeDD/DafkeDD_CLI doctor
     - a file that is still as the CLI wrote it is replaced;
     - a file you changed is never overwritten: the new version lands next to it as `<file>.dafkedd-new` (ignored by
       git), to compare with `git diff --no-index <file> <file>.dafkedd-new`;
-    - a missing file, and missing pages of the knowledge base, are added; a file the CLI no longer makes is reported,
-      not deleted;
+    - a missing file, and missing pages of the knowledge base, are added;
+    - a file of Claude Code (`.claude/`) the CLI no longer makes (an agent that became a skill) is removed when you did
+      not change it, with the folder it leaves empty; one you changed stays, reported. Code the CLI no longer makes is
+      reported, never deleted (your own code may still import it);
     - a file the manifest knows but you deleted stays deleted (reported as such); remove its line from `.dafkedd.json`
       to get it back.
 
@@ -878,6 +880,12 @@ git switch developer
 
 ## Changelog
 
+- **0.54.12**: `update` removes the old agents a project did not change.
+    - A file of Claude Code (`.claude/`) that the CLI no longer makes and that is still exactly as the CLI wrote it (its
+      hash is the one of `.dafkedd.json`) is removed, with the folder it leaves empty, and reported: the agents that
+      became skills in 0.54.11 (`frontend`, `nestjs`, `postgresql`, `translator`, `e2e`, `seed`, ...). One you changed
+      stays, reported as no longer needed. Code the CLI no longer makes is still only reported. A path of the manifest
+      that leads out of the project (`..`, a folder that is a link) is never touched.
 - **0.54.11**: in a project, the building and workflow agents are skills now.
     - In every project with Claude Code, `frontend` became the skill `pasport-design`, and `nestjs`, `postgresql`,
       `translator` and `e2e` became skills of the same name: the main session builds and loads them by itself when the
@@ -887,7 +895,7 @@ git switch developer
       `performance`) and `kb`.
     - The CLAUDE.md, the skills `plan` and `implement`, the agents, the labels, `dependabot.yml`, the changelog, the ADR
       README and the Backup check workflow of a project name the skills. An existing project gets the new skills with
-      `update`; removing its old agent files comes with the next version.
+      `update`; 0.54.12 removes its old agent files.
 - **0.54.10**: fewer repeated checks.
     - An approval of `i18n` or `security` (and in a project `a11y` or `privacy`) still counts for a later staged tree
       when only documentation changed since: markdown, but never `CLAUDE.md` (in any case, also `CLAUDE.local.md`) or a

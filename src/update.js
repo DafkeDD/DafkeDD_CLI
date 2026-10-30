@@ -29,6 +29,9 @@ export const NEW_SUFFIX = '.dafkedd-new'
 /** Your version of a file of an older project that update replaced after you said it was unchanged. */
 export const OLD_SUFFIX = '.dafkedd-old'
 
+/** A file that is removed when the CLI no longer makes it: Claude Code (agents, skills), which no code imports. */
+const obsolete = rel => rel.startsWith('.claude/') && !rel.split(/[\\/]/).includes('..')
+
 /**
  * What `update` does with every file the CLI manages, by comparing three versions: on disk, the hash the manifest
  * remembers (what the CLI wrote last time) and the content of this version of the CLI.
@@ -37,7 +40,10 @@ export const OLD_SUFFIX = '.dafkedd-old'
  * - `same`: already the content of this version: nothing;
  * - `updated`: on disk exactly as the CLI wrote it last time: replaced;
  * - `changed`: changed by you (or no manifest to tell): the new version next to it as `<file>.dafkedd-new`;
- * - `removed`: in the manifest, no longer made by the CLI: left alone and reported.
+ * - `obsolete`: a file of Claude Code (`.claude/`) in the manifest, no longer made by the CLI (an agent that became a
+ *   skill) and still exactly as the CLI wrote it: removed and reported;
+ * - `removed`: in the manifest, no longer made by the CLI, but changed by you, or code (your own code may still import
+ *   it): left alone and reported.
  * `skip`: the starting points of the project that are on disk (yours): left out entirely.
  */
 export function planUpdate({ disk, remembered = {}, wanted, skip = new Set() }) {
@@ -54,8 +60,43 @@ export function planUpdate({ disk, remembered = {}, wanted, skip = new Set() }) 
         else plan.push({ rel, action: 'changed' })
     }
     for (const rel of Object.keys(remembered))
-        if (!(rel in wanted) && !skip.has(rel) && disk[rel] !== undefined) plan.push({ rel, action: 'removed' })
+        if (!(rel in wanted) && !skip.has(rel) && disk[rel] !== undefined)
+            plan.push({ rel, action: obsolete(rel) && disk[rel] === remembered[rel] ? 'obsolete' : 'removed' })
     return plan.sort((a, b) => a.rel.localeCompare(b.rel))
+}
+
+/**
+ * Removes a file of `.claude/` the CLI no longer makes, and the folders it leaves empty. Only inside `.claude/`: a path
+ * of the manifest that leads outside it (`..`, a folder that is a link to elsewhere, also to the rest of the project) is
+ * never touched.
+ */
+async function removeObsolete(projectDir, rel) {
+    const claude = path.join(await fs.realpath(projectDir), '.claude')
+    const inside = file => {
+        const relative = path.relative(claude, file)
+        return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative)
+    }
+    const target = path.resolve(claude, '..', rel)
+    if (!inside(target)) return false
+    let folder = path.dirname(target)
+    try {
+        if (!inside(path.join(await fs.realpath(folder), path.basename(target)))) return false
+        // .claude itself a link to elsewhere
+        if ((await fs.realpath(claude)) !== claude) return false
+    } catch {
+        return false
+    }
+    await fs.rm(target, { force: true })
+    // The folders it leaves empty (an old skill folder): never .claude itself, never a folder with other files
+    while (inside(folder)) {
+        try {
+            await fs.rmdir(folder)
+        } catch {
+            break
+        }
+        folder = path.dirname(folder)
+    }
+    return true
 }
 
 const LABELS = {
@@ -63,7 +104,8 @@ const LABELS = {
     updated: 'bijgewerkt',
     changed: `zelf aangepast: nieuwe versie in <bestand>${NEW_SUFFIX}`,
     replaced: `vervangen; je vorige versie staat in <bestand>${OLD_SUFFIX}`,
-    removed: 'niet meer nodig (niet verwijderd)',
+    obsolete: 'niet meer nodig: verwijderd (je had het niet aangepast)',
+    removed: 'niet meer nodig (niet verwijderd: verwijder het zelf als je het niet meer gebruikt)',
     deleted: 'door jou verwijderd (niet teruggezet; verwijder de regel uit .dafkedd.json om het terug te krijgen)'
 }
 
@@ -164,7 +206,8 @@ export async function update({
         }))
     )
         for (const entry of unsure) entry.action = 'replaced'
-    for (const { rel, action } of plan) {
+    for (const entry of plan) {
+        const { rel, action } = entry
         const target = path.join(projectDir, rel)
         if (action === 'replaced') {
             await fs.copyFile(target, target + OLD_SUFFIX)
@@ -173,6 +216,8 @@ export async function update({
             await fs.mkdir(path.dirname(target), { recursive: true })
             await fs.writeFile(target, wanted[rel], rel.endsWith('.sh') ? { mode: 0o755 } : undefined)
         } else if (action === 'changed') await fs.writeFile(target + NEW_SUFFIX, wanted[rel])
+        // A folder of it that is a link out of the project: left alone, and reported like that
+        else if (action === 'obsolete' && !(await removeObsolete(projectDir, rel))) entry.action = 'removed'
     }
     // The pages of the knowledge base that are missing (an existing page is never touched)
     const kbAdded = []
