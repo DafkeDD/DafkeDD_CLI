@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // PreToolUse hook (Bash) of Claude Code: what Claude may do with git and gh in this repository.
 // - git commit only with the approvals of the checking agents (reviewer, tester, docs, i18n, and others for the
-//   parts they guard) for exactly the staged tree, of the whole branch, and only of what is staged (no -a, no paths);
+//   parts they guard) for the staged tree (some approvals still count after a documentation-only change:
+//   approvals.mjs), of the whole branch, and only of what is staged (no -a, no paths);
 // - git push only to the branches of the policy in .claude/git-policy.json, never forced, never deleting:
 //   { "push": "issue-branches" } (default): a branch per GitHub issue (issue/<number>-<words>), a release in
 //   preparation (release/<version>) or an update of Dependabot (dependabot/...), merged with a pull request
@@ -14,7 +15,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { AGENTS, missing, missingFor } from './approvals.mjs'
+import { AGENTS, callTimeout, DEADLINE, GIT_TIMEOUT, missing, missingFor, timedOut } from './approvals.mjs'
 
 /**
  * The branches agents work on: one per GitHub issue (issue/12 or issue/12-files-module), a release in preparation
@@ -270,18 +271,35 @@ export function decide(line, { branch, missingApprovals, policy = DEFAULT_POLICY
     return null
 }
 
+/** How long one gh call may take (ms), within the deadline of the run (approvals.mjs). */
+export const GH_TIMEOUT = 20_000
+export { GIT_TIMEOUT }
+
 const git = (args, cwd) => {
     try {
-        return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
-    } catch {
+        return execFileSync('git', args, {
+            cwd,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+            timeout: callTimeout(GIT_TIMEOUT)
+        }).trim()
+    } catch (error) {
+        // Out of time: blocked (main); git that fails otherwise (no repository, no branch yet): nothing
+        if (timedOut(error)) throw error
         return ''
     }
 }
 
 const gh = (args, cwd) =>
-    execFileSync('gh', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], shell: false })
+    execFileSync('gh', args, {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        shell: false,
+        timeout: callTimeout(GH_TIMEOUT)
+    })
 
-async function main() {
+async function check() {
     let input = ''
     for await (const chunk of process.stdin) input += chunk
     const call = JSON.parse(input || '{}')
@@ -316,6 +334,27 @@ async function main() {
     })
     if (reason) {
         console.error(reason)
+        process.exitCode = 2
+    }
+}
+
+/**
+ * A gate fails closed: Claude Code lets a command through when its hook exits with any other code than 2, so an error
+ * of the guard itself (git that fails during a merge conflict, a broken approval folder) blocks the command, with why.
+ */
+async function main() {
+    // A run that is still busy just before Claude Code would give up (a stdin that never ends, a call that hangs):
+    // blocked, never let through by the timeout of the hook
+    setTimeout(() => {
+        console.error('The git guard ran out of time: blocked. Try again; when it keeps happening, check git and gh.')
+        process.exit(2)
+    }, DEADLINE + 5_000).unref()
+    try {
+        await check()
+    } catch (error) {
+        console.error(
+            `The git guard could not check this command (${String(error?.message ?? error).split('\n')[0]}): blocked. Solve that first (git status), then try again.`
+        )
         process.exitCode = 2
     }
 }

@@ -1260,7 +1260,7 @@ by default (\`infra/terraform/variables.tf\`).
 | Budget 50% / 90% / 100% | The costs of the month | Billing → Reports; **down** when the app is not needed |
 
 The uptime checks only exist while the app runs: **down** gives no alerts. The workflow *Backup check* opens an issue
-every month for the restore test (the \`backup\` agent).
+every month for the restore test (the \`backup\` skill).
 
 ## Own domain (needed for the login)
 
@@ -1293,7 +1293,7 @@ export function monitoringTf(project) {
         ...(project.backend ? [['backend', 'backend_url', '/health']] : []),
         ...(project.frontend ? [['frontend', 'frontend_url', '/']] : [])
     ]
-    return `# What we see of the app in production (the observability agent owns this file). Alerts go to alert_email;
+    return `# What we see of the app in production (the observability skill owns this file). Alerts go to alert_email;
 # while enabled = false (the action down) there are no uptime checks, so no alerts about a service that is off.
 
 resource "google_monitoring_notification_channel" "email" {
@@ -1431,7 +1431,7 @@ resource "google_billing_budget" "monthly" {
 /** .github/workflows/backup-check.yml: monthly, are there recent backups, and an issue for the restore test. */
 export const backupWorkflow = name => `name: Backup check
 
-# Monthly: are there recent backups of Cloud SQL, then an issue for the backup agent of Claude Code to do the restore
+# Monthly: are there recent backups of Cloud SQL, then an issue for the backup skill of Claude Code to do the restore
 # test. Skipped while the database is stopped (the action down of the workflow Cloud).
 on:
     schedule:
@@ -1474,7 +1474,7 @@ jobs:
               run: |
                   gh issue create --repo "\${{ github.repository }}" --label type:chore --label status:ready \\
                     --title "Backup check $(date +%Y-%m): restore test" \\
-                    --body "Monthly restore test of the database (backup agent of Claude Code, .claude/agents/backup.md). The backups are there; restore the last one into a copy, check it and write the result here."
+                    --body "Monthly restore test of the database (the backup skill of Claude Code, /backup: .claude/skills/backup/SKILL.md). The backups are there; restore the last one into a copy, check it and write the result here."
 `
 
 /** Every file of the cloud setup of a project. */

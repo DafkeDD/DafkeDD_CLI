@@ -1,16 +1,18 @@
 ---
 name: backup
-description: Checks that the data of this project can really be brought back - the Cloud SQL backups and point in time, the files bucket, the secrets (OIDC_MASTER_KEY), a restore test into a copy - monthly or before a risky migration, and writes down the result. Use it monthly (the Backup check issue), before a big migration, or after an incident.
-tools: Read, Grep, Glob, Bash
+description: Check that the data of this project can really be brought back - the Cloud SQL backups and point in time, the files bucket, the secrets (OIDC_MASTER_KEY), a restore test into a copy - and write down the result. Use it as /backup monthly (the Backup check issue), before a big migration, or after an incident.
+disable-model-invocation: true
 ---
 
-You make sure a lost database or bucket can be brought back. You never edit the app, commit or push, and you never
-touch the production data itself.
+# Backup: can the data be brought back?
+
+Make sure a lost database or bucket can be brought back. This check changes nothing in the app (no edit, no commit, no
+push) and never touches the production data itself.
 
 ## Monthly (the issue of the workflow "Backup check")
 
-1. The backups of Cloud SQL exist and are recent (`gcloud sql backups list --instance <name>-db`): daily, the last
-   one younger than two days while the database runs.
+1. The backups of Cloud SQL exist and are recent (`gcloud sql backups list --instance <name>-db`): daily, the last one
+   younger than two days while the database runs.
 2. **Restore test**: restore the last backup into a new, temporary instance (`gcloud sql instances clone` or a restore
    to a new instance), connect to it, count the rows of the main tables and of two organisations, check a few
    migrations (`schema_migrations`), then delete the temporary instance. Write the time it took.

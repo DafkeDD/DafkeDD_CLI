@@ -1,10 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { commands, LABELS, REPO } from '../scripts/setup-labels.mjs'
 
-const SKILLS = ['plan', 'implement', 'diagnose', 'handoff', 'port-from-test']
-const AGENTS = ['reviewer', 'tester', 'docs', 'i18n', 'security', 'frontend', 'nestjs', 'postgresql']
+const SKILLS = ['plan', 'implement', 'diagnose', 'handoff', 'port-from-test', 'pasport-design', 'nestjs', 'postgresql']
+const AGENTS = ['reviewer', 'tester', 'docs', 'i18n', 'security']
 const names = new Set(LABELS.map(([name]) => name))
 
 /** The frontmatter of an agent or skill: one line per key. */
@@ -29,16 +30,24 @@ test('every skill and agent has a name and a description of one line', async () 
     }
 })
 
-test('the checking agents are read-only, the building agents may edit, none commits or pushes', async () => {
+test('the checking agents are read-only, building is done with the knowledge skills (no building agents)', async () => {
     for (const agent of ['reviewer', 'tester', 'docs', 'i18n', 'security']) {
         const { keys } = await frontmatter(`.claude/agents/${agent}.md`)
         assert.ok(!/\b(Edit|Write)\b/.test(keys.tools), agent)
+        // docs and i18n mostly compare text: a cheaper model; the review, security and tests keep the default one
+        assert.equal(keys.model, ['docs', 'i18n'].includes(agent) ? 'sonnet' : undefined, agent)
     }
-    for (const agent of ['frontend', 'nestjs', 'postgresql']) {
-        const { keys, text } = await frontmatter(`.claude/agents/${agent}.md`)
-        assert.match(keys.tools, /Edit/, agent)
-        assert.match(text, /never commit or push/, agent)
+    // Building is the main session's, with the knowledge skills: no building agents any more
+    for (const agent of ['frontend', 'nestjs', 'postgresql'])
+        assert.ok(!existsSync(`.claude/agents/${agent}.md`), agent)
+    for (const skill of ['pasport-design', 'nestjs', 'postgresql']) {
+        const { text } = await frontmatter(`.claude/skills/${skill}/SKILL.md`)
+        assert.match(text, /start the checking agents \(the `implement` skill\)/, skill)
     }
+    assert.match(
+        await fs.readFile('.claude/skills/pasport-design/SKILL.md', 'utf8'),
+        /First-login tour|first-login tour/
+    )
 })
 
 test('the skills use only labels that npm run labels creates, on the right repository', async () => {
@@ -66,8 +75,8 @@ test('implement works on an issue branch, opens a pull request and merges it whe
     assert.match(implement, /gh pr create --base developer/)
     assert.match(implement, /gh pr merge <number> --squash --delete-branch/)
     assert.match(implement, /Never merge into `main`/)
-    for (const agent of ['reviewer', 'tester', 'docs', 'i18n', 'security', 'frontend', 'nestjs', 'postgresql'])
-        assert.ok(implement.includes(`**${agent}**`), agent)
+    for (const name of ['reviewer', 'tester', 'docs', 'i18n', 'security', 'pasport-design', 'nestjs', 'postgresql'])
+        assert.ok(implement.includes(`**${name}**`), name)
     const plan = await fs.readFile('.claude/skills/plan/SKILL.md', 'utf8')
     assert.match(plan, /gh issue create --repo DafkeDD\/DafkeDD_CLI --label spec/)
     const ignored = await fs.readFile('.gitignore', 'utf8')

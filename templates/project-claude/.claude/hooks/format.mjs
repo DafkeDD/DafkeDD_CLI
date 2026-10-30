@@ -7,6 +7,9 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+/** How long Prettier may take for one file (ms), below the `timeout` of the hook in .claude/settings.json (30 s). */
+export const FORMAT_TIMEOUT = 20_000
+
 export const FORMATTED = /\.(m?js|cjs|ts|tsx|json|md|css|ya?ml)$/
 
 /** The script of Prettier in a package: run with node itself, no shell (paths with spaces on Windows). */
@@ -36,10 +39,16 @@ async function main() {
     const dir = prettierRoot(full, root)
     if (!dir) return
     try {
-        execFileSync(process.execPath, [prettierBin(dir), '--write', full], { cwd: dir, stdio: 'ignore', shell: false })
+        execFileSync(process.execPath, [prettierBin(dir), '--write', full], {
+            cwd: dir,
+            stdio: 'ignore',
+            shell: false,
+            timeout: FORMAT_TIMEOUT
+        })
     } catch {
         // Not a file Prettier can format (or a syntax error that the tests will report): leave it
     }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) await main()
+// Not a gate: an error of its own never blocks or bothers the session (the format check of the CI still runs)
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) await main().catch(() => {})

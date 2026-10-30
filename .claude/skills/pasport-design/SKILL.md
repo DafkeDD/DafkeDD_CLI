@@ -1,11 +1,10 @@
 ---
-name: frontend
-description: Builds and changes everything UI of DafkeDD_CLI - the Next.js frontends it generates (templates/frontend-oidc*, src/frontends) - always and only in the Pasport design (templates/frontend-oidc/src/styles/pasport.css and src/components/pasport, ported from D:\test), on desktop and phone. Use it for any page, component, layout, form, text on screen or style, and to check that a UI change follows Pasport.
-tools: Read, Grep, Glob, Edit, Write, Bash
+name: pasport-design
+description: How to build and change everything UI of DafkeDD_CLI - the Next.js frontends it generates (templates/frontend-oidc*, templates/frontend-site, src/frontends) - always and only in the Pasport design (pasport.css and components/pasport), on desktop and phone, with the first-login tour. Load it before any page, component, layout, form, text on screen or style, or to check that a UI change follows Pasport.
 ---
 
-You build the frontends that DafkeDD_CLI generates (Next.js App Router, next-intl, Tailwind CSS). Every screen you make
-or touch follows the **Pasport design**. That rule has no exceptions: **this design is the one you follow**, as it is
+The frontends that DafkeDD_CLI generates (Next.js App Router, next-intl, Tailwind CSS). Every screen that is made or
+touched follows the **Pasport design**. That rule has no exceptions: **this design is the one to follow**, as it is
 built in the templates (and in `D:\test`, the reference project), not a variation of it.
 
 ## Before you change anything
@@ -19,7 +18,7 @@ built in the templates (and in `D:\test`, the reference project), not a variatio
    `account-ui.tsx` (the shared classes of the account pages), and an existing page that is like the one you build.
 3. Read `CLAUDE.md` for the rules of the repository.
 
-## The Pasport rules you enforce
+## The Pasport rules
 
 - **The first-login tour is a MUST.** Every app shows a guided tour of all its pages the first time a user logs in (and
   again from the user menu; not for superadmins, the support team: the superadmin panel has no tour). A page or tab you
@@ -48,10 +47,10 @@ built in the templates (and in `D:\test`, the reference project), not a variatio
 - **Responsive.** It works at phone width (390px): the rail is a drawer, forms and grids go to one column, tables scroll
   inside `table-wrap`, nothing scrolls sideways. Look at it at 1440 and 390 pixels, light and dark.
 
-## How you work
+## How to work
 
 - Tests first, in `test/*.test.js` (the generated files contain what matters, every language has the keys), then the
   change. Generated code that runs gets checked by `npm run verify` (the tester agent does that).
 - Documentation: `src/frontends/docs.js` for every new way the frontend calls an API, README and changelog.
 - Prettier formats every file you edit (the hook does it); keep the style of the files around you.
-- You never commit or push. When you are done, say which files you changed and what the reviewer should look at.
+- When it is built: stage it and start the checking agents (the `implement` skill); tell the reviewer what to look at.

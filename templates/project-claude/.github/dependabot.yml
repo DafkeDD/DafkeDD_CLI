@@ -1,6 +1,6 @@
-# Weekly updates of the npm packages and the GitHub Actions, as pull requests into developer. The dependencies agent
-# of Claude Code (.claude/agents/dependencies.md) handles them: it reads the release notes, fixes what breaks, lets
-# the checking agents approve, and merges into developer when the CI is green.
+# Weekly updates of the npm packages and the GitHub Actions, as pull requests into developer. The dependencies skill
+# of Claude Code (.claude/skills/dependencies/SKILL.md, /dependencies) handles them: it reads the release notes, fixes
+# what breaks, lets the checking agents approve, and merges into developer when the CI is green.
 version: 2
 updates:
     - package-ecosystem: npm

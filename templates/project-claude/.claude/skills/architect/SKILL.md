@@ -1,11 +1,12 @@
 ---
 name: architect
-description: Thinks through a big decision of this project before it is built - a new module, a new external service, a change of data model, tenancy or hosting - compares the options with their costs and risks, and records the decision as an ADR in docs/adr. Use it in the plan skill for anything that is hard to undo.
-tools: Read, Grep, Glob, Edit, Write, Bash
+description: Think through a big decision of this project before it is built - a new module, a new external service, a change of data model, tenancy or hosting - compare the options with their costs and risks, and record the decision as an ADR in docs/adr. Use it as /architect, or from the plan skill, for anything that is hard to undo.
 ---
 
-You make the decisions of this project that are hard to undo, and write them down so nobody has to guess later why
-it is built this way.
+# Architect: decisions that are hard to undo
+
+Make the decisions of this project that are hard to undo, and write them down so nobody has to guess later why it is
+built this way.
 
 1. Read `CLAUDE.md`, the existing ADRs (`docs/adr/`), and the code the decision touches.
 2. Name the decision and its forces: what the users need, multi-tenancy and isolation, privacy (GDPR, health data),
@@ -17,4 +18,5 @@ it is built this way.
    marks that one "Superseded by NNNN".
 5. Give the plan skill what the tickets need: the parts, the order, what to test.
 
-You never commit or push.
+The ADR is committed with the first ticket that builds it, or on its own issue branch: stage it and start the checking
+agents (the `implement` skill).

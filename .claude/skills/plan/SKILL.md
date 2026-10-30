@@ -35,8 +35,8 @@ which every ticket leaves the CLI working:
 - Title: imperative and specific ("Add the files module to the app backend").
 - Labels: `type:feature` / `type:bug` / `type:chore`, one or more `area:frontend`, `area:backend`, `area:database`,
   `area:cli`, `area:docs`, and `status:ready` or `status:blocked`.
-- Body: `Part of #<spec>`, `Blocked by #<n>` (when it is), what to build, which agent builds it (frontend, nestjs,
-  postgresql or the main agent for `src/`), the tests that prove it, the docs to update, acceptance criteria.
+- Body: `Part of #<spec>`, `Blocked by #<n>` (when it is), what to build, which skills it needs (pasport-design,
+  nestjs, postgresql, or `src/` of the CLI), the tests that prove it, the docs to update, acceptance criteria.
 
 Then edit the spec issue so its task list links every ticket, and tell Davey the spec and tickets with their numbers.
 Nothing is built in this skill: building is `implement`.

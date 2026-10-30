@@ -106,6 +106,148 @@ test('planUpdate: new, same, updated by the CLI, changed by you, no longer neede
     assert.deepEqual(planUpdate({ disk: { c: sha('C1') }, wanted: { c: 'C2' } }), [{ rel: 'c', action: 'changed' }])
 })
 
+test('planUpdate: an old file of Claude Code you did not change is obsolete; changed, or code, it stays', () => {
+    const remembered = {
+        '.claude/agents/frontend.md': sha('old agent'),
+        '.claude/agents/nestjs.md': sha('old agent'),
+        'frontend/src/components/locale-switcher.tsx': sha('old switcher'),
+        // A path that leads out of .claude is never obsolete, also with the separators of Windows
+        '.claude/../frontend/src/x.ts': sha('x'),
+        '.claude\\..\\x.ts': sha('x'),
+        // Passes the prefix .claude/, but Windows reads it as <project>/x.ts: only the check of `..` stops it
+        '.claude/..\\x.ts': sha('x')
+    }
+    const plan = planUpdate({
+        disk: { ...remembered, '.claude/agents/nestjs.md': sha('my own version') },
+        // Deleted by you already: nothing to do
+        remembered: { ...remembered, '.claude/agents/postgresql.md': sha('old agent') },
+        wanted: {}
+    })
+    assert.deepEqual(plan, [
+        { rel: '.claude/../frontend/src/x.ts', action: 'removed' },
+        { rel: '.claude/..\\x.ts', action: 'removed' },
+        { rel: '.claude/agents/frontend.md', action: 'obsolete' },
+        { rel: '.claude/agents/nestjs.md', action: 'removed' },
+        { rel: '.claude\\..\\x.ts', action: 'removed' },
+        // Your own code may still import it
+        { rel: 'frontend/src/components/locale-switcher.tsx', action: 'removed' }
+    ])
+})
+
+test('update removes the last file of .claude, but never .claude itself or the project', async t => {
+    const dir = await tempDir(t)
+    const rel = '.claude/skills/old/SKILL.md'
+    await fs.mkdir(path.dirname(path.join(dir, rel)), { recursive: true })
+    await fs.writeFile(path.join(dir, rel), 'old skill')
+    // A project without Claude Code: nothing else is in .claude
+    const bare = { ...project, claude: false }
+    const manifest = await buildManifest({ projectDir: dir, project: bare, version: '0.54.11' })
+    manifest.files[rel] = sha('old skill')
+    await fs.writeFile(path.join(dir, MANIFEST), JSON.stringify(manifest))
+    const plan = await update({ projectDir: dir, version: '0.54.12', log: silent })
+    assert.equal(plan.find(entry => entry.rel === rel)?.action, 'obsolete')
+    assert.ok(!existsSync(path.join(dir, '.claude/skills')))
+    assert.ok(existsSync(path.join(dir, '.claude')))
+    assert.ok(existsSync(dir))
+})
+
+test('update never removes through a .claude that is itself a link, to the project or elsewhere', async t => {
+    const elsewhere = await fs.mkdtemp(path.join(os.tmpdir(), 'elsewhere-'))
+    t.after(() => fs.rm(elsewhere, { recursive: true, force: true }))
+    // Each target is a folder named .claude itself too (another project, a part of this one): resolving the link first
+    // would make it look like the .claude of this project
+    const targets = {
+        project: dir => dir,
+        'a .claude in the project': dir => path.join(dir, 'frontend', '.claude'),
+        'the .claude of another project': () => path.join(elsewhere, 'other', '.claude')
+    }
+    for (const [name, where] of Object.entries(targets)) {
+        const dir = await tempDir(t)
+        const to = where(dir)
+        const rel = '.claude/agents/agent.md'
+        const file = path.join(to, 'agents', 'agent.md')
+        await fs.mkdir(path.dirname(file), { recursive: true })
+        await fs.writeFile(file, 'not yours')
+        // (a junction: on Windows a link to a folder needs no administrator rights then)
+        await fs.symlink(to, path.join(dir, '.claude'), 'junction')
+        const manifest = await buildManifest({
+            projectDir: dir,
+            project: { ...project, claude: false },
+            version: '0.54.11'
+        })
+        manifest.files[rel] = sha('not yours')
+        await fs.writeFile(path.join(dir, MANIFEST), JSON.stringify(manifest))
+        const plan = await update({ projectDir: dir, version: '0.54.12', log: silent })
+        assert.equal(plan.find(entry => entry.rel === rel)?.action, 'removed', name)
+        assert.equal(await fs.readFile(file, 'utf8'), 'not yours', name)
+    }
+})
+
+test('update removes the old agents you did not change, keeps the ones you changed, and forgets them', async t => {
+    const dir = await tempDir(t)
+    await writeAll(dir, managedFiles(project))
+    await fs.writeFile(path.join(dir, 'frontend', 'package.json'), '{}')
+    const manifest = await buildManifest({ projectDir: dir, project, version: '0.54.11' })
+    // An older CLI made these agents (now skills) and an old skill folder; you changed nestjs.md
+    const old = {
+        '.claude/agents/frontend.md': 'old frontend agent',
+        '.claude/agents/nestjs.md': 'old nestjs agent',
+        '.claude/skills/old-skill/SKILL.md': 'old skill'
+    }
+    for (const [rel, content] of Object.entries(old)) {
+        await fs.mkdir(path.dirname(path.join(dir, rel)), { recursive: true })
+        await fs.writeFile(path.join(dir, rel), content)
+        manifest.files[rel] = sha(content)
+    }
+    await fs.writeFile(path.join(dir, '.claude/agents/nestjs.md'), 'my own nestjs agent')
+    // A path of the manifest outside the project is never touched
+    const outside = path.join(path.dirname(dir), path.basename(dir) + '-outside.md')
+    await fs.writeFile(outside, 'not yours')
+    t.after(() => fs.rm(outside, { force: true }))
+    const escape = `.claude/../../${path.basename(outside)}`
+    manifest.files[escape] = sha('not yours')
+    // ... also not through a folder that is a link to elsewhere
+    const elsewhere = await fs.mkdtemp(path.join(os.tmpdir(), 'elsewhere-'))
+    t.after(() => fs.rm(elsewhere, { recursive: true, force: true }))
+    await fs.writeFile(path.join(elsewhere, 'agent.md'), 'not yours')
+    // (a junction: on Windows a link to a folder needs no administrator rights then)
+    await fs.symlink(elsewhere, path.join(dir, '.claude/linked'), 'junction')
+    manifest.files['.claude/linked/agent.md'] = sha('not yours')
+    // ... nor through a link to the rest of the project: only .claude/ is ever removed
+    await fs.mkdir(path.join(dir, 'backend/src'), { recursive: true })
+    await fs.writeFile(path.join(dir, 'backend/src/mine.ts'), 'my code')
+    await fs.symlink(dir, path.join(dir, '.claude/up'), 'junction')
+    manifest.files['.claude/up/backend/src/mine.ts'] = sha('my code')
+    await fs.writeFile(path.join(dir, MANIFEST), JSON.stringify(manifest))
+
+    const lines = []
+    const plan = await update({ projectDir: dir, version: '0.54.12', log: line => lines.push(String(line)) })
+    const action = rel => plan.find(entry => entry.rel === rel)?.action
+    assert.equal(action('.claude/agents/frontend.md'), 'obsolete')
+    assert.equal(action('.claude/skills/old-skill/SKILL.md'), 'obsolete')
+    assert.equal(action('.claude/agents/nestjs.md'), 'removed')
+    assert.ok(!existsSync(path.join(dir, '.claude/agents/frontend.md')))
+    // The folder it left empty goes too; the agents folder with the other agents stays
+    assert.ok(!existsSync(path.join(dir, '.claude/skills/old-skill')))
+    assert.ok(existsSync(path.join(dir, '.claude/skills')))
+    assert.ok(existsSync(path.join(dir, '.claude/agents/reviewer.md')))
+    assert.equal(await fs.readFile(path.join(dir, '.claude/agents/nestjs.md'), 'utf8'), 'my own nestjs agent')
+    assert.equal(await fs.readFile(outside, 'utf8'), 'not yours')
+    assert.equal(await fs.readFile(path.join(elsewhere, 'agent.md'), 'utf8'), 'not yours')
+    assert.equal(action(escape), 'removed')
+    assert.equal(action('.claude/linked/agent.md'), 'removed')
+    assert.equal(action('.claude/up/backend/src/mine.ts'), 'removed')
+    assert.equal(await fs.readFile(path.join(dir, 'backend/src/mine.ts'), 'utf8'), 'my code')
+    assert.ok(lines.some(line => line.includes('.claude/agents/frontend.md: niet meer nodig: verwijderd')))
+    assert.ok(lines.some(line => line.includes('.claude/agents/nestjs.md: niet meer nodig (niet verwijderd')))
+    // The manifest forgets them: the next update has nothing to say about them
+    const next = readManifest(dir)
+    assert.equal(next.files['.claude/agents/frontend.md'], undefined)
+    assert.equal(next.files['.claude/agents/nestjs.md'], undefined)
+    const again = await update({ projectDir: dir, version: '0.54.12', log: silent })
+    assert.ok(!again.some(entry => entry.rel.startsWith('.claude/agents/') && entry.action !== 'same'))
+})
+
 test('planUpdate: a starting point that is there is yours (skip): not compared, not "removed"; a deleted one stays deleted', () => {
     const wanted = {
         'backend/src/app.module.ts': 'new',

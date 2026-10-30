@@ -1,11 +1,25 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { checksGreen, decide, gitCommands, readPolicy } from '../.claude/hooks/guard-git.mjs'
-import { AGENTS, approve, branchPaths, KINDS, missing, required } from '../.claude/hooks/approvals.mjs'
+import { checksGreen, decide, GH_TIMEOUT, GIT_TIMEOUT, gitCommands, readPolicy } from '../.claude/hooks/guard-git.mjs'
+import { FORMAT_TIMEOUT } from '../.claude/hooks/format.mjs'
+import { describeProject, projectClaudeFiles } from '../src/claude.js'
+import {
+    AGENTS,
+    approvalFile,
+    approve,
+    branchPaths,
+    DEADLINE,
+    KINDS,
+    shorter,
+    timedOut,
+    missing,
+    required
+} from '../.claude/hooks/approvals.mjs'
 
 const HOOK = path.resolve('.claude/hooks/guard-git.mjs')
 const TEMPLATE = 'templates/project-claude/.claude'
@@ -31,6 +45,13 @@ test('the hooks of this repository are the ones every project gets (one source)'
             await fs.readFile(`${TEMPLATE}/hooks/${name}`, 'utf8'),
             name
         )
+    // The header says what an approval covers: not exactly the staged tree, a documentation-only change keeps some
+    const header = (await fs.readFile(`${TEMPLATE}/hooks/guard-git.mjs`, 'utf8')).split('\n// - git push')[0]
+    assert.match(
+        header.replace(/\n\/\/\s*/g, ' '),
+        /for the staged tree \(some approvals still count after a documentation-only change: approvals\.mjs\)/
+    )
+    assert.ok(!header.includes('exactly the staged tree'))
     // The CLI works like the projects it makes: a branch per issue, merged into developer
     assert.deepEqual(JSON.parse(await fs.readFile('.claude/git-policy.json', 'utf8')), PROJECT)
     assert.deepEqual(JSON.parse(await fs.readFile(`${TEMPLATE}/git-policy.json`, 'utf8')), PROJECT)
@@ -219,6 +240,140 @@ test('the approvals belong to exactly the staged tree, and the hook blocks a com
     assert.match(hook('git push -u origin issue/1-start').stderr, /Push only to developer/)
 })
 
+test('an approval still counts when only files outside its scope changed since; review, tests and docs never', async t => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-scope-'))
+    t.after(() => fs.rm(dir, { recursive: true, force: true }))
+    const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
+    git('init', '-q', '-b', 'issue/1-start')
+    await fs.mkdir(path.join(dir, 'src', 'oidc'), { recursive: true })
+    await fs.writeFile(path.join(dir, 'src', 'oidc', 'tokens.ts'), 'one\n')
+    await fs.writeFile(path.join(dir, 'README.md'), 'one\n')
+    git('add', '-A')
+    for (const kind of ['review', 'tests', 'docs', 'i18n', 'security']) approve(dir, kind)
+    assert.deepEqual(missing(dir), [])
+    // Only documentation, a docs generator and a test of the CLI changed: i18n still counts; security still counts for
+    // the markdown, not for the generator (code); the others look again
+    await fs.writeFile(path.join(dir, 'README.md'), 'two\n')
+    await fs.mkdir(path.join(dir, 'src', 'backends'), { recursive: true })
+    await fs.writeFile(path.join(dir, 'src', 'backends', 'docs.js'), 'two\n')
+    await fs.mkdir(path.join(dir, 'test'))
+    await fs.writeFile(path.join(dir, 'test', 'a.test.js'), 'two\n')
+    git('add', '-A')
+    assert.deepEqual(missing(dir), ['review', 'tests', 'docs', 'security'])
+    for (const kind of ['review', 'tests', 'docs', 'security']) approve(dir, kind)
+    assert.deepEqual(missing(dir), [])
+    // Only a markdown file: i18n and security still count
+    await fs.writeFile(path.join(dir, 'README.md'), 'three\n')
+    git('add', '-A')
+    assert.deepEqual(missing(dir), ['review', 'tests', 'docs'])
+    // Code changed: every approval looks again
+    await fs.writeFile(path.join(dir, 'src', 'oidc', 'tokens.ts'), 'three\n')
+    git('add', '-A')
+    assert.deepEqual(missing(dir), ['review', 'tests', 'docs', 'i18n', 'security'])
+})
+
+test('documentation never hides a change of security: the rules, the agents, a docs.js that is code, a rename', async t => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-scope-'))
+    t.after(() => fs.rm(dir, { recursive: true, force: true }))
+    const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
+    const commit = (...args) => git('-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', ...args)
+    git('init', '-q', '-b', 'developer')
+    commit('--allow-empty', '-m', 'start')
+    git('update-ref', 'refs/remotes/origin/developer', 'HEAD')
+    git('switch', '-q', '-c', 'issue/1-guard')
+    // The branch changes a guard: every later commit of it needs security
+    await fs.mkdir(path.join(dir, 'src', 'oidc'), { recursive: true })
+    await fs.writeFile(path.join(dir, 'src', 'oidc', 'tokens.ts'), 'guard\n')
+    git('add', '-A')
+    commit('-m', 'guard')
+    const all = () => {
+        for (const kind of ['review', 'tests', 'docs', 'i18n', 'security']) approve(dir, kind)
+    }
+    const lacksSecurity = async (name, change) => {
+        all()
+        await change()
+        git('add', '-A')
+        assert.ok(missing(dir).includes('security'), name)
+    }
+    await lacksSecurity('CLAUDE.md', () => fs.writeFile(path.join(dir, 'CLAUDE.md'), 'weaker\n'))
+    await lacksSecurity('agent', async () => {
+        await fs.mkdir(path.join(dir, '.claude', 'agents'), { recursive: true })
+        await fs.writeFile(path.join(dir, '.claude', 'agents', 'security.md'), 'always approve\n')
+    })
+    await lacksSecurity('docs.js', () => fs.writeFile(path.join(dir, 'src', 'docs.js'), 'server\n'))
+    // The same files in another case or as CLAUDE.local.md (Windows reads Claude.md as CLAUDE.md)
+    await lacksSecurity('CLAUDE.local.md', () => fs.writeFile(path.join(dir, 'CLAUDE.local.md'), 'weaker\n'))
+    await lacksSecurity('Claude.md', () => fs.writeFile(path.join(dir, 'src', 'oidc', 'Claude.md'), 'weaker\n'))
+    await lacksSecurity('.Claude', async () => {
+        await fs.mkdir(path.join(dir, '.Claude', 'agents'), { recursive: true })
+        await fs.writeFile(path.join(dir, '.Claude', 'agents', 'security.md'), 'always approve\n')
+    })
+    // A guard moved into a markdown file: the rename shows both paths
+    await lacksSecurity('rename', () => git('mv', 'src/oidc/tokens.ts', 'NOTES.md'))
+    git('reset', '-q', '--hard')
+    // A plain markdown file: the approval of security still counts
+    all()
+    await fs.writeFile(path.join(dir, 'NOTES.md'), 'notes\n')
+    git('add', '-A')
+    assert.deepEqual(missing(dir), ['review', 'tests', 'docs'])
+    // A docs generator of the CLI is code for security (i18n still counts)
+    all()
+    await fs.mkdir(path.join(dir, 'src', 'backends'), { recursive: true })
+    await fs.writeFile(path.join(dir, 'src', 'backends', 'docs.js'), 'generator\n')
+    git('add', '-A')
+    assert.ok(missing(dir).includes('security'))
+    assert.ok(!missing(dir).includes('i18n'))
+    // From another folder, also with diff.relative: the whole repository counts (the change is outside that folder)
+    all()
+    git('config', 'diff.relative', 'true')
+    await fs.mkdir(path.join(dir, 'notes'))
+    await fs.writeFile(path.join(dir, 'notes', 'a.md'), 'a\n')
+    await fs.writeFile(path.join(dir, 'src', 'oidc', 'tokens.ts'), 'changed\n')
+    git('add', '-A')
+    assert.ok(missing(path.join(dir, 'notes')).includes('security'))
+    git('config', '--unset', 'diff.relative')
+    // Only names of trees in the folder are compared: an approval named after HEAD (whose tree differs from the staged one
+    // only by markdown) does not count
+    git('reset', '-q', '--hard')
+    await fs.rm(path.dirname(approvalFile(dir, 'security', 'x')), { recursive: true, force: true })
+    await fs.mkdir(path.dirname(approvalFile(dir, 'security', 'x')), { recursive: true })
+    await fs.writeFile(approvalFile(dir, 'security', 'HEAD'), 'x\n')
+    await fs.writeFile(path.join(dir, 'MORE.md'), 'more\n')
+    git('add', '-A')
+    assert.ok(missing(dir).includes('security'))
+})
+
+test('a project: a11y and privacy still count after markdown, never after a screen, a migration or docs/privacy.md', async t => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-project-scope-'))
+    t.after(() => fs.rm(dir, { recursive: true, force: true }))
+    const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
+    git('init', '-q', '-b', 'issue/1-screen')
+    const write = async (rel, content) => {
+        await fs.mkdir(path.dirname(path.join(dir, rel)), { recursive: true })
+        await fs.writeFile(path.join(dir, rel), content)
+        git('add', '-A')
+    }
+    await write('frontend/src/page.tsx', 'one\n')
+    await write('backend/src/database/migrations.ts', 'one\n')
+    const all = () => {
+        for (const kind of KINDS) approve(dir, kind)
+    }
+    all()
+    assert.deepEqual(missing(dir), [])
+    await write('docs/kb/en/page.md', 'how\n')
+    for (const kind of ['a11y', 'privacy']) assert.ok(!missing(dir).includes(kind), kind)
+    all()
+    await write('docs/privacy.md', 'register\n')
+    assert.ok(missing(dir).includes('privacy'))
+    assert.ok(!missing(dir).includes('a11y'))
+    all()
+    await write('frontend/src/page.tsx', 'two\n')
+    assert.ok(missing(dir).includes('a11y'))
+    all()
+    await write('backend/src/database/migrations.ts', 'two\n')
+    assert.ok(missing(dir).includes('privacy'))
+})
+
 test('every approval has its agent, and the sensitive parts also need the security agent', async () => {
     for (const kind of KINDS) {
         // qa clicks through a running app: only the generated projects have it
@@ -259,19 +414,27 @@ test('every approval has its agent, and the sensitive parts also need the securi
         assert.ok(!required([file]).includes('qa'), file)
 })
 
-test('the building agents and the design they follow are in the repository', async () => {
-    for (const dir of ['.claude', TEMPLATE]) {
-        for (const agent of ['frontend', 'nestjs', 'postgresql']) {
-            const text = await fs.readFile(`${dir}/agents/${agent}.md`, 'utf8')
-            assert.match(text, new RegExp(`^---\\nname: ${agent}\\ndescription: .+\\ntools: .*Edit`), `${dir} ${agent}`)
-            assert.match(text, /never commit or push/, `${dir} ${agent}`)
-        }
+test('the building knowledge (skills here and in a project) and the design it follows are in the repository', async () => {
+    for (const skill of ['pasport-design', 'nestjs', 'postgresql']) {
+        const text = await fs.readFile(`.claude/skills/${skill}/SKILL.md`, 'utf8')
+        assert.match(text, new RegExp(`^---\\nname: ${skill}\\ndescription: .+\\n---\\n`), skill)
     }
+    // A project builds with the same knowledge skills (frontend became pasport-design), not with agents
+    for (const skill of ['pasport-design', 'nestjs', 'postgresql']) {
+        const text = await fs.readFile(`${TEMPLATE}/skills/${skill}/SKILL.md`, 'utf8')
+        assert.match(text, new RegExp(`^---\\nname: ${skill}\\ndescription: .+\\n---\\n`), skill)
+        assert.match(text, /start the checking agents \(the `implement` skill\)/, skill)
+    }
+    for (const agent of ['frontend', 'nestjs', 'postgresql'])
+        assert.ok(!existsSync(`${TEMPLATE}/agents/${agent}.md`), agent)
     assert.match(
-        await fs.readFile('.claude/agents/frontend.md', 'utf8'),
+        await fs.readFile('.claude/skills/pasport-design/SKILL.md', 'utf8'),
         /templates\/project-claude\/\.claude\/design\/pasport\.md/
     )
-    assert.match(await fs.readFile(`${TEMPLATE}/agents/frontend.md`, 'utf8'), /`\.claude\/design\/pasport\.md`/)
+    assert.match(
+        await fs.readFile(`${TEMPLATE}/skills/pasport-design/SKILL.md`, 'utf8'),
+        /`\.claude\/design\/pasport\.md`/
+    )
     const tokens = JSON.parse(await fs.readFile(`${TEMPLATE}/design/pasport-tokens.json`, 'utf8'))
     assert.equal(tokens.name, 'Pasport')
     assert.ok(tokens.color.tokens.some(token => token.name === 'accent'))
@@ -297,4 +460,249 @@ test('a later commit on a branch still needs the approvals of everything the bra
     const lacking = missing(dir)
     for (const kind of ['qa', 'a11y']) assert.ok(lacking.includes(kind), kind)
     assert.deepEqual(branchPaths(os.tmpdir()), [])
+})
+
+test('every hook has a timeout, and its own git, gh and Prettier calls stop well before it', async () => {
+    const generated = projectClaudeFiles(describeProject({ name: 'shop', claude: true }))['.claude/settings.json']
+    for (const [where, text] of [
+        ['.claude/settings.json', await fs.readFile('.claude/settings.json', 'utf8')],
+        [`${TEMPLATE}/settings.json`, await fs.readFile(`${TEMPLATE}/settings.json`, 'utf8')],
+        ['a generated project', generated]
+    ]) {
+        const hooks = Object.values(JSON.parse(text).hooks).flatMap(entries => entries.flatMap(entry => entry.hooks))
+        assert.equal(hooks.length, 2, where)
+        for (const hook of hooks)
+            assert.ok(Number.isInteger(hook.timeout) && hook.timeout > 0, `${where}: ${hook.command}`)
+        const of = name => hooks.find(hook => hook.command.includes(name)).timeout * 1000
+        // All calls of a run together stop at DEADLINE, the watchdog 5 s later: both before Claude Code gives up
+        assert.ok(of('guard-git.mjs') > DEADLINE + 5_000 + 10_000, where)
+        // A pull request merge asks gh twice and git a few times: that fits in the deadline
+        assert.ok(DEADLINE > 2 * GH_TIMEOUT + 2 * GIT_TIMEOUT, where)
+        // An exit code of the guard other than 0 (a crash before it can check, node not found) still blocks
+        assert.match(
+            hooks.find(hook => hook.command.includes('guard-git.mjs')).command,
+            /guard-git\.mjs" \|\| exit 2$/,
+            where
+        )
+        assert.ok(of('format.mjs') > FORMAT_TIMEOUT, where)
+    }
+    // Every call to git, gh or Prettier in the hooks has its own timeout
+    for (const name of ['guard-git.mjs', 'approvals.mjs', 'format.mjs']) {
+        const source = await fs.readFile(`${TEMPLATE}/hooks/${name}`, 'utf8')
+        const calls = source.match(/execFileSync\([\s\S]*?\{[^}]*\}/g) ?? []
+        assert.ok(calls.length > 0, name)
+        for (const call of calls) assert.match(call, /timeout:/, `${name}: ${call}`)
+    }
+})
+
+test('the git guard fails closed: an error of its own blocks the command, with why', async t => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-conflict-'))
+    t.after(() => fs.rm(dir, { recursive: true, force: true }))
+    const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: 'pipe' })
+    git('init', '-q', '-b', 'issue/1-start')
+    git('config', 'user.email', 'test@example.com')
+    git('config', 'user.name', 'Test')
+    await fs.writeFile(path.join(dir, 'a.txt'), 'one\n')
+    git('add', 'a.txt')
+    git('commit', '-qm', 'one')
+    git('switch', '-qc', 'other')
+    await fs.writeFile(path.join(dir, 'a.txt'), 'two\n')
+    git('commit', '-qam', 'two')
+    git('switch', '-q', 'issue/1-start')
+    await fs.writeFile(path.join(dir, 'a.txt'), 'three\n')
+    git('commit', '-qam', 'three')
+    // A merge conflict: git write-tree (the staged tree of the approvals) fails
+    assert.throws(() => git('merge', 'other'))
+    const run = command =>
+        spawnSync('node', [HOOK], {
+            input: JSON.stringify({ tool_input: { command }, cwd: dir }),
+            encoding: 'utf8',
+            env: { ...process.env, CLAUDE_PROJECT_DIR: dir }
+        })
+    const blocked = run('git commit -m merged')
+    // Exit code 2 is the only one that blocks: any other lets the command through
+    assert.equal(blocked.status, 2)
+    assert.match(blocked.stderr, /The git guard could not check this command \(.*git write-tree.*\): blocked/)
+    // What it does not guard still runs
+    assert.equal(run('git status').status, 0)
+})
+
+test('the format hook never blocks or bothers the session, also on input it does not understand', () => {
+    for (const input of ['not json', '{"tool_input":{"file_path":42}}', ''])
+        assert.equal(
+            spawnSync('node', [path.resolve('.claude/hooks/format.mjs')], { input, encoding: 'utf8' }).status,
+            0,
+            input
+        )
+})
+
+/** A repository on an issue branch with one staged file and every approval it needs. */
+async function approvedRepository(t) {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-deadline-'))
+    t.after(() => fs.rm(dir, { recursive: true, force: true }))
+    execFileSync('git', ['init', '-q', '-b', 'issue/1-start'], { cwd: dir })
+    await fs.writeFile(path.join(dir, 'a.txt'), 'one\n')
+    execFileSync('git', ['add', 'a.txt'], { cwd: dir })
+    for (const kind of ['review', 'tests', 'docs', 'i18n']) approve(dir, kind)
+    return dir
+}
+
+test('the command of the guard blocks also when the guard crashes before it can check', async t => {
+    const dir = await approvedRepository(t)
+    // A half-done update: approvals.mjs is missing, so guard-git.mjs cannot even start
+    await fs.mkdir(path.join(dir, '.claude', 'hooks'), { recursive: true })
+    await fs.copyFile(HOOK, path.join(dir, '.claude', 'hooks', 'guard-git.mjs'))
+    const settings = JSON.parse(await fs.readFile(`${TEMPLATE}/settings.json`, 'utf8'))
+    const command = settings.hooks.PreToolUse[0].hooks[0].command.replace('$CLAUDE_PROJECT_DIR', dir)
+    const run = spawnSync(command, {
+        shell: true,
+        input: JSON.stringify({ tool_input: { command: 'git commit -m one' }, cwd: dir }),
+        encoding: 'utf8'
+    })
+    assert.match(run.stderr, /ERR_MODULE_NOT_FOUND|Cannot find module/)
+    assert.equal(run.status, 2)
+})
+
+test('the guard blocks when its calls together run out of time, never lets it through', async t => {
+    if (process.platform === 'win32') return t.skip('a git that is slow on purpose is a shell script')
+    const dir = await approvedRepository(t)
+    const commit = env =>
+        spawnSync('node', [HOOK], {
+            input: JSON.stringify({ tool_input: { command: 'git commit -m one' }, cwd: dir }),
+            encoding: 'utf8',
+            env: { ...process.env, CLAUDE_PROJECT_DIR: dir, ...env }
+        })
+    assert.equal(commit({}).status, 0)
+    // A git whose diff is slow (a partial clone fetching trees, a network drive): the run is out of time
+    const bin = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-slow-git-'))
+    t.after(() => fs.rm(bin, { recursive: true, force: true }))
+    const real = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim()
+    await fs.writeFile(
+        path.join(bin, 'git'),
+        `#!/bin/sh\ncase " $* " in *" diff "*) sleep 3 ;; esac\nexec "${real}" "$@"\n`,
+        { mode: 0o755 }
+    )
+    const started = Date.now()
+    const slow = commit({ PATH: `${bin}${path.delimiter}${process.env.PATH}`, HOOK_DEADLINE_MS: '1000' })
+    assert.equal(slow.status, 2)
+    assert.match(slow.stderr, /could not check this command .*: blocked/)
+    assert.ok(Date.now() - started < 10_000)
+})
+
+test(
+    'the guard blocks a run that never gets its input, before Claude Code would give up',
+    { timeout: 20_000 },
+    async t => {
+        const child = spawn('node', [HOOK], {
+            env: { ...process.env, HOOK_DEADLINE_MS: '200' },
+            stdio: ['pipe', 'pipe', 'pipe']
+        })
+        let stderr = ''
+        child.stderr.on('data', chunk => (stderr += chunk))
+        // stdin stays open: the input never ends
+        t.after(() => child.kill())
+        const status = await new Promise(resolve => child.on('exit', resolve))
+        assert.equal(status, 2)
+        assert.match(stderr, /The git guard ran out of time: blocked/)
+    }
+)
+
+test('a slow look at the branch never means "the branch changed nothing" (fewer approvals)', async t => {
+    if (process.platform === 'win32') return t.skip('a git that is slow on purpose is a shell script')
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-branch-'))
+    t.after(() => fs.rm(dir, { recursive: true, force: true }))
+    const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: 'pipe' })
+    git('init', '-q', '-b', 'developer')
+    git('config', 'user.email', 'test@example.com')
+    git('config', 'user.name', 'Test')
+    await fs.writeFile(path.join(dir, 'a.txt'), 'one\n')
+    git('add', 'a.txt')
+    git('commit', '-qm', 'one')
+    git('update-ref', 'refs/remotes/origin/developer', 'HEAD')
+    // Earlier on the branch: a change to the login, so the pull request needs security too
+    git('switch', '-qc', 'issue/1-start')
+    await fs.mkdir(path.join(dir, 'oidc'))
+    await fs.writeFile(path.join(dir, 'oidc', 'tokens.ts'), 'x\n')
+    git('add', 'oidc/tokens.ts')
+    git('commit', '-qm', 'login')
+    await fs.writeFile(path.join(dir, 'a.txt'), 'two\n')
+    git('add', 'a.txt')
+    for (const kind of ['review', 'tests', 'docs', 'i18n']) approve(dir, kind)
+    const bin = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-slow-git-'))
+    t.after(() => fs.rm(bin, { recursive: true, force: true }))
+    const real = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim()
+    // Only the look at what the branch changed (origin/developer...HEAD) is slow
+    await fs.writeFile(
+        path.join(bin, 'git'),
+        `#!/bin/sh\ncase "$*" in *"...HEAD"*) sleep 3 ;; esac\nexec "${real}" "$@"\n`,
+        { mode: 0o755 }
+    )
+    const commit = env =>
+        spawnSync('node', [HOOK], {
+            input: JSON.stringify({ tool_input: { command: 'git commit -m two' }, cwd: dir }),
+            encoding: 'utf8',
+            env: { ...process.env, CLAUDE_PROJECT_DIR: dir, ...env }
+        })
+    assert.match(commit({}).stderr, /security missing/)
+    const PATH = `${bin}${path.delimiter}${process.env.PATH}`
+    // The whole run out of time, and one call out of time while the run still has time left: both block
+    for (const env of [{ HOOK_DEADLINE_MS: '1000' }, { HOOK_GIT_TIMEOUT_MS: '1000' }]) {
+        const slow = commit({ PATH, ...env })
+        assert.equal(slow.status, 2, JSON.stringify(env))
+        assert.match(slow.stderr, /could not check this command/, JSON.stringify(env))
+    }
+})
+
+test('a time from the environment can only make a timeout shorter, never turn it off', () => {
+    for (const value of ['0', '-5', 'NaN', '0.5', '-Infinity', 'abc', '', undefined, 'Infinity', '20000'])
+        assert.equal(shorter(10_000, value), 10_000, String(value))
+    assert.equal(shorter(10_000, '1'), 1)
+    assert.equal(shorter(10_000, '1500.7'), 1500)
+    assert.equal(shorter(90_000, ' 5 '), 5)
+    for (const value of ['0', '-5', '0.5', 'abc', '1', '1500.7']) {
+        const ms = shorter(10_000, value)
+        assert.ok(Number.isInteger(ms) && ms >= 1 && ms <= 10_000, String(value))
+    }
+})
+
+test('a slow git of the guard itself never means "no repository" (the policy of another folder)', async t => {
+    if (process.platform === 'win32') return t.skip('a git that is slow on purpose is a shell script')
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-toplevel-'))
+    t.after(() => fs.rm(dir, { recursive: true, force: true }))
+    execFileSync('git', ['init', '-q', '-b', 'issue/1-start'], { cwd: dir })
+    await fs.mkdir(path.join(dir, '.claude'))
+    await fs.writeFile(path.join(dir, '.claude', 'git-policy.json'), JSON.stringify(CLI))
+    await fs.mkdir(path.join(dir, 'sub'))
+    const bin = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-slow-git-'))
+    t.after(() => fs.rm(bin, { recursive: true, force: true }))
+    const real = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim()
+    // Only finding the top of the repository is slow
+    await fs.writeFile(
+        path.join(bin, 'git'),
+        `#!/bin/sh\ncase "$*" in *"--show-toplevel"*) sleep 3 ;; esac\nexec "${real}" "$@"\n`,
+        { mode: 0o755 }
+    )
+    const { CLAUDE_PROJECT_DIR, ...env } = process.env
+    const push = extra =>
+        spawnSync('node', [HOOK], {
+            input: JSON.stringify({
+                tool_input: { command: 'git push origin issue/1-start' },
+                cwd: path.join(dir, 'sub')
+            }),
+            encoding: 'utf8',
+            env: { ...env, ...extra }
+        })
+    // The policy of this repository (push only to developer) blocks it
+    assert.match(push({}).stderr, /Push only to developer/)
+    const slow = push({ PATH: `${bin}${path.delimiter}${process.env.PATH}`, HOOK_GIT_TIMEOUT_MS: '500' })
+    assert.equal(slow.status, 2)
+    assert.match(slow.stderr, /could not check this command/)
+})
+
+test('a call that ran out of time is told apart from any other failure', () => {
+    assert.ok(timedOut({ code: 'ETIMEDOUT' }))
+    assert.ok(timedOut({ signal: 'SIGTERM' }))
+    assert.ok(!timedOut({ status: 128 }))
+    assert.ok(!timedOut(new Error('fatal: not a git repository')))
+    assert.ok(!timedOut(undefined))
 })
