@@ -1,7 +1,8 @@
 // The approvals of the checking agents, per staged tree (git write-tree): a commit (and the merge of its pull request)
-// is only allowed for exactly the tree they saw. They live in .git/claude-approvals, so they are never committed.
+// is only allowed for the tree they saw, or a later one that only changed files outside their scope (OUT_OF_SCOPE).
+// They live in .git/claude-approvals, so they are never committed.
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 /** Every agent that can approve (each records it with .claude/hooks/approve.mjs <kind>). */
@@ -29,8 +30,18 @@ const git = (args, cwd) =>
 /** The tree that a commit would make of what is staged now. */
 export const stagedTree = cwd => git(['write-tree'], cwd)
 
+/**
+ * The paths of `git diff` (`args` are its revisions): every path of the whole repository (--no-relative, also from a
+ * subfolder or with diff.relative), a rename as its old and its new path (--no-renames: moving a guard into docs/ still
+ * shows the guard), NUL-separated so no name is quoted.
+ */
+const diffPaths = (cwd, args) =>
+    git(['diff', '--name-only', '--no-renames', '--no-relative', '-z', ...args], cwd)
+        .split('\0')
+        .filter(Boolean)
+
 /** The staged paths. */
-export const stagedPaths = cwd => git(['diff', '--cached', '--name-only'], cwd).split('\n').filter(Boolean)
+export const stagedPaths = cwd => diffPaths(cwd, ['--cached'])
 
 const folder = cwd => path.resolve(cwd, git(['rev-parse', '--git-path', 'claude-approvals'], cwd))
 
@@ -65,9 +76,62 @@ export function approve(cwd, kind) {
     return tree
 }
 
+/**
+ * Documentation only: a markdown file, but never CLAUDE.md (also CLAUDE.local.md) or one under .claude/ (also
+ * templates/project-claude/.claude), in any case (Windows does not tell Claude.md from CLAUDE.md): those are the rules
+ * and the instructions of the agents, not documentation.
+ */
+const docsOnly = file =>
+    /\.md$/.test(file) && !/(^|\/)claude(\.[^/]*)?\.md$/i.test(file) && !/(^|\/)\.claude\//i.test(file)
+
+/** The two docs generators of the CLI: documentation of the API and the frontend (no server, no text of an app). */
+const DOCS_GENERATORS = ['src/backends/docs.js', 'src/frontends/docs.js']
+
+/**
+ * The files that do not concern a check: when only those changed since it approved a tree, its approval still counts.
+ * The review, the tests, the docs check and qa always look at the last tree.
+ */
+export const OUT_OF_SCOPE = {
+    // No text of the app: documentation, the tests of the CLI and its docs generators
+    i18n: file => docsOnly(file) || /^test\//.test(file) || DOCS_GENERATORS.includes(file),
+    security: docsOnly,
+    a11y: docsOnly,
+    // docs/privacy.md is the register the privacy agent checks: never out of its scope
+    privacy: file => docsOnly(file) && file !== 'docs/privacy.md'
+}
+
+/** The name of a tree (SHA-1 or SHA-256): nothing else in the folder is compared. */
+const TREE = /^[0-9a-f]{40}([0-9a-f]{24})?$/
+
+/** The files that differ between two trees. */
+const changedBetween = (cwd, from, to) => diffPaths(cwd, ['--end-of-options', from, to])
+
+/** Did `kind` approve this tree, or an earlier one from which only files outside its scope changed? */
+export function approved(cwd, kind, tree) {
+    if (existsSync(approvalFile(cwd, kind, tree))) return true
+    const scope = OUT_OF_SCOPE[kind]
+    if (!scope) return false
+    let earlier = []
+    try {
+        earlier = readdirSync(folder(cwd))
+            .filter(name => name.startsWith(kind + '-'))
+            .map(name => name.slice(kind.length + 1))
+            .filter(name => TREE.test(name))
+    } catch {
+        return false
+    }
+    return earlier.some(from => {
+        try {
+            return changedBetween(cwd, from, tree).every(scope)
+        } catch {
+            // A tree git no longer knows: it does not count
+            return false
+        }
+    })
+}
+
 /** The approvals a tree is still missing, for a change of these paths. */
-export const missingFor = (cwd, tree, paths) =>
-    required(paths).filter(kind => !existsSync(approvalFile(cwd, kind, tree)))
+export const missingFor = (cwd, tree, paths) => required(paths).filter(kind => !approved(cwd, kind, tree))
 
 /**
  * The paths the branch changed since it left developer (origin/developer...HEAD): a fix later on the branch still needs
@@ -75,9 +139,7 @@ export const missingFor = (cwd, tree, paths) =>
  */
 export function branchPaths(cwd, base = 'origin/developer') {
     try {
-        return git(['diff', '--name-only', `${base}...HEAD`], cwd)
-            .split('\n')
-            .filter(Boolean)
+        return diffPaths(cwd, [`${base}...HEAD`])
     } catch {
         return []
     }

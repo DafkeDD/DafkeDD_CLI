@@ -5,7 +5,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { checksGreen, decide, gitCommands, readPolicy } from '../.claude/hooks/guard-git.mjs'
-import { AGENTS, approve, branchPaths, KINDS, missing, required } from '../.claude/hooks/approvals.mjs'
+import { AGENTS, approvalFile, approve, branchPaths, KINDS, missing, required } from '../.claude/hooks/approvals.mjs'
 
 const HOOK = path.resolve('.claude/hooks/guard-git.mjs')
 const TEMPLATE = 'templates/project-claude/.claude'
@@ -217,6 +217,124 @@ test('the approvals belong to exactly the staged tree, and the hook blocks a com
     await fs.mkdir(path.join(dir, '.claude'))
     await fs.writeFile(path.join(dir, '.claude', 'git-policy.json'), JSON.stringify(CLI))
     assert.match(hook('git push -u origin issue/1-start').stderr, /Push only to developer/)
+})
+
+test('an approval still counts when only files outside its scope changed since; review, tests and docs never', async t => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-scope-'))
+    t.after(() => fs.rm(dir, { recursive: true, force: true }))
+    const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
+    git('init', '-q', '-b', 'issue/1-start')
+    await fs.mkdir(path.join(dir, 'src', 'oidc'), { recursive: true })
+    await fs.writeFile(path.join(dir, 'src', 'oidc', 'tokens.ts'), 'one\n')
+    await fs.writeFile(path.join(dir, 'README.md'), 'one\n')
+    git('add', '-A')
+    for (const kind of ['review', 'tests', 'docs', 'i18n', 'security']) approve(dir, kind)
+    assert.deepEqual(missing(dir), [])
+    // Only documentation, a docs generator and a test of the CLI changed: i18n still counts; security still counts for
+    // the markdown, not for the generator (code); the others look again
+    await fs.writeFile(path.join(dir, 'README.md'), 'two\n')
+    await fs.mkdir(path.join(dir, 'src', 'backends'), { recursive: true })
+    await fs.writeFile(path.join(dir, 'src', 'backends', 'docs.js'), 'two\n')
+    await fs.mkdir(path.join(dir, 'test'))
+    await fs.writeFile(path.join(dir, 'test', 'a.test.js'), 'two\n')
+    git('add', '-A')
+    assert.deepEqual(missing(dir), ['review', 'tests', 'docs', 'security'])
+    for (const kind of ['review', 'tests', 'docs', 'security']) approve(dir, kind)
+    assert.deepEqual(missing(dir), [])
+    // Only a markdown file: i18n and security still count
+    await fs.writeFile(path.join(dir, 'README.md'), 'three\n')
+    git('add', '-A')
+    assert.deepEqual(missing(dir), ['review', 'tests', 'docs'])
+    // Code changed: every approval looks again
+    await fs.writeFile(path.join(dir, 'src', 'oidc', 'tokens.ts'), 'three\n')
+    git('add', '-A')
+    assert.deepEqual(missing(dir), ['review', 'tests', 'docs', 'i18n', 'security'])
+})
+
+test('documentation never hides a change of security: the rules, the agents, a docs.js that is code, a rename', async t => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-scope-'))
+    t.after(() => fs.rm(dir, { recursive: true, force: true }))
+    const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
+    const commit = (...args) => git('-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', ...args)
+    git('init', '-q', '-b', 'developer')
+    commit('--allow-empty', '-m', 'start')
+    git('update-ref', 'refs/remotes/origin/developer', 'HEAD')
+    git('switch', '-q', '-c', 'issue/1-guard')
+    // The branch changes a guard: every later commit of it needs security
+    await fs.mkdir(path.join(dir, 'src', 'oidc'), { recursive: true })
+    await fs.writeFile(path.join(dir, 'src', 'oidc', 'tokens.ts'), 'guard\n')
+    git('add', '-A')
+    commit('-m', 'guard')
+    const all = () => {
+        for (const kind of ['review', 'tests', 'docs', 'i18n', 'security']) approve(dir, kind)
+    }
+    const lacksSecurity = async (name, change) => {
+        all()
+        await change()
+        git('add', '-A')
+        assert.ok(missing(dir).includes('security'), name)
+    }
+    await lacksSecurity('CLAUDE.md', () => fs.writeFile(path.join(dir, 'CLAUDE.md'), 'weaker\n'))
+    await lacksSecurity('agent', async () => {
+        await fs.mkdir(path.join(dir, '.claude', 'agents'), { recursive: true })
+        await fs.writeFile(path.join(dir, '.claude', 'agents', 'security.md'), 'always approve\n')
+    })
+    await lacksSecurity('docs.js', () => fs.writeFile(path.join(dir, 'src', 'docs.js'), 'server\n'))
+    // The same files in another case or as CLAUDE.local.md (Windows reads Claude.md as CLAUDE.md)
+    await lacksSecurity('CLAUDE.local.md', () => fs.writeFile(path.join(dir, 'CLAUDE.local.md'), 'weaker\n'))
+    await lacksSecurity('Claude.md', () => fs.writeFile(path.join(dir, 'src', 'oidc', 'Claude.md'), 'weaker\n'))
+    await lacksSecurity('.Claude', async () => {
+        await fs.mkdir(path.join(dir, '.Claude', 'agents'), { recursive: true })
+        await fs.writeFile(path.join(dir, '.Claude', 'agents', 'security.md'), 'always approve\n')
+    })
+    // A guard moved into a markdown file: the rename shows both paths
+    await lacksSecurity('rename', () => git('mv', 'src/oidc/tokens.ts', 'NOTES.md'))
+    git('reset', '-q', '--hard')
+    // A plain markdown file: the approval of security still counts
+    all()
+    await fs.writeFile(path.join(dir, 'NOTES.md'), 'notes\n')
+    git('add', '-A')
+    assert.deepEqual(missing(dir), ['review', 'tests', 'docs'])
+    // From a subfolder, also with diff.relative: the whole repository counts
+    all()
+    git('config', 'diff.relative', 'true')
+    await fs.writeFile(path.join(dir, 'src', 'oidc', 'tokens.ts'), 'changed\n')
+    git('add', '-A')
+    assert.ok(missing(path.join(dir, 'src', 'oidc')).includes('security'))
+    // Only names of trees in the folder are compared
+    await fs.writeFile(approvalFile(dir, 'security', 'HEAD'), 'x\n')
+    assert.ok(missing(dir).includes('security'))
+})
+
+test('a project: a11y and privacy still count after markdown, never after a screen, a migration or docs/privacy.md', async t => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-project-scope-'))
+    t.after(() => fs.rm(dir, { recursive: true, force: true }))
+    const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
+    git('init', '-q', '-b', 'issue/1-screen')
+    const write = async (rel, content) => {
+        await fs.mkdir(path.dirname(path.join(dir, rel)), { recursive: true })
+        await fs.writeFile(path.join(dir, rel), content)
+        git('add', '-A')
+    }
+    await write('frontend/src/page.tsx', 'one\n')
+    await write('backend/src/database/migrations.ts', 'one\n')
+    const all = () => {
+        for (const kind of KINDS) approve(dir, kind)
+    }
+    all()
+    assert.deepEqual(missing(dir), [])
+    await write('docs/kb/en/page.md', 'how\n')
+    for (const kind of ['a11y', 'privacy']) assert.ok(!missing(dir).includes(kind), kind)
+    all()
+    await write('docs/privacy.md', 'register\n')
+    assert.ok(missing(dir).includes('privacy'))
+    assert.ok(!missing(dir).includes('a11y'))
+    all()
+    await write('frontend/src/page.tsx', 'two\n')
+    assert.ok(missing(dir).includes('a11y'))
+    all()
+    await write('backend/src/database/migrations.ts', 'two\n')
+    assert.ok(missing(dir).includes('privacy'))
 })
 
 test('every approval has its agent, and the sensitive parts also need the security agent', async () => {

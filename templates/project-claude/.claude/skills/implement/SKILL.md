@@ -35,7 +35,9 @@ The **seed** agent adds the test data and test accounts a new table or screen ne
 - Then **qa** when the change touches a screen, a form, an endpoint behind a screen or the database (the commit hook
   asks for it then): it clicks through every control in a real browser (Playwright MCP) and checks the rows in the
   database (PostgreSQL MCP, read-only).
-- Fix what they find, stage again and run them all again: an approval counts only for exactly the tree it saw.
+- Fix what they find, stage again and run them again: an approval counts for the tree it saw. Only `i18n`, `security`,
+  `a11y` and `privacy` still count when nothing but markdown (never `CLAUDE.md` or `.claude/`; for `privacy` never
+  `docs/privacy.md`) changed since (the commit hook tells you what is missing).
 - The approvals are for the whole branch: a later fix asks for every agent the branch needs (also for files of an
   earlier commit), and the agents review the branch (`git diff origin/developer...HEAD`) plus what is staged.
 - Conflicts with `developer`: `git fetch origin && git merge origin/developer` on the branch, solve them, run the

@@ -98,7 +98,10 @@ their approvals. Only the main session builds, commits and pushes. `docs` and `i
    `postgresql`, tests first.
 3. **Check**: stage the change (`git add`, as a separate command), then start the checking agents in parallel on exactly
    that: `reviewer`, `tester`, `docs`, `i18n`, plus `security` for the sensitive parts. Each one records its approval
-   for the staged tree (`node .claude/hooks/approve.mjs <kind>`). After any further change, they all run again.
+   for the staged tree (`node .claude/hooks/approve.mjs <kind>`). After any further change they run again, except `i18n`
+   and `security` when only documentation (markdown, but never `CLAUDE.md` (in any case, also `CLAUDE.local.md`) or a
+   file under `.claude/`; for `i18n` also `test/` and the docs generators `src/backends/docs.js` and
+   `src/frontends/docs.js`) changed since their approval (`OUT_OF_SCOPE` in `.claude/hooks/approvals.mjs`).
 4. **Commit and merge**: on the branch `issue/<n>-<words>` (made from `developer`), commit
    `<version>: <change> (closes #<n>)`, push the branch, open a pull request into `developer`. When the CI is green,
    merge it with `gh pr merge <n> --squash --delete-branch`. Never into `main` (a release), never forced.

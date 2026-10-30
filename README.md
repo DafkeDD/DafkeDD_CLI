@@ -623,7 +623,7 @@ way this CLI is built: nothing has to be installed.
 
 1. `plan` makes the issues.
 2. `implement` makes the branch `issue/<number>-<words>` from `developer`, and builds it with the agents.
-3. The checking agents approve exactly what is staged; then it is committed (`closes #<number>`) and pushed.
+3. The checking agents approve what is staged; then it is committed (`closes #<number>`) and pushed.
 4. A pull request goes into `developer`.
 5. When the CI is green, an agent merges it (`gh pr merge <number> --squash --delete-branch`).
 6. **Only a person merges `developer` into `main`**, which makes the release.
@@ -765,8 +765,13 @@ commit hook needs their approvals); the main session builds with the skills abov
 `docs` and `i18n` run on a cheaper model (`model: sonnet` in their front matter): they mostly compare text. `reviewer`,
 `security` and `tester` keep the default model.
 
-The checking agents record their approval for exactly the staged tree with `.claude/hooks/approve.mjs`. The approvals
-are kept in `.git/claude-approvals` and are never committed.
+The checking agents record their approval for the staged tree with `.claude/hooks/approve.mjs`. `reviewer`, `tester` and
+`docs` always check the last tree; an approval of `i18n` or `security` (and in a project `a11y` or `privacy`) still
+counts when only documentation changed since (markdown, but never `CLAUDE.md` (in any case, also `CLAUDE.local.md`) or a
+file under `.claude/`; for `i18n` also `test/` and the docs generators `src/backends/docs.js` and
+`src/frontends/docs.js`; a rename counts as its old and its new path), for `privacy` never `docs/privacy.md` (its
+register); so a fix of a sentence does not need every check again (`OUT_OF_SCOPE` in `.claude/hooks/approvals.mjs`). The
+approvals are kept in `.git/claude-approvals` and are never committed.
 
 **Hooks (`.claude/settings.json`)**
 
@@ -873,6 +878,15 @@ git switch developer
 
 ## Changelog
 
+- **0.54.10**: fewer repeated checks.
+    - An approval of `i18n` or `security` (and in a project `a11y` or `privacy`) still counts for a later staged tree
+      when only documentation changed since: markdown, but never `CLAUDE.md` (in any case, also `CLAUDE.local.md`) or a
+      file under `.claude/`; for `i18n` also `test/` and the docs generators `src/backends/docs.js` and
+      `src/frontends/docs.js`; for `privacy` never `docs/privacy.md`, its register. A rename counts as its old and its
+      new path. `reviewer`, `tester` and `docs` always check the last tree. In this repository and in every project with
+      Claude Code (`OUT_OF_SCOPE` in `.claude/hooks/approvals.mjs`).
+    - The hooks read every path of the whole repository (also from a subfolder or with `diff.relative`), with renames as
+      both paths, so a guard moved or renamed always needs the security agent.
 - **0.54.9**: the building agents of this repository are skills now.
     - `frontend`, `nestjs` and `postgresql` became the skills `pasport-design`, `nestjs` and `postgresql`: the main
       session builds and loads them by itself when the work is about a page, an endpoint or the database (no agent that
