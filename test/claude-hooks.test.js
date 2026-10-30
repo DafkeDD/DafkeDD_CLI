@@ -295,14 +295,30 @@ test('documentation never hides a change of security: the rules, the agents, a d
     await fs.writeFile(path.join(dir, 'NOTES.md'), 'notes\n')
     git('add', '-A')
     assert.deepEqual(missing(dir), ['review', 'tests', 'docs'])
-    // From a subfolder, also with diff.relative: the whole repository counts
+    // A docs generator of the CLI is code for security (i18n still counts)
+    all()
+    await fs.mkdir(path.join(dir, 'src', 'backends'), { recursive: true })
+    await fs.writeFile(path.join(dir, 'src', 'backends', 'docs.js'), 'generator\n')
+    git('add', '-A')
+    assert.ok(missing(dir).includes('security'))
+    assert.ok(!missing(dir).includes('i18n'))
+    // From another folder, also with diff.relative: the whole repository counts (the change is outside that folder)
     all()
     git('config', 'diff.relative', 'true')
+    await fs.mkdir(path.join(dir, 'notes'))
+    await fs.writeFile(path.join(dir, 'notes', 'a.md'), 'a\n')
     await fs.writeFile(path.join(dir, 'src', 'oidc', 'tokens.ts'), 'changed\n')
     git('add', '-A')
-    assert.ok(missing(path.join(dir, 'src', 'oidc')).includes('security'))
-    // Only names of trees in the folder are compared
+    assert.ok(missing(path.join(dir, 'notes')).includes('security'))
+    git('config', '--unset', 'diff.relative')
+    // Only names of trees in the folder are compared: an approval named after HEAD (whose tree differs from the staged one
+    // only by markdown) does not count
+    git('reset', '-q', '--hard')
+    await fs.rm(path.dirname(approvalFile(dir, 'security', 'x')), { recursive: true, force: true })
+    await fs.mkdir(path.dirname(approvalFile(dir, 'security', 'x')), { recursive: true })
     await fs.writeFile(approvalFile(dir, 'security', 'HEAD'), 'x\n')
+    await fs.writeFile(path.join(dir, 'MORE.md'), 'more\n')
+    git('add', '-A')
     assert.ok(missing(dir).includes('security'))
 })
 
