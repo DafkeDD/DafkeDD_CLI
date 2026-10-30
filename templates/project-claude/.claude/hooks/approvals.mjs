@@ -24,8 +24,43 @@ export const ALWAYS = ['review', 'tests', 'docs', 'i18n']
 export const SENSITIVE =
     /(oidc|auth|pasport|passkey|mfa|eid|session|token|cookie|access|guard|tenan|billing|mollie|license|licence|files?\/|upload|database|migrat|crypto|secret|\.claude\/hooks|proxy)/i
 
+/**
+ * A time from the environment that can only make `max` shorter (the tests): a whole number of ms, at least 1. Anything
+ * else (0, a negative number, a fraction below 1, no number) is ignored: a timeout of 0 would mean no timeout at all.
+ */
+export function shorter(max, value) {
+    const ms = Math.floor(Number(value))
+    return Number.isFinite(ms) && ms >= 1 ? Math.min(max, ms) : max
+}
+
+/**
+ * The time budget of a hook run (ms): Claude Code lets a command through when the hook runs past its `timeout`
+ * (.claude/settings.json: 120 s), so every git and gh call of the guard together stops at DEADLINE, and a call that
+ * runs out throws (the guard then blocks: it fails closed). HOOK_DEADLINE_MS can only make it shorter (the tests).
+ */
+export const DEADLINE = shorter(90_000, process.env.HOOK_DEADLINE_MS)
+const started = Date.now()
+
+/** A call that ran out of time: never read as "not approved" or "nothing", always rethrown. */
+export const timedOut = error => error?.code === 'ETIMEDOUT' || Boolean(error?.signal)
+
+/** The timeout of the next call: at most `max`, never past the deadline of the run; none left throws. */
+export function callTimeout(max) {
+    const left = DEADLINE - (Date.now() - started)
+    if (left < 1) throw Object.assign(new Error('the time of the hook is up'), { code: 'ETIMEDOUT' })
+    // Never 0 (no timeout) or below: at least 1 ms, at most `max`
+    return Math.max(1, Math.min(max, left))
+}
+
+/** One git call: at most 10 s (HOOK_GIT_TIMEOUT_MS only shorter), and within the deadline of the run. */
+export const GIT_TIMEOUT = shorter(10_000, process.env.HOOK_GIT_TIMEOUT_MS)
 const git = (args, cwd) =>
-    execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+    execFileSync('git', args, {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: callTimeout(GIT_TIMEOUT)
+    }).trim()
 
 /** The tree that a commit would make of what is staged now. */
 export const stagedTree = cwd => git(['write-tree'], cwd)
@@ -123,8 +158,9 @@ export function approved(cwd, kind, tree) {
     return earlier.some(from => {
         try {
             return changedBetween(cwd, from, tree).every(scope)
-        } catch {
-            // A tree git no longer knows: it does not count
+        } catch (error) {
+            // Out of time: the guard blocks; a tree git no longer knows: it does not count
+            if (timedOut(error)) throw error
             return false
         }
     })
@@ -140,7 +176,9 @@ export const missingFor = (cwd, tree, paths) => required(paths).filter(kind => !
 export function branchPaths(cwd, base = 'origin/developer') {
     try {
         return diffPaths(cwd, [`${base}...HEAD`])
-    } catch {
+    } catch (error) {
+        // Out of time: never "nothing changed" (fewer approvals); without origin/developer: nothing to add
+        if (timedOut(error)) throw error
         return []
     }
 }

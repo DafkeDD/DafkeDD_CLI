@@ -121,6 +121,9 @@ The hooks in `.claude/settings.json` enforce this (`.claude/git-policy.json`: `i
       and every approval (for every file the branch changed since `origin/developer`), never with `--admin`;
     - blocks `gh release create`, `gh release delete` and `gh repo delete`.
 - `format.mjs` runs Prettier on every file that is edited.
+- Every hook has a `timeout`; the guard fails closed: its calls together stop at a deadline before it, a watchdog and
+  `|| exit 2` after its command block a run that hangs or crashes, and an error of its own blocks (exit code 2).
+  `format.mjs` never blocks.
 - The git hook `.githooks/pre-push` and the CI (`.github/workflows/ci.yml`) run the format check and the tests once
   more.
 

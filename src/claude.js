@@ -208,6 +208,8 @@ export function projectClaudeMd(project) {
         `    - \`gh pr merge\` only into \`${DEVELOP_BRANCH}\`, with green checks and every approval;`,
         '    - `gh release` and `gh repo delete` never.',
         '- `format.mjs` runs Prettier on every file that is edited.',
+        '- Each hook has a `timeout`; the guard blocks a command it could not check (an error of its own), `format.mjs`',
+        '  never blocks.',
         '',
         '## Skills and agents',
         '',

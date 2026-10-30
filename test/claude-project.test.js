@@ -515,3 +515,11 @@ test('the references to the skills of a project point at files that exist', asyn
     for (const rel of paths) assert.ok(files[rel], rel)
     for (const name of ['backup', 'dependencies']) assert.ok(!files[`.claude/agents/${name}.md`], name)
 })
+
+test('CLAUDE.md of a project says every hook has a timeout and the guard fails closed', () => {
+    const flat = projectClaudeMd(app).replace(/\s+/g, ' ')
+    assert.match(
+        flat,
+        /Each hook has a `timeout`; the guard blocks a command it could not check \(an error of its own\), `format\.mjs` never blocks\./
+    )
+})
