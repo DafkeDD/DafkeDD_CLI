@@ -882,11 +882,11 @@ git switch developer
     - In every project with Claude Code, `frontend` became the skill `pasport-design`, and `nestjs`, `postgresql`,
       `translator` and `e2e` became skills of the same name: the main session builds and loads them by itself when the
       work is about them. `seed`, `release`, `backup`, `dependencies`, `infra`, `observability`, `support` and
-      `architect` are skills started with `/<name>` (`release` and `backup` only by a person). The agents are only the
-      independent checks (`reviewer`, `tester`, `docs`, `i18n`, `security`, `qa`, `a11y`, `privacy`, `performance`) and
-      `kb`.
-    - The CLAUDE.md, the skills `plan` and `implement`, the agents, the labels, `dependabot.yml`, the changelog, the
-      ADRs and the Backup check workflow of a project name the skills. An existing project gets the new skills with
+      `architect` are skills started with `/<name>` (`release`, `backup` and `support` only by a person). The agents are
+      only the independent checks (`reviewer`, `tester`, `docs`, `i18n`, `security`, `qa`, `a11y`, `privacy`,
+      `performance`) and `kb`.
+    - The CLAUDE.md, the skills `plan` and `implement`, the agents, the labels, `dependabot.yml`, the changelog, the ADR
+      README and the Backup check workflow of a project name the skills. An existing project gets the new skills with
       `update`; removing its old agent files comes with the next version.
 - **0.54.10**: fewer repeated checks.
     - An approval of `i18n` or `security` (and in a project `a11y` or `privacy`) still counts for a later staged tree

@@ -11,7 +11,7 @@ later, without the conversation in which they were taken.
 
 ## Decision
 
-Every such decision is written down as an ADR in `docs/adr`, from `template.md`, by the `architect` skill or by hand,
+Every such decision is written down as an ADR in `docs/adr`, from `template.md`, by the `architect` agent or by hand,
 before it is built.
 
 ## Consequences
