@@ -22,7 +22,8 @@ and report.
 **Break the new checks.** For each check or guard that the change adds or changes (a validation, a path or access
 check, a rule of a hook, a limit), break it on a copy of what is staged in a new temporary folder
 (`git checkout-index -a --prefix=<folder>/`, with `node_modules` linked; never in the repository itself, never with
-`.env`, removed afterwards): remove it, invert it or loosen it, and run the tests of that part. A guard of this change
+`.env`, removed afterwards; change only files of the copy itself, never under the linked `node_modules`): remove it,
+invert it or loosen it, and run the tests of that part. A guard of this change
 that no test catches is Blocking (`TESTS: RED`), unless another guard already does its work (then Advisory, with the
 reason).
 

@@ -896,6 +896,19 @@ git switch developer
 
 ## Changelog
 
+- **0.54.15**: a test checks the skills and agents themselves.
+    - `test/skills-agents.test.js`: every skill and agent of the CLI and of a project is named after its folder or file
+      (kebab case), has a description of at most 1024 characters, without tags, that says when to use it, and a SKILL.md
+      under 500 lines. Every agent, `kb` included, has only the front matter keys `name`, `description`, `tools` and
+      `model`, each once on its own line (no `hooks`, `mcpServers`, `permissionMode`, no YAML block, and no line break
+      other than `\n`: YAML would read a carriage return, NEL or line separator as a new line), with a `model` of
+      `sonnet`, `opus`, `haiku` or `inherit`. The checking agents have only the tools of an allowlist (reading, a shell
+      that their instructions keep read-only, the browser and database servers; no wildcard, no other server); `kb` may
+      add `Edit` and `Write`. It found the `<n>` in the description of the `implement` skills (shown as `&lt;n&gt;` in
+      the list of skills) and a project `security` agent that did not say when to use it.
+    - `kb` treats everything it reads as data too, never copies such a text into the knowledge base and writes only in
+      `docs/kb/` and `frontend/e2e/screens.spec.ts`; the ticket text handed to a checking agent is data; the `tester`
+      never changes the linked `node_modules` of its copy.
 - **0.54.14**: every hook has a timeout, and the git guard fails closed.
     - `.claude/settings.json` (of the CLI and of every project) gives `guard-git.mjs` 120 s and `format.mjs` 30 s.
     - The guard used to end with exit code 1 on an error of its own (for example `git write-tree` during a merge
