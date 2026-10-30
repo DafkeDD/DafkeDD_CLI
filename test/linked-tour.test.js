@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { files, uiFiles, withApi, LOCALES } from '../src/frontends/nextjs.js'
 import { APP_TOUR_MESSAGES, designFiles, oidcFrontendFiles } from '../src/frontends/oidc.js'
 import { projectClaudeMd, describeProject } from '../src/claude.js'
+import { frontendReadme } from '../src/frontends/docs.js'
 
 const linked = oidcFrontendFiles({ linked: true, appName: 'Planner' })
 const portal = oidcFrontendFiles({ apiPort: 4000 })
@@ -116,7 +117,7 @@ test('update brings the tour to an existing linked app (a design file)', () => {
     assert.equal(designFiles()['frontend/src/components/pasport/app-tour.tsx'], undefined)
 })
 
-test('CLAUDE.md of a linked app names its tour; other apps keep the known gap', () => {
+test('CLAUDE.md of a linked app names its tour; other apps have none, by choice', () => {
     const app = describeProject({
         name: 'planner',
         frontend: { id: 'next' },
@@ -126,9 +127,106 @@ test('CLAUDE.md of a linked app names its tour; other apps keep the known gap', 
     const flat = projectClaudeMd(app).replace(/\s+/g, ' ')
     assert.match(
         flat,
-        /The tour is `AppTour` in `frontend\/src\/components\/pasport\/app-tour\.tsx`: every page of `APP_NAV` is a step, with its text `AppTour\.pages\.<label>` in `frontend\/messages\/\*\.json`\./
+        /The tour is `AppTour` in `frontend\/src\/components\/pasport\/app-tour\.tsx`: every page of `APP_NAV` is a step, with its text `AppTour\.pages\.<label>` in `frontend\/messages\/\*\.json` \(`npm run check:design` fails without it\)\./
     )
-    assert.ok(!flat.includes('Known gap: this app does not have the tour yet'))
+    assert.ok(!flat.includes('Known gap'))
     const site = describeProject({ name: 'site', frontend: { id: 'next' } })
-    assert.match(projectClaudeMd(site).replace(/\s+/g, ' '), /Known gap: this app does not have the tour yet/)
+    assert.match(projectClaudeMd(site).replace(/\s+/g, ' '), /This kind of app has no tour, by choice/)
+})
+
+test('check:design of a linked app fails when a page of APP_NAV has no tour text, and says which', async t => {
+    const { execFileSync } = await import('node:child_process')
+    const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const path = await import('node:path')
+    const dir = await mkdtemp(path.join(tmpdir(), 'dafkedd-tour-check-'))
+    t.after(() => rm(dir, { recursive: true, force: true }))
+    const all = withApi({ ...files, ...uiFiles }, { oidc: true, port: 4000, linked: { name: 'Planner' } }, { ui: true })
+    all['package.json'] = JSON.stringify({ dependencies: { next: '16.0.0' } })
+    const write = async (rel, content) => {
+        await mkdir(path.dirname(path.join(dir, rel)), { recursive: true })
+        await writeFile(path.join(dir, rel), content)
+    }
+    for (const [rel, content] of Object.entries(all)) await write(rel, content)
+    const check = () => {
+        try {
+            return {
+                ok: true,
+                out: execFileSync('node', ['scripts/check-design.mjs'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' })
+            }
+        } catch (error) {
+            return { ok: false, out: String(error.stderr) }
+        }
+    }
+    // A new app passes
+    assert.equal(check().ok, true, check().out)
+    // A new page in the rail without its tour text fails, per language
+    await write(
+        'src/lib/nav.ts',
+        all['src/lib/nav.ts'].replace(
+            "{ href: '/', label: 'home', icon: 'home' }",
+            "{ href: '/', label: 'home', icon: 'home' },\n    { href: '/planning', label: 'planning', icon: 'calendar' }"
+        )
+    )
+    let result = check()
+    assert.equal(result.ok, false)
+    for (const locale of LOCALES)
+        assert.match(
+            result.out,
+            new RegExp(
+                `messages/${locale}\\.json: the page planning of APP_NAV has no tour text AppTour\\.pages\\.planning`
+            )
+        )
+    // Only the languages that miss it
+    const en = JSON.parse(all['messages/en.json'])
+    en.AppTour.pages.planning = 'Plan the week of your team here.'
+    await write('messages/en.json', JSON.stringify(en))
+    result = check()
+    assert.equal(result.ok, false)
+    assert.ok(!result.out.includes('messages/en.json'), 'en has it')
+    assert.match(result.out, /messages\/nl\.json: the page planning/)
+    // Every language has it: passes again
+    for (const locale of ['nl', 'fr', 'de']) {
+        const messages = JSON.parse(all[`messages/${locale}.json`])
+        messages.AppTour.pages.planning = `planning (${locale})`
+        await write(`messages/${locale}.json`, JSON.stringify(messages))
+    }
+    assert.equal(check().ok, true)
+    // An empty text is no text
+    const de = JSON.parse(all['messages/de.json'])
+    de.AppTour.pages.planning = '   '
+    await write('messages/de.json', JSON.stringify(de))
+    result = check()
+    assert.equal(result.ok, false)
+    assert.match(result.out, /messages\/de\.json: the page planning/)
+    assert.ok(!result.out.includes('messages/fr.json'), 'fr has it')
+    de.AppTour.pages.planning = 'Hier plant ihr die Woche eures Teams.'
+    await write('messages/de.json', JSON.stringify(de))
+    assert.equal(check().ok, true)
+    // A language without its messages file fails, and says which
+    const { unlink } = await import('node:fs/promises')
+    await unlink(path.join(dir, 'messages/fr.json'))
+    result = check()
+    assert.equal(result.ok, false)
+    assert.match(result.out, /messages\/fr\.json: missing or not valid JSON/)
+    const fr = JSON.parse(all['messages/fr.json'])
+    fr.AppTour.pages.planning = 'Planifiez ici la semaine de votre équipe.'
+    await write('messages/fr.json', JSON.stringify(fr))
+    assert.equal(check().ok, true)
+    // Never a silent pass: an APP_NAV the check cannot read fails
+    await write('src/lib/nav.ts', 'export const NAV = []\n')
+    result = check()
+    assert.equal(result.ok, false)
+    assert.match(result.out, /src\/lib\/nav\.ts: APP_NAV not found/)
+})
+
+test('the frontend docs of a linked app say check:design checks the tour texts; the login server does not', () => {
+    const flat = text => text.replace(/\s+/g, ' ')
+    const linkedDocs = flat(frontendReadme({ api: { port: 4000, oidc: true, linked: { name: 'Planner' } } }))
+    assert.match(
+        linkedDocs,
+        /It also fails when a page of `APP_NAV` has no tour text `AppTour\.pages\.<label>` in en, nl, fr or de, and says which\./
+    )
+    const serverDocs = flat(frontendReadme({ api: { port: 4000, oidc: true } }))
+    assert.ok(!serverDocs.includes('has no tour text'))
 })

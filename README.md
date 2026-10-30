@@ -489,9 +489,10 @@ No organisation is created: the superadmin logs in to the platform and creates o
     users register. A linked app shows the first-login tour (`src/components/pasport/app-tour.tsx`): a step per page of
     `APP_NAV`, the notifications and the account menu, once per account (remembered in the browser as `app-tour:<sub>`)
     and again from "Tour" in the user menu, never for a superadmin. A new page of a linked app gets its tour text
-    `AppTour.pages.<label>` in `messages/{en,nl,fr,de}.json`. Pages use `<AppPage>` (`src/components/shell`); see
-    "Design (Pasport)" in `docs/frontend.md`. Claude Code (the `pasport-design` skill, the `qa` and `reviewer` agents)
-    is told that this is the design to follow, at 1440 and 390 pixels wide.
+    `AppTour.pages.<label>` in `messages/{en,nl,fr,de}.json`: `npm run check:design` fails without it, and says which.
+    Pages use `<AppPage>` (`src/components/shell`); see "Design (Pasport)" in `docs/frontend.md`. Claude Code (the
+    `pasport-design` skill, the `qa` and `reviewer` agents) is told that this is the design to follow, at 1440 and 390
+    pixels wide.
 
 - **eHealth vault** (`/vault`): only for doctors (the profession of their membership). A doctor keeps an eHealth
   certificate there and may choose colleagues (the secretariat) who use it for them. A linked app reaches the vault
@@ -900,6 +901,10 @@ git switch developer
 
 ## Changelog
 
+- **0.54.17**: `npm run check:design` of a linked app fails when a page of `APP_NAV` has no tour text
+  `AppTour.pages.<label>` in en, nl, fr or de, and names the language and the page: a new page can no longer ship
+  without its step in the first-login tour. `update` brings the check to existing linked apps. The CLAUDE.md of a site,
+  an API frontend or the simple login no longer says the tour is coming: those have none, by choice.
 - **0.54.16**: a linked app has the first-login tour.
     - `AppTour` (`src/components/pasport/app-tour.tsx`): a welcome, a step for every page of `APP_NAV` (it goes there
       and points at the page head), the bell, the account menu and the end. A new page in `APP_NAV` is a new step by

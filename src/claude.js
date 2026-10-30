@@ -80,10 +80,10 @@ function firstLoginTour(project) {
             : project.kind === 'app'
               ? [
                     '  The tour is `AppTour` in `frontend/src/components/pasport/app-tour.tsx`: every page of `APP_NAV` is a step,',
-                    '  with its text `AppTour.pages.<label>` in `frontend/messages/*.json`.'
+                    '  with its text `AppTour.pages.<label>` in `frontend/messages/*.json` (`npm run check:design` fails without it).'
                 ]
               : [
-                    '  Known gap: this app does not have the tour yet (DafkeDD_CLI issue #11, it comes with `update`); until then, list',
+                    '  This kind of app has no tour, by choice (DafkeDD_CLI makes it for the login server and a linked app); list',
                     '  the tour steps of a new page in its pull request.'
                 ])
     ]

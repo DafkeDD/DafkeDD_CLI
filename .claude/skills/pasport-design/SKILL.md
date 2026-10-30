@@ -25,8 +25,8 @@ built in the templates (and in `D:\test`, the reference project), not a variatio
   add or change gets its step in the tour, with its texts in en, nl, fr and de; a page without its step is not done.
   The customer portal of the login server has it (`Tour` in `templates/frontend-oidc/src/components/pasport/tour.tsx`,
   on `GuidedTour`), and so has a linked app (`AppTour` in `templates/frontend-oidc-linked/src/components/pasport/app-tour.tsx`:
-  every page of `APP_NAV` is a step, its text `AppTour.pages.<label>`). A site, an API frontend and the simple login
-  have none: a new page of those lists its tour steps in its pull request.
+  every page of `APP_NAV` is a step, its text `AppTour.pages.<label>`; `check-design.mjs` fails without it). A site, an
+  API frontend and the simple login have none, by choice: a new page of those lists its tour steps in its pull request.
 - **The components of the design.** `@/components/pasport/*` (`Btn`, `Field`, `Input`, `Select`, `Badge`, `Avatar`,
   `Modal`, `PageHead`, `AuthLayout`, `Icon`, …), the classes of `pasport.css` (`card`, `tbl`, `tabs`, `page-head`, …)
   and the shell (`AppPage`). Something new is built from those classes and tokens, in `components/pasport`. Never

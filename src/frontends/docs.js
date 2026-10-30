@@ -410,7 +410,11 @@ to the page it asked for. Only the pages in \`PUBLIC_PATHS\` (\`/login\`, \`/adm
 **Checked**: \`npm run check:design\` (\`scripts/check-design.mjs\`, also in the CI) fails when a page is not in the
 shell (\`<AppPage>\`, or a \`layout.tsx\` above it with \`<CustomerShell>\` or \`<AdminShell>\`; a page that only redirects
 is fine) or, when it is public, in the login screen, when another component library, icon set or CSS framework is
-imported, or when a page or component writes a colour instead of a token (\`var(--accent)\`, \`var(--text-2)\`, ...).
+imported, or when a page or component writes a colour instead of a token (\`var(--accent)\`, \`var(--text-2)\`, ...).${
+        link
+            ? ' It also fails when a page of \`APP_NAV\` has no tour text \`AppTour.pages.<label>\` in en, nl, fr or de, and says which.'
+            : ''
+    }
 \`update\` of DafkeDD_CLI keeps the code (design, pages, components) in step with the CLI; a file you changed gets the new version
 next to it (\`<file>.dafkedd-new\`).
 
