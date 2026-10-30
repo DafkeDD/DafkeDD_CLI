@@ -56,8 +56,9 @@ project are the design, and a new screen looks as if it was always part of them.
   team: the superadmin panel has no tour). A page or tab you add or change gets its step in the tour, with its texts in
   en, nl, fr and de: a page without its tour step is not done. On the login server the tour is `Tour` in
   `src/components/pasport/tour.tsx`. In a linked app it is `AppTour` (`src/components/pasport/app-tour.tsx`): every
-  page of `APP_NAV` is a step by itself, and its text is `AppTour.pages.<label>` in every language. An app that does
-  not have one yet (DafkeDD_CLI issue #11) lists the tour steps of a new page in its pull request.
+  page of `APP_NAV` is a step by itself, and its text is `AppTour.pages.<label>` in every language (`npm run
+  check:design` fails without it). An app without a tour (a site, an API frontend, the simple login) lists the tour
+  steps of a new page in its pull request.
 - **Shape**: a page head (`page-head`, `PageHead` in a linked app) with one primary action; content in
   `card card-pad`; tables in `tbl` inside `table-wrap`; dialogs with `Modal`; no coloured left borders; status is a
   `Badge` with a word; codes and amounts in `t-mono`.

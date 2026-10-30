@@ -47,8 +47,9 @@ how the code is made testable.
   superadmins). A new page or tab always gets its step in the tour, with its texts in en, nl, fr and de; a change
   without its tour step is not done. Superadmins (the support team) get no tour, so the superadmin panel has none. The
   customer portal of the login server has it (`templates/frontend-oidc/src/components/pasport/tour.tsx`), and so has a
-  linked app (`templates/frontend-oidc-linked/src/components/pasport/app-tour.tsx`, a step per page of `APP_NAV`). Known
-  gap: a site, an API frontend and the simple login have no tour.
+  linked app (`templates/frontend-oidc-linked/src/components/pasport/app-tour.tsx`, a step per page of `APP_NAV`;
+  `check-design.mjs` fails when a page has no `AppTour.pages.<label>` text). A site, an API frontend and the simple
+  login have no tour, by choice.
 - **Prettier everywhere** (`.prettierrc`: 4 spaces, no semicolons, single quotes, width 120). There are no warnings in
   the build, lint or tests of a generated project.
 - **Multi-tenant everywhere.**

@@ -132,6 +132,35 @@ for (const file of pages) {
     }
 }
 
+// 4. The first-login tour of a linked app (src/components/pasport/app-tour.tsx) has a step for every page of APP_NAV:
+// a new page in the rail is not done without its tour text AppTour.pages.<label> in every language
+if (existsSync(path.join(src, 'components', 'pasport', 'app-tour.tsx'))) {
+    const nav = path.join(src, 'lib', 'nav.ts')
+    const navCode = existsSync(nav) ? read(nav) : ''
+    const appNav = /APP_NAV[^=]*=\s*\[([\s\S]*?)\]\s*(?:\n|$)/.exec(navCode)?.[1] ?? ''
+    const labels = [...appNav.matchAll(/label:\s*'([^']+)'/g)].map(match => match[1])
+    // Never a silent pass: without the pages of the rail there is nothing to check them against
+    if (!labels.length)
+        problems.push(
+            "src/lib/nav.ts: APP_NAV not found (export const APP_NAV: NavItem[] = [{ href, label: '...', icon }]): the first-login tour has a step for every page of it."
+        )
+    for (const locale of ['en', 'nl', 'fr', 'de']) {
+        const messagesFile = path.join(root, 'messages', `${locale}.json`)
+        let tourPages = {}
+        try {
+            tourPages = JSON.parse(read(messagesFile)).AppTour?.pages ?? {}
+        } catch {
+            problems.push(`messages/${locale}.json: missing or not valid JSON (the texts of the app in ${locale}).`)
+            continue
+        }
+        for (const label of labels)
+            if (typeof tourPages[label] !== 'string' || !tourPages[label].trim())
+                problems.push(
+                    `messages/${locale}.json: the page ${label} of APP_NAV has no tour text AppTour.pages.${label}. Add what the page is for, in every language (en, nl, fr, de): the first-login tour shows it.`
+                )
+    }
+}
+
 if (problems.length) {
     console.error(`The Pasport design (.claude/design/pasport.md): ${problems.length} problem(s)\n`)
     for (const problem of problems) console.error('- ' + problem)
