@@ -166,10 +166,10 @@ test('cloudFiles and cloudSteps: Terraform, bootstrap, README, workflow, Dockerf
     const stat = await fs.stat(path.join(dir, 'infra', 'bootstrap.sh'))
     if (process.platform !== 'win32') assert.ok(stat.mode & 0o100, 'bootstrap.sh is executable')
     assert.ok(cloudNext().some(line => line.includes('bootstrap.sh')))
-    // CLAUDE.md of the project tells about it, and the infra agent never presses the button
+    // CLAUDE.md of the project tells about it, and the infra skill never presses the button
     assert.match(projectClaudeMd({ ...app, cloud: true }), /## Google Cloud/)
     assert.ok(!projectClaudeMd(app).includes('## Google Cloud'))
-    const infra = await fs.readFile('templates/project-claude/.claude/agents/infra.md', 'utf8')
+    const infra = await fs.readFile('templates/project-claude/.claude/skills/infra/SKILL.md', 'utf8')
     assert.match(infra, /never run `deploy`, `up` or `down` yourself/)
 })
 

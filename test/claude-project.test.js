@@ -19,6 +19,17 @@ import {
 } from '../src/claude.js'
 import { main } from '../src/index.js'
 
+/** The agents of a project: only the independent checks, and kb (it writes the knowledge base). */
+const AGENTS = ['reviewer', 'tester', 'docs', 'i18n', 'security', 'qa', 'a11y', 'privacy', 'performance', 'kb']
+/** The building knowledge, loaded by itself when the work is about it. */
+const KNOWLEDGE = ['pasport-design', 'nestjs', 'postgresql', 'translator', 'e2e']
+/** The workflows, started with /<name> (release and backup only by a person). */
+const WORKFLOWS = ['seed', 'release', 'backup', 'dependencies', 'infra', 'observability', 'support', 'architect']
+/** Every skill of a project. */
+const SKILLS = ['plan', 'implement', 'diagnose', 'handoff', ...KNOWLEDGE, ...WORKFLOWS]
+/** The agents a project had before 0.54.11, now skills (frontend became pasport-design). */
+const CONVERTED = ['frontend', 'nestjs', 'postgresql', 'translator', 'e2e', ...WORKFLOWS]
+
 const LINK = { issuer: 'http://localhost:4000/oidc', accountUrl: 'http://localhost:3000', clientId: 'planner' }
 const app = describeProject({
     name: 'planner',
@@ -78,7 +89,7 @@ test('CLAUDE.md of a project: its parts, the rules, the branch per issue, the me
     ])
         assert.ok(text.includes(part), part)
     for (const name of [
-        'frontend',
+        'pasport-design',
         'nestjs',
         'postgresql',
         'reviewer',
@@ -100,7 +111,7 @@ test('CLAUDE.md of a project: its parts, the rules, the branch per issue, the me
     assert.ok(!text.includes('the README of the backend'))
     assert.match(
         text,
-        /`\.\.\. update` brings the agents, hooks, pipelines and the code of `\.\/backend`, `\.\/frontend` and/
+        /`\.\.\. update` brings the skills, agents, hooks, pipelines and the code of `\.\/backend`, `\.\/frontend` and/
     )
     assert.match(text, /`<file>\.dafkedd-new`/)
     assert.match(projectClaudeMd(frontendOnly), /the code of `\.\/frontend` and `\.\/docs`/)
@@ -151,7 +162,7 @@ test('the release runs only on main, after the CI, with the version of the backe
     assert.match(releaseWorkflow(frontendOnly), /require\('\.\/frontend\/package\.json'\)/)
 })
 
-test('a project gets the agents, skills, hooks, design, issue forms, the policy and both pipelines', () => {
+test('a project gets the skills, agents, hooks, design, issue forms, the policy and both pipelines', () => {
     const files = projectClaudeFiles(app)
     for (const rel of [
         'CLAUDE.md',
@@ -170,32 +181,8 @@ test('a project gets the agents, skills, hooks, design, issue forms, the policy 
         '.github/workflows/release.yml',
         '.github/dependabot.yml',
         'CHANGELOG.md',
-        ...[
-            'frontend',
-            'nestjs',
-            'postgresql',
-            'reviewer',
-            'tester',
-            'docs',
-            'i18n',
-            'security',
-            'qa',
-            'kb',
-            'e2e',
-            'a11y',
-            'privacy',
-            'performance',
-            'dependencies',
-            'release',
-            'translator',
-            'seed',
-            'observability',
-            'support',
-            'architect',
-            'backup',
-            'infra'
-        ].map(name => `.claude/agents/${name}.md`),
-        ...['plan', 'implement', 'diagnose', 'handoff'].map(name => `.claude/skills/${name}/SKILL.md`)
+        ...AGENTS.map(name => `.claude/agents/${name}.md`),
+        ...SKILLS.map(name => `.claude/skills/${name}/SKILL.md`)
     ])
         assert.ok(files[rel], rel)
     assert.deepEqual(JSON.parse(files['.claude/git-policy.json']), { push: 'issue-branches', merge: 'developer' })
@@ -238,7 +225,9 @@ test('claudeSteps writes the files and adds the handoff to the root .gitignore o
         'node_modules\n.claude/handoff.md\n.env.test\nplaywright-report/\ntest-results/\n.lighthouseci/\n*.dafkedd-new\n'
     )
     assert.match(await fs.readFile(path.join(dir, 'CLAUDE.md'), 'utf8'), /^# planner/)
-    assert.ok(await fs.stat(path.join(dir, '.claude', 'agents', 'frontend.md')))
+    assert.ok(await fs.stat(path.join(dir, '.claude', 'skills', 'pasport-design', 'SKILL.md')))
+    assert.ok(await fs.stat(path.join(dir, '.claude', 'agents', 'reviewer.md')))
+    await assert.rejects(fs.stat(path.join(dir, '.claude', 'agents', 'frontend.md')))
     assert.ok(await fs.stat(path.join(dir, '.github', 'workflows', 'release.yml')))
     assert.ok(claudeNext().some(line => line.includes('setup-labels')))
     // The CLI made the repository: it did that itself
@@ -284,11 +273,13 @@ test('main: Claude Code is added before git, and developer becomes the default b
     assert.ok(logs.some(line => line.includes('standaardbranch developer')))
 })
 
-test('the new agents: what they may do, the knowledge base, Dependabot into developer, releases prepared for a person', () => {
+test('the agents: what they may do, the knowledge base, Dependabot into developer, releases prepared for a person', () => {
     const files = projectClaudeFiles(app)
     const frontmatter = name =>
-        files[`.claude/agents/${name}.md`].match(/^---\nname: (.+)\ndescription: (.+)\ntools: (.+)\n---\n/)
-    for (const name of ['kb', 'e2e', 'a11y', 'privacy', 'performance', 'dependencies', 'release', 'translator']) {
+        files[`.claude/agents/${name}.md`].match(
+            /^---\nname: (.+)\ndescription: (.+)\ntools: (.+)\n(?:model: .+\n)?---\n/
+        )
+    for (const name of AGENTS) {
         const [, own, description] = frontmatter(name)
         assert.equal(own, name)
         assert.ok(description.length > 60, name)
@@ -304,8 +295,8 @@ test('the new agents: what they may do, the knowledge base, Dependabot into deve
     assert.match(files['.claude/agents/kb.md'], /docs\/kb\/screenshots\/<lang>\//)
     assert.match(files['.claude/agents/kb.md'], /e2e\/screens\.spec\.ts/)
     assert.match(files['.claude/agents/docs.md'], /the knowledge base/)
-    assert.match(files['.claude/agents/release.md'], /You never merge into `main`/)
-    assert.match(files['.claude/agents/dependencies.md'], /two weeks/)
+    assert.match(files['.claude/skills/release/SKILL.md'], /You never merge into `main`/)
+    assert.match(files['.claude/skills/dependencies/SKILL.md'], /two weeks/)
     const dependabot = files['.github/dependabot.yml']
     assert.equal((dependabot.match(/target-branch: developer/g) ?? []).length, 3)
     for (const dir of ['/backend', '/frontend']) assert.ok(dependabot.includes(`directory: ${dir}`), dir)
@@ -318,12 +309,12 @@ test('the new agents: what they may do, the knowledge base, Dependabot into deve
 
 test('seed, support, architect, observability and backup; the decisions in docs/adr', () => {
     const files = projectClaudeFiles({ ...app, cloud: true })
-    assert.match(files['.claude/agents/seed.md'], /refusing to run when\n?\s*`NODE_ENV=production`/)
-    assert.match(files['.claude/agents/seed.md'], /TOTP secret/)
-    assert.match(files['.claude/agents/support.md'], /gh issue list --search/)
-    assert.match(files['.claude/agents/architect.md'], /docs\/adr\/NNNN-<title>\.md/)
-    assert.match(files['.claude/agents/observability.md'], /monitoring\.tf/)
-    assert.match(files['.claude/agents/backup.md'], /Restore test/)
+    assert.match(files['.claude/skills/seed/SKILL.md'], /refusing to run when\n?\s*`NODE_ENV=production`/)
+    assert.match(files['.claude/skills/seed/SKILL.md'], /TOTP secret/)
+    assert.match(files['.claude/skills/support/SKILL.md'], /gh issue list --search/)
+    assert.match(files['.claude/skills/architect/SKILL.md'], /docs\/adr\/NNNN-<title>\.md/)
+    assert.match(files['.claude/skills/observability/SKILL.md'], /monitoring\.tf/)
+    assert.match(files['.claude/skills/backup/SKILL.md'], /Restore test/)
     assert.match(files['docs/adr/README.md'], /\[0001\]\(0001-record-architecture-decisions\.md\)/)
     assert.match(files['docs/adr/template.md'], /## Options considered/)
     assert.match(files['CLAUDE.md'], /`observability` \(logs, alerts, budget\) and `backup`/)
@@ -404,4 +395,108 @@ test('the CI checks secrets and known vulnerabilities, Lighthouse the pages with
             '.github/workflows/screenshots.yml'
         ]
     )
+})
+
+test('the building and workflow agents of a project are skills; only the checks (and kb) stay agents', () => {
+    const files = projectClaudeFiles({ ...app, cloud: true })
+    const agents = Object.keys(files)
+        .filter(rel => rel.startsWith('.claude/agents/'))
+        .map(rel => rel.slice('.claude/agents/'.length).replace(/\.md$/, ''))
+        .sort()
+    assert.deepEqual(agents, [...AGENTS].sort())
+    for (const name of CONVERTED) assert.ok(!files[`.claude/agents/${name}.md`], `no agent ${name}`)
+    const skills = Object.keys(files)
+        .filter(rel => /^\.claude\/skills\/[^/]+\/SKILL\.md$/.test(rel))
+        .map(rel => rel.split('/')[2])
+        .sort()
+    assert.deepEqual(skills, [...SKILLS].sort())
+    for (const name of [...KNOWLEDGE, ...WORKFLOWS]) {
+        const text = files[`.claude/skills/${name}/SKILL.md`]
+        const [, head] = text.match(/^---\n([\s\S]+?)\n---\n/)
+        const keys = Object.fromEntries(head.split('\n').map(line => line.split(/: (.*)/s).slice(0, 2)))
+        assert.equal(keys.name, name)
+        assert.ok(keys.description.length > 60, name)
+        // A skill has no tools or model of an agent, and is written for the main session
+        assert.deepEqual(
+            Object.keys(keys).sort(),
+            ['description', 'disable-model-invocation', 'name'].filter(key => key in keys).sort(),
+            name
+        )
+        assert.ok(!keys.tools && !keys.model, name)
+        assert.ok(!/You never commit or push/.test(text), name)
+        // What the main session does when the work is built: the checking agents, never a commit of its own
+        if (KNOWLEDGE.includes(name)) assert.match(text, /start the checking agents \(the `implement` skill\)/, name)
+        // Only the workflows with side effects for a person are kept from loading by themselves
+        assert.equal(keys['disable-model-invocation'], ['release', 'backup'].includes(name) ? 'true' : undefined, name)
+    }
+    // The knowledge skills say when to load them; the workflows how to start them
+    for (const name of KNOWLEDGE)
+        assert.match(files[`.claude/skills/${name}/SKILL.md`], /^description: .*\bLoad it\b/m, name)
+    for (const name of WORKFLOWS)
+        assert.match(files[`.claude/skills/${name}/SKILL.md`], new RegExp(`^description: .*/${name}\\b`, 'm'), name)
+    // No skill or agent of a project still sends work to an agent that is a skill now
+    for (const [rel, text] of Object.entries(files).filter(([rel]) => rel.startsWith('.claude/')))
+        for (const name of CONVERTED)
+            assert.ok(
+                !new RegExp(`\\b(the|an?) \\**${name}\\** agent\\b|agents/${name}\\.md`).test(text),
+                `${rel}: ${name}`
+            )
+})
+
+test('the pasport-design skill of a project keeps the first-login tour, its superadmin exception and the known gap', () => {
+    const text = projectClaudeFiles(app)['.claude/skills/pasport-design/SKILL.md']
+    const flat = text.replace(/\s+/g, ' ')
+    assert.match(
+        flat,
+        /\*\*The first-login tour is a MUST\*\*: the first time a user logs in, the app shows a guided tour of all its pages/
+    )
+    assert.match(flat, /\(not for superadmins, the support team: the superadmin panel has no tour\)/)
+    assert.match(flat, /a page without its tour step is not done/)
+    assert.match(
+        flat,
+        /an app that does not have one yet \(DafkeDD_CLI issue #11\) lists the tour steps of a new page in its pull request/
+    )
+    assert.match(flat, /`\.claude\/design\/pasport\.md`/)
+    assert.match(flat, /stage it and start the checking agents \(the `implement` skill\)/)
+})
+
+test('CLAUDE.md of a project lists the skills and the agents apart', () => {
+    for (const project of [app, { ...app, cloud: true }, pasport, frontendOnly]) {
+        const text = projectClaudeMd(project)
+        const section = text.slice(
+            text.indexOf('## Skills and agents'),
+            text.indexOf('\n## ', text.indexOf('## Skills and agents') + 1)
+        )
+        assert.ok(section.length > 100)
+        const flat = section.replace(/\s+/g, ' ')
+        assert.match(flat, /Workflow skills: `plan`, `implement`, `diagnose`, `handoff`\./)
+        assert.match(flat, /Knowledge skills \(they load by themselves when the work is about them\): `pasport-design`/)
+        for (const name of ['seed', 'support', 'architect', 'dependencies', 'release'])
+            assert.match(flat, new RegExp(`Skills to start with \`/<name>\`:.*\`${name}\``), name)
+        assert.match(
+            flat,
+            /Checking agents \(read-only\): `reviewer`, `tester`, `docs`, `i18n`, `security`, `qa`, `a11y`, `privacy`, `performance`\./
+        )
+        assert.match(flat, /The agent `kb`/)
+        assert.equal(/Cloud skills: `infra`/.test(flat), Boolean(project.cloud))
+        assert.ok(!text.includes('Building (`.claude/agents/`)'))
+        assert.ok(!/the agents `frontend`/.test(text))
+    }
+    assert.match(
+        projectClaudeMd(app).replace(/\s+/g, ' '),
+        /with the skills `pasport-design`, `nestjs`, `postgresql`, `translator` \(the four languages\) and `e2e`/
+    )
+    assert.match(projectClaudeMd(app), /then the checking agents on that:/)
+})
+
+test('the references to the skills of a project point at files that exist', async () => {
+    const files = projectClaudeFiles({ ...app, cloud: true })
+    const { backupWorkflow } = await import('../src/cloud.js')
+    const paths = [
+        ...backupWorkflow('planner').matchAll(/\.claude\/(?:skills|agents)\/[\w/.-]+\.md/g),
+        ...files['.github/dependabot.yml'].matchAll(/\.claude\/(?:skills|agents)\/[\w/.-]+\.md/g)
+    ].map(([rel]) => rel)
+    assert.deepEqual(paths, ['.claude/skills/backup/SKILL.md', '.claude/skills/dependencies/SKILL.md'])
+    for (const rel of paths) assert.ok(files[rel], rel)
+    for (const name of ['backup', 'dependencies']) assert.ok(!files[`.claude/agents/${name}.md`], name)
 })

@@ -8,7 +8,8 @@ import { ghOwner } from './repo.js'
 
 /**
  * Claude Code for a generated project (optional, the CLI asks): CLAUDE.md with the rules and the parts of the project,
- * the agents, skills and hooks of templates/project-claude, the Pasport design, issue forms, and the GitHub pipelines
+ * the skills (building and workflows), the checking agents and hooks of templates/project-claude, the Pasport design,
+ * issue forms, and the GitHub pipelines
  * (CI on every pull request, a release when developer is merged into main). Work happens on a branch per GitHub issue;
  * an agent may merge it into developer when the CI is green and the checking agents approved it.
  */
@@ -183,9 +184,9 @@ export function projectClaudeMd(project) {
         '',
         '1. **Plan** with the skill `plan`: the questions first, then a spec issue and ticket issues on GitHub.',
         `2. **Build** an issue with \`implement\` on its own branch, \`issue/<number>-<words>\` from \`${DEVELOP_BRANCH}\`, with`,
-        '   the agents `frontend`, `nestjs`, `postgresql`, `translator` (the four languages), `e2e` (browser tests) and',
-        '   `kb` (the knowledge base with screenshots); tests first.',
-        '3. **Check**: stage the change (`git add`, a separate command), then the checking agents on exactly that:',
+        '   the skills `pasport-design`, `nestjs`, `postgresql`, `translator` (the four languages) and `e2e` (browser tests),',
+        '   and the agent `kb` (the knowledge base with screenshots); tests first.',
+        '3. **Check**: stage the change (`git add`, a separate command), then the checking agents on that:',
         '   `reviewer`, `tester`, `docs`, `i18n`, and `security` for login, tokens, organisations, billing, uploads and the',
         '   database. Then `qa` for a screen, a form or the database: it clicks through every control in a real browser',
         '   and checks the rows; `a11y` for a screen, `privacy` for what is stored, `performance` for lists and queries.',
@@ -208,25 +209,31 @@ export function projectClaudeMd(project) {
         '    - `gh release` and `gh repo delete` never.',
         '- `format.mjs` runs Prettier on every file that is edited.',
         '',
-        '## Agents and skills',
+        '## Skills and agents',
         '',
-        '- Building (`.claude/agents/`): `frontend`, `nestjs`, `postgresql`, `translator`, `e2e`, `kb`.',
-        '- Checking (read-only): `reviewer`, `tester`, `docs`, `i18n`, `security`, `qa`, `a11y`, `privacy`, `performance`.',
+        'The main session builds and runs the workflows, with the skills (`.claude/skills/`); the agents',
+        '(`.claude/agents/`) are the independent checks, plus `kb`.',
+        '',
+        '- Workflow skills: `plan`, `implement`, `diagnose`, `handoff`.',
+        '- Knowledge skills (they load by themselves when the work is about them): `pasport-design` (every screen, the',
+        '  phone, the first-login tour), `nestjs`, `postgresql`, `translator` (the four languages), `e2e` (browser tests).',
+        `- Skills to start with \`/<name>\`: \`seed\` (test data and test accounts${project.kind === 'pasport' ? '; `npm run demo:data` and `npm run demo:clear` in `./backend` already exist' : project.backend ? '; it creates a seed script in `./backend`' : ''}), \`support\` (a message`,
+        '  of a user to an answer and a reproducible issue), `architect` (decisions that are hard to undo, `docs/adr`),',
+        '  `dependencies` (the weekly Dependabot pull requests, `.github/dependabot.yml`) and `release` (prepares the pull',
+        `  request from \`${DEVELOP_BRANCH}\` into \`${RELEASE_BRANCH}\` with \`CHANGELOG.md\`; a person merges it).`,
         ...(project.cloud
             ? [
-                  '- Cloud: `infra` (Terraform in `infra/terraform`, the Dockerfiles, the workflow `Cloud`; see `infra/README.md`).'
+                  '- Cloud skills: `infra` (Terraform in `infra/terraform`, the Dockerfiles, the workflow `Cloud`; see',
+                  '  `infra/README.md`), `observability` (logs, alerts, budget) and `backup` (the monthly restore test).'
               ]
             : []),
-        `- Around it: \`seed\` (test data and test accounts${project.kind === 'pasport' ? '; `npm run demo:data` and `npm run demo:clear` in `./backend` already exist' : project.backend ? '; it creates a seed script in `./backend`' : ''}), \`support\` (a message of a user`,
-        '  to an answer and a reproducible issue), `architect` (decisions that are hard to undo, `docs/adr`)' +
-            (project.cloud ? ', `observability` (logs, alerts, budget) and `backup` (the monthly restore test).' : '.'),
-        '- Upkeep: `dependencies` (the weekly Dependabot pull requests, `.github/dependabot.yml`) and `release` (prepares',
-        `  the pull request from \`${DEVELOP_BRANCH}\` into \`${RELEASE_BRANCH}\` with \`CHANGELOG.md\`; a person merges it).`,
-        '- Skills (`.claude/skills/`): `plan`, `implement`, `diagnose`, `handoff`.',
+        '- Checking agents (read-only): `reviewer`, `tester`, `docs`, `i18n`, `security`, `qa`, `a11y`, `privacy`,',
+        '  `performance`.',
+        '- The agent `kb`: writes the knowledge base (`docs/kb`) after every change to a screen.',
         '- GitHub (once, when the CLI did not make the repository): `node .claude/scripts/setup-labels.mjs` (the labels)',
         '  and `node .claude/scripts/protect-branches.mjs` (`developer` and `main` protected, vulnerability reporting).',
         '- The CLI: `npx --allow-git=all github:DafkeDD/DafkeDD_CLI doctor` checks the tools, the MCP servers and GitHub;',
-        `  \`... update\` brings the agents, hooks, pipelines and the code of ${[
+        `  \`... update\` brings the skills, agents, hooks, pipelines and the code of ${[
             project.backend && '`./backend`',
             project.frontend && '`./frontend`',
             '`./docs`'
@@ -324,7 +331,7 @@ export function ciWorkflow(project) {
                       '                  if-no-files-found: ignore'
                   ]
                 : []),
-            '            # The browser tests of the e2e agent (frontend/e2e, also the visual tests), once @playwright/test is installed',
+            '            # The browser tests of the e2e skill (frontend/e2e, also the visual tests), once @playwright/test is installed',
             '            - name: Browser tests (Playwright)',
             '              run: |',
             '                  if [ -n "$(npm pkg get devDependencies.@playwright/test | tr -d \'{}\')" ]; then',
@@ -472,7 +479,7 @@ jobs:
 export const screenshotsWorkflow = () => `name: Screenshots
 
 # Actions -> Screenshots -> Run workflow, on an issue branch: frontend/e2e/screens.spec.ts makes every screenshot of
-# docs/kb again (the e2e agent) and they are committed to that branch. The CI compares them on every pull request.
+# docs/kb again (the e2e skill) and they are committed to that branch. The CI compares them on every pull request.
 on:
     workflow_dispatch:
 
@@ -592,8 +599,9 @@ function mcpLines(project) {
         '',
         ...(names.includes('playwright')
             ? [
-                  '- **Playwright MCP** (`@playwright/mcp`): a real browser for the agents (`qa`, `frontend`) to click through the',
-                  '  app. It uses the Chrome of this computer; without Chrome: `npx playwright install chromium` once.'
+                  '- **Playwright MCP** (`@playwright/mcp`): a real browser for the agents and skills (`qa`, `kb`,',
+                  '  `pasport-design`) to click through the app. It uses the Chrome of this computer; without Chrome:',
+                  '  `npx playwright install chromium` once.'
               ]
             : []),
         ...(names.includes('postgres')

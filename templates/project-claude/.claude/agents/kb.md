@@ -31,10 +31,10 @@ base being updated is not finished.
 2. Start the backend and the frontend (`npm run start:dev`, `npm run dev`) and log in with the test account Davey gave
    you (ask for one when you have none; never create accounts on a login server of others).
 3. With the Playwright MCP, go through the page in every language and theme to see every control and state. The
-   screenshots themselves are made by `frontend/e2e/screens.spec.ts` (the e2e agent; also the visual tests of the
+   screenshots themselves are made by `frontend/e2e/screens.spec.ts` (the e2e skill; also the visual tests of the
    CI): add every state you document there (`<id>-<state>`), then ask for **Actions → Screenshots → Run workflow** on
    the issue branch; it makes them on Linux and commits them. Never a screenshot with real personal data: the test
-   data of the seed agent.
+   data of the seed skill.
 4. Write or update the pages in all four languages: plain words, "je/jij" in Dutch, "vous" in French, "du" in German;
    the user's point of view ("Click **Invite** …"), never code or routes in the text except under "Where".
 5. Update `pages.json` and the tables of contents. Remove the pages and screenshots of what no longer exists.

@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -31,6 +32,13 @@ test('the hooks of this repository are the ones every project gets (one source)'
             await fs.readFile(`${TEMPLATE}/hooks/${name}`, 'utf8'),
             name
         )
+    // The header says what an approval covers: not exactly the staged tree, a documentation-only change keeps some
+    const header = (await fs.readFile(`${TEMPLATE}/hooks/guard-git.mjs`, 'utf8')).split('\n// - git push')[0]
+    assert.match(
+        header.replace(/\n\/\/\s*/g, ' '),
+        /for the staged tree \(some approvals still count after a documentation-only change: approvals\.mjs\)/
+    )
+    assert.ok(!header.includes('exactly the staged tree'))
     // The CLI works like the projects it makes: a branch per issue, merged into developer
     assert.deepEqual(JSON.parse(await fs.readFile('.claude/git-policy.json', 'utf8')), PROJECT)
     assert.deepEqual(JSON.parse(await fs.readFile(`${TEMPLATE}/git-policy.json`, 'utf8')), PROJECT)
@@ -393,21 +401,27 @@ test('every approval has its agent, and the sensitive parts also need the securi
         assert.ok(!required([file]).includes('qa'), file)
 })
 
-test('the building knowledge (skills here, agents in a project) and the design it follows are in the repository', async () => {
+test('the building knowledge (skills here and in a project) and the design it follows are in the repository', async () => {
     for (const skill of ['pasport-design', 'nestjs', 'postgresql']) {
         const text = await fs.readFile(`.claude/skills/${skill}/SKILL.md`, 'utf8')
         assert.match(text, new RegExp(`^---\\nname: ${skill}\\ndescription: .+\\n---\\n`), skill)
     }
-    for (const agent of ['frontend', 'nestjs', 'postgresql']) {
-        const text = await fs.readFile(`${TEMPLATE}/agents/${agent}.md`, 'utf8')
-        assert.match(text, new RegExp(`^---\\nname: ${agent}\\ndescription: .+\\ntools: .*Edit`), agent)
-        assert.match(text, /never commit or push/, agent)
+    // A project builds with the same knowledge skills (frontend became pasport-design), not with agents
+    for (const skill of ['pasport-design', 'nestjs', 'postgresql']) {
+        const text = await fs.readFile(`${TEMPLATE}/skills/${skill}/SKILL.md`, 'utf8')
+        assert.match(text, new RegExp(`^---\\nname: ${skill}\\ndescription: .+\\n---\\n`), skill)
+        assert.match(text, /start the checking agents \(the `implement` skill\)/, skill)
     }
+    for (const agent of ['frontend', 'nestjs', 'postgresql'])
+        assert.ok(!existsSync(`${TEMPLATE}/agents/${agent}.md`), agent)
     assert.match(
         await fs.readFile('.claude/skills/pasport-design/SKILL.md', 'utf8'),
         /templates\/project-claude\/\.claude\/design\/pasport\.md/
     )
-    assert.match(await fs.readFile(`${TEMPLATE}/agents/frontend.md`, 'utf8'), /`\.claude\/design\/pasport\.md`/)
+    assert.match(
+        await fs.readFile(`${TEMPLATE}/skills/pasport-design/SKILL.md`, 'utf8'),
+        /`\.claude\/design\/pasport\.md`/
+    )
     const tokens = JSON.parse(await fs.readFile(`${TEMPLATE}/design/pasport-tokens.json`, 'utf8'))
     assert.equal(tokens.name, 'Pasport')
     assert.ok(tokens.color.tokens.some(token => token.name === 'accent'))

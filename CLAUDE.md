@@ -124,7 +124,11 @@ The hooks in `.claude/settings.json` enforce this (`.claude/git-policy.json`: `i
 ## Claude Code in the generated projects
 
 - When the CLI asks "Claude Code toevoegen?" and the answer is yes, a project gets `templates/project-claude/` and more:
-    - the agents, skills, hooks, design and issue forms;
+    - the skills, agents, hooks, design and issue forms. The main session builds and runs the workflows with the skills:
+      the knowledge skills `pasport-design`, `nestjs`, `postgresql`, `translator` and `e2e` load by themselves, and
+      `seed`, `release`, `backup`, `dependencies`, `infra`, `observability`, `support` and `architect` are started with
+      `/<name>`. The agents are only the independent checks (`reviewer`, `tester`, `docs`, `i18n`, `security`, `qa`,
+      `a11y`, `privacy`, `performance`) and `kb`;
     - `CLAUDE.md`, `.mcp.json` and the workflows (`ci.yml`, `release.yml`, `codeql.yml`, `screenshots.yml`), made by
       `src/claude.js`.
 - There, work happens on a branch per issue (`.claude/git-policy.json`: `issue-branches`, merge into `developer`). An

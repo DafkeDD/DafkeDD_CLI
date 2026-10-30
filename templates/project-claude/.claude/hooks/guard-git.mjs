@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // PreToolUse hook (Bash) of Claude Code: what Claude may do with git and gh in this repository.
 // - git commit only with the approvals of the checking agents (reviewer, tester, docs, i18n, and others for the
-//   parts they guard) for exactly the staged tree, of the whole branch, and only of what is staged (no -a, no paths);
+//   parts they guard) for the staged tree (some approvals still count after a documentation-only change:
+//   approvals.mjs), of the whole branch, and only of what is staged (no -a, no paths);
 // - git push only to the branches of the policy in .claude/git-policy.json, never forced, never deleting:
 //   { "push": "issue-branches" } (default): a branch per GitHub issue (issue/<number>-<words>), a release in
 //   preparation (release/<version>) or an update of Dependabot (dependabot/...), merged with a pull request

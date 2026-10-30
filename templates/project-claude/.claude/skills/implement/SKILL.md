@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Build one GitHub issue of this project on its own branch - issue/<n>-<words>, test first with the frontend/nestjs/postgresql agents, the checking agents, a pull request into developer, and merge it when the CI is green. Use when an issue is ready to build.
+description: Build one GitHub issue of this project on its own branch - issue/<n>-<words>, test first with the pasport-design, nestjs, postgresql, translator and e2e skills, the checking agents, a pull request into developer, and merge it when the CI is green. Use when an issue is ready to build.
 ---
 
 # Implement: one issue, from its branch to developer
@@ -15,14 +15,16 @@ Read `CLAUDE.md` first. One issue gives one branch, one pull request and one mer
 
 ## 2. Build it, test first
 
-Give each part to its agent with the issue text and the files involved: **frontend** (screens, always Pasport),
-**nestjs** (endpoints, modules), **postgresql** (migrations, Row-Level Security, queries), **translator** (every new
-text in the four languages), **e2e** (the browser tests of the change) and **kb** (the knowledge base: every control
-and message of a changed screen, with screenshots, in four languages). Tests first, then the code,
-then the docs (`docs/`, READMEs, `.env.example`). Run the checks of each part until they are green.
+You build it yourself, with the knowledge skill of each part (they load by themselves; load them with the Skill tool
+when they did not): **pasport-design** (screens, always Pasport, the phone, the first-login tour), **nestjs**
+(endpoints, modules), **postgresql** (migrations, Row-Level Security, queries), **translator** (every new text in the
+four languages) and **e2e** (the browser tests of the change). Then give the **kb** agent the issue text and the
+changed screens: it writes the knowledge base (every control and message of a changed screen, with screenshots, in four
+languages). Tests first, then the code, then the docs (`docs/`, READMEs, `.env.example`). Run the checks of each part
+until they are green.
 
-The **seed** agent adds the test data and test accounts a new table or screen needs (`npm run seed` in
-`./backend`), so qa, kb, e2e and performance can use them.
+The **seed** skill adds the test data and test accounts a new table or screen needs (`npm run seed` in `./backend`), so
+qa, kb, the e2e tests and performance can use them.
 
 ## 3. Check it, with agents that did not build it
 
