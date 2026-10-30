@@ -26,7 +26,7 @@ project are the design, and a new screen looks as if it was always part of them.
       `out-of-office.tsx` (`OutOfOfficeDialog`, `OutOfOfficeNotice`) and `tour.tsx` (`Tour`, the first-time tour). Only
       on the login server: `password-card.tsx` (`PasswordCard`) and `customer/my-apps.tsx` (`MyApps`) next to the other
       pages of `customer`, `admin` and `tickets`. Only in a linked app: `page-head.tsx` (`PageHead`: `title`, `text`,
-      `actions`) and `profile.tsx`;
+      `actions`) and `profile.tsx`, `app-tour.tsx` (`AppTour`, the first-login tour of the app);
     - `frontend/src/lib/portal.ts`: the types of the API and `useApi` / `useData` (the calls of the pages);
     - the pages: on the login server the route groups `src/app/[locale]/(portal)` (the customer portal) and
       `src/app/[locale]/admin/(panel)` (the superadmin panel), whose `layout.tsx` draws the shell, with their
@@ -55,8 +55,9 @@ project are the design, and a new screen looks as if it was always part of them.
   item of the rail and the main parts of each page), and again from the user menu (not for superadmins, the support
   team: the superadmin panel has no tour). A page or tab you add or change gets its step in the tour, with its texts in
   en, nl, fr and de: a page without its tour step is not done. On the login server the tour is `Tour` in
-  `src/components/pasport/tour.tsx`; an app that does not have one yet (DafkeDD_CLI issue #11) lists the tour steps of
-  a new page in its pull request.
+  `src/components/pasport/tour.tsx`. In a linked app it is `AppTour` (`src/components/pasport/app-tour.tsx`): every
+  page of `APP_NAV` is a step by itself, and its text is `AppTour.pages.<label>` in every language. An app that does
+  not have one yet (DafkeDD_CLI issue #11) lists the tour steps of a new page in its pull request.
 - **Shape**: a page head (`page-head`, `PageHead` in a linked app) with one primary action; content in
   `card card-pad`; tables in `tbl` inside `table-wrap`; dialogs with `Modal`; no coloured left borders; status is a
   `Badge` with a word; codes and amounts in `t-mono`.

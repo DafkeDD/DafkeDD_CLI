@@ -146,6 +146,9 @@ test('answersOf: a linked app from the manifest and its .env files, its name fro
     assert.ok(files['backend/src/mail/mail.service.ts'])
     // The texts of the frontend of this version, per language
     assert.ok(frontendMessages(APP, dir).nl.AppLicense)
+    // ... and the texts of the first-login tour, which update adds to an older linked app
+    for (const locale of ['en', 'nl', 'fr', 'de'])
+        assert.ok(frontendMessages(APP, dir)[locale].AppTour.pages.home, locale)
 })
 
 test('moveReadmesToDocs: the READMEs go to ./docs like when the project was made, with the title they had', async t => {

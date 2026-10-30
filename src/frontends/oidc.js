@@ -1506,6 +1506,103 @@ export const LICENSE_MESSAGES = {
 }
 
 /**
+ * The first-login tour of a linked app (AppTour in src/components/pasport/app-tour.tsx): the fixed steps, and
+ * `pages.<label>` for every page of APP_NAV (`home` from the start). A new page of the app gets its text here too.
+ */
+export const APP_TOUR_MESSAGES = {
+    en: {
+        menu: 'Tour',
+        skip: 'Skip',
+        back: 'Back',
+        next: 'Next',
+        finish: 'Get started',
+        stepOf: 'Step {step} of {total}',
+        welcomeTitle: 'Welcome, {name}!',
+        welcomeText:
+            'Let’s walk through this app together: its pages, your notifications and your account. It only takes a minute.',
+        pageText: 'This is {page}: open it from the menu on the left.',
+        pages: {
+            home: 'Your starting point: from here you reach everything this app does for you.'
+        },
+        bellTitle: 'Notifications',
+        bellText: 'The bell shows what is new for you. Click a notification to go there at once.',
+        accountTitle: 'Your account',
+        accountText:
+            'Through your name you find your profile, Security, the language and logging out. This tour is here too.',
+        doneTitle: 'You are all set!',
+        doneText: 'You can always start this tour again through your name at the top right → Tour.'
+    },
+    nl: {
+        menu: 'Rondleiding',
+        skip: 'Overslaan',
+        back: 'Vorige',
+        next: 'Volgende',
+        finish: 'Aan de slag',
+        stepOf: 'Stap {step} van {total}',
+        welcomeTitle: 'Welkom, {name}!',
+        welcomeText:
+            'We lopen samen door deze app: de pagina’s, je meldingen en je account. Het duurt maar een minuut.',
+        pageText: 'Dit is {page}: je opent het via het menu links.',
+        pages: {
+            home: 'Je startpunt: van hier bereik je alles wat deze app voor je doet.'
+        },
+        bellTitle: 'Meldingen',
+        bellText: 'De bel toont wat nieuw is voor jou. Klik op een melding om er meteen naartoe te gaan.',
+        accountTitle: 'Je account',
+        accountText:
+            'Via je naam vind je je profiel, Beveiliging, de taal en afmelden. Ook deze rondleiding staat daar.',
+        doneTitle: 'Je bent klaar!',
+        doneText: 'Je kunt deze rondleiding altijd opnieuw starten via je naam rechtsboven → Rondleiding.'
+    },
+    fr: {
+        menu: 'Visite guidée',
+        skip: 'Passer',
+        back: 'Précédent',
+        next: 'Suivant',
+        finish: 'C’est parti',
+        stepOf: 'Étape {step} sur {total}',
+        welcomeTitle: 'Bienvenue, {name} !',
+        welcomeText:
+            'Parcourons ensemble cette application : ses pages, vos notifications et votre compte. Cela ne prend qu’une minute.',
+        pageText: 'Voici {page} : ouvrez-la depuis le menu à gauche.',
+        pages: {
+            home: 'Votre point de départ : d’ici, vous accédez à tout ce que cette application fait pour vous.'
+        },
+        bellTitle: 'Notifications',
+        bellText:
+            'La cloche montre ce qui est nouveau pour vous. Cliquez sur une notification pour y aller tout de suite.',
+        accountTitle: 'Votre compte',
+        accountText:
+            'Via votre nom, vous trouvez votre profil, Sécurité, la langue et la déconnexion. Cette visite s’y trouve aussi.',
+        doneTitle: 'Tout est prêt !',
+        doneText: 'Vous pouvez relancer cette visite à tout moment via votre nom en haut à droite → Visite guidée.'
+    },
+    de: {
+        menu: 'Rundgang',
+        skip: 'Überspringen',
+        back: 'Zurück',
+        next: 'Weiter',
+        finish: 'Los geht’s',
+        stepOf: 'Schritt {step} von {total}',
+        welcomeTitle: 'Willkommen, {name}!',
+        welcomeText:
+            'Gehen wir diese App gemeinsam durch: ihre Seiten, deine Benachrichtigungen und dein Konto. Es dauert nur eine Minute.',
+        pageText: 'Das ist {page}: du öffnest es über das Menü links.',
+        pages: {
+            home: 'Dein Ausgangspunkt: Von hier erreichst du alles, was diese App für dich tut.'
+        },
+        bellTitle: 'Benachrichtigungen',
+        bellText:
+            'Die Glocke zeigt, was für dich neu ist. Klicke auf eine Benachrichtigung, um direkt dorthin zu gehen.',
+        accountTitle: 'Dein Konto',
+        accountText:
+            'Über deinen Namen findest du dein Profil, Sicherheit, die Sprache und das Abmelden. Auch dieser Rundgang ist dort.',
+        doneTitle: 'Alles bereit!',
+        doneText: 'Du kannst diesen Rundgang jederzeit über deinen Namen oben rechts → Rundgang neu starten.'
+    }
+}
+
+/**
  * Texts of the Pasport shell (sidebar, topbar, user menu) and of the login screen around the forms (its teal panel).
  * Every language needs the same keys (checked by the tests).
  */
@@ -1733,6 +1830,7 @@ export const LINKED_FILES = [
     'src/components/pasport/shell.tsx',
     'src/components/pasport/toast.tsx',
     'src/components/pasport/tour.tsx',
+    'src/components/pasport/app-tour.tsx',
     'src/components/pasport/ui.tsx',
     'src/components/pasport/widgets.tsx',
     'src/components/presence.tsx',

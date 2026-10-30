@@ -123,9 +123,10 @@ Every app, the login server's own portal included, uses the same shell (`Shell` 
 
 The first time a user logs in, the app shows a guided tour of **all** its pages: it walks through every item of the rail
 and puts a spotlight on the main parts of each page, with the explanation next to it (`Tour` in
-`components/pasport/tour.tsx` on the login server). It is shown once per user (not to superadmins, the support team) and
-again from the user menu ("Tour"). A new page or tab always gets its step, with its texts in en, nl, fr and de: a page
-without its tour step is not done.
+`components/pasport/tour.tsx` on the login server; in a linked app `AppTour` in `components/pasport/app-tour.tsx`, a
+step for every page of `APP_NAV` with its text `AppTour.pages.<label>`). It is shown once per user (not to superadmins,
+the support team) and again from the user menu ("Tour"). A new page or tab always gets its step, with its texts in en,
+nl, fr and de: a page without its tour step is not done.
 
 ### The login screens
 

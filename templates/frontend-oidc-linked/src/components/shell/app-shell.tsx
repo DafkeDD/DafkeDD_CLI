@@ -47,6 +47,7 @@ async function Shell({ children, wide }: { children: ReactNode; wide: boolean })
             user={{
                 name: session.name || session.email,
                 email: session.email,
+                account: session.sub,
                 organisation: !session.tenant ? t('superadmin') : session.tenant.name,
                 profile: '/profile',
                 security: ACCOUNT_URL + '/security',

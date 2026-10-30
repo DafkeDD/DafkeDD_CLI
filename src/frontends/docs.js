@@ -318,7 +318,8 @@ const LINKED_FILES_TABLE = `| \`src/components/shell/app-shell.tsx\` | \`<AppPag
 | \`src/components/pasport/profile.tsx\` | \`Profile\`: the own profile (\`/profile\`): name, email, phone, language, the billing details of the organisation and what the eID says |
 | \`src/components/session-links.tsx\`, \`app-license.tsx\`, \`ask-demo.tsx\` | The home page: \`SessionLinks\` ("signed in as", the organisation, a link to the profile), the licence card, \`NoRoles\` (a licence but no role in this app: a notice, for the admin with a link to \`/users\` of the login server, instead of the notes) and \`AskDemo\` |
 | \`src/components/pasport/page-head.tsx\` | \`PageHead\`: the title, the sentence under it and the actions of a page |
-| \`src/lib/nav.ts\` | \`APP_NAV\`: the pages of this app in the sidebar |
+| \`src/lib/nav.ts\` | \`APP_NAV\`: the pages of this app in the sidebar (and the steps of the first-login tour) |
+| \`src/components/pasport/app-tour.tsx\` | \`AppTour\`: the first-login tour of this app on \`GuidedTour\` (\`tour.tsx\`): a welcome, every page of \`APP_NAV\` (its text \`AppTour.pages.<label>\`), the bell, the account menu and the end. Once per account, again from the user menu, never for a superadmin |
 `
 
 /** The pages of the portal and the panel of the login server (in the table of pasportDesign). */
@@ -350,7 +351,10 @@ export default async function PlanningPage({ params }: { params: Promise<{ local
 ${'```'}
 
 Then add it to the sidebar: \`{ href: '/planning', label: 'planning', icon: 'calendar' }\` in \`APP_NAV\`, and the key
-\`planning\` in the \`Nav\` namespace of **every** \`messages/<language>.json\` (the texts are never hard-coded). Icons
+\`planning\` in the \`Nav\` namespace of **every** \`messages/<language>.json\` (the texts are never hard-coded), and its
+step in the first-login tour: \`AppTour.pages.planning\` in every language (what the page is for, one or two sentences).
+The tour (\`src/components/pasport/app-tour.tsx\`, \`AppTour\`) makes a step of every page of \`APP_NAV\` by itself; it
+shows once per account (\`localStorage\` \`app-tour:<sub>\`, never the email address), again from the user menu ("Tour"), never for a superadmin. Icons
 are the names of \`ICONS\` in \`src/components/pasport/ui.tsx\`. \`<AppPage wide>\` uses the whole width. The texts of the
 shell are in \`Portal.Shell\`, of the login screens in \`AuthScreen\`.`
 }

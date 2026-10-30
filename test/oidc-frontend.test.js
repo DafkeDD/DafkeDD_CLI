@@ -24,6 +24,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
     APP_LICENSE_MESSAGES,
+    APP_TOUR_MESSAGES,
     AUDIT_MESSAGES,
     NOTES_MESSAGES,
     envLocal,
@@ -135,6 +136,7 @@ test('every text exists in all four languages, and every text the code uses exis
         Profile: PROFILE_MESSAGES,
         AppLicense: APP_LICENSE_MESSAGES,
         Notes: NOTES_MESSAGES,
+        AppTour: APP_TOUR_MESSAGES,
         // The portal of the login server (useT('Shell') → Portal.Shell, src/components/pasport/i18n.ts)
         ...Object.fromEntries(
             Object.keys(PORTAL_MESSAGES.en).map(part => [
