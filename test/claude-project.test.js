@@ -110,6 +110,12 @@ test('CLAUDE.md of a project: its parts, the rules, the branch per issue, the me
         projectClaudeMd(pasport),
         /`npm run demo:data` and `npm run demo:clear` in `\.\/backend` already exist/
     )
+    // The tour of the first login is an absolute MUST of every app with the Pasport design
+    for (const md of [projectClaudeMd(pasport), text, projectClaudeMd(frontendOnly)])
+        assert.match(md, /\*\*First-login tour \(an absolute MUST\)\*\*: the first time a user logs in/)
+    assert.match(projectClaudeMd(pasport), /`Tour` in `frontend\/src\/components\/pasport\/tour\.tsx`/)
+    // An app without the tour yet says so
+    assert.match(text, /Known gap: this app does not have the tour yet \(DafkeDD_CLI issue #11/)
 })
 
 test('the CI checks every part on pushes and pull requests, with PostgreSQL for the database tests', () => {

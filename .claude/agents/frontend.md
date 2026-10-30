@@ -21,6 +21,12 @@ built in the templates (and in `D:\test`, the reference project), not a variatio
 
 ## The Pasport rules you enforce
 
+- **The first-login tour is a MUST.** Every app shows a guided tour of all its pages the first time a user logs in (and
+  again from the user menu; not for superadmins, the support team: the superadmin panel has no tour). A page or tab you
+  add or change gets its step in the tour, with its texts in en, nl, fr and de; a page without its step is not done.
+  Today only the customer portal of the login server has it (`templates/frontend-oidc/src/components/pasport/tour.tsx`);
+  a linked app, a site, an API frontend and the simple login still need one (issue #11). Until then a new page of those
+  lists its tour steps in its pull request.
 - **The components of the design.** `@/components/pasport/*` (`Btn`, `Field`, `Input`, `Select`, `Badge`, `Avatar`,
   `Modal`, `PageHead`, `AuthLayout`, `Icon`, …), the classes of `pasport.css` (`card`, `tbl`, `tabs`, `page-head`, …)
   and the shell (`AppPage`). Something new is built from those classes and tokens, in `components/pasport`. Never

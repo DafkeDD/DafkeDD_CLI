@@ -52,6 +52,12 @@ in the project are the design, and a new screen looks as if it was always part o
 - **Protected by default**: every page needs a login. `src/proxy.ts` sends a browser without a session to `/login` (and
   back afterwards); only the pages in `PUBLIC_PATHS` are open. Add a page there only when it must be open (a sign-up,
   a public link), never to "make it work".
+- **The first-login tour is a MUST**: the first time a user logs in, the app shows a guided tour of all its pages (every
+  item of the rail and the main parts of each page), and again from the user menu (not for superadmins, the support
+  team: the superadmin panel has no tour). A page or tab you add or change
+  gets its step in the tour, with its texts in en, nl, fr and de: a page without its tour step is not done. On the
+  login server the tour is `Tour` in `src/components/pasport/tour.tsx`; an app that does not have one yet (DafkeDD_CLI
+  issue #11) lists the tour steps of a new page in its pull request.
 - **Shape**: a page head (`page-head`, `PageHead` in a linked app) with one primary action; content in `card card-pad`; tables in `tbl` inside `table-wrap`;
   dialogs with `Modal`; no coloured left borders; status is a `Badge` with a word; codes and amounts in `t-mono`.
 - **The phone is not optional**: every screen works at 390px wide. The rail becomes a drawer behind the menu button,
