@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Build one GitHub ticket of DafkeDD_CLI on its own branch - issue/<n>-<words>, test first with the frontend/nestjs/postgresql agents, the reviewer, tester, docs, i18n (and security) agents, a pull request into developer, and merge it when the CI is green. Use when a ticket (issue number) is ready to build, or for a small change (make a ticket for it first).
+description: Build one GitHub ticket of DafkeDD_CLI on its own branch - issue/<n>-<words>, test first with the pasport-design, nestjs and postgresql skills, the reviewer, tester, docs, i18n (and security) agents, a pull request into developer, and merge it when the CI is green. Use when a ticket (issue number) is ready to build, or for a small change (make a ticket for it first).
 ---
 
 # Implement: one ticket, from its branch to developer
@@ -17,11 +17,13 @@ Read `CLAUDE.md` first. One ticket gives one branch, one pull request, one versi
 
 ## 2. Build it, test first
 
-- Split the work by area and give each part to its agent, with the ticket text and the files involved:
-  - **frontend**: pages, components, texts on screen (always the Pasport design);
+- You build it yourself, with the knowledge skill of each area (they load by themselves; load them with the Skill tool
+  when they did not):
+  - **pasport-design**: pages, components, texts on screen (always the Pasport design, the phone, the first-login
+    tour);
   - **nestjs**: endpoints, modules, DTOs, errors, Swagger;
   - **postgresql**: migrations, tables, Row-Level Security, queries, db specs;
-  - `src/` (questions, steps, generation) and tests of the CLI: yourself.
+  - `src/` (questions, steps, generation) and tests of the CLI.
 - Tests first (`test/*.test.js`, and the specs inside the templates), then the code, then the docs: README with the
   changelog line, `version` in `package.json` and `package-lock.json` (the next patch or minor version), API docs,
   frontend docs.

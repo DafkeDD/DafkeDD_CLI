@@ -69,29 +69,33 @@ how the code is made testable.
 | `diagnose`       | An error, a failing build or test, wrong behaviour: reproduce, failing test, cause, fix                       |
 | `handoff`        | A long session or a stop halfway: `.claude/handoff.md` for the next session                                   |
 | `port-from-test` | Davey changed a generated project (`D:\test`, `D:\KidieFile`): bring the generic improvements into the CLI    |
+| `pasport-design` | Any page, component, form, text on screen or style: the Pasport design, the phone, the first-login tour       |
+| `nestjs`         | Any API endpoint, backend module or server-side behaviour of a generated backend                              |
+| `postgresql`     | Any migration, table, Row-Level Security, query or db test of a generated backend                             |
+
+The main session builds, with the knowledge skills (`pasport-design`, `nestjs`, `postgresql`): they load by themselves
+when the work is about them.
 
 ## Agents (`.claude/agents/`)
 
-They build and check; only the main session commits and pushes. `docs` and `i18n` run on a cheaper model
+Only the independent checks are agents: they did not make the work, they run in parallel, and the commit hook needs
+their approvals. Only the main session builds, commits and pushes. `docs` and `i18n` run on a cheaper model
 (`model: sonnet`); `reviewer`, `security` and `tester` keep the default one.
 
-| Agent        | Role                                                                                                           |
-| ------------ | -------------------------------------------------------------------------------------------------------------- |
-| `frontend`   | Builds every UI of the generated frontends, always in the Pasport design (`pasport.css`, `components/pasport`) |
-| `nestjs`     | Builds the generated NestJS backends: endpoints, modules, DTOs, errors, Swagger, their tests and docs          |
-| `postgresql` | Builds migrations, tables, Row-Level Security, a database per organisation, queries and db tests               |
-| `reviewer`   | Checks the staged change against the ticket and every rule above (read-only)                                   |
-| `tester`     | Runs `npm run format:check`, `npm test` and, for generated code, `npm run verify` (read-only)                  |
-| `docs`       | Checks that README, changelog, version, API docs and frontend docs are complete (read-only)                    |
-| `i18n`       | Checks en, nl, fr and de: same keys, real translations, no hardcoded text (read-only)                          |
-| `security`   | Security review of login, tokens, tenants, billing, uploads, the database and the hooks (read-only)            |
+| Agent      | Role                                                                                                |
+| ---------- | --------------------------------------------------------------------------------------------------- |
+| `reviewer` | Checks the staged change against the ticket and every rule above (read-only)                        |
+| `tester`   | Runs `npm run format:check`, `npm test` and, for generated code, `npm run verify` (read-only)       |
+| `docs`     | Checks that README, changelog, version, API docs and frontend docs are complete (read-only)         |
+| `i18n`     | Checks en, nl, fr and de: same keys, real translations, no hardcoded text (read-only)               |
+| `security` | Security review of login, tokens, tenants, billing, uploads, the database and the hooks (read-only) |
 
 ## How work is done
 
 1. **Plan** with `plan`: the questions first, then a spec issue and ticket issues on GitHub (`DafkeDD/DafkeDD_CLI`,
    labels from `npm run labels`).
-2. **Build** a ticket with `implement`: the frontend, nestjs and postgresql agents (and the main session for `src/`),
-   tests first.
+2. **Build** a ticket with `implement`: the main session builds, with the skills `pasport-design`, `nestjs` and
+   `postgresql`, tests first.
 3. **Check**: stage the change (`git add`, as a separate command), then start the checking agents in parallel on exactly
    that: `reviewer`, `tester`, `docs`, `i18n`, plus `security` for the sensitive parts. Each one records its approval
    for the staged tree (`node .claude/hooks/approve.mjs <kind>`). After any further change, they all run again.

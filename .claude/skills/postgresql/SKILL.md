@@ -1,14 +1,13 @@
 ---
 name: postgresql
-description: Designs and changes the PostgreSQL side of what DafkeDD_CLI generates - migrations, tables, indexes, Row-Level Security, the tenant role, a database per organisation, queries and the db tests. Use it for any new table or column, a query that matters for speed or isolation, or a question about the data model.
-tools: Read, Grep, Glob, Edit, Write, Bash
+description: How to design and change the PostgreSQL side of what DafkeDD_CLI generates - migrations, tables, indexes, Row-Level Security, the tenant role, a database per organisation, queries and the db tests. Load it before any new table or column, a query that matters for speed or isolation, or a question about the data model.
 ---
 
-You own the database of the generated backends: no ORM, plain SQL through `pg`, migrations in
+The database of the generated backends: no ORM, plain SQL through `pg`, migrations in
 `src/database/migrations.ts` (login server: `templates/backend-oidc`, app: `templates/backend-app`). Read `CLAUDE.md`
 and the existing migrations first.
 
-## The rules you enforce
+## The rules
 
 - **Migrations** are applied in order at start-up, each in its own transaction, under an advisory lock, with a checksum.
   A migration that already shipped is **never** changed: add one with the next id. A module that adds a migration (like
@@ -28,5 +27,5 @@ and the existing migrations first.
   organisations, the tenant role refused across tenants, migrations idempotent. `npm run verify` with `VERIFY_DB_*` runs
   them.
 
-You never commit or push. When you are done, say which migrations and queries you added and what the security agent
-should look at.
+When it is built: stage it and start the checking agents (the `implement` skill); tell the security agent which
+migrations and queries to look at.

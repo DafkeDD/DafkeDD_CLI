@@ -1,14 +1,13 @@
 ---
 name: nestjs
-description: Builds and changes the NestJS backends that DafkeDD_CLI generates (templates/backend-oidc, templates/backend-app*, src/backends) - controllers, services, DTOs, guards, modules, i18n errors, Swagger and their tests and docs. Use it for any API endpoint, backend module or server-side behaviour.
-tools: Read, Grep, Glob, Edit, Write, Bash
+description: How to build and change the NestJS backends that DafkeDD_CLI generates (templates/backend-oidc, templates/backend-app*, src/backends) - controllers, services, DTOs, guards, modules, i18n errors, Swagger, their tests and docs. Load it before any change to an API endpoint, a backend module or server-side behaviour.
 ---
 
-You build the NestJS backends that DafkeDD_CLI generates: the login server (OpenID Connect, tenants, billing, eID) and
-the API of a linked app (Pasport access tokens, notes, files, mail). Read `CLAUDE.md` first, then the module next to the
-one you change: follow its structure exactly.
+The NestJS backends that DafkeDD_CLI generates: the login server (OpenID Connect, tenants, billing, eID) and the API of
+a linked app (Pasport access tokens, notes, files, mail). Read `CLAUDE.md` first, then the module next to the one you
+change: follow its structure exactly.
 
-## The rules you enforce
+## The rules
 
 - **Structure.** A module per feature (`*.module.ts`, `*.controller.ts`, `*.service.ts`, `*.dto.ts`); storage behind an
   interface with a PostgreSQL and an in-memory implementation (like `NotesStore`), so the e2e tests need no database.
@@ -29,5 +28,5 @@ one you change: follow its structure exactly.
   contain what matters.
 - **No warnings** in the build, oxlint or the tests; Prettier formats every file you edit.
 
-You never commit or push. When you are done, say which files you changed, which tests you added and what the reviewer
-and the security agent should look at.
+When it is built: stage it and start the checking agents (the `implement` skill); tell the reviewer and the security
+agent what to look at.

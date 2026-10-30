@@ -740,26 +740,27 @@ Everything Claude Code needs is in this repository; nothing has to be installed.
 
 **Skills (`.claude/skills/`)**
 
-| Skill            | What it does                                                                                                                                                                                       |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plan`           | Asks every open question, then makes a spec issue and ticket issues on GitHub (areas, acceptance criteria, blocking order)                                                                         |
-| `implement`      | Builds one ticket on its own branch: tests first, the building agents, then the checking agents, a commit `<version>: … (closes #n)`, a pull request into `developer`, merged when the CI is green |
-| `diagnose`       | From an error to a tested fix: reproduce, failing test, cause, fix, a `type:bug` issue                                                                                                             |
-| `handoff`        | Writes `.claude/handoff.md` (not committed) so a new session can continue                                                                                                                          |
-| `port-from-test` | Compares a project that was changed by hand (`D:\test`, `D:\KidieFile`) with what the CLI generates now, and brings the generic improvements into the CLI                                          |
+| Skill            | What it does                                                                                                                                                                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plan`           | Asks every open question, then makes a spec issue and ticket issues on GitHub (areas, acceptance criteria, blocking order)                                                                                                         |
+| `implement`      | Builds one ticket on its own branch: tests first, built by the main session with the knowledge skills, then the checking agents, a commit `<version>: … (closes #n)`, a pull request into `developer`, merged when the CI is green |
+| `diagnose`       | From an error to a tested fix: reproduce, failing test, cause, fix, a `type:bug` issue                                                                                                                                             |
+| `handoff`        | Writes `.claude/handoff.md` (not committed) so a new session can continue                                                                                                                                                          |
+| `port-from-test` | Compares a project that was changed by hand (`D:\test`, `D:\KidieFile`) with what the CLI generates now, and brings the generic improvements into the CLI                                                                          |
+| `pasport-design` | How to build UI of the generated frontends: the Pasport design, the phone, the first-login tour (loads by itself for UI work)                                                                                                      |
+| `nestjs`         | How to build the generated NestJS backends: endpoints, modules, DTOs, errors, Swagger, their tests and docs (loads by itself)                                                                                                      |
+| `postgresql`     | How to build migrations, tables, Row-Level Security, a database per organisation, queries and db tests (loads by itself)                                                                                                           |
 
-**Agents (`.claude/agents/`)**
+**Agents (`.claude/agents/`)**: only the independent checks (they did not make the work, they run in parallel, and the
+commit hook needs their approvals); the main session builds with the skills above.
 
-| Agent        | Role                                                                                                  |
-| ------------ | ----------------------------------------------------------------------------------------------------- |
-| `frontend`   | Builds the UI of the generated frontends, always in the Pasport design with the DafkeDD UI components |
-| `nestjs`     | Builds the generated NestJS backends: endpoints, modules, DTOs, errors, Swagger, their tests and docs |
-| `postgresql` | Builds migrations, tables, Row-Level Security, a database per organisation, queries and db tests      |
-| `reviewer`   | Checks the staged change against the ticket and the rules (read-only)                                 |
-| `tester`     | Runs `npm run format:check`, `npm test` and, for generated code, `npm run verify` (read-only)         |
-| `docs`       | Checks README, changelog, version, API docs and frontend docs (read-only)                             |
-| `i18n`       | Checks en, nl, fr and de: the same keys, real translations, no hardcoded text (read-only)             |
-| `security`   | Security review of login, tokens, tenants, billing, uploads, the database and the hooks (read-only)   |
+| Agent      | Role                                                                                                |
+| ---------- | --------------------------------------------------------------------------------------------------- |
+| `reviewer` | Checks the staged change against the ticket and the rules (read-only)                               |
+| `tester`   | Runs `npm run format:check`, `npm test` and, for generated code, `npm run verify` (read-only)       |
+| `docs`     | Checks README, changelog, version, API docs and frontend docs (read-only)                           |
+| `i18n`     | Checks en, nl, fr and de: the same keys, real translations, no hardcoded text (read-only)           |
+| `security` | Security review of login, tokens, tenants, billing, uploads, the database and the hooks (read-only) |
 
 `docs` and `i18n` run on a cheaper model (`model: sonnet` in their front matter): they mostly compare text. `reviewer`,
 `security` and `tester` keep the default model.
@@ -840,7 +841,7 @@ src/frontends/oidc.js    # texts and .env.local of the frontend login, copies te
 test/                    # test suite (node:test)
 scripts/                 # test runner, git hook setup and npm run verify
 .githooks/               # pre-push hook
-.claude/                 # agents and hooks for Claude Code (see "Working with Claude Code")
+.claude/                 # skills, agents and hooks for Claude Code (see "Working with Claude Code")
 CLAUDE.md                # the rules of this repository for Claude Code
 ```
 
@@ -872,6 +873,11 @@ git switch developer
 
 ## Changelog
 
+- **0.54.9**: the building agents of this repository are skills now.
+    - `frontend`, `nestjs` and `postgresql` became the skills `pasport-design`, `nestjs` and `postgresql`: the main
+      session builds and loads them by itself when the work is about a page, an endpoint or the database (no agent that
+      starts empty and reads everything again). The agents are only the independent checks: `reviewer`, `tester`,
+      `docs`, `i18n` and `security`.
 - **0.54.8**: the docs and i18n checks run on a cheaper model.
     - The agents `docs` and `i18n` (of this repository and of every project with Claude Code) have `model: sonnet`: they
       mostly compare text, so fewer tokens per change. `reviewer`, `security` and `tester` keep the default model.

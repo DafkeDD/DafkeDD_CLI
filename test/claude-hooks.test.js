@@ -259,16 +259,18 @@ test('every approval has its agent, and the sensitive parts also need the securi
         assert.ok(!required([file]).includes('qa'), file)
 })
 
-test('the building agents and the design they follow are in the repository', async () => {
-    for (const dir of ['.claude', TEMPLATE]) {
-        for (const agent of ['frontend', 'nestjs', 'postgresql']) {
-            const text = await fs.readFile(`${dir}/agents/${agent}.md`, 'utf8')
-            assert.match(text, new RegExp(`^---\\nname: ${agent}\\ndescription: .+\\ntools: .*Edit`), `${dir} ${agent}`)
-            assert.match(text, /never commit or push/, `${dir} ${agent}`)
-        }
+test('the building knowledge (skills here, agents in a project) and the design it follows are in the repository', async () => {
+    for (const skill of ['pasport-design', 'nestjs', 'postgresql']) {
+        const text = await fs.readFile(`.claude/skills/${skill}/SKILL.md`, 'utf8')
+        assert.match(text, new RegExp(`^---\\nname: ${skill}\\ndescription: .+\\n---\\n`), skill)
+    }
+    for (const agent of ['frontend', 'nestjs', 'postgresql']) {
+        const text = await fs.readFile(`${TEMPLATE}/agents/${agent}.md`, 'utf8')
+        assert.match(text, new RegExp(`^---\\nname: ${agent}\\ndescription: .+\\ntools: .*Edit`), agent)
+        assert.match(text, /never commit or push/, agent)
     }
     assert.match(
-        await fs.readFile('.claude/agents/frontend.md', 'utf8'),
+        await fs.readFile('.claude/skills/pasport-design/SKILL.md', 'utf8'),
         /templates\/project-claude\/\.claude\/design\/pasport\.md/
     )
     assert.match(await fs.readFile(`${TEMPLATE}/agents/frontend.md`, 'utf8'), /`\.claude\/design\/pasport\.md`/)
