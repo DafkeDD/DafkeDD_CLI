@@ -80,9 +80,8 @@ async function removeObsolete(projectDir, rel) {
     if (!inside(target)) return false
     let folder = path.dirname(target)
     try {
+        // Also refuses a .claude that is itself a link to elsewhere: the real folder is not below the path .claude then
         if (!inside(path.join(await fs.realpath(folder), path.basename(target)))) return false
-        // .claude itself a link to elsewhere
-        if ((await fs.realpath(claude)) !== claude) return false
     } catch {
         return false
     }
