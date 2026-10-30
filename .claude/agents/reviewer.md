@@ -34,6 +34,8 @@ the ticket you were given and the rules below. You never edit files and never co
   tests; no dead code or debug output.
 - **Design**: every screen follows the Pasport design (`templates/project-claude/.claude/design/pasport.md`): the Dafke UI components, the
   shell, the tokens (no hex colours, no Tailwind colour classes, no other icon set), both themes.
+- **First-login tour (MUST)**: a new or changed page or tab of a generated app (not the superadmin panel) has its
+  step in the tour of the first login (texts in en, nl, fr and de); without it the change is not done.
 - **Origin**: no code copied from Corilus or other proprietary sources.
 - **Compatibility**: a migration that already shipped is never changed (add a new one); generated projects of earlier
   versions keep working.

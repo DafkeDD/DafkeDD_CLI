@@ -64,6 +64,25 @@ const KIND_TEXT = {
     api: 'a frontend with an API'
 }
 
+/**
+ * The rule of the first-login tour (an absolute MUST of every app with the Pasport design). Only the portal of the login
+ * server has the tour yet; the other projects say so until DafkeDD_CLI issue #11 brings it.
+ */
+function firstLoginTour(project) {
+    return [
+        '- **First-login tour (an absolute MUST)**: the first time a user logs in, the app shows a guided tour of **all** its',
+        '  pages (every item of the rail and the main parts of each page), and again from the user menu (not for',
+        '  superadmins). A new page or tab always gets its step in the tour, with its texts in en, nl, fr and de: a change',
+        '  without its tour step is not done.',
+        ...(project.kind === 'pasport'
+            ? ['  The tour is `Tour` in `frontend/src/components/pasport/tour.tsx`.']
+            : [
+                  '  Known gap: this app does not have the tour yet (DafkeDD_CLI issue #11, it comes with `update`); until then, list',
+                  '  the tour steps of a new page in its pull request.'
+              ])
+    ]
+}
+
 /** CLAUDE.md of a generated project. */
 export function projectClaudeMd(project) {
     const lines = [
@@ -139,14 +158,16 @@ export function projectClaudeMd(project) {
                   '  `frontend/src/components/shell/`. That is the design to follow on every screen, on desktop and on the phone (390px).',
                   '  `npm run check:design` in `./frontend` (also in the CI) checks it; `update` of DafkeDD_CLI keeps the code (design, pages, components) current.',
                   '- **Protected by default**: every page needs a login; `frontend/src/proxy.ts` sends the browser to `/login`. Only the',
-                  '  pages in `PUBLIC_PATHS` are open.'
+                  '  pages in `PUBLIC_PATHS` are open.',
+                  ...firstLoginTour(project)
               ]
             : [
                   '- **The Pasport design**, always and only: `.claude/design/pasport.md` and `.claude/design/pasport-tokens.json` (from',
                   '  the Claude Design System "Pasport", https://claude.ai/artifact/QD82mLA9dWSEgtpubjgChq), built in',
                   '  `frontend/src/styles/pasport.css` and `frontend/src/components/pasport/`. Every page is in the shell',
                   '  (`<AppPage>` of `frontend/src/components/shell/app-shell.tsx`, its rail in `frontend/src/lib/nav.ts`), on desktop',
-                  '  and on the phone (390px). `npm run check:design` in `./frontend` (also in the CI) checks it.'
+                  '  and on the phone (390px). `npm run check:design` in `./frontend` (also in the CI) checks it.',
+                  ...firstLoginTour(project)
               ]),
         ...(project.kind === 'pasport' || project.kind === 'app'
             ? [

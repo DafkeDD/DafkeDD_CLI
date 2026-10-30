@@ -42,6 +42,13 @@ how the code is made testable.
 - **Protected by default**: every page of a generated frontend needs a login (`src/proxy.ts` sends it to `/login`); only
   `PUBLIC_PATHS` are open. Known gap: today only the OpenID Connect frontends (the login server, a linked app) do this;
   a site, an API frontend and the simple login still have a plain next-intl proxy (issue #4).
+- **First-login tour (an absolute MUST)**: every app the CLI generates shows a guided tour of **all** its pages (every
+  item of the rail and the main parts of each page) the first time a user logs in, and again from the user menu (not for
+  superadmins). A new page or tab always gets its step in the tour, with its texts in en, nl, fr and de; a change
+  without its tour step is not done. Superadmins (the support team) get no tour, so the superadmin panel has none. Known
+  gap: today only the customer portal of the login server has it
+  (`templates/frontend-oidc/src/components/pasport/tour.tsx`); a linked app, a site, an API frontend and the simple
+  login still need one (issue #11).
 - **Prettier everywhere** (`.prettierrc`: 4 spaces, no semicolons, single quotes, width 120). There are no warnings in
   the build, lint or tests of a generated project.
 - **Multi-tenant everywhere.**

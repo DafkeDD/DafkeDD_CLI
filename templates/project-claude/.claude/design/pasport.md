@@ -119,6 +119,14 @@ Every app, the login server's own portal included, uses the same shell (`Shell` 
 - **No licence**: in a linked app without a licence (or without a role) the home page shows `AppLicense` / `NoRoles` (a
   `Notice` saying what to do: start a demo, or ask the admin) instead of the content.
 
+### The first-login tour (an absolute MUST)
+
+The first time a user logs in, the app shows a guided tour of **all** its pages: it walks through every item of the rail
+and puts a spotlight on the main parts of each page, with the explanation next to it (`Tour` in
+`components/pasport/tour.tsx` on the login server). It is shown once per user (not to superadmins, the support team) and
+again from the user menu ("Tour"). A new page or tab always gets its step, with its texts in en, nl, fr and de: a page
+without its tour step is not done.
+
 ### The login screens
 
 The login, registration, password, email and invitation screens use `AuthLayout`: the teal panel with the eID card on

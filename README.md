@@ -869,6 +869,12 @@ git switch developer
 
 ## Changelog
 
+- **0.54.7**: the first-login tour is an absolute MUST.
+    - The rule is in CLAUDE.md, in the CLAUDE.md of every project with the Pasport design, in the frontend and reviewer
+      agents and in the brand book: every app shows a guided tour of all its pages the first time a user logs in (and
+      again from the user menu; not for superadmins), and a new page or tab always gets its step, in en, nl, fr and de.
+      Only the customer portal of the login server has the tour yet; a linked app, a site, an API frontend and the
+      simple login say so in their CLAUDE.md until issue #11 brings it.
 - **0.54.6**: the eID PIN in four boxes.
     - The PIN of the eID is typed in four masked boxes (`OtpInput` with `masked`), like the code of the two-step
       verification, on the login screen, the registration and "Link eID". "Read card" only works with four digits; the
