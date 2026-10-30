@@ -75,7 +75,8 @@ export function OtpInput({
     onComplete,
     error,
     autoFocus,
-    label
+    label,
+    masked
 }: {
     length?: number
     value: string
@@ -85,6 +86,8 @@ export function OtpInput({
     autoFocus?: boolean
     /** Accessible name of each box: receives the 1-based position. */
     label?: (n: number) => string
+    /** Dots instead of the digits (a PIN): never remembered or filled in by the browser. */
+    masked?: boolean
 }) {
     const refs = useRef<(HTMLInputElement | null)[]>([])
     useEffect(() => {
@@ -123,8 +126,9 @@ export function OtpInput({
                         refs.current[i] = el
                     }}
                     className='otp-box'
+                    type={masked ? 'password' : 'text'}
                     inputMode='numeric'
-                    autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                    autoComplete={i === 0 && !masked ? 'one-time-code' : 'off'}
                     maxLength={1}
                     value={c}
                     onChange={e => change(i, e)}

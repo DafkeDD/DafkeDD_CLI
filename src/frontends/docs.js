@@ -211,8 +211,9 @@ http://localhost:3000 during development and on your https domain in production.
 **Belgian eID** (\`src/components/eid.tsx\`, with \`@dafkedd/eid/react\` of https://github.com/DafkeDD/DafkeDD_EID): "Log
 in with eID" on the login page, the tab "With eID" on \`/register\` and "Link eID" on \`/security\`. Only after that
 click the page contacts the DafkeDD eID program on the PC (http://127.0.0.1:47820), and it tells the user what is
-missing: the program (with a download link), a card reader, or the card. The user types the PIN on the page; the card
-signs a nonce of the API, and only that signature goes to the API (the card is not read, the PIN never leaves the PC).
+missing: the program (with a download link), a card reader, or the card. The user types the PIN on the page, in four
+masked boxes like the code of the two-step verification; the card signs a nonce of the API, and only that signature
+goes to the API (the card is not read, the PIN never leaves the PC).
 During development \`npm run eid:mock\` starts the program with a virtual reader and test card (PIN \`1234\`), allowed
 to log in on http://localhost:3000. In production users install the program once
 (https://github.com/DafkeDD/DafkeDD_EID/releases/latest), allowed for your origin
@@ -413,7 +414,7 @@ next to it (\`<file>.dafkedd-new\`).
 | --- | --- |
 | \`src/styles/pasport.css\` | The tokens (light and dark) and every class of the design: buttons, fields, cards, tables, badges, tabs, modals, toasts, the shell, the login screens, the pages of the portal (marketplace, wizard, vault, tickets, tour, presence) and the phone layout |
 | \`src/components/pasport/ui.tsx\` | \`Icon\` (the icons of the design, \`ICONS\`), \`Btn\`, \`Field\`, \`Input\`, \`PasswordInput\`, \`Select\`, \`Toggle\`, \`Badge\`, \`Avatar\` (with the status dot), \`AppIcon\`, \`ErrorNote\`, \`OkNote\`, \`Skeleton\` |
-| \`src/components/pasport/widgets.tsx\` | \`Modal\`, \`OtpInput\` (the six boxes of a code), \`QrCode\`, \`Sparkline\`, \`BarChart\`, \`LineChart\`, \`Donut\` |
+| \`src/components/pasport/widgets.tsx\` | \`Modal\`, \`OtpInput\` (the boxes of a code: six for the two-step verification; \`masked\` shows dots and turns off autofill, for the four boxes of the eID PIN), \`QrCode\`, \`Sparkline\`, \`BarChart\`, \`LineChart\`, \`Donut\` |
 | \`src/components/pasport/page-state.tsx\` | \`Loading\`, \`LoadError\`, \`Notice\`, \`ClientRedirect\` |
 | \`src/components/pasport/toast.tsx\` | \`useToast\` (a message at the bottom right), \`ThemeToggle\`, \`LocaleFloat\` |
 | \`src/components/pasport/auth-layout.tsx\` | \`AuthLayout\`: the login screen (one for everybody), the teal panel with the eID card on the left, the form on the right; only the form on a phone |
