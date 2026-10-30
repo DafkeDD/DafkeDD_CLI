@@ -225,6 +225,13 @@ test('a login project gets its JWT secret from Terraform, the APIs come first, p
     assert.match(main, /JWT_SECRET = random_id\.jwt\.hex/)
     assert.match(main, /resource "random_id" "jwt"/)
     assert.ok(!mainTf(app).includes('random_id.jwt'))
+    // The frontend and the API share API_PROXY_SECRET; the frontend trusts the one proxy of Cloud Run (the address of the
+    // browser for the rate limit of the login) and passes /api on to the API
+    assert.match(main, /resource "random_id" "proxy"/)
+    assert.equal(main.match(/API_PROXY_SECRET = random_id\.proxy\.hex/g).length, 2)
+    assert.match(main, /TRUSTED_PROXIES = "1"/)
+    assert.match(main, /API_URL = local\.backend_url/)
+    assert.ok(!mainTf(app).includes('random_id.proxy'))
     assert.match(
         main,
         /resource "google_service_account" "backend" \{\n(?:  .+\n)*  depends_on\s+= \[google_project_service\.apis\]\n\}/

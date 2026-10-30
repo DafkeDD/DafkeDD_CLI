@@ -55,15 +55,25 @@ export const VALIDATION = {
     de: { MAX_LENGTH: '{property} darf höchstens {constraints.0} Zeichen lang sein' }
 }
 
-export const envLines = ({ jwtSecret }) =>
+export const envLines = ({ jwtSecret, proxySecret }) =>
     [
         '',
         '# Login: secret that signs the session cookie. Keep it private and use a different one in production.',
         "# Generate one: node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\"",
         `JWT_SECRET='${jwtSecret}'`,
         '',
-        '# Maximum login/register attempts per minute per IP address',
+        '# Maximum login/register attempts per minute, per address of the browser (an IPv6 address by its /64)',
         `AUTH_RATE_LIMIT=${DEFAULT_RATE_LIMIT}`,
+        '# ...and per account (email address); empty: five times AUTH_RATE_LIMIT, so one address never locks an account out',
+        '# AUTH_ACCOUNT_RATE_LIMIT=',
+        '',
+        '# Which proxies in front of the API may tell the address of the browser (X-Forwarded-For): loopback (this',
+        '# computer), a number of proxies (1 on Cloud Run), false, or addresses like 10.0.0.0/8',
+        '# TRUST_PROXY=loopback',
+        '',
+        '# Shared with the frontend (API_PROXY_SECRET in frontend/.env.local): only with it does the API count the address',
+        '# of the browser that the frontend passes on (X-Client-Address) for the rate limit of the login',
+        `API_PROXY_SECRET='${proxySecret}'`,
         ''
     ].join('\n')
 
@@ -470,12 +480,12 @@ import {
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { AppException } from '../common/app.exception.js';
 import { publicUser, UsersService } from '../users/users.service.js';
 import { SESSION_COOKIE, SESSION_SECONDS } from './auth.constants.js';
 import { AuthGuard, type AuthenticatedRequest } from './auth.guard.js';
+import { AuthThrottlerGuard } from './auth-throttler.guard.js';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -506,7 +516,7 @@ export class AuthController {
   @ApiBadRequestResponse({ description: 'errors.BAD_REQUEST: invalid input, translated per field' })
   @ApiConflictResponse({ description: 'errors.EMAIL_TAKEN, translated' })
   @ApiTooManyRequestsResponse({ description: 'errors.TOO_MANY_REQUESTS, translated' })
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(AuthThrottlerGuard)
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) response: Response) {
     const { user, token } = await this.auth.register(dto);
     response.cookie(SESSION_COOKIE, token, { ...this.cookieOptions(), maxAge: SESSION_SECONDS * 1000 });
@@ -520,7 +530,7 @@ export class AuthController {
   @ApiBadRequestResponse({ description: 'errors.BAD_REQUEST: invalid input, translated per field' })
   @ApiUnauthorizedResponse({ description: 'errors.INVALID_CREDENTIALS, translated' })
   @ApiTooManyRequestsResponse({ description: 'errors.TOO_MANY_REQUESTS, translated' })
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(AuthThrottlerGuard)
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) response: Response) {
     const { user, token } = await this.auth.login(dto);
     response.cookie(SESSION_COOKIE, token, { ...this.cookieOptions(), maxAge: SESSION_SECONDS * 1000 });
@@ -550,6 +560,70 @@ export class AuthController {
 }
 `,
 
+    'src/auth/auth-throttler.guard.ts': `import { createHash, timingSafeEqual } from 'node:crypto';
+import { isIP } from 'node:net';
+import { ExecutionContext, Injectable } from '@nestjs/common';
+import { ThrottlerGuard } from '@nestjs/throttler';
+
+/** Compared as SHA-256 digests: always the same length, in constant time. */
+const same = (a: string, b: string) =>
+  timingSafeEqual(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest());
+
+/** The placeholder of .env.example: never a secret, also when it was copied into .env. */
+const EXAMPLE_SECRET = '${EXAMPLE_SECRET}';
+
+/** API_PROXY_SECRET when it is a real one (at least 32 characters, not the placeholder), else ''. */
+function proxySecret(): string {
+  const secret = process.env.API_PROXY_SECRET ?? '';
+  return secret.length >= 32 && secret !== EXAMPLE_SECRET ? secret : '';
+}
+
+/**
+ * The bucket of an address: an IPv4 address itself (also written as ::ffff:a.b.c.d), an IPv6 address by its /64, the
+ * block one line or server gets: otherwise one client could take a new address for every try.
+ */
+export function addressBucket(address: string): string {
+  const mapped = /^::ffff:(\\d+\\.\\d+\\.\\d+\\.\\d+)$/i.exec(address);
+  if (mapped) return mapped[1];
+  if (isIP(address) !== 6) return address;
+  const [head, tail = ''] = address.toLowerCase().split('::');
+  const left = head ? head.split(':') : [];
+  const right = tail ? tail.split(':') : [];
+  const groups = address.includes('::') ? [...left, ...Array(8 - left.length - right.length).fill('0'), ...right] : left;
+  return groups.slice(0, 4).map((group) => group.replace(/^0+(?=.)/, '')).join(':') + '::/64';
+}
+
+/**
+ * The rate limit of login and register (AUTH_RATE_LIMIT per minute), counted twice:
+ * - per address of the browser: req.ip (TRUST_PROXY), or the address the frontend passes on in X-Client-Address. That
+ *   header only counts with X-Proxy-Secret equal to API_PROXY_SECRET, which only the frontend knows: a browser or
+ *   another server that sends it without the secret is counted by its own address.
+ * - per account (the email address of the request), so another address never gives one account more tries. Its limit is
+ *   higher (AUTH_ACCOUNT_RATE_LIMIT, default five times as many): one address alone can never lock an account out.
+ */
+@Injectable()
+export class AuthThrottlerGuard extends ThrottlerGuard {
+  protected async getTracker(request: Record<string, any>): Promise<string> {
+    const secret = proxySecret();
+    const given = request.headers?.['x-proxy-secret'];
+    const address = request.headers?.['x-client-address'];
+    if (secret && typeof given === 'string' && same(given, secret) && typeof address === 'string' && isIP(address))
+      return addressBucket(address);
+    return addressBucket(String(request.ip ?? ''));
+  }
+
+  protected generateKey(context: ExecutionContext, suffix: string, name: string): string {
+    if (name !== 'account') return super.generateKey(context, suffix, name);
+    const email = context.switchToHttp().getRequest().body?.email;
+    return super.generateKey(
+      context,
+      'account:' + (typeof email === 'string' ? email.trim().toLowerCase().slice(0, 254) : ''),
+      name,
+    );
+  }
+}
+`,
+
     'src/auth/auth.module.ts': `import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
@@ -558,17 +632,30 @@ import { UsersModule } from '../users/users.module.js';
 import { SESSION_SECONDS } from './auth.constants.js';
 import { AuthController } from './auth.controller.js';
 import { AuthGuard } from './auth.guard.js';
+import { AuthThrottlerGuard } from './auth-throttler.guard.js';
 import { AuthService } from './auth.service.js';
 
 @Module({
   imports: [
     UsersModule,
-    // Login and register: at most AUTH_RATE_LIMIT attempts per minute per IP address.
+    // Login and register: at most AUTH_RATE_LIMIT attempts per minute per address of the browser, and
+    // AUTH_ACCOUNT_RATE_LIMIT per account (email address), so another address never gives one account more tries and
+    // one address alone never locks an account out (src/auth/auth-throttler.guard.ts).
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => [
-        { ttl: 60_000, limit: Number(config.get<string>('AUTH_RATE_LIMIT') ?? ${DEFAULT_RATE_LIMIT}) },
-      ],
+      useFactory: (config: ConfigService) => {
+        // Only a positive whole number counts: empty, 0, negative or text is the default (0 would refuse every login)
+        const positive = (value: string | undefined, fallback: number) => {
+          const number = Math.floor(Number(value));
+          return number > 0 ? number : fallback;
+        };
+        const limit = positive(config.get<string>('AUTH_RATE_LIMIT'), ${DEFAULT_RATE_LIMIT});
+        const account = positive(config.get<string>('AUTH_ACCOUNT_RATE_LIMIT'), limit * 5);
+        return [
+          { name: 'address', ttl: 60_000, limit },
+          { name: 'account', ttl: 60_000, limit: account },
+        ];
+      },
     }),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -579,7 +666,7 @@ import { AuthService } from './auth.service.js';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AuthGuard],
+  providers: [AuthService, AuthGuard, AuthThrottlerGuard],
 })
 export class AuthModule {}
 `,
@@ -590,7 +677,8 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
 import { DatabaseService } from '../src/database/database.service.js';
-import { configureApp } from '../src/setup.js';
+import { addressBucket } from '../src/auth/auth-throttler.guard.js';
+import { configureApp, trustProxy } from '../src/setup.js';
 import { UsersService, type User, type UserWithHash } from '../src/users/users.service.js';
 
 process.env.JWT_SECRET ??= 'test-only-secret';
@@ -805,6 +893,127 @@ describe('rate limit (e2e)', () => {
       await app.close();
       process.env.AUTH_RATE_LIMIT = '1000';
     }
+  });
+
+  const SECRET = 'a-secret-shared-with-the-frontend-0123456789';
+
+  /** Three attempts per minute per address and six per account, the frontend's secret set. */
+  async function withLimit(test: (attempt: (address: string, secret: string, email: string) => request.Test) => Promise<void>) {
+    process.env.AUTH_RATE_LIMIT = '3';
+    process.env.AUTH_ACCOUNT_RATE_LIMIT = '6';
+    process.env.API_PROXY_SECRET = SECRET;
+    const app = await createApp(new FakeUsers());
+    try {
+      await test((address, secret, email) =>
+        request(app.getHttpServer())
+          .post('/auth/login')
+          .set('X-Client-Address', address)
+          .set('X-Proxy-Secret', secret)
+          .send({ email, password: 'wrong-password' }),
+      );
+    } finally {
+      await app.close();
+      process.env.AUTH_RATE_LIMIT = '1000';
+      delete process.env.AUTH_ACCOUNT_RATE_LIMIT;
+      delete process.env.API_PROXY_SECRET;
+    }
+  }
+  const user = (i: number) => 'user' + i + '@example.com';
+
+  it('a forged X-Client-Address without the secret does not escape the limit', () =>
+    withLimit(async (attempt) => {
+      for (let i = 0; i < 3; i++) await attempt('203.0.113.' + i, 'wrong-secret', user(i)).expect(401);
+      await attempt('203.0.113.9', 'wrong-secret', user(9)).expect(429);
+    }));
+
+  it('the placeholder of .env.example is never a secret', async () => {
+    process.env.API_PROXY_SECRET = 'change-me-to-a-long-random-string';
+    process.env.AUTH_RATE_LIMIT = '3';
+    const app = await createApp(new FakeUsers());
+    try {
+      const attempt = (i: number) =>
+        request(app.getHttpServer())
+          .post('/auth/login')
+          .set('X-Client-Address', '203.0.113.' + i)
+          .set('X-Proxy-Secret', 'change-me-to-a-long-random-string')
+          .send({ email: user(i), password: 'wrong-password' });
+      for (let i = 0; i < 3; i++) await attempt(i).expect(401);
+      await attempt(3).expect(429);
+    } finally {
+      await app.close();
+      process.env.AUTH_RATE_LIMIT = '1000';
+      delete process.env.API_PROXY_SECRET;
+    }
+  });
+
+  it('another address never gives one account more tries', () =>
+    withLimit(async (attempt) => {
+      for (let i = 0; i < 6; i++) await attempt('203.0.113.' + i, SECRET, 'ada@example.com').expect(401);
+      await attempt('203.0.113.7', SECRET, 'ada@example.com').expect(429);
+    }));
+
+  it('one address alone cannot lock an account out', () =>
+    withLimit(async (attempt) => {
+      for (let i = 0; i < 3; i++) await attempt('203.0.113.1', SECRET, 'ada@example.com').expect(401);
+      await attempt('203.0.113.1', SECRET, 'ada@example.com').expect(429);
+      await attempt('198.51.100.2', SECRET, 'ada@example.com').expect(401);
+    }));
+
+  it('an IPv6 address counts by its /64: a new address in it does not escape the limit', () =>
+    withLimit(async (attempt) => {
+      for (let i = 1; i <= 3; i++) await attempt('2001:db8:1:2::' + i, SECRET, user(i)).expect(401);
+      await attempt('2001:db8:1:2::ffff', SECRET, user(4)).expect(429);
+      await attempt('2001:db8:1:3::1', SECRET, user(5)).expect(401);
+      // A short address (::) is in the same /64 as its long form
+      for (let i = 6; i <= 8; i++) await attempt('2001:db8::' + i, SECRET, user(i)).expect(401);
+      await attempt('2001:db8:0:0:0:0:0:9', SECRET, user(9)).expect(429);
+    }));
+
+  it('an empty or invalid limit is the default, never 0', async () => {
+    process.env.AUTH_RATE_LIMIT = 'ten';
+    process.env.AUTH_ACCOUNT_RATE_LIMIT = '';
+    const app = await createApp(new FakeUsers());
+    try {
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'ada@example.com', password: 'wrong-password' })
+        .expect(401);
+    } finally {
+      await app.close();
+      process.env.AUTH_RATE_LIMIT = '1000';
+      delete process.env.AUTH_ACCOUNT_RATE_LIMIT;
+    }
+  });
+
+  it('the frontend with the secret: every browser its own limit', () =>
+    withLimit(async (attempt) => {
+      for (let i = 0; i < 5; i++) await attempt('203.0.113.' + i, SECRET, user(i)).expect(401);
+    }));
+});
+
+describe('the address of a browser', () => {
+  it.each([
+    ['203.0.113.7', '203.0.113.7'],
+    ['::ffff:203.0.113.7', '203.0.113.7'],
+    ['2001:db8:abcd:12::1', '2001:db8:abcd:12::/64'],
+    ['2001:0db8:abcd:0012:ffff:1:2:3', '2001:db8:abcd:12::/64'],
+    ['2001:db8::1', '2001:db8:0:0::/64'],
+    ['2001:db8::2', '2001:db8:0:0::/64'],
+  ])('%s counts as %s', (address, bucket) => {
+    expect(addressBucket(address)).toBe(bucket);
+  });
+});
+
+describe('TRUST_PROXY', () => {
+  it.each([
+    [undefined, 'loopback'],
+    ['', 'loopback'],
+    ['true', true],
+    ['false', false],
+    ['1', 1],
+    ['loopback, 10.0.0.0/8', 'loopback, 10.0.0.0/8'],
+  ])('%s is read as %s', (value, expected) => {
+    expect(trustProxy(value)).toBe(expected);
   });
 });
 `

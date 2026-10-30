@@ -286,13 +286,180 @@ export const API_MESSAGES = {
     }
 }
 
+/** The frontend of the simple login reaches its API through /api on its own host (the session cookie is its own). */
+const throughFrontend = api => Boolean(api.auth) && !api.oidc
+
+/** .env.local of the frontend of the simple login: the API, the secret it shares with it, the proxies in front. */
+export const loginEnvLocal = api =>
+    [
+        '# Where the API of this app runs (the browser reaches it through /api of this frontend)',
+        `API_URL=http://localhost:${api.port}`,
+        '',
+        '# Shared with the API (API_PROXY_SECRET in backend/.env): proves that this frontend passes the address of the',
+        '# browser on, for the rate limit of the login',
+        `API_PROXY_SECRET=${api.proxySecret ?? ''}`,
+        '',
+        '# The proxies in front of this frontend that add the address of the browser to X-Forwarded-For: 0 when browsers',
+        '# reach this frontend directly (here), 1 on Cloud Run',
+        'TRUSTED_PROXIES=0',
+        ''
+    ].join('\n')
+
+/** /api/<path> of the frontend of the simple login: passes each call on to the API, with the cookie and its Set-Cookie. */
+export const API_ROUTE = `import { type NextRequest, NextResponse } from 'next/server'
+import { API_URL } from '@/lib/api'
+
+/**
+ * The API of this app through the frontend's own host: /api/<path> goes to API_URL/<path>. The session cookie the API
+ * sets (the login) then belongs to this frontend, so src/proxy.ts can see who is logged in. The cookie, the language
+ * and the body go along, and the answer comes back with its Set-Cookie. A change (POST, PUT, PATCH, DELETE) must come
+ * from a page of this app (the Origin header), so another site cannot use the cookie. It reads the request, so it is
+ * never cached.
+ */
+
+/** What the browser sends that the API needs. Never its X-Forwarded-For: the browser can write anything there. */
+const FORWARD = ['accept', 'accept-language', 'content-type', 'cookie', 'user-agent']
+/** What the API answers that the browser needs (Set-Cookie separately: there can be more than one). */
+const BACK = ['content-type', 'content-disposition', 'cache-control']
+/** The largest body passed on (the API refuses more than this anyway). */
+const MAX_BODY = 1_000_000
+/** How long the API may take before the browser hears it is offline. */
+const TIMEOUT_MS = 30_000
+/**
+ * The proxies in front of this frontend that add the address of the browser to X-Forwarded-For (1 on Cloud Run, 0 when
+ * the browser reaches this frontend directly): only the address the outermost of them saw is passed on.
+ */
+const TRUSTED_PROXIES = Math.max(0, Math.floor(Number(process.env.TRUSTED_PROXIES ?? 0)) || 0)
+/** Shared with the API: only with it does the API count the address this route passes on (X-Client-Address). */
+const PROXY_SECRET = process.env.API_PROXY_SECRET ?? ''
+
+/**
+ * True when the call comes from a page of this app: the Origin of the browser is the address of this request, or the
+ * address a reverse proxy in front of this app passed on (X-Forwarded-Host). Another site's page cannot set that header
+ * (it would need a CORS preflight, which this route never allows), so it cannot use the cookie.
+ */
+function fromThisApp(request: NextRequest): boolean {
+    const origin = request.headers.get('origin')
+    if (origin === null) return false
+    if (origin === new URL(request.url).origin) return true
+    const host = request.headers.get('x-forwarded-host')?.split(',')[0].trim()
+    const proto = request.headers.get('x-forwarded-proto')?.split(',')[0].trim() ?? 'https'
+    return Boolean(host) && origin === proto + '://' + host
+}
+
+/** The address of the browser as the trusted proxies saw it, or null (no trusted proxy: unknown). */
+function clientAddress(request: NextRequest): string | null {
+    if (!TRUSTED_PROXIES) return null
+    const chain = (request.headers.get('x-forwarded-for') ?? '')
+        .split(',')
+        .map(part => part.trim())
+        .filter(Boolean)
+    const address = chain[chain.length - TRUSTED_PROXIES]
+    return address && /^[0-9A-Fa-f:.]{2,45}$/.test(address) ? address : null
+}
+
+/** The body, at most MAX_BODY bytes: null when it is larger. */
+async function readBody(request: NextRequest): Promise<Uint8Array | null | undefined> {
+    if (!request.body) return undefined
+    if (Number(request.headers.get('content-length') ?? 0) > MAX_BODY) return null
+    const reader = request.body.getReader()
+    const chunks: Uint8Array[] = []
+    let size = 0
+    for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        size += value.byteLength
+        if (size > MAX_BODY) {
+            await reader.cancel()
+            return null
+        }
+        chunks.push(value)
+    }
+    const body = new Uint8Array(size)
+    let offset = 0
+    for (const chunk of chunks) {
+        body.set(chunk, offset)
+        offset += chunk.byteLength
+    }
+    return body
+}
+
+/** Every answer: never read as another type than it says, and never run as a page of this app. */
+function safe(result: NextResponse): NextResponse {
+    result.headers.set('x-content-type-options', 'nosniff')
+    result.headers.set('content-security-policy', "sandbox; default-src 'none'")
+    return result
+}
+
+async function forward(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
+    const parts = (await params).path ?? []
+    // Only the API itself: never a step out of its path, and not its documentation page (it is on the API itself)
+    if (parts.some(part => part === '' || part === '.' || part === '..' || part.includes('\\\\')) || /^docs(-json|-yaml)?$/i.test(parts[0] ?? ''))
+        return safe(NextResponse.json({ error: 'not-found' }, { status: 404 }))
+    if (!['GET', 'HEAD'].includes(request.method) && !fromThisApp(request))
+        return safe(NextResponse.json({ error: 'origin' }, { status: 403 }))
+
+    const headers = new Headers()
+    for (const name of FORWARD) {
+        const value = request.headers.get(name)
+        if (value) headers.set(name, value)
+    }
+    // The address of the browser, for the rate limit of the login: only from a trusted proxy, with the shared secret
+    const address = clientAddress(request)
+    if (address && PROXY_SECRET) {
+        headers.set('x-client-address', address)
+        headers.set('x-proxy-secret', PROXY_SECRET)
+    }
+
+    const body = ['GET', 'HEAD'].includes(request.method) ? undefined : await readBody(request)
+    if (body === null) return safe(NextResponse.json({ error: 'too-large' }, { status: 413 }))
+    const response = await fetch(API_URL + '/' + parts.map(encodeURIComponent).join('/') + request.nextUrl.search, {
+        method: request.method,
+        headers,
+        body: body as BodyInit | undefined,
+        cache: 'no-store',
+        redirect: 'manual',
+        signal: AbortSignal.timeout(TIMEOUT_MS)
+    }).catch(() => null)
+    if (!response) return safe(NextResponse.json({ error: 'offline' }, { status: 502 }))
+
+    const result = new NextResponse([204, 304].includes(response.status) ? null : response.body, {
+        status: response.status
+    })
+    for (const name of BACK) {
+        const value = response.headers.get(name)
+        if (value) result.headers.set(name, value)
+    }
+    for (const cookie of response.headers.getSetCookie()) result.headers.append('set-cookie', cookie)
+    return safe(result)
+}
+
+export const GET = forward
+export const POST = forward
+export const PUT = forward
+export const PATCH = forward
+export const DELETE = forward
+`
+
 /**
  * Files that connect the frontend to the backend: an API client that sends the selected language
  * (Accept-Language, so server errors come back in that language), a hook for client components and a status card
  * for the example page.
  */
 export const apiFiles = api => ({
-    'src/lib/api.ts': `export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '${api.url ?? `http://localhost:${api.port}`}';
+    'src/lib/api.ts': `${
+        throughFrontend(api)
+            ? `/**
+ * The API of this app. In the browser every call goes to /api on this frontend's own host (src/app/api/[[...path]]/route.ts
+ * passes it on), so the session cookie of the login belongs to this frontend and src/proxy.ts can see it. On the server
+ * it goes to the API itself (API_URL).
+ */
+export const API_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? '${api.url ?? `http://localhost:${api.port}`}';
+const BASE = typeof window === 'undefined' ? API_URL : '/api';
+/** The answers of /api itself (src/app/api/[[...path]]/route.ts): never a message of the API. */
+const ROUTE_ERRORS = ['offline', 'origin', 'not-found', 'too-large'];`
+            : `export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '${api.url ?? `http://localhost:${api.port}`}';`
+    }
 
 export class ApiError extends Error {
   constructor(
@@ -311,9 +478,18 @@ export class ApiError extends Error {
 export async function apiFetch<T>(path: string, locale: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set('Accept-Language', locale);
-  // credentials: 'include' sends the session cookie of a logged in user along
-  const response = await fetch(API_URL + path, { ...init, headers, credentials: 'include' });
+${
+    throughFrontend(api)
+        ? `  // The session cookie belongs to this frontend: the browser sends it along to /api by itself
+  const response = await fetch(BASE + path, { ...init, headers, credentials: 'same-origin' });
   const body = await response.json().catch(() => null);
+  // An answer of /api itself, not of the API (it could not reach it, or refused the call): the same as a fetch that
+  // fails, so the screens show their own translated text instead of an English status text
+  if (typeof body?.error === 'string' && ROUTE_ERRORS.includes(body.error)) throw new TypeError(body.error);`
+        : `  // credentials: 'include' sends the session cookie of a logged in user along
+  const response = await fetch(API_URL + path, { ...init, headers, credentials: 'include' });
+  const body = await response.json().catch(() => null);`
+}
   // Validation errors come back as a list of messages (already in the selected language)
   const message = Array.isArray(body?.message) ? body.message.join('\\n') : body?.message;
   if (!response.ok) throw new ApiError(response.status, message ?? response.statusText, body);
@@ -475,6 +651,7 @@ export function withApi(fileMap, api, { ui }) {
         ...fileMap,
         ...(api.oidc ? uiFiles : {}),
         ...apiFiles(api),
+        ...(throughFrontend(api) ? { 'src/app/api/[[...path]]/route.ts': API_ROUTE } : {}),
         ...(api.auth ? authFiles() : {}),
         ...(api.oidc
             ? oidcFrontendFiles({
@@ -771,6 +948,8 @@ export const nextjs = {
                     // Login through the OIDC server: where it is, and the secret of the session cookie (never committed)
                     if (api?.oidc)
                         await write(root, '.env.local', envLocal({ apiPort: api.port, linked: api.linked ?? null }))
+                    // The simple login: where the API is and the secret it shares with it (never committed)
+                    if (api && throughFrontend(api)) await write(root, '.env.local', loginEnvLocal(api))
                     // Linked next to the login server on this computer: its own port (3000 is that server's frontend)
                     if (api?.linked) await setPort(root, api.linked.port)
                     await patchNextConfig(root)

@@ -294,7 +294,26 @@ export function backendReadme({
                       '(generated)',
                       'Secret that signs the session cookie. Keep it private; use another one in production'
                   ],
-                  ['AUTH_RATE_LIMIT', '10', 'Maximum login and register attempts per minute per IP address']
+                  [
+                      'AUTH_RATE_LIMIT',
+                      '10',
+                      'Maximum login and register attempts per minute, per address of the browser (an IPv6 address by its /64)'
+                  ],
+                  [
+                      'AUTH_ACCOUNT_RATE_LIMIT',
+                      '5 × AUTH_RATE_LIMIT',
+                      'Maximum login and register attempts per minute per account (email address): higher, so one address never locks an account out'
+                  ],
+                  [
+                      'TRUST_PROXY',
+                      'loopback',
+                      'Express `trust proxy`: the proxies in front of the API that may tell the address of the browser (X-Forwarded-For): `loopback`, a number of proxies (`1` on Cloud Run), `false`, or addresses like `10.0.0.0/8`'
+                  ],
+                  [
+                      'API_PROXY_SECRET',
+                      '(generated)',
+                      'Shared with the frontend (its `API_PROXY_SECRET`): only with it is the address of the browser that the frontend passes on (X-Client-Address) counted for the rate limit of the login'
+                  ]
               ]
             : []),
         ...(oidc
@@ -644,17 +663,24 @@ ONE table, named after the database followed by \`users\`: **\`${table}\`**. The
 1. \`POST /auth/register\` or \`POST /auth/login\` answer with the user and set a \`session\` cookie (a signed JWT, valid for 7
    days). The cookie is **httpOnly** (scripts cannot read it) and **SameSite=Lax**, and **Secure** when
    \`NODE_ENV=production\`.
-2. The browser sends the cookie along automatically (in \`fetch\`: \`credentials: 'include'\`). \`GET /auth/me\` returns the user.
+2. The browser sends the cookie along automatically. The frontend calls this API through \`/api\` on its own host
+   (\`src/app/api/[[...path]]/route.ts\` of the frontend passes the cookie and the \`Set-Cookie\` on), so the cookie
+   belongs to the frontend. \`GET /auth/me\` returns the user.
 3. \`POST /auth/logout\` clears the cookie.
 
 Passwords are hashed with scrypt (random salt per password). Login and register are limited to \`AUTH_RATE_LIMIT\`
-attempts per minute per IP address. An unknown email address gives the same error, and takes as long, as a wrong
+attempts per minute, per address of the browser (an IPv6 address by its /64), and \`AUTH_ACCOUNT_RATE_LIMIT\` (five times as many) per account (email address), so another address never gives one account more
+tries. Through \`/api\` the frontend passes the address of the browser on (\`X-Client-Address\`), and the API counts it only
+with \`X-Proxy-Secret\` equal to \`API_PROXY_SECRET\` (shared with the frontend, made by the CLI); without it, the
+address the API itself sees (\`TRUST_PROXY\`). The frontend takes that address only from a trusted proxy in front of it
+(\`TRUSTED_PROXIES\`, 1 on Cloud Run), never from an \`X-Forwarded-For\` the browser wrote itself. An unknown email address gives the same error, and takes as long, as a wrong
 password.
 
 To protect your own endpoint: \`@UseGuards(AuthGuard)\` and read \`request.userId\` (see \`GET /auth/me\`).
 
-For production: HTTPS, a long random \`JWT_SECRET\`, your real \`CORS_ORIGIN\`, the frontend and the API on the same site
-(for example \`app.example.com\` and \`api.example.com\`) and, behind a reverse proxy, Express's \`trust proxy\`.
+For production: HTTPS, a long random \`JWT_SECRET\` and \`API_PROXY_SECRET\` (the same in the frontend), your real
+\`CORS_ORIGIN\`, \`TRUST_PROXY\` for the proxies in front of the API (1 on Cloud Run) and \`TRUSTED_PROXIES\` in the frontend
+for the proxies in front of it. The terraform of the project sets all of them on Cloud Run.
 `
             : ''
     }

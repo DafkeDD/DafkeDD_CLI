@@ -16,7 +16,9 @@ function setup({ frontend = 'demo-fe', backend = 'demo-be', repo = null, claude 
             return { ui: 'all', auth: true }
         },
         steps: async ctx => {
-            events.push(`${id}.steps(${JSON.stringify({ answers: ctx.answers, api: ctx.api ?? null })})`)
+            events.push(
+                `${id}.steps(${JSON.stringify({ answers: ctx.answers, api: ctx.api ?? null, secrets: ctx.secrets ?? null })})`
+            )
             return [{ title: `${id} step`, run: async () => {} }]
         }
     })
@@ -120,7 +122,11 @@ test('main tells the backend whether a frontend was chosen (the login pages need
 test('main tells the frontend whether the backend answered yes to the login pages', async () => {
     const { events, options } = setup()
     await main(options)
-    assert.ok(events.some(e => e.startsWith('demo-fe.steps') && e.includes('"api":{"port":4000,"auth":true}')))
+    const frontend = events.find(e => e.startsWith('demo-fe.steps'))
+    assert.match(frontend, /"api":\{"port":4000,"auth":true,"proxySecret":"[0-9a-f]{64}"\}/)
+    // The frontend and the backend share one secret (API_PROXY_SECRET), made for this project
+    const secret = /"proxySecret":"([0-9a-f]{64})"/.exec(frontend)[1]
+    assert.ok(events.find(e => e.startsWith('demo-be.steps')).includes(`"secrets":{"proxy":"${secret}"}`))
 })
 
 test('main tells the frontend which API it talks to when a backend is installed', async () => {

@@ -93,9 +93,13 @@ const VARIANTS = {
     // Without the OpenID Connect server: Next.js + NestJS + PostgreSQL with the simple login, in the Pasport design too
     plain: async () => {
         const answers = { database: db('plain'), auth: true, oidc: null }
+        // Shared by the frontend and the API, as the CLI does (API_PROXY_SECRET)
+        const proxy = randomBytes(32).toString('hex')
         return {
-            frontend: { answers: { ui: 'all' }, api: { ...nestjs.api, auth: true, oidc: false } },
-            backend: { part: nestjs, answers }
+            frontend: { answers: { ui: 'all' }, api: { ...nestjs.api, auth: true, oidc: false, proxySecret: proxy } },
+            backend: { part: nestjs, answers, secrets: { proxy } },
+            // The login through /api of the frontend, with the built API and frontend running
+            flow: loginThroughFrontend
         }
     },
     // An app for an existing login server, without modules (one database, Row-Level Security)
@@ -214,6 +218,75 @@ async function startsOnPort(dir) {
     }
 }
 
+/** Starts a process and waits until `url` answers (any status); returns the process. */
+async function serve(command, args, { cwd, env, url }) {
+    const child = spawn(command, args, { cwd, env: { ...process.env, ...env }, stdio: 'ignore' })
+    for (let i = 0; i < 120; i++) {
+        await new Promise(resolve => setTimeout(resolve, 500))
+        if (await fetch(url).catch(() => null)) return child
+    }
+    child.kill()
+    throw new Error(`${command} ${args.join(' ')} did not answer on ${url}`)
+}
+
+/**
+ * The simple login through /api of the frontend, as a browser does it: register, me, log out; a change from another
+ * site is refused; a browser that writes its own X-Forwarded-For does not escape the rate limit of the login.
+ */
+async function loginThroughFrontend(projectDir) {
+    const LIMIT = 4
+    const api = await serve('node', ['dist/main'], {
+        cwd: path.join(projectDir, 'backend'),
+        env: { PORT: '4100', AUTH_RATE_LIMIT: String(LIMIT) },
+        url: 'http://127.0.0.1:4100/health'
+    })
+    let web = null
+    try {
+        web = await serve('node', [path.join('node_modules', 'next', 'dist', 'bin', 'next'), 'start', '-p', '3100'], {
+            cwd: path.join(projectDir, 'frontend'),
+            env: { API_URL: 'http://127.0.0.1:4100' },
+            url: 'http://127.0.0.1:3100/api/health'
+        })
+        const base = 'http://127.0.0.1:3100'
+        const json = { 'content-type': 'application/json', origin: base }
+        const health = await fetch(base + '/api/health')
+        if (health.status !== 200) throw new Error(`/api/health through the frontend: ${health.status}`)
+        const email = `verify-${Date.now()}@example.com`
+        const registered = await fetch(base + '/api/auth/register', {
+            method: 'POST',
+            headers: json,
+            body: JSON.stringify({ name: 'Verify', email, password: 'correct horse battery' })
+        })
+        const cookie = registered.headers.getSetCookie().find(value => value.startsWith('session='))
+        if (registered.status !== 201 || !cookie || !/HttpOnly/i.test(cookie) || /Domain=/i.test(cookie))
+            throw new Error(`register through /api: ${registered.status} ${cookie ?? 'no session cookie'}`)
+        const session = cookie.split(';')[0]
+        const me = await fetch(base + '/api/auth/me', { headers: { cookie: session } })
+        if (me.status !== 200 || (await me.json()).email !== email) throw new Error(`/api/auth/me: ${me.status}`)
+        const forged = await fetch(base + '/api/auth/logout', {
+            method: 'POST',
+            headers: { cookie: session, origin: 'https://evil.example.com' }
+        })
+        if (forged.status !== 403) throw new Error(`a logout from another site: ${forged.status}`)
+        const logout = await fetch(base + '/api/auth/logout', { method: 'POST', headers: { ...json, cookie: session } })
+        if (![200, 201, 204].includes(logout.status)) throw new Error(`log out through /api: ${logout.status}`)
+        // Another X-Forwarded-For and another account on every try: still LIMIT tries per minute (register counted too)
+        let blocked = 0
+        for (let i = 0; i <= LIMIT; i++) {
+            const attempt = await fetch(base + '/api/auth/login', {
+                method: 'POST',
+                headers: { ...json, 'x-forwarded-for': `198.51.100.${i}`, 'x-client-address': `203.0.113.${i}` },
+                body: JSON.stringify({ email: `nobody-${i}@example.com`, password: 'wrong password' })
+            })
+            if (attempt.status === 429) blocked++
+        }
+        if (!blocked) throw new Error('a forged X-Forwarded-For escaped the rate limit of the login')
+    } finally {
+        web?.kill()
+        api.kill()
+    }
+}
+
 /** How pg connects to the database of a variant (its answers also have `connection`, which pg reads as a socket). */
 const connectionOf = ({ host, port, user, password, database }) => ({ host, port, user, password, database })
 
@@ -250,7 +323,11 @@ for (const name of names) {
         project.claude = true
         const steps = [
             ...(await nextjs.steps({ projectDir, answers: variant.frontend.answers, api: variant.frontend.api })),
-            ...(await variant.backend.part.steps({ projectDir, answers: variant.backend.answers })),
+            ...(await variant.backend.part.steps({
+                projectDir,
+                answers: variant.backend.answers,
+                secrets: variant.backend.secrets
+            })),
             docsStep({
                 projectDir,
                 parts: [
@@ -316,6 +393,10 @@ for (const name of names) {
             }
             log(`${name}: tests against PostgreSQL (npm run test:db)`)
             await script(backend, 'test:db')
+            if (variant.flow) {
+                log(`${name}: the login through /api of the frontend (the built API and frontend)`)
+                await variant.flow(projectDir)
+            }
             const demo = variant.backend.answers.oidc?.demo
             if (demo) {
                 log(`${name}: demo data (npm run demo:data, again, demo:clear, again)`)

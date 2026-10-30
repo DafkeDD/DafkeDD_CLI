@@ -67,10 +67,29 @@ icon set: \`npm run check:design\` fails on react-icons, lucide-react and the li
         parts.push(`
 ## Calling the API
 
-The backend runs on **${'`'}http://localhost:${apiPort}${'`'}** (override with \`NEXT_PUBLIC_API_URL\` in \`.env.local\`) and its
+${
+    api.auth && !api.oidc
+        ? `The backend runs on **${'`'}http://localhost:${apiPort}${'`'}** (override with \`API_URL\` in \`.env.local\`; the
+older \`NEXT_PUBLIC_API_URL\` still works) and its documentation is on \`/docs\`. In the browser the client in \`src/lib\`
+calls \`/api/<path>\` of this frontend, and \`src/app/api/[[...path]]/route.ts\` passes it on to \`API_URL/<path>\`, with
+the cookie and the answer's \`Set-Cookie\`: the session cookie of the login belongs to this frontend. A change (POST,
+PUT, PATCH, DELETE) through \`/api\` must come from a page of this app (the \`Origin\` header, or the host a proxy in front
+passes on); a body is at most 1 MB; every answer gets \`nosniff\` and a sandbox; the documentation page of the API is not
+passed on (it is on the API itself). An answer of \`/api\` itself (the API is down or slow, another site, a wrong path, a
+body too large) makes the screens say the API is offline, in the language of the visitor. The client sends the selected
+language as \`Accept-Language\`, so error messages come back in the language of the visitor.
+
+| Variable (\`.env.local\`) | Meaning |
+| --- | --- |
+| \`API_URL\` | Where the API runs (\`http://localhost:${apiPort}\`) |
+| \`API_PROXY_SECRET\` | Shared with the API (made by the CLI): only with it does the API count the address of the browser for the rate limit of the login |
+| \`TRUSTED_PROXIES\` | The proxies in front of this frontend that add the address of the browser to \`X-Forwarded-For\`: \`0\` here (the browser could write that header itself, so nothing is passed on), \`1\` on Cloud Run (behind an extra load balancer: 2) |
+`
+        : `The backend runs on **${'`'}http://localhost:${apiPort}${'`'}** (override with \`NEXT_PUBLIC_API_URL\` in \`.env.local\`) and its
 documentation is on \`/docs\`. The client in \`src/lib\` sends the selected language as \`Accept-Language\`, so error
 messages come back in the language of the visitor, and sends the session cookie along (\`credentials: 'include'\`).
-
+`
+}
 **In a client component** (\`'use client'\`):
 
 ${fence}tsx

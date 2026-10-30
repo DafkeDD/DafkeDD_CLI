@@ -260,3 +260,30 @@ test('formatLike: without Prettier in the project there is nothing to compare wi
     assert.equal(await formatLike(dir, 'backend', { 'backend/a.ts': 'a' }), null)
     assert.ok(!existsSync(path.join(dir, 'backend')))
 })
+
+test('codeFiles: update brings /api of the frontend and the rate limit of the login to a project with the simple login', async t => {
+    const dir = await tempDir(t)
+    await writeAll(dir, { 'backend/.env': 'PORT=4000\nDATABASE_NAME=shop\nCORS_ORIGIN=http://localhost:3000\n' })
+    const login = { ...PASPORT, name: 'shop', kind: 'login', database: 'shop' }
+    const files = codeFiles(login, dir)
+    assert.ok(files['frontend/src/app/api/[[...path]]/route.ts'], 'the /api route')
+    assert.match(files['frontend/src/lib/api.ts'], /const BASE = typeof window === 'undefined' \? API_URL : '\/api'/)
+    assert.ok(files['backend/src/auth/auth-throttler.guard.ts'], 'the guard of the rate limit')
+    assert.match(files['backend/src/setup.ts'], /trustProxy\(config\.get<string>\('TRUST_PROXY'\)\)/)
+    // Never a secret or an .env
+    assert.ok(!Object.keys(files).some(rel => /\.env/.test(rel)))
+    // A project with an API without login keeps calling it directly
+    const api = codeFiles({ ...login, kind: 'api', database: null }, dir)
+    assert.equal(api['frontend/src/app/api/[[...path]]/route.ts'], undefined)
+    assert.match(api['frontend/src/lib/api.ts'], /fetch\(API_URL \+ path/)
+})
+
+test('updateEnv adds API_PROXY_SECRET only as a comment: never the placeholder of .env.example as a secret', async t => {
+    const dir = await tempDir(t)
+    await writeAll(dir, { 'backend/.env': 'PORT=4000\nDATABASE_NAME=shop\n' })
+    const login = { ...PASPORT, name: 'shop', kind: 'login', database: 'shop' }
+    await updateEnv({ projectDir: dir, project: login })
+    const env = await fs.readFile(path.join(dir, 'backend', '.env'), 'utf8')
+    assert.match(env, /^# API_PROXY_SECRET=/m)
+    assert.ok(!/^API_PROXY_SECRET=/m.test(env), 'never an active API_PROXY_SECRET')
+})
