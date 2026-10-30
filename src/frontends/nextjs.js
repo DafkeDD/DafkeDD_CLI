@@ -13,6 +13,7 @@ import {
     NAV_MESSAGES,
     NOTES_MESSAGES,
     APP_LICENSE_MESSAGES,
+    APP_TOUR_MESSAGES,
     OIDC_MESSAGES,
     oidcFrontendFiles,
     SHELL_MESSAGES,
@@ -508,7 +509,11 @@ export function withApi(fileMap, api, { ui }) {
                                   ? {}
                                   : { Register: REGISTER_MESSAGES[locale], Invite: INVITE_MESSAGES[locale] }),
                               ...(api.linked
-                                  ? { Notes: NOTES_MESSAGES[locale], AppLicense: APP_LICENSE_MESSAGES[locale] }
+                                  ? {
+                                        Notes: NOTES_MESSAGES[locale],
+                                        AppLicense: APP_LICENSE_MESSAGES[locale],
+                                        AppTour: APP_TOUR_MESSAGES[locale]
+                                    }
                                   : {})
                           }
                         : {})

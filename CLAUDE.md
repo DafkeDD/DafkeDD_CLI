@@ -45,10 +45,10 @@ how the code is made testable.
 - **First-login tour (an absolute MUST)**: every app the CLI generates shows a guided tour of **all** its pages (every
   item of the rail and the main parts of each page) the first time a user logs in, and again from the user menu (not for
   superadmins). A new page or tab always gets its step in the tour, with its texts in en, nl, fr and de; a change
-  without its tour step is not done. Superadmins (the support team) get no tour, so the superadmin panel has none. Known
-  gap: today only the customer portal of the login server has it
-  (`templates/frontend-oidc/src/components/pasport/tour.tsx`); a linked app, a site, an API frontend and the simple
-  login still need one (issue #11).
+  without its tour step is not done. Superadmins (the support team) get no tour, so the superadmin panel has none. The
+  customer portal of the login server has it (`templates/frontend-oidc/src/components/pasport/tour.tsx`), and so has a
+  linked app (`templates/frontend-oidc-linked/src/components/pasport/app-tour.tsx`, a step per page of `APP_NAV`). Known
+  gap: a site, an API frontend and the simple login have no tour.
 - **Prettier everywhere** (`.prettierrc`: 4 spaces, no semicolons, single quotes, width 120). There are no warnings in
   the build, lint or tests of a generated project.
 - **Multi-tenant everywhere.**

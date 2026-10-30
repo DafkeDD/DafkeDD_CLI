@@ -44,7 +44,8 @@ frontend with an API, the simple login and the OpenID Connect login alike. The C
 - `src/styles/pasport.css` and `src/components/pasport` (the tokens, classes and components of the design, its own
   icons; no react-icons), the fonts Hanken Grotesk and JetBrains Mono, and the root layout that loads them;
 - the shell (icon rail, topbar with the search, light or dark, the language and the user menu): every page is in
-  `<AppPage>` (`src/components/shell/app-shell.tsx`), the pages of the rail are in `src/lib/nav.ts` (`APP_NAV`);
+  `<AppPage>` (`src/components/shell/app-shell.tsx`), the pages of the rail are in `src/lib/nav.ts` (`APP_NAV`; in a
+  linked app a new page also gets its first-login tour text `AppTour.pages.<label>` in en, nl, fr and de);
 - a home page in the shell (the stack, the status card of the API, the account card with the simple login);
 - with the simple login: `/login` and `/register` in the login screen of the design (`AuthLayout`), `/profile` in the
   shell, and the account in the topbar (`src/components/shell/account.ts`);
@@ -485,9 +486,12 @@ No organisation is created: the superadmin logs in to the platform and creates o
     - every page starts with a `PageHead`.
 
     A linked app has no login or registration form: `/login` goes straight to the login screen of the server, where
-    users register. Pages use `<AppPage>` (`src/components/shell`); see "Design (Pasport)" in `docs/frontend.md`. Claude
-    Code (the `pasport-design` skill, the `qa` and `reviewer` agents) is told that this is the design to follow, at 1440
-    and 390 pixels wide.
+    users register. A linked app shows the first-login tour (`src/components/pasport/app-tour.tsx`): a step per page of
+    `APP_NAV`, the notifications and the account menu, once per account (remembered in the browser as `app-tour:<sub>`)
+    and again from "Tour" in the user menu, never for a superadmin. A new page of a linked app gets its tour text
+    `AppTour.pages.<label>` in `messages/{en,nl,fr,de}.json`. Pages use `<AppPage>` (`src/components/shell`); see
+    "Design (Pasport)" in `docs/frontend.md`. Claude Code (the `pasport-design` skill, the `qa` and `reviewer` agents)
+    is told that this is the design to follow, at 1440 and 390 pixels wide.
 
 - **eHealth vault** (`/vault`): only for doctors (the profession of their membership). A doctor keeps an eHealth
   certificate there and may choose colleagues (the secretariat) who use it for them. A linked app reaches the vault
@@ -896,6 +900,14 @@ git switch developer
 
 ## Changelog
 
+- **0.54.16**: a linked app has the first-login tour.
+    - `AppTour` (`src/components/pasport/app-tour.tsx`): a welcome, a step for every page of `APP_NAV` (it goes there
+      and points at the page head), the bell, the account menu and the end. A new page in `APP_NAV` is a new step by
+      itself, with its text `AppTour.pages.<label>` in en, nl, fr and de (a page without one still gets a step with a
+      general text). Once per account (`localStorage` `app-tour:<sub>`, the opaque id: never the email address), again
+      from the user menu ("Tour"), never for a superadmin. An open tour goes on after a step to another page.
+    - The tour of the customer portal runs on the same `GuidedTour` (`tour.tsx`), remembered as before. `update` brings
+      the tour and its texts to an existing linked app.
 - **0.54.15**: a test checks the skills and agents themselves.
     - `test/skills-agents.test.js`: every skill and agent of the CLI and of a project is named after its folder or file
       (kebab case), has a description of at most 1024 characters, without tags, that says when to use it, and a SKILL.md

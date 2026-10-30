@@ -66,8 +66,8 @@ const KIND_TEXT = {
 }
 
 /**
- * The rule of the first-login tour (an absolute MUST of every app with the Pasport design). Only the portal of the login
- * server has the tour yet; the other projects say so until DafkeDD_CLI issue #11 brings it.
+ * The rule of the first-login tour (an absolute MUST of every app with the Pasport design). The portal of the login
+ * server (Tour) and a linked app (AppTour) have the tour; a site, an API frontend and the simple login say they do not.
  */
 function firstLoginTour(project) {
     return [
@@ -77,10 +77,15 @@ function firstLoginTour(project) {
         '  without its tour step is not done.',
         ...(project.kind === 'pasport'
             ? ['  The tour is `Tour` in `frontend/src/components/pasport/tour.tsx`.']
-            : [
-                  '  Known gap: this app does not have the tour yet (DafkeDD_CLI issue #11, it comes with `update`); until then, list',
-                  '  the tour steps of a new page in its pull request.'
-              ])
+            : project.kind === 'app'
+              ? [
+                    '  The tour is `AppTour` in `frontend/src/components/pasport/app-tour.tsx`: every page of `APP_NAV` is a step,',
+                    '  with its text `AppTour.pages.<label>` in `frontend/messages/*.json`.'
+                ]
+              : [
+                    '  Known gap: this app does not have the tour yet (DafkeDD_CLI issue #11, it comes with `update`); until then, list',
+                    '  the tour steps of a new page in its pull request.'
+                ])
     ]
 }
 

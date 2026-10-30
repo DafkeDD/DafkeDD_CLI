@@ -125,8 +125,15 @@ test('CLAUDE.md of a project: its parts, the rules, the branch per issue, the me
     for (const md of [projectClaudeMd(pasport), text, projectClaudeMd(frontendOnly)])
         assert.match(md, /\*\*First-login tour \(an absolute MUST\)\*\*: the first time a user logs in/)
     assert.match(projectClaudeMd(pasport), /`Tour` in `frontend\/src\/components\/pasport\/tour\.tsx`/)
-    // An app without the tour yet says so
-    assert.match(text, /Known gap: this app does not have the tour yet \(DafkeDD_CLI issue #11/)
+    // A linked app has its tour (AppTour); a site without one yet says so
+    assert.match(
+        text.replace(/\s+/g, ' '),
+        /The tour is `AppTour` in `frontend\/src\/components\/pasport\/app-tour\.tsx`/
+    )
+    assert.match(
+        projectClaudeMd(frontendOnly),
+        /Known gap: this app does not have the tour yet \(DafkeDD_CLI issue #11/
+    )
 })
 
 test('the CI checks every part on pushes and pull requests, with PostgreSQL for the database tests', () => {
@@ -465,7 +472,11 @@ test('the pasport-design skill of a project keeps the first-login tour, its supe
     assert.match(flat, /a page without its tour step is not done/)
     assert.match(
         flat,
-        /an app that does not have one yet \(DafkeDD_CLI issue #11\) lists the tour steps of a new page in its pull request/
+        /An app that does not have one yet \(DafkeDD_CLI issue #11\) lists the tour steps of a new page in its pull request/
+    )
+    assert.match(
+        flat,
+        /In a linked app it is `AppTour` \(`src\/components\/pasport\/app-tour\.tsx`\): every page of `APP_NAV` is a step by itself, and its text is `AppTour\.pages\.<label>` in every language\./
     )
     assert.match(flat, /`\.claude\/design\/pasport\.md`/)
     assert.match(flat, /stage it and start the checking agents \(the `implement` skill\)/)
