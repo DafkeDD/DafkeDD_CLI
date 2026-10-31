@@ -230,8 +230,9 @@ async function serve(command, args, { cwd, env, url }) {
 }
 
 /**
- * The simple login through /api of the frontend, as a browser does it: register, me, log out; a change from another
- * site is refused; a browser that writes its own X-Forwarded-For does not escape the rate limit of the login.
+ * The simple login through /api of the frontend, as a browser does it: every page needs a login (and comes back after
+ * it, never to another host); register, me, log out; a change from another site is refused; a browser that writes its
+ * own X-Forwarded-For does not escape the rate limit of the login.
  */
 async function loginThroughFrontend(projectDir) {
     const LIMIT = 4
@@ -251,6 +252,24 @@ async function loginThroughFrontend(projectDir) {
         const json = { 'content-type': 'application/json', origin: base }
         const health = await fetch(base + '/api/health')
         if (health.status !== 200) throw new Error(`/api/health through the frontend: ${health.status}`)
+        // Every page needs a login: without a session to /login, and back after it; /login and /register stay open
+        const page = (url, cookie) => fetch(base + url, { redirect: 'manual', headers: cookie ? { cookie } : {} })
+        const goesTo = async (url, cookie) => {
+            const answer = await page(url, cookie)
+            return answer.status >= 300 && answer.status < 400
+                ? new URL(answer.headers.get('location'), base).href
+                : answer.status
+        }
+        for (const [url, expected] of [
+            ['/', base + '/login'],
+            ['/profile', base + '/login?returnTo=%2Fprofile'],
+            ['/login', 200],
+            ['/register', 200],
+            ['/apikeys', base + '/login?returnTo=%2Fapikeys']
+        ]) {
+            const where = await goesTo(url)
+            if (where !== expected) throw new Error(`${url} without a session: ${where}, not ${expected}`)
+        }
         const email = `verify-${Date.now()}@example.com`
         const registered = await fetch(base + '/api/auth/register', {
             method: 'POST',
@@ -263,6 +282,17 @@ async function loginThroughFrontend(projectDir) {
         const session = cookie.split(';')[0]
         const me = await fetch(base + '/api/auth/me', { headers: { cookie: session } })
         if (me.status !== 200 || (await me.json()).email !== email) throw new Error(`/api/auth/me: ${me.status}`)
+        // Logged in: the page opens; the login sends you on, only to a page of this app (never another host)
+        if ((await goesTo('/profile', session)) !== 200) throw new Error('/profile with a session is not shown')
+        for (const [url, expected] of [
+            ['/login?returnTo=%2Fprofile', base + '/profile'],
+            ['/login?returnTo=' + encodeURIComponent('//evil.example.com'), base + '/'],
+            ['/login?returnTo=' + encodeURIComponent('https://evil.example.com'), base + '/'],
+            ['/login?returnTo=' + encodeURIComponent('/..//evil.example.com'), base + '/']
+        ]) {
+            const where = await goesTo(url, session)
+            if (where !== expected) throw new Error(`${url} with a session: ${where}, not ${expected}`)
+        }
         const forged = await fetch(base + '/api/auth/logout', {
             method: 'POST',
             headers: { cookie: session, origin: 'https://evil.example.com' }

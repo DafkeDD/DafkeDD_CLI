@@ -50,6 +50,8 @@ frontend with an API, the simple login and the OpenID Connect login alike. The C
 - with the simple login: `/login` and `/register` in the login screen of the design (`AuthLayout`), `/profile` in the
   shell, and the account in the topbar (`src/components/shell/account.ts`); the browser reaches the API through `/api`
   of the frontend (`src/app/api/[[...path]]/route.ts`, to `API_URL`), so the session cookie belongs to the frontend;
+  every other page needs the login: `src/proxy.ts` (`PUBLIC_PATHS`: `/login`, `/register`) sends a browser without a
+  session to `/login` and back after it (only to a page of the app); a site without a login stays public;
 - `npm run check:design` (`scripts/check-design.mjs`, also in the CI): every page in the shell or the login screen, no
   other component library, icon set or CSS framework, colours only through the tokens.
 
@@ -909,6 +911,13 @@ git switch developer
 
 ## Changelog
 
+- **0.54.19**: every page of the frontend of the simple login needs the login (#4). `src/proxy.ts` asks `GET /auth/me`
+  of the API with the cookie of the request (3 seconds at most; an API that is down or slow counts as no login) and
+  sends a browser without a session to `/login?returnTo=<page>`; after the login it comes back, only to a page of the
+  app (`safeReturn` in `src/lib/return-to.ts`, resolved as the browser will: never `//host`, `/..//host`, `\host`,
+  another scheme or a control character). Only `PUBLIC_PATHS` (`/login`, `/register`) are open; they send a logged in
+  user on. A site without a login stays public. `update` brings the proxy to existing projects; the login form (yours
+  once it is there) goes back to `returnTo` in new projects. `verify plain` checks it in the built frontend.
 - **0.54.18**: the frontend of the simple login reaches its API through `/api` on its own host
   (`src/app/api/[[...path]]/route.ts` passes each call on to `API_URL`, with the cookie and the `Set-Cookie`), so the
   session cookie belongs to the frontend: the first step to protect every page (#4). In the browser `src/lib/api.ts`

@@ -264,17 +264,23 @@ Texts are in the \`Oidc\` namespace of the message files; the code is in \`src/l
 | --- | --- |
 | \`/login\` | Log in with email and password, in the login screen of the Pasport design (\`AuthLayout\`) |
 | \`/register\` | Create an account (name, email, password of at least 8 characters); you are logged in right away |
-| \`/profile\` | Protected, in the shell: shows your name, email and member-since date from the database; log out button |
+| \`/profile\` | In the shell: shows your name, email and member-since date from the database; log out button |
 
-The home page has an account card with "Log in" and "Register", or "Signed in as ..." (\`src/components/auth-links.tsx\`).
+The home page, like every page, needs the login (a visitor without a session goes to \`/login\` first); its account card
+shows "Signed in as ..." with a link to the profile (\`src/components/auth-links.tsx\`).
 Logged in, the topbar of the shell shows your name, with the profile, the language and log out in its menu
 (\`src/components/shell/account.ts\`). Flow: the form calls \`POST /auth/register\` or
 \`POST /auth/login\`, the API sets an httpOnly session cookie, then you are sent to \`/profile\`, which calls \`GET /auth/me\`.
 A \`401\` answer sends visitors to \`/login\`. JavaScript never sees the cookie. Texts are in the \`Auth\` namespace of the
 message files.
 
-To protect another page: call \`api.get('/auth/me')\` in a client component (see \`src/components/profile.tsx\`) and send
-the visitor to \`/login\` on a 401. Always protect the data in the API too (\`@UseGuards(AuthGuard)\`), not only the page.
+**Every page is protected**: \`src/proxy.ts\` asks \`GET /auth/me\` of the API with the cookie of the request (3 seconds at
+most) and sends a browser without a session to \`/login\`, and after the login back to the page it asked for
+(\`?returnTo=\`, only a page of this app: \`safeReturn\` in \`src/lib/return-to.ts\`). An API that is down or slow counts as
+no login: no page is shown without one. Only \`PUBLIC_PATHS\` (\`/login\`, \`/register\`) are open, and they send a
+logged in user on; a new public page goes in that list. A path with a dot is a file, not a page (the proxy does not
+look at it): never give a page a dot in its path. Always protect the data in the API too
+(\`@UseGuards(AuthGuard)\`), not only the page.
 `)
         }
     }

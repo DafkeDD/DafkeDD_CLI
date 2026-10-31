@@ -173,6 +173,12 @@ export function projectClaudeMd(project) {
                   '  `frontend/src/styles/pasport.css` and `frontend/src/components/pasport/`. Every page is in the shell',
                   '  (`<AppPage>` of `frontend/src/components/shell/app-shell.tsx`, its rail in `frontend/src/lib/nav.ts`), on desktop',
                   '  and on the phone (390px). `npm run check:design` in `./frontend` (also in the CI) checks it.',
+                  ...(project.kind === 'login'
+                      ? [
+                            '- **Protected by default**: every page needs a login; `frontend/src/proxy.ts` asks `GET /auth/me` of the API and',
+                            '  sends a browser without a session to `/login` (and back after it). Only the pages in `PUBLIC_PATHS` are open.'
+                        ]
+                      : []),
                   ...firstLoginTour(project)
               ]),
         ...(project.kind === 'pasport' || project.kind === 'app'
