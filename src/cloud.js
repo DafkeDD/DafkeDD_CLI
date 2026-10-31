@@ -107,6 +107,13 @@ function frontendEnv(project) {
             OIDC_CLIENT_ID: hcl(project.link?.clientId ?? project.name),
             OIDC_ACCOUNT_URL: 'var.login_account_url'
         })
+    if (project.kind === 'login')
+        Object.assign(env, {
+            // The browser reaches the API through /api of the frontend, which passes it on to here
+            API_URL: 'local.backend_url',
+            // Cloud Run is one proxy in front of the frontend: the address of the browser for the rate limit of the login
+            TRUSTED_PROXIES: '"1"'
+        })
     return env
 }
 
@@ -363,7 +370,12 @@ export function mainTf(project) {
               ]
             : []),
         ...(project.kind === 'login'
-            ? ['    # Signs the tokens of the login', '    JWT_SECRET = random_id.jwt.hex']
+            ? [
+                  '    # Signs the tokens of the login',
+                  '    JWT_SECRET = random_id.jwt.hex',
+                  '    # Shared with the frontend: the address of the browser it passes on (rate limit of the login)',
+                  '    API_PROXY_SECRET = random_id.proxy.hex'
+              ]
             : [])
     ]
     const apis = [
@@ -509,7 +521,7 @@ locals {
   backend_url  = var.backend_domain != "" ? "https://\${var.backend_domain}" : "https://\${local.backend_service}-\${local.run_domain}"
   frontend_url = var.frontend_domain != "" ? "https://\${var.frontend_domain}" : "https://\${local.frontend_service}-\${local.run_domain}"
 
-${backend ? `  backend_env = {\n${block(backendEnv(project))}\n  }\n  backend_secrets = merge({\n${generatedBackendSecrets.join('\n')}\n  }, var.backend_secrets)\n` : ''}${frontend ? `  frontend_env = {\n${block(frontendEnv(project))}\n  }\n  frontend_secrets = merge({\n    # Encrypts the session cookie\n    AUTH_SECRET = random_id.auth_secret.hex\n  }, var.frontend_secrets)\n` : ''}}
+${backend ? `  backend_env = {\n${block(backendEnv(project))}\n  }\n  backend_secrets = merge({\n${generatedBackendSecrets.join('\n')}\n  }, var.backend_secrets)\n` : ''}${frontend ? `  frontend_env = {\n${block(frontendEnv(project))}\n  }\n  frontend_secrets = merge({\n    # Encrypts the session cookie\n    AUTH_SECRET = random_id.auth_secret.hex${project.kind === 'login' ? '\n    # Shared with the API: the address of the browser for the rate limit of the login\n    API_PROXY_SECRET = random_id.proxy.hex' : ''}\n  }, var.frontend_secrets)\n` : ''}}
 
 resource "google_project_service" "apis" {
   for_each           = toset(${hcl(apis)})
@@ -538,7 +550,7 @@ resource "google_artifact_registry_repository" "app" {
   }
   depends_on = [google_project_service.apis]
 }
-${frontend ? '\nresource "random_id" "auth_secret" {\n  byte_length = 32\n}\n' : ''}${project.kind === 'pasport' ? '\nresource "random_id" "master_key" {\n  byte_length = 32\n}\n' : ''}${project.kind === 'login' ? '\nresource "random_id" "jwt" {\n  byte_length = 32\n}\n' : ''}${
+${frontend ? '\nresource "random_id" "auth_secret" {\n  byte_length = 32\n}\n' : ''}${project.kind === 'pasport' ? '\nresource "random_id" "master_key" {\n  byte_length = 32\n}\n' : ''}${project.kind === 'login' ? '\nresource "random_id" "jwt" {\n  byte_length = 32\n}\n\nresource "random_id" "proxy" {\n  byte_length = 32\n}\n' : ''}${
         project.database
             ? `
 resource "random_id" "preview_db" {

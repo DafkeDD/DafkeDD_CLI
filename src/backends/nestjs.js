@@ -755,8 +755,8 @@ describe('API (e2e)', () => {\n`
 
     if (auth) {
         Object.assign(result, login.authFiles(login.usersTable(database.database)))
-        result['.env'] += login.envLines({ jwtSecret: auth.jwtSecret })
-        result['.env.example'] += login.envLines({ jwtSecret: login.EXAMPLE_SECRET })
+        result['.env'] += login.envLines({ jwtSecret: auth.jwtSecret, proxySecret: auth.proxySecret ?? '' })
+        result['.env.example'] += login.envLines({ jwtSecret: login.EXAMPLE_SECRET, proxySecret: login.EXAMPLE_SECRET })
         for (const locale of LOCALES) {
             result[`src/i18n/${locale}/errors.json`] = json({
                 ...JSON.parse(result[`src/i18n/${locale}/errors.json`]),
@@ -788,7 +788,31 @@ describe('API (e2e)', () => {\n`
                 "import { INestApplication } from '@nestjs/common';\nimport cookieParser from 'cookie-parser';\n"
             ),
             '  app.enableCors({',
-            '  app.use(cookieParser());\n  app.enableCors({'
+            [
+                '  app.use(cookieParser());',
+                '  // Which proxies in front of the API may tell the address of the browser (X-Forwarded-For): TRUST_PROXY.',
+                "  app.getHttpAdapter().getInstance().set('trust proxy', trustProxy(config.get<string>('TRUST_PROXY')));",
+                '  app.enableCors({'
+            ].join('\n')
+        )
+        result['src/setup.ts'] = replaceOnce(
+            result['src/setup.ts'],
+            'export function configureApp(',
+            [
+                '/**',
+                ' * TRUST_PROXY as Express reads it: empty is `loopback` (this computer), `true` or `false`, a number of proxies',
+                ' * (`1` on Cloud Run), or addresses and ranges like `loopback, 10.0.0.0/8`. Never the raw text: Express would read',
+                ' * `1` as the address 0.0.0.1 and refuse `true`.',
+                ' */',
+                'export function trustProxy(value: string | undefined): boolean | number | string {',
+                "  const setting = value?.trim() ?? '';",
+                "  if (!setting) return 'loopback';",
+                "  if (setting === 'true' || setting === 'false') return setting === 'true';",
+                '  return /^\\d+$/.test(setting) ? Number(setting) : setting;',
+                '}',
+                '',
+                'export function configureApp('
+            ].join('\n')
         )
         result['src/common/all-exceptions.filter.ts'] = replaceOnce(
             files['src/common/all-exceptions.filter.ts'],
@@ -1177,6 +1201,8 @@ export const nestjs = {
         exec = run,
         answers = {},
         secret = () => randomBytes(48).toString('hex'),
+        // Shared with the frontend: { proxy } (API_PROXY_SECRET of the simple login)
+        secrets = null,
         emptyEarlier = database => emptyDatabase(database, { exec })
     }) {
         const database = answers?.database ?? null
@@ -1329,7 +1355,7 @@ export const nestjs = {
                     }
                     for (const [rel, content] of Object.entries(
                         buildFiles(database, {
-                            auth: withAuth ? { jwtSecret: secret() } : null,
+                            auth: withAuth ? { jwtSecret: secret(), proxySecret: secrets?.proxy ?? secret() } : null,
                             oidc: withOidc,
                             app: withApp,
                             appOptions: appChoice

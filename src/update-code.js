@@ -419,7 +419,7 @@ export async function updateEnv({ projectDir, project }) {
         const missing = blocks
             .filter(block => !known.has(block.key))
             .map(block =>
-                /^(OIDC_MASTER_KEY|OIDC_BOOTSTRAP_ADMIN_PASSWORD_HASH|JWT_SECRET)=/m.test(block.text)
+                /^(OIDC_MASTER_KEY|OIDC_BOOTSTRAP_ADMIN_PASSWORD_HASH|JWT_SECRET|API_PROXY_SECRET)=/m.test(block.text)
                     ? { ...block, text: block.text.replace(/^([A-Z0-9_]+=)/m, '# $1') }
                     : block
             )

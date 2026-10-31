@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { ANSWERS_FILE, readAnswers, saveAnswers, select, useAnswers } from './prompts.js'
 import pc from 'picocolors'
@@ -108,6 +109,8 @@ export async function main({
 
     // What the GitHub steps did (labels, protection of the branches), for the summary
     const github = {}
+    // The simple login: the frontend proves to the API that it passes the address of the browser on (API_PROXY_SECRET)
+    const secrets = backendAnswers.auth ? { proxy: randomBytes(32).toString('hex') } : null
     const steps = [
         // The frontend gets to know the API (url, language link, status card) when a backend is installed.
         ...(frontend
@@ -120,12 +123,13 @@ export async function main({
                         ? {
                               ...backend.api,
                               auth: Boolean(backendAnswers.auth),
+                              ...(secrets ? { proxySecret: secrets.proxy } : {}),
                               ...(backendAnswers.oidc ? { oidc: true } : {})
                           }
                         : null
               })
             : []),
-        ...(backend ? await backend.steps({ projectDir, answers: backendAnswers }) : []),
+        ...(backend ? await backend.steps({ projectDir, answers: backendAnswers, secrets }) : []),
         ...docsSteps({ projectDir, frontend, backend }),
         // The knowledge base for the users: every page of the frontend, in four languages, from the first commit on
         ...(frontend ? kbSteps({ projectDir, project: described }) : []),

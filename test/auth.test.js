@@ -101,9 +101,9 @@ test('the session is a signed JWT in an httpOnly, SameSite=Lax cookie that is Se
 
 test('login and register are rate limited, logout and me are not (the frontend polls /auth/me)', () => {
     const controller = authFiles('t')['src/auth/auth.controller.ts']
-    assert.equal(controller.match(/UseGuards\(ThrottlerGuard\)/g).length, 2)
-    assert.match(controller, /@Post\('register'\)[^]*?@UseGuards\(ThrottlerGuard\)\s+async register/)
-    assert.match(controller, /@Post\('login'\)[^]*?@UseGuards\(ThrottlerGuard\)\s+async login/)
+    assert.equal(controller.match(/UseGuards\(AuthThrottlerGuard\)/g).length, 2)
+    assert.match(controller, /@Post\('register'\)[^]*?@UseGuards\(AuthThrottlerGuard\)\s+async register/)
+    assert.match(controller, /@Post\('login'\)[^]*?@UseGuards\(AuthThrottlerGuard\)\s+async login/)
 })
 
 test('an unknown email takes as long as a wrong password and gives the same error', () => {
@@ -460,9 +460,10 @@ test('the pages use the locale-aware navigation of next-intl, and spacing withou
     }
 })
 
-test('the API client sends the cookie along and shows lists of validation messages', () => {
+test('the API client sends the cookie along (through /api of the frontend) and shows lists of validation messages', () => {
     const api = withApi(SITE, API, { ui: true })['src/lib/api.ts']
-    assert.match(api, /credentials: 'include'/)
+    assert.match(api, /credentials: 'same-origin'/)
+    assert.ok(!api.includes("credentials: 'include'"))
     assert.match(api, /Array\.isArray\(body\?\.message\)/)
 })
 
