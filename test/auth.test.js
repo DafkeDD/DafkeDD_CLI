@@ -434,7 +434,7 @@ test('the form talks to the auth endpoints and shows the translated error of the
     assert.match(form, /^'use client'/)
     assert.match(form, /\/auth\/register/)
     assert.match(form, /\/auth\/login/)
-    assert.match(form, /router\.push\('\/profile'\)/)
+    assert.match(form, /\?\? '\/profile'\)/, 'back to the page that asked for the login, else the profile')
     assert.match(form, /err\.message/, 'the server message is already in the selected language')
     assert.match(form, /autoComplete=\{isRegister \? 'new-password' : 'current-password'\}/)
     assert.match(form, /<PasswordInput/)

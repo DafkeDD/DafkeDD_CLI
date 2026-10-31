@@ -39,9 +39,10 @@ how the code is made testable.
   (390px) too. `templates/frontend-oidc/scripts/check-design.mjs` checks it in every project (`npm run check:design`,
   also in the CI), and `update` keeps the files of `DESIGN_FILES` (`src/frontends/oidc.js`) and `SITE_DESIGN_FILES`
   (`src/frontends/site.js`) in step: a new design file goes in those lists.
-- **Protected by default**: every page of a generated frontend needs a login (`src/proxy.ts` sends it to `/login`); only
-  `PUBLIC_PATHS` are open. Known gap: today only the OpenID Connect frontends (the login server, a linked app) do this;
-  a site, an API frontend and the simple login still have a plain next-intl proxy (issue #4).
+- **Protected by default**: every page of a generated frontend with a login needs that login (`src/proxy.ts` sends it to
+  `/login`, and back after it); only `PUBLIC_PATHS` are open. That is the login server, a linked app and the simple
+  login (its proxy asks `GET /auth/me` of the API through the cookie of the frontend). A site without a login (no
+  backend, or an API without login) is public: there is no login.
 - **First-login tour (an absolute MUST)**: every app the CLI generates shows a guided tour of **all** its pages (every
   item of the rail and the main parts of each page) the first time a user logs in, and again from the user menu (not for
   superadmins). A new page or tab always gets its step in the tour, with its texts in en, nl, fr and de; a change

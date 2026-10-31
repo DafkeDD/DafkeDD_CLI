@@ -441,6 +441,92 @@ export const PATCH = forward
 export const DELETE = forward
 `
 
+/** A page of this app to come back to after the login: a path of its own, never another host. */
+export const RETURN_TO = `/**
+ * The page to come back to after the login (?returnTo=): only a path of this app. Never another host (//evil.com,
+ * /\\evil.com, https://evil.com) and never a script (javascript:): those give null.
+ */
+export function safeReturn(value: string | null | undefined): string | null {
+    if (!value || value.length > 2000) return null
+    if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\\\')) return null
+    // Control characters (a tab or new line is dropped by the browser: /\\t/evil.com becomes //evil.com)
+    if (/[\\u0000-\\u001f\\u007f]/.test(value)) return null
+    // Resolved as the browser will (/..//evil.com and /%2e%2e//evil.com become //evil.com): still this app, else null
+    const url = new URL(value, 'http://this-app.invalid')
+    if (url.origin !== 'http://this-app.invalid' || url.pathname.startsWith('//')) return null
+    return url.pathname + url.search + url.hash
+}
+`
+
+/** src/proxy.ts of the frontend of the simple login: every page needs a login, except PUBLIC_PATHS. */
+export const LOGIN_PROXY = `import createMiddleware from 'next-intl/middleware'
+import { NextResponse, type NextRequest } from 'next/server'
+import { routing } from './i18n/routing'
+import { API_URL } from './lib/api'
+import { safeReturn } from './lib/return-to'
+
+const intl = createMiddleware(routing)
+
+/**
+ * The pages anyone may open without a login: the login and the registration. Every other page is protected: without a
+ * session the browser goes to /login, and after the login back to the page it asked for. A new public page goes in this
+ * list (and nowhere else).
+ */
+export const PUBLIC_PATHS = ['/login', '/register']
+
+export const isPublic = (pathname: string) =>
+    PUBLIC_PATHS.some(path => pathname === path || pathname.startsWith(path + '/'))
+
+/** How long the API may take to say who is logged in: longer is "not logged in" (the login page says why). */
+const TIMEOUT_MS = 3000
+
+/**
+ * Logged in: GET /auth/me of the API answers 200 with the cookie of this request. Anything else (no session cookie, 401,
+ * the API down or too slow) is not logged in: the page is never shown without a login.
+ */
+async function loggedIn(request: NextRequest): Promise<boolean> {
+    if (!request.cookies.get('session')) return false
+    const cookie = request.headers.get('cookie') ?? ''
+    const answer = await fetch(API_URL + '/auth/me', {
+        headers: { cookie },
+        cache: 'no-store',
+        redirect: 'manual',
+        signal: AbortSignal.timeout(TIMEOUT_MS)
+    }).catch(() => null)
+    // The answer is not read: closed, so its connection is free again at once
+    await answer?.body?.cancel().catch(() => {})
+    return answer?.status === 200
+}
+
+/** Every page request: the login (protected by default, see PUBLIC_PATHS) and the language (next-intl). */
+export default async function proxy(request: NextRequest) {
+    const { pathname, search } = request.nextUrl
+    // /api has its own checks (the API itself): not a page
+    if (pathname === '/api' || pathname.startsWith('/api/')) return NextResponse.next()
+    if (isPublic(pathname)) {
+        // Logged in already: the login and the registration send you on, to the page you came for
+        if (await loggedIn(request)) {
+            const back = safeReturn(request.nextUrl.searchParams.get('returnTo')) ?? '/'
+            return NextResponse.redirect(new URL(back, request.url))
+        }
+        return intl(request)
+    }
+    if (!(await loggedIn(request))) {
+        const login = new URL('/login', request.url)
+        const back = pathname + search
+        if (back !== '/' && safeReturn(back)) login.searchParams.set('returnTo', back)
+        return NextResponse.redirect(login)
+    }
+    return intl(request)
+}
+
+// Every request but the files of Next.js and a path with a dot (a file such as /favicon.ico): a page path never has a
+// dot, or it is not protected. /api is let through above, never by a prefix here (/apikeys is a page).
+export const config = {
+    matcher: '/((?!_next|_vercel|.*\\\\..*).*)'
+}
+`
+
 /**
  * Files that connect the frontend to the backend: an API client that sends the selected language
  * (Accept-Language, so server errors come back in that language), a hook for client components and a status card
@@ -651,7 +737,14 @@ export function withApi(fileMap, api, { ui }) {
         ...fileMap,
         ...(api.oidc ? uiFiles : {}),
         ...apiFiles(api),
-        ...(throughFrontend(api) ? { 'src/app/api/[[...path]]/route.ts': API_ROUTE } : {}),
+        ...(throughFrontend(api)
+            ? {
+                  'src/app/api/[[...path]]/route.ts': API_ROUTE,
+                  // Every page needs a login, except PUBLIC_PATHS (the session cookie is the frontend's, through /api)
+                  'src/proxy.ts': LOGIN_PROXY,
+                  'src/lib/return-to.ts': RETURN_TO
+              }
+            : {}),
         ...(api.auth ? authFiles() : {}),
         ...(api.oidc
             ? oidcFrontendFiles({

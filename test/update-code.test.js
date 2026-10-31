@@ -267,6 +267,9 @@ test('codeFiles: update brings /api of the frontend and the rate limit of the lo
     const login = { ...PASPORT, name: 'shop', kind: 'login', database: 'shop' }
     const files = codeFiles(login, dir)
     assert.ok(files['frontend/src/app/api/[[...path]]/route.ts'], 'the /api route')
+    // The proxy that protects every page, and the check of returnTo
+    assert.match(files['frontend/src/proxy.ts'], /export const PUBLIC_PATHS = \['\/login', '\/register'\]/)
+    assert.ok(files['frontend/src/lib/return-to.ts'], 'safeReturn')
     assert.match(files['frontend/src/lib/api.ts'], /const BASE = typeof window === 'undefined' \? API_URL : '\/api'/)
     assert.ok(files['backend/src/auth/auth-throttler.guard.ts'], 'the guard of the rate limit')
     assert.match(files['backend/src/setup.ts'], /trustProxy\(config\.get<string>\('TRUST_PROXY'\)\)/)
@@ -275,6 +278,7 @@ test('codeFiles: update brings /api of the frontend and the rate limit of the lo
     // A project with an API without login keeps calling it directly
     const api = codeFiles({ ...login, kind: 'api', database: null }, dir)
     assert.equal(api['frontend/src/app/api/[[...path]]/route.ts'], undefined)
+    assert.ok(!api['frontend/src/proxy.ts'].includes('PUBLIC_PATHS'), 'a site without a login stays public')
     assert.match(api['frontend/src/lib/api.ts'], /fetch\(API_URL \+ path/)
 })
 

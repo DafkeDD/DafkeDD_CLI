@@ -172,6 +172,7 @@ import { AuthHeading, AuthLayout } from '@/components/pasport/auth-layout'
 import { Btn, ErrorNote, Field, Input, PasswordInput } from '@/components/pasport/ui'
 import { Link, useRouter } from '@/i18n/navigation'
 import { ApiError } from '@/lib/api'
+import { safeReturn } from '@/lib/return-to'
 import { useApi } from '@/lib/use-api'
 
 /** Log in or create an account (POST /auth/login, /auth/register). Errors come from the API, in the language. */
@@ -190,7 +191,8 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
         setError(null)
         try {
             await api.post(isRegister ? '/auth/register' : '/auth/login', values)
-            router.push('/profile')
+            // Back to the page that asked for the login (only a page of this app), else the profile
+            router.push(safeReturn(new URLSearchParams(window.location.search).get('returnTo')) ?? '/profile')
         } catch (err) {
             setError(err instanceof ApiError ? err.message : t('offline'))
             setBusy(false)
