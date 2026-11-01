@@ -737,6 +737,11 @@ export const DOCKERIGNORE = [
     '!.env.example',
     'storage',
     '*.log',
+    // The browser tests (frontend/e2e) and what they leave behind: never in an image
+    'e2e',
+    'playwright.config.ts',
+    'playwright-report',
+    'test-results',
     ''
 ].join('\n')
 

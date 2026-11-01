@@ -732,9 +732,10 @@ the real steps of the CLI (no questions) in a temporary folder:
 Each one gets the build, lint, unit and e2e tests the CLI runs itself, plus TypeScript, Prettier, the lint and
 `npm run check:design` of the frontend, `npm audit` (high and critical) and, with a database, `npm run test:db`. It also
 checks the files of Claude Code, the knowledge base and Google Cloud, that `update` changes nothing on a fresh project,
-that `doctor` finds no failure, and that the built backend answers `/health` on `PORT` 8080 as on Cloud Run; for the
-login server also that the superadmin exists after the first start and that `demo:data` and `demo:clear` work. The
-database comes from `VERIFY_DB_HOST`, `VERIFY_DB_PORT`, `VERIFY_DB_USER` and `VERIFY_DB_PASSWORD` (default
+that `doctor` finds no failure, the browser tests of the frontend where it has them (`npm run test:e2e` in Chromium,
+installed by Playwright when it is missing), and that the built backend answers `/health` on `PORT` 8080 as on Cloud
+Run; for the login server also that the superadmin exists after the first start and that `demo:data` and `demo:clear`
+work. The database comes from `VERIFY_DB_HOST`, `VERIFY_DB_PORT`, `VERIFY_DB_USER` and `VERIFY_DB_PASSWORD` (default
 `localhost:5432`, `postgres`/`postgres`; the user needs `CREATEDB`). Options:
 
 - `-- --only app-full` runs one variant (or several: `--only app,app-full`);
@@ -911,6 +912,16 @@ git switch developer
 
 ## Changelog
 
+- **0.54.20**: browser tests (#43, part of #35). A linked app gets `frontend/e2e/` with Playwright and axe
+  (`npm run test:e2e`, pinned `@playwright/test@1.56.0`, also in the CI): the first-login tour (every step of `APP_NAV`,
+  remembered, from the user menu, none for a superadmin) and every page of `APP_NAV` in en, nl, fr and de, light and
+  dark, at 390px, with axe (WCAG 2.2 AA) and the login it needs. A test logs in with a session cookie sealed with a
+  secret only for the tests (`e2e/session.ts`), without a login server. `npm run verify` runs the suite of every variant
+  that has one, in Chromium. axe found what the design missed, now fixed in every app: `text-3` (light `#646d80`, dark
+  `#858e9f`), the brand teal in light (`accent` `#0f766e`, `accent-hover` `#115e59`), the red in light (`#c81e1e`) and
+  the initials of an avatar (`avatar-bg`) reach 4.5:1; the account menu says the visible name too (WCAG 2.5.3); the API
+  hint of the status card is no longer faded. A CLI test computes the contrast of the tokens. `update` brings the suite,
+  its packages and `.gitignore` lines to an existing linked app.
 - **0.54.19**: every page of the frontend of the simple login needs the login (#4). `src/proxy.ts` asks `GET /auth/me`
   of the API with the cookie of the request (3 seconds at most; an API that is down or slow counts as no login) and
   sends a browser without a session to `/login?returnTo=<page>`; after the login it comes back, only to a page of the

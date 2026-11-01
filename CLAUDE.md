@@ -158,7 +158,8 @@ The hooks in `.claude/settings.json` enforce this (`.claude/git-policy.json`: `i
 
 ## Checking generated projects
 
-- `npm run verify` generates four variants with the real steps of the CLI, in a temporary folder:
+- `npm run verify` generates four variants with the real steps of the CLI, in a temporary folder, and runs their browser
+  tests (`npm run test:e2e`, Chromium of the pinned Playwright) where the frontend has them:
     - `pasport`: the login server (with the demo data);
     - `plain`: an API with the simple login and PostgreSQL;
     - `app`: an app without modules (Row-Level Security);

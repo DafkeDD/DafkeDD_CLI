@@ -44,7 +44,7 @@ built in the templates (and in `D:\test`, the reference project), not a variatio
   keys. Dutch is "je" and "jij", short, active verbs; buttons say what happens; errors say what to do. Never a hardcoded
   string on screen.
 - **Accessible.** Labels on every control, focus visible (`accent` ring), keyboard reachable, contrast 4.5:1 for text
-  (`text-3` only for 12px+ repeated labels), `prefers-reduced-motion` respected.
+  (`text-3` too; the axe check of the browser tests of a project fails below it), `prefers-reduced-motion` respected.
 - **Responsive.** It works at phone width (390px): the rail is a drawer, forms and grids go to one column, tables scroll
   inside `table-wrap`, nothing scrolls sideways. Look at it at 1440 and 390 pixels, light and dark.
 

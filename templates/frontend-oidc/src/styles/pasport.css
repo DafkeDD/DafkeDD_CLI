@@ -13,10 +13,13 @@
    ============================================================ */
 
 :root {
-    --accent: #0d9488;
-    --accent-hover: #0f766e;
+    /* Brand teal: white text on it, and it as text on every surface, at least 4.5:1 (WCAG 2.2 AA) */
+    --accent: #0f766e;
+    --accent-hover: #115e59;
     --accent-active: #115e59;
     --accent-fg: #ffffff;
+    /* Avatars: white initials at 5.5:1 */
+    --avatar-bg: #0f766e;
     --accent-tint: #f0fdfa;
     --accent-tint-2: #ccfbf1;
     --accent-border: #99f6e4;
@@ -31,7 +34,7 @@
     --border-strong: #d6dae1;
     --text: #0f1729;
     --text-2: #475063;
-    --text-3: #8a93a6;
+    --text-3: #646d80;
     --text-inv: #ffffff;
 
     --green: #16a34a;
@@ -40,7 +43,7 @@
     --amber: #d97706;
     --amber-tint: #fffbeb;
     --amber-border: #fde68a;
-    --red: #dc2626;
+    --red: #c81e1e;
     --red-tint: #fef2f2;
     --red-border: #fecaca;
     --blue: #2563eb;
@@ -78,6 +81,7 @@
     --accent-hover: #5eead4;
     --accent-active: #99f6e4;
     --accent-fg: #04201d;
+    --avatar-bg: #2dd4bf;
     --accent-tint: #0c2925;
     --accent-tint-2: #123e38;
     --accent-border: #1c4f48;
@@ -92,7 +96,7 @@
     --border-strong: #333a45;
     --text: #eef1f6;
     --text-2: #a7b0c0;
-    --text-3: #6b7484;
+    --text-3: #858e9f;
     --text-inv: #0a0c10;
 
     --green: #4ade80;
@@ -664,7 +668,7 @@ table.tbl {
     align-items: center;
     justify-content: center;
     border-radius: var(--r-full);
-    background: var(--accent);
+    background: var(--avatar-bg);
     color: var(--accent-fg);
     font-weight: 650;
     font-size: 13px;
@@ -3456,4 +3460,17 @@ a.tile[aria-disabled='true'] {
     margin-top: 3px;
     white-space: pre-wrap;
     color: var(--text);
+}
+
+/* ---------- Only for screen readers ---------- */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }

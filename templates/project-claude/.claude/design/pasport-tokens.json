@@ -27,15 +27,15 @@
             {
                 "name": "accent",
                 "value": {
-                    "light": "#0d9488",
+                    "light": "#0f766e",
                     "dark": "#2dd4bf"
                 },
-                "usage": "Brand teal: primary buttons, links, active navigation, focus ring. Text on it uses `accent-fg`. As link text on `surface` it is 3.74:1 in light: use it for links set in 14px semibold or larger, `accent-hover` (5.5:1) for smaller ones."
+                "usage": "Brand teal: primary buttons, links, active navigation, focus ring. Text on it uses `accent-fg` (5.5:1 in light); as text on every surface it is at least 4.5:1 in both themes (WCAG 2.2 AA)."
             },
             {
                 "name": "accent-hover",
                 "value": {
-                    "light": "#0f766e",
+                    "light": "#115e59",
                     "dark": "#5eead4"
                 },
                 "usage": "Hover state of `accent` fills; start of the login aside gradient."
@@ -54,7 +54,7 @@
                     "light": "#ffffff",
                     "dark": "#04201d"
                 },
-                "usage": "Text and icons on `accent` fills. Light theme: white on `accent` is 3.74:1, enough only for bold 14px+ button labels (kept as the source has it); dark theme 9.2:1."
+                "usage": "Text and icons on `accent` fills: white in light (5.5:1 on `accent`), near-black in dark (9.2:1)."
             },
             {
                 "name": "accent-tint",
@@ -155,10 +155,10 @@
             {
                 "name": "text-3",
                 "value": {
-                    "light": "#8a93a6",
-                    "dark": "#6b7484"
+                    "light": "#646d80",
+                    "dark": "#858e9f"
                 },
-                "usage": "Captions, placeholders, section labels and icons. Below 4.5:1 on `surface` in both themes: only for 12px+ labels that repeat information, never for the only copy of something."
+                "usage": "Captions, placeholders, section labels and icons. At least 4.5:1 on every surface and background in both themes (WCAG 2.2 AA), so it may carry real copy; still the quietest text."
             },
             {
                 "name": "text-inv",
@@ -166,7 +166,15 @@
                     "light": "#ffffff",
                     "dark": "#0a0c10"
                 },
-                "usage": "Text on the login aside and on dark ink: white in light (5.5:1 on `accent-hover`), near-black in dark (on the light teal gradient)."
+                "usage": "Text on the login aside and on dark ink: white in light (7.6:1 on `accent-hover`), near-black in dark (on the light teal gradient)."
+            },
+            {
+                "name": "avatar-bg",
+                "value": {
+                    "light": "#0f766e",
+                    "dark": "#2dd4bf"
+                },
+                "usage": "The ground of an avatar with initials (`accent-fg` on it): 5.5:1 in light."
             },
             {
                 "name": "overlay",
@@ -227,7 +235,7 @@
             {
                 "name": "red",
                 "value": {
-                    "light": "#dc2626",
+                    "light": "#c81e1e",
                     "dark": "#f87171"
                 },
                 "usage": "Danger: errors, destructive buttons, failed payments."

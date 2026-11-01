@@ -36,8 +36,9 @@ design to follow: use those, and build anything new from those classes and token
 - Status: `green` success, `amber` warning, `red` danger, `blue` info, `violet` new. Each comes with a `-tint` ground
   and a `-border`; always add a word or icon.
 - Charts use `chart-1` to `chart-6` in that order.
-- Text: `text` for headings and body, `text-2` for secondary copy, `text-3` only for 12px+ labels that repeat something
-  visible elsewhere (3.1:1 on `surface` in light).
+- Text: `text` for headings and body, `text-2` for secondary copy, `text-3` for captions, placeholders and labels. Every
+  text is at least 4.5:1 on every surface in both themes (WCAG 2.2 AA), `text-3` too; avatars with initials sit on
+  `avatar-bg`. The browser tests of a project (`frontend/e2e`, axe) check it.
 - Both themes ship. The app sets `data-theme` on `<html>` with `ThemeProvider` (light, dark or the system setting) and
   offers a `ThemeToggle` in the topbar.
 

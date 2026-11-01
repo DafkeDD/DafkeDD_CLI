@@ -295,12 +295,13 @@ export function Shell({
                                         onClick={() => setUserMenu(o => !o)}
                                         aria-expanded={userMenu}
                                         aria-haspopup='menu'
-                                        aria-label={t('userMenu')}
                                     >
+                                        {/* The visible name is part of the name of the button (WCAG 2.5.3 label in name) */}
                                         <div className='tb-user-text'>
                                             <div className='tb-user-name'>{account.name}</div>
                                             <div className='tb-user-sub'>{account.sub}</div>
                                         </div>
+                                        <span className='sr-only'>{t('userMenu')}</span>
                                         <Avatar
                                             name={account.name}
                                             size={36}

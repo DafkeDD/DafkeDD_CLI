@@ -5,6 +5,10 @@ description: How to write the automatic browser tests of this project (Playwrigh
 
 The tests that turn what the qa agent checks by hand into tests that run on every pull request.
 
+A linked app has the suite from the start (`frontend/e2e/`: `session.ts`, `tour.spec.ts`, `pages.spec.ts`; every page of
+`APP_NAV` in four languages, both themes, 390px and axe): add the specs of a change next to them and use
+`e2e/session.ts` to log in.
+
 ## Setup (once, when `frontend/e2e/` does not exist yet)
 
 - In `./frontend`: `npm install --save-dev @playwright/test @axe-core/playwright`, then
