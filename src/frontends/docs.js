@@ -353,6 +353,17 @@ const PORTAL_FILES_TABLE = `| \`src/components/pasport/password-card.tsx\` | \`P
 | \`src/components/pasport/customer/*\`, \`admin/*\`, \`tickets/*\` | The pages of the portal (my apps, dashboard, marketplace, wizard, vault, users, invoices, profile) and of the panel (statistics, tenants, users, catalogue and connection, codes, ratings), and the tickets of both |
 `
 
+/** The browser tests of a linked app (e2e/, playwright.config.ts). */
+const LINKED_BROWSER_TESTS = `
+**Browser tests** (\`npm run test:e2e\`, Playwright, also in the CI): \`playwright.config.ts\` starts the built frontend on
+its own port (3199, \`E2E_PORT\`), without a login server; \`e2e/session.ts\` logs a test in with a session cookie sealed
+with a secret only for the tests (\`USER\`, \`SUPERADMIN\`). \`e2e/tour.spec.ts\` walks the first-login tour (every step,
+remembered, again from the menu, none for a superadmin); \`e2e/pages.spec.ts\` opens every page of \`APP_NAV\` in en, nl,
+fr and de, light and dark, and at 390px, checks it with axe (WCAG 2.2 AA) and that it needs a login. A new page in
+\`APP_NAV\` is tested by itself; tests of what a page does go in a spec of its own (the \`e2e\` skill). Once:
+\`npx playwright install chromium\`. With a built frontend: \`E2E_NO_BUILD=1 npm run test:e2e\`.
+`
+
 /** A page of a linked app: in AppPage, in the sidebar through APP_NAV. */
 function ownPage(name) {
     return `**A page of your own** (in the shell, here "${name}"):
@@ -464,7 +475,7 @@ next to it (\`<file>.dafkedd-new\`).
 ${link ? LINKED_FILES_TABLE : PORTAL_FILES_TABLE}| \`src/lib/brand.ts\` | \`BRAND\` (the platform, \`Pasport\`) and \`APP_NAME\` (${link ? `\`${link.name}\`` : '\`null\` on the login server'}) |
 
 ${link ? ownPage(name) : PORTAL_PAGE}
-
+${link ? LINKED_BROWSER_TESTS : ''}
 The stylesheet of the design is not in a CSS layer, so it wins from Tailwind classes on the same element (\`.input\` is
 always 100% wide). Give such an element another size or look with the important variant (\`w-40!\`), or use the
 constants of \`src/components/account-ui.tsx\` (\`INPUT\`, \`SELECT\`: fields of the design that take a width).

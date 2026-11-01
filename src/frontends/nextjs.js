@@ -69,6 +69,15 @@ export const PRETTIERRC = `{
 
 // The DafkeDD UI files are left alone, otherwise 'dafke-ui update' sees them as "modified".
 // AGENTS.md and next-env.d.ts are rewritten by Next.js itself (also by 'next dev').
+/**
+ * The browser tests of a frontend (frontend/e2e, `npm run test:e2e`, in the CI): Playwright pinned, so the browser of
+ * the CI, of `npm run verify` and of a project match (dependabot keeps it current in a project), and axe.
+ */
+export const PLAYWRIGHT_VERSION = '1.56.0'
+export const E2E_PACKAGES = [`@playwright/test@${PLAYWRIGHT_VERSION}`, '@axe-core/playwright@4.14.0']
+/** What a test run leaves behind: never committed, never formatted. */
+export const E2E_IGNORED = ['playwright-report/', 'test-results/']
+
 export const PRETTIERIGNORE = `node_modules
 .next
 out
@@ -78,6 +87,8 @@ AGENTS.md
 next-env.d.ts
 dafke-ui.lock.json
 src/components/ui
+playwright-report
+test-results
 `
 
 // Every text exists in every language. When you add a language to LOCALES, add its translation here too.
@@ -692,7 +703,7 @@ export function ApiStatus() {
           </li>
         )}
       </ul>
-      {status.state === 'offline' && <p className="text-xs opacity-70">{t('hint')}</p>}
+      {status.state === 'offline' && <p className="text-xs text-[var(--text-3)]">{t('hint')}</p>}
     </section>
   );
 }
@@ -1023,6 +1034,26 @@ export const nextjs = {
                         cwd: root
                     })
             },
+            // The browser tests of a linked app (e2e/, playwright.config.ts): the tour, every page, languages, themes, axe
+            ...(api?.linked
+                ? [
+                      {
+                          title: 'Browsertests installeren (Playwright, axe)',
+                          weight: 2,
+                          run: async () => {
+                              await exec('npm', ['install', '--save-dev', ...E2E_PACKAGES], { cwd: root })
+                              const ignore = path.join(root, '.gitignore')
+                              const text = await fs.readFile(ignore, 'utf8').catch(() => '')
+                              const missing = E2E_IGNORED.filter(line => !text.split('\n').includes(line))
+                              if (missing.length)
+                                  await fs.writeFile(
+                                      ignore,
+                                      text.replace(/\n*$/, '\n') + '\n# Playwright\n' + missing.join('\n') + '\n'
+                                  )
+                          }
+                      }
+                  ]
+                : []),
             {
                 title: 'next-intl configureren',
                 weight: 1,
@@ -1106,6 +1137,8 @@ export const nextjs = {
                     if (api?.oidc && !api.linked) pkg.scripts['eid:mock'] = EID_MOCK_SCRIPT
                     // The Pasport design, checked (also in the CI): scripts/check-design.mjs
                     pkg.scripts['check:design'] = 'node scripts/check-design.mjs'
+                    // The browser tests (e2e/): a linked app has them from the start
+                    if (api?.linked) pkg.scripts['test:e2e'] = 'playwright test'
                     await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
 
                     await exec('npx', ['--no-install', 'prettier', '--write', '.'], { cwd: root })

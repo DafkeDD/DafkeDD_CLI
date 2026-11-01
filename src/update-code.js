@@ -12,7 +12,15 @@ import { buildFiles, PORT, SECURITY_OVERRIDES } from './backends/nestjs.js'
 import * as oidc from './backends/oidc.js'
 import { databases } from './databases/index.js'
 import { EID_MOCK_SCRIPT } from './eid.js'
-import { files as nextFiles, LOCALES, sitePages, uiFiles, withApi } from './frontends/nextjs.js'
+import {
+    E2E_IGNORED,
+    E2E_PACKAGES,
+    files as nextFiles,
+    LOCALES,
+    sitePages,
+    uiFiles,
+    withApi
+} from './frontends/nextjs.js'
 import { frontendReadme } from './frontends/docs.js'
 import { DOCS_DIR, docsFolder, pointer } from './docs.js'
 import { parseEnvFile } from './manifest.js'
@@ -337,15 +345,26 @@ export async function updatePackages({ projectDir, project, exec = run }) {
             {
                 scripts: {
                     'check:design': 'node scripts/check-design.mjs',
-                    ...(answers.api.linked ? {} : { 'eid:mock': EID_MOCK_SCRIPT })
+                    ...(answers.api.linked ? { 'test:e2e': 'playwright test' } : { 'eid:mock': EID_MOCK_SCRIPT })
                 },
                 dependencies: [],
-                devDependencies: []
+                // The browser tests of a linked app (e2e/, playwright.config.ts come with the code)
+                devDependencies: answers.api.linked ? E2E_PACKAGES : []
             }
         ])
     for (const [part, wanted] of parts) {
         const file = path.join(projectDir, part, 'package.json')
         if (!existsSync(file)) continue
+        // What a test run of the browser tests leaves behind is never committed
+        if (wanted.scripts['test:e2e']) {
+            const ignore = path.join(projectDir, part, '.gitignore')
+            const text = existsSync(ignore) ? await fs.readFile(ignore, 'utf8') : ''
+            const missing = E2E_IGNORED.filter(line => !text.split('\n').includes(line))
+            if (missing.length) {
+                await fs.writeFile(ignore, text.replace(/\n*$/, '\n') + '\n# Playwright\n' + missing.join('\n') + '\n')
+                lines.push(`${pc.green('✔')} ${part}/.gitignore: ${missing.join(', ')}`)
+            }
+        }
         const text = await fs.readFile(file, 'utf8')
         const pkg = JSON.parse(text)
         const added = Object.keys(wanted.scripts).filter(name => !(name in (pkg.scripts ?? {})))

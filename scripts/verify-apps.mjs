@@ -388,6 +388,14 @@ for (const name of names) {
         await script(frontend, 'format:check')
         await script(frontend, 'lint')
         await script(frontend, 'check:design')
+        // The browser tests of the project (e2e/), in Chromium, on the frontend built above
+        const pkg = JSON.parse(await fs.readFile(path.join(frontend, 'package.json'), 'utf8'))
+        if (pkg.scripts?.['test:e2e']) {
+            log(`${name}: browser tests (npm run test:e2e, Playwright in Chromium)`)
+            // The Chromium of the pinned Playwright (nothing is downloaded when it is there)
+            await run('npx', ['--no-install', 'playwright', 'install', 'chromium'], { cwd: frontend })
+            await run('npm', ['run', 'test:e2e'], { cwd: frontend, env: { ...process.env, E2E_NO_BUILD: '1' } })
+        }
         log(`${name}: npm audit (high and critical, as in the CI)`)
         for (const dir of [backend, frontend])
             await run('npm', ['audit', '--omit=dev', '--audit-level=high'], { cwd: dir })

@@ -1849,7 +1849,12 @@ export const LINKED_FILES = [
     'src/lib/refresh.ts',
     'src/lib/session.ts',
     'src/proxy.ts',
-    'src/styles/pasport.css'
+    'src/styles/pasport.css',
+    // The browser tests (npm run test:e2e): the tour, every page of APP_NAV, the languages, both themes, the phone, axe
+    'playwright.config.ts',
+    'e2e/session.ts',
+    'e2e/tour.spec.ts',
+    'e2e/pages.spec.ts'
 ]
 
 /**
