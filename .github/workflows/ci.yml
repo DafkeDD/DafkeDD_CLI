@@ -6,6 +6,10 @@ on:
     pull_request:
         branches: [developer, main]
 
+# Only reading: no job pushes, comments or releases
+permissions:
+    contents: read
+
 jobs:
     test:
         name: Tests (Node ${{ matrix.node }}, ${{ matrix.os }})
@@ -38,3 +42,25 @@ jobs:
               run: |
                   node bin/cli.js --help
                   node bin/cli.js --version
+
+    # The engine's own checks of the mods (mods/): claude plugin validate and claude plugin test, on a pinned Claude Code
+    mods:
+        name: Mods (claude plugin validate and test)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v5
+
+            - uses: actions/setup-node@v5
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - run: npm ci
+
+            - name: Claude Code
+              run: npm install --global @anthropic-ai/claude-code@2.1.316
+
+            - name: Validate and test the mods
+              run: node --test test/mods.test.js
+              env:
+                  REQUIRE_CLAUDE: '1'

@@ -1,2 +1,3 @@
 node_modules
 .claude/handoff.md
+mods/*/.claude-plugin/types/

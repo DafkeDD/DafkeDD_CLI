@@ -5,3 +5,6 @@ package-lock.json
 .claude/skills/
 templates/project-claude/.claude/agents/
 templates/project-claude/.claude/skills/
+# A copy of Anthropic's sample, kept exactly as it was published (its NOTICE)
+mods/replay-theater/
+templates/project-claude/mods/replay-theater/

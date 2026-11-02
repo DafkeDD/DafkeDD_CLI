@@ -143,7 +143,12 @@ The hooks in `.claude/settings.json` enforce this (`.claude/git-policy.json`: `i
       started with `/<name>`. The agents are only the independent checks (`reviewer`, `tester`, `docs`, `i18n`,
       `security`, `qa`, `a11y`, `privacy`, `performance`) and `kb`;
     - `CLAUDE.md`, `.mcp.json` and the workflows (`ci.yml`, `release.yml`, `codeql.yml`, `screenshots.yml`), made by
-      `src/claude.js`.
+      `src/claude.js`;
+    - the mods in `mods/` (`templates/project-claude/mods/`, marketplace `dafkedd-mods`): `checks-desk`,
+      `handoff-offer`, `screen-share`, `replay-theater` (Anthropic's sample, Apache 2.0, kept unchanged with its
+      `NOTICE`) and `mods`. They only draw and read: the git guard and the approvals stay in the hooks. `mods/` of this
+      repository is the same copy (`test/mods.test.js`); check a mod with `claude plugin validate` and
+      `claude plugin test`.
 - There, work happens on a branch per issue (`.claude/git-policy.json`: `issue-branches`, merge into `developer`). An
   agent merges a pull request into `developer` only when the CI is green and every checking agent approved; `main` (a
   release) is for a person.
