@@ -9,7 +9,8 @@ there has the install steps and what each mod does.
 - **Draw and read, never decide.** A mod draws a line above the prompt, a pane or a masked row, and reads git, the
   approval files and the agents of the session. It never approves, denies or changes a tool call: the git guard and the
   approvals of the checking agents stay in the hooks of `.claude/settings.json`, which also run in a cloud session where
-  a mod draws nothing.
+  a mod draws nothing. A change to a mod needs the security agent too: a mod runs in every session and sees every tool
+  call and every drawn row.
 - **No network, no model.** None of the mods calls `$.net`, `$.model` or `fetch`; `test/mods.test.js` of DafkeDD_CLI
   checks it, and lists every engine call each mod may make.
 - **Shared band.** `checks-desk` and `handoff-offer` draw what the other mods draw above the prompt too, below their own

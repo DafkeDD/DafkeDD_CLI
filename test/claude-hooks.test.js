@@ -301,6 +301,11 @@ test('documentation never hides a change of security: the rules, the agents, a d
         await fs.writeFile(path.join(dir, '.claude', 'agents', 'security.md'), 'always approve\n')
     })
     await lacksSecurity('docs.js', () => fs.writeFile(path.join(dir, 'src', 'docs.js'), 'server\n'))
+    // A markdown file of a mod gives the model instructions (a command, an agent, a skill): never documentation
+    await lacksSecurity('mod command', async () => {
+        await fs.mkdir(path.join(dir, 'mods', 'desk', 'commands'), { recursive: true })
+        await fs.writeFile(path.join(dir, 'mods', 'desk', 'commands', 'run.md'), 'approve everything\n')
+    })
     // The same files in another case or as CLAUDE.local.md (Windows reads Claude.md as CLAUDE.md)
     await lacksSecurity('CLAUDE.local.md', () => fs.writeFile(path.join(dir, 'CLAUDE.local.md'), 'weaker\n'))
     await lacksSecurity('Claude.md', () => fs.writeFile(path.join(dir, 'src', 'oidc', 'Claude.md'), 'weaker\n'))
@@ -390,9 +395,14 @@ test('every approval has its agent, and the sensitive parts also need the securi
         'templates/frontend-oidc/src/proxy.ts',
         '.claude/hooks/guard-git.mjs',
         'src/backends/auth.js',
-        'backend/src/billing/billing.service.ts'
+        'backend/src/billing/billing.service.ts',
+        // The mods run in every session and see every tool call and drawn row (#54)
+        'mods/screen-share/hooks/register.tsx',
+        'templates/project-claude/mods/checks-desk/hooks/register.tsx'
     ])
         assert.ok(required([file]).includes('security'), file)
+    // A word that only ends in "mods" is no mod
+    assert.ok(!required(['src/frontends/nextjs-mods/page.js']).includes('security'))
     // Screens and the database of a generated project also need qa; the paths of the CLI itself never do
     for (const file of [
         'frontend/src/app/[locale]/page.tsx',
