@@ -352,6 +352,12 @@ export async function updatePackages({ projectDir, project, exec = run }) {
                 devDependencies: answers.api.linked ? E2E_PACKAGES : []
             }
         ])
+    // The browser tests of the simple login (e2e/, playwright.config.ts come with the code)
+    if (project.frontend && answers.api?.auth && !answers.api.oidc)
+        parts.push([
+            'frontend',
+            { scripts: { 'test:e2e': 'playwright test' }, dependencies: [], devDependencies: E2E_PACKAGES }
+        ])
     for (const [part, wanted] of parts) {
         const file = path.join(projectDir, part, 'package.json')
         if (!existsSync(file)) continue

@@ -27,6 +27,8 @@ for (const [key, value] of Object.entries(envLocal())) process.env[key] ??= valu
 // The server below and the sessions of the tests share these (the config is read by every test worker too)
 process.env.AUTH_SECRET = process.env.E2E_AUTH_SECRET ?? createHash('sha256').update('dafkedd-e2e').digest('hex')
 process.env.APP_URL = `http://localhost:${PORT}`
+// The server below is a test server: it may use the public test secret above (src/lib/oidc.ts)
+process.env.E2E_TEST = '1'
 
 export default defineConfig({
     testDir: 'e2e',

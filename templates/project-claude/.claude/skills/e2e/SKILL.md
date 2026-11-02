@@ -7,7 +7,9 @@ The tests that turn what the qa agent checks by hand into tests that run on ever
 
 A linked app has the suite from the start (`frontend/e2e/`: `session.ts`, `tour.spec.ts`, `pages.spec.ts`; every page of
 `APP_NAV` in four languages, both themes, 390px and axe): add the specs of a change next to them and use
-`e2e/session.ts` to log in.
+`e2e/session.ts` to log in. The simple login has one too (`e2e/account.ts`, `login.spec.ts`, `pages.spec.ts`): it
+starts the built API with its database and logs in for real with `logIn()` of `e2e/account.ts`, a test account that
+`e2e/global-teardown.ts` removes after the run.
 
 ## Setup (once, when `frontend/e2e/` does not exist yet)
 

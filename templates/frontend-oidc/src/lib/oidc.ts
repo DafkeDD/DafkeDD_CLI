@@ -141,10 +141,22 @@ export const cookieOptions = (maxAgeSeconds: number, path = '/') => ({
     maxAge: maxAgeSeconds
 })
 
+/**
+ * The secrets of the tests, which anyone can read in the code: the browser tests (sha256 of 'dafkedd-e2e') and the
+ * Lighthouse step of the CI (zeros). A server in production never accepts them, outside those tests (E2E_TEST=1).
+ */
+const TEST_SECRETS = ['853f3ceac193d37c5bbe6aea9868220d9d7b8c9387ca2df20098c85592dc458d', '0'.repeat(64)]
+
 /** The 32-byte key of AUTH_SECRET (.env.local) that encrypts the cookies. */
 function secret(): Buffer {
     const hex = process.env.AUTH_SECRET ?? ''
     if (!/^[0-9a-f]{64}$/i.test(hex)) throw new Error('AUTH_SECRET must be 64 hexadecimal characters (see .env.local)')
+    if (
+        process.env.NODE_ENV === 'production' &&
+        process.env.E2E_TEST !== '1' &&
+        TEST_SECRETS.includes(hex.toLowerCase())
+    )
+        throw new Error('AUTH_SECRET is a public test secret: make a new one (openssl rand -hex 32)')
     return Buffer.from(hex, 'hex')
 }
 
