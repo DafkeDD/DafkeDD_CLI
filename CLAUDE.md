@@ -71,6 +71,7 @@ how the code is made testable.
 | `diagnose`       | An error, a failing build or test, wrong behaviour: reproduce, failing test, cause, fix                       |
 | `handoff`        | A long session or a stop halfway: `.claude/handoff.md` for the next session                                   |
 | `port-from-test` | Davey changed a generated project (`D:\test`, `D:\KidieFile`): bring the generic improvements into the CLI    |
+| `rule-audit`     | `/rule-audit <file>`: sort the rules of a CLAUDE.md, skill or agent and propose them with their reason        |
 | `pasport-design` | Any page, component, form, text on screen or style: the Pasport design, the phone, the first-login tour       |
 | `nestjs`         | Any API endpoint, backend module or server-side behaviour of a generated backend                              |
 | `postgresql`     | Any migration, table, Row-Level Security, query or db test of a generated backend                             |
@@ -138,9 +139,9 @@ The hooks in `.claude/settings.json` enforce this (`.claude/git-policy.json`: `i
 - When the CLI asks "Claude Code toevoegen?" and the answer is yes, a project gets `templates/project-claude/` and more:
     - the skills, agents, hooks, design and issue forms. The main session builds and runs the workflows with the skills:
       the knowledge skills `pasport-design`, `nestjs`, `postgresql`, `translator` and `e2e` load by themselves, and
-      `seed`, `release`, `backup`, `dependencies`, `infra`, `observability`, `support` and `architect` are started with
-      `/<name>`. The agents are only the independent checks (`reviewer`, `tester`, `docs`, `i18n`, `security`, `qa`,
-      `a11y`, `privacy`, `performance`) and `kb`;
+      `seed`, `release`, `backup`, `dependencies`, `infra`, `observability`, `support`, `architect` and `rule-audit` are
+      started with `/<name>`. The agents are only the independent checks (`reviewer`, `tester`, `docs`, `i18n`,
+      `security`, `qa`, `a11y`, `privacy`, `performance`) and `kb`;
     - `CLAUDE.md`, `.mcp.json` and the workflows (`ci.yml`, `release.yml`, `codeql.yml`, `screenshots.yml`), made by
       `src/claude.js`.
 - There, work happens on a branch per issue (`.claude/git-policy.json`: `issue-branches`, merge into `developer`). An

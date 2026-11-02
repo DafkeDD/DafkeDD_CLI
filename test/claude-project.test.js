@@ -24,7 +24,17 @@ const AGENTS = ['reviewer', 'tester', 'docs', 'i18n', 'security', 'qa', 'a11y', 
 /** The building knowledge, loaded by itself when the work is about it. */
 const KNOWLEDGE = ['pasport-design', 'nestjs', 'postgresql', 'translator', 'e2e']
 /** The workflows, started with /<name> (release and backup only by a person). */
-const WORKFLOWS = ['seed', 'release', 'backup', 'dependencies', 'infra', 'observability', 'support', 'architect']
+const WORKFLOWS = [
+    'seed',
+    'release',
+    'backup',
+    'dependencies',
+    'infra',
+    'observability',
+    'support',
+    'architect',
+    'rule-audit'
+]
 /** Every skill of a project. */
 const SKILLS = ['plan', 'implement', 'diagnose', 'handoff', ...KNOWLEDGE, ...WORKFLOWS]
 /** The agents a project had before 0.54.11, now skills (frontend became pasport-design). */
@@ -513,7 +523,7 @@ test('CLAUDE.md of a project lists the skills and the agents apart', () => {
         const flat = section.replace(/\s+/g, ' ')
         assert.match(flat, /Workflow skills: `plan`, `implement`, `diagnose`, `handoff`\./)
         assert.match(flat, /Knowledge skills \(they load by themselves when the work is about them\): `pasport-design`/)
-        for (const name of ['seed', 'support', 'architect', 'dependencies', 'release'])
+        for (const name of ['seed', 'support', 'architect', 'rule-audit', 'dependencies', 'release'])
             assert.match(flat, new RegExp(`Skills to start with \`/<name>\`:.*\`${name}\``), name)
         assert.match(
             flat,
