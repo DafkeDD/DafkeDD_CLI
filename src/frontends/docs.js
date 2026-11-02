@@ -250,7 +250,9 @@ trust a tenant id from the browser.
 
 **Settings** (\`.env.local\`, generated, never committed): \`OIDC_ISSUER\`, \`OIDC_CLIENT_ID\` (\`frontend\`, registered in
 \`backend/config/oidc-clients.json\`), \`APP_URL\` and \`AUTH_SECRET\` (64 hex characters). For production: HTTPS, your
-real \`APP_URL\` (and the matching redirect URI in the backend), a new \`AUTH_SECRET\`.
+real \`APP_URL\` (and the matching redirect URI in the backend), a new \`AUTH_SECRET\` (\`openssl rand -hex 32\`). A server
+in production refuses the public secrets of the tests (that of the browser tests and the zeros of the Lighthouse step
+of the CI); \`E2E_TEST=1\` allows them, only on a test server, never in production.
 
 Texts are in the \`Oidc\` namespace of the message files; the code is in \`src/lib/oidc.ts\` (only \`node:crypto\` and
 \`fetch\`, no OIDC library).
@@ -281,7 +283,7 @@ no login: no page is shown without one. Only \`PUBLIC_PATHS\` (\`/login\`, \`/re
 logged in user on; a new public page goes in that list. A path with a dot is a file, not a page (the proxy does not
 look at it): never give a page a dot in its path. Always protect the data in the API too
 (\`@UseGuards(AuthGuard)\`), not only the page.
-`)
+${api.oidc ? '' : LOGIN_BROWSER_TESTS}`)
         }
     }
 
@@ -362,6 +364,19 @@ remembered, again from the menu, none for a superadmin); \`e2e/pages.spec.ts\` o
 fr and de, light and dark, and at 390px, checks it with axe (WCAG 2.2 AA) and that it needs a login. A new page in
 \`APP_NAV\` is tested by itself; tests of what a page does go in a spec of its own (the \`e2e\` skill). Once:
 \`npx playwright install chromium\`. With a built frontend: \`E2E_NO_BUILD=1 npm run test:e2e\`.
+`
+
+/** The browser tests of the simple login (templates/frontend-login). */
+const LOGIN_BROWSER_TESTS = `
+**Browser tests** (\`npm run test:e2e\`, Playwright, also in the CI): \`playwright.config.ts\` starts the built API
+(\`../backend\`, port 4199, \`E2E_API_PORT\`, with the database of \`backend/.env\`) and the built frontend (port 3199,
+\`E2E_PORT\`), with secrets made for that run only. The tests log in for real: \`e2e/account.ts\` makes a test account
+through \`/api\` (\`e2e-<run>-...@example.com\`), and \`e2e/global-teardown.ts\` removes every account of the run from
+the users table afterwards (the database of \`backend/.env\`: never run them against production).
+\`e2e/login.spec.ts\` registers, logs out and in again (back to the page asked for, never to another site) and checks that every page needs the login; \`e2e/pages.spec.ts\` opens every page of \`APP_NAV\`, the
+profile, the login and the registration in en, nl, fr and de, light and dark, and at 390px, and checks them with axe
+(WCAG 2.2 AA). A new page in \`APP_NAV\` is tested by itself. Once: \`npx playwright install chromium\`. With the API
+and the frontend built: \`E2E_NO_BUILD=1 npm run test:e2e\`.
 `
 
 /** A page of a linked app: in AppPage, in the sidebar through APP_NAV. */
@@ -547,6 +562,7 @@ form of its own: registering always happens on the login server.
 | \`NEXT_PUBLIC_PASPORT_API_URL\` | The API of the login server (\`${link.apiUrl}\`): \`PASPORT_API_URL\` in \`src/lib/pasport.ts\` |
 | \`APP_URL\` | Where this frontend runs (\`http://localhost:${link.port}\`) |
 | \`AUTH_SECRET\` | Encrypts the session cookie (another one in production) |
+| \`E2E_TEST\` | Only for a test server (the browser tests set \`1\`): allows the public test secrets, which production refuses. Never set it in production |
 
 **In production**: add the https addresses of this frontend to the app on \`/admin/catalog\` (tab "Connection") of the login server (or make a new link code and run the
 CLI again), and set \`APP_URL\`. The login server and this frontend must be on the same site (for example

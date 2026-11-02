@@ -733,10 +733,11 @@ Each one gets the build, lint, unit and e2e tests the CLI runs itself, plus Type
 `npm run check:design` of the frontend, `npm audit` (high and critical) and, with a database, `npm run test:db`. It also
 checks the files of Claude Code, the knowledge base and Google Cloud, that `update` changes nothing on a fresh project,
 that `doctor` finds no failure, the browser tests of the frontend where it has them (`npm run test:e2e` in Chromium,
-installed by Playwright when it is missing), and that the built backend answers `/health` on `PORT` 8080 as on Cloud
-Run; for the login server also that the superadmin exists after the first start and that `demo:data` and `demo:clear`
-work. The database comes from `VERIFY_DB_HOST`, `VERIFY_DB_PORT`, `VERIFY_DB_USER` and `VERIFY_DB_PASSWORD` (default
-`localhost:5432`, `postgres`/`postgres`; the user needs `CREATEDB`). Options:
+installed by Playwright when it is missing; those of `plain` after its database tests, against the real API), and that
+the built backend answers `/health` on `PORT` 8080 as on Cloud Run; for the login server also that the superadmin exists
+after the first start and that `demo:data` and `demo:clear` work. The database comes from `VERIFY_DB_HOST`,
+`VERIFY_DB_PORT`, `VERIFY_DB_USER` and `VERIFY_DB_PASSWORD` (default `localhost:5432`, `postgres`/`postgres`; the user
+needs `CREATEDB`). Options:
 
 - `-- --only app-full` runs one variant (or several: `--only app,app-full`);
 - `-- --keep` keeps the projects;
@@ -912,6 +913,22 @@ git switch developer
 
 ## Changelog
 
+- **0.54.21**: browser tests of the simple login (#44, part of #35). Its frontend gets `frontend/e2e/` with Playwright
+  and axe (`npm run test:e2e`, also in the CI): `playwright.config.ts` starts the built API (with its database) and the
+  frontend, with secrets made for the run only; the tests register, log out and in again through the pages (back to the
+  page asked for, never to another site), see a wrong password refused and every page need the login, and open every
+  page of `APP_NAV`, the profile, the login and the registration in en, nl, fr and de, light and dark, at 390px, with
+  axe (WCAG 2.2 AA). Every test account of a run is removed after it (`e2e/global-teardown.ts`). The CI gives the
+  frontend job of the simple login PostgreSQL and the built API, and no frontend is built twice any more
+  (`E2E_NO_BUILD`). `npm run verify` runs the suite of `plain` after its database tests. A server in production refuses
+  the public test secrets (`AUTH_SECRET` of the browser tests and of the Lighthouse step) unless it is a test server
+  (`E2E_TEST`). `update` brings the suite, its packages and `.gitignore` lines to an existing simple login. axe found
+  two more status colours below 4.5:1 in light, now darker in every app: `green` `#15803d` and `amber` `#b45309` (the
+  CLI test of the token contrast now covers every status colour, on the surfaces and on its own tint). The Screenshots
+  workflow of a simple login gets PostgreSQL and the built API too, and it no longer leaves its write token on disk
+  while `npm ci` runs (`persist-credentials: false`; only the commit step gets it). After `update`: a
+  `playwright.config.ts` you changed yourself comes as `.dafkedd-new`; take over the API server of the simple login, or
+  `E2E_TEST=1` of a linked app, from it.
 - **0.54.20**: browser tests (#43, part of #35). A linked app gets `frontend/e2e/` with Playwright and axe
   (`npm run test:e2e`, pinned `@playwright/test@1.56.0`, also in the CI): the first-login tour (every step of `APP_NAV`,
   remembered, from the user menu, none for a superadmin) and every page of `APP_NAV` in en, nl, fr and de, light and

@@ -260,9 +260,9 @@ export function ConnectionPanel({
         <div
             style={{
                 padding: '12px 14px',
-                border: '1px solid var(--amber, #d97706)',
+                border: '1px solid var(--amber, #b45309)',
                 borderRadius: 'var(--r-md)',
-                background: 'color-mix(in srgb, var(--amber, #d97706) 10%, transparent)'
+                background: 'color-mix(in srgb, var(--amber, #b45309) 10%, transparent)'
             }}
         >
             <div style={{ fontWeight: 600, fontSize: 14 }}>{t('connSecretTitle')}</div>

@@ -300,6 +300,12 @@ export const API_MESSAGES = {
 /** The frontend of the simple login reaches its API through /api on its own host (the session cookie is its own). */
 const throughFrontend = api => Boolean(api.auth) && !api.oidc
 
+/**
+ * Does this frontend get the browser tests (e2e/, playwright.config.ts, `npm run test:e2e`) from the start? A linked app
+ * (the tour, every page) and the simple login (register and log in through the real API, every page).
+ */
+export const hasBrowserTests = api => Boolean(api?.linked) || Boolean(api && throughFrontend(api))
+
 /** .env.local of the frontend of the simple login: the API, the secret it shares with it, the proxies in front. */
 export const loginEnvLocal = api =>
     [
@@ -1034,8 +1040,9 @@ export const nextjs = {
                         cwd: root
                     })
             },
-            // The browser tests of a linked app (e2e/, playwright.config.ts): the tour, every page, languages, themes, axe
-            ...(api?.linked
+            // The browser tests (e2e/, playwright.config.ts): every page, languages, themes, axe; the tour of a linked
+            // app, the login of the simple login
+            ...(hasBrowserTests(api)
                 ? [
                       {
                           title: 'Browsertests installeren (Playwright, axe)',
@@ -1137,8 +1144,8 @@ export const nextjs = {
                     if (api?.oidc && !api.linked) pkg.scripts['eid:mock'] = EID_MOCK_SCRIPT
                     // The Pasport design, checked (also in the CI): scripts/check-design.mjs
                     pkg.scripts['check:design'] = 'node scripts/check-design.mjs'
-                    // The browser tests (e2e/): a linked app has them from the start
-                    if (api?.linked) pkg.scripts['test:e2e'] = 'playwright test'
+                    // The browser tests (e2e/): a linked app and the simple login have them from the start
+                    if (hasBrowserTests(api)) pkg.scripts['test:e2e'] = 'playwright test'
                     await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
 
                     await exec('npx', ['--no-install', 'prettier', '--write', '.'], { cwd: root })

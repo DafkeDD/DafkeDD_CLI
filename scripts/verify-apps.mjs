@@ -388,14 +388,17 @@ for (const name of names) {
         await script(frontend, 'format:check')
         await script(frontend, 'lint')
         await script(frontend, 'check:design')
-        // The browser tests of the project (e2e/), in Chromium, on the frontend built above
+        // The browser tests of the project (e2e/), in Chromium, on the frontend (and API) built above
         const pkg = JSON.parse(await fs.readFile(path.join(frontend, 'package.json'), 'utf8'))
-        if (pkg.scripts?.['test:e2e']) {
+        const browserTests = async () => {
             log(`${name}: browser tests (npm run test:e2e, Playwright in Chromium)`)
             // The Chromium of the pinned Playwright (nothing is downloaded when it is there)
             await run('npx', ['--no-install', 'playwright', 'install', 'chromium'], { cwd: frontend })
             await run('npm', ['run', 'test:e2e'], { cwd: frontend, env: { ...process.env, E2E_NO_BUILD: '1' } })
         }
+        // Those of the simple login log in through the real API: they need its database (below)
+        const withApi = Boolean(variant.frontend.api.auth && !variant.frontend.api.oidc)
+        if (pkg.scripts?.['test:e2e'] && !withApi) await browserTests()
         log(`${name}: npm audit (high and critical, as in the CI)`)
         for (const dir of [backend, frontend])
             await run('npm', ['audit', '--omit=dev', '--audit-level=high'], { cwd: dir })
@@ -435,6 +438,7 @@ for (const name of names) {
                 log(`${name}: the login through /api of the frontend (the built API and frontend)`)
                 await variant.flow(projectDir)
             }
+            if (pkg.scripts?.['test:e2e'] && withApi) await browserTests()
             const demo = variant.backend.answers.oidc?.demo
             if (demo) {
                 log(`${name}: demo data (npm run demo:data, again, demo:clear, again)`)

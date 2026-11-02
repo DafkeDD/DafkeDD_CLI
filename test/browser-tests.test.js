@@ -100,7 +100,7 @@ test('the frontend steps of a linked app install Playwright and axe, pinned, and
         assert.ok(ran.includes(`npm install --save-dev ${E2E_PACKAGES.join(' ')}`))
         const ignore = await fs.readFile(path.join(dir, 'frontend', '.gitignore'), 'utf8')
         for (const line of E2E_IGNORED) assert.equal(ignore.split('\n').filter(l => l === line).length, 1, line)
-        // A frontend that is not a linked app has no such step yet
+        // A site (no API) has no browser tests yet
         const other = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-e2e-site-'))
         const site = await nextjs.steps({ projectDir: other, answers: { ui: 'all' }, api: null, exec: async () => {} })
         await fs.rm(other, { recursive: true, force: true })
@@ -111,7 +111,7 @@ test('the frontend steps of a linked app install Playwright and axe, pinned, and
     // npm run test:e2e
     assert.match(
         readFileSync(new URL('../src/frontends/nextjs.js', import.meta.url), 'utf8'),
-        /if \(api\?\.linked\) pkg\.scripts\['test:e2e'\] = 'playwright test'/
+        /if \(hasBrowserTests\(api\)\) pkg\.scripts\['test:e2e'\] = 'playwright test'/
     )
 })
 
@@ -139,7 +139,7 @@ test('update gives an existing linked app the packages, the script and the ignor
 
 test('npm run verify runs the browser tests of every variant that has them, on the built frontend', () => {
     const verify = readFileSync(new URL('../scripts/verify-apps.mjs', import.meta.url), 'utf8')
-    assert.match(verify, /if \(pkg\.scripts\?\.\['test:e2e'\]\) \{/)
+    assert.match(verify, /if \(pkg\.scripts\?\.\['test:e2e'\] && !withApi\) await browserTests\(\)/)
     // The Chromium of the pinned Playwright, installed when it is missing
     assert.match(verify, /run\('npx', \['--no-install', 'playwright', 'install', 'chromium'\], \{ cwd: frontend \}\)/)
     assert.match(
@@ -181,6 +181,13 @@ test('every text colour of the Pasport design is at least 4.5:1 (WCAG 2.2 AA) in
         assert.ok(contrast(t['accent-fg'], t.accent) >= 4.5, `${theme}: a primary button`)
         assert.ok(contrast(t['accent-fg'], t['avatar-bg']) >= 4.5, `${theme}: the initials of an avatar`)
         assert.ok(contrast(t.red, t['red-tint']) >= 4.5, `${theme}: an error message`)
+        // The status colours are text too (a badge on its tint, "Connected" on a card)
+        for (const status of ['green', 'amber', 'red', 'blue', 'violet'])
+            for (const ground of [...grounds, `${status}-tint`])
+                assert.ok(
+                    contrast(t[status], t[ground]) >= 4.5,
+                    `${theme}: ${status} on ${ground} ${contrast(t[status], t[ground])}`
+                )
     }
     // The tokens of the brand book say the same
     const json = JSON.parse(
@@ -188,6 +195,8 @@ test('every text colour of the Pasport design is at least 4.5:1 (WCAG 2.2 AA) in
     )
     const flat = JSON.stringify(json)
     assert.match(flat, /"name":"text-3","value":\{"light":"#646d80","dark":"#858e9f"\}/)
+    assert.match(flat, /"name":"green","value":\{"light":"#15803d","dark":"#4ade80"\}/)
+    assert.match(flat, /"name":"amber","value":\{"light":"#b45309","dark":"#fbbf24"\}/)
     assert.match(flat, /"name":"accent","value":\{"light":"#0f766e"/)
     assert.match(flat, /"name":"avatar-bg"/)
     // The account menu says the visible name of the user too (WCAG 2.5.3 label in name)

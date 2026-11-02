@@ -263,6 +263,26 @@ export function projectClaudeMd(project) {
     return lines.join('\n')
 }
 
+/** A PostgreSQL service for a job of the CI, and the DATABASE_* settings of the API for it. */
+const postgresService = database => [
+    '        services:',
+    '            postgres:',
+    '                image: postgres:17',
+    '                env:',
+    '                    POSTGRES_USER: postgres',
+    '                    POSTGRES_PASSWORD: postgres',
+    '                ports: ["5432:5432"]',
+    '                options: >-',
+    '                    --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s',
+    '                    --health-retries 10',
+    '        env:',
+    '            DATABASE_HOST: localhost',
+    '            DATABASE_PORT: 5432',
+    '            DATABASE_USER: postgres',
+    '            DATABASE_PASSWORD: postgres',
+    `            DATABASE_NAME: ${database}`
+]
+
 /** The CI of the project: the checks of every part, on every push and pull request (also called by the release). */
 export function ciWorkflow(project) {
     const setup = dir => [
@@ -283,26 +303,7 @@ export function ciWorkflow(project) {
             '        defaults:',
             '            run:',
             '                working-directory: backend',
-            ...(project.database
-                ? [
-                      '        services:',
-                      '            postgres:',
-                      '                image: postgres:17',
-                      '                env:',
-                      '                    POSTGRES_USER: postgres',
-                      '                    POSTGRES_PASSWORD: postgres',
-                      '                ports: ["5432:5432"]',
-                      '                options: >-',
-                      '                    --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s',
-                      '                    --health-retries 10',
-                      '        env:',
-                      '            DATABASE_HOST: localhost',
-                      '            DATABASE_PORT: 5432',
-                      '            DATABASE_USER: postgres',
-                      '            DATABASE_PASSWORD: postgres',
-                      `            DATABASE_NAME: ${project.database}`
-                  ]
-                : []),
+            ...(project.database ? postgresService(project.database) : []),
             '        steps:',
             ...setup('backend'),
             '            - run: npm run format:check',
@@ -312,6 +313,8 @@ export function ciWorkflow(project) {
             '            - run: npm run test:e2e',
             ...(project.database ? ['            - run: npm run --if-present test:db'] : [])
         )
+    // The simple login: its browser tests need the API and its database (playwright.config.ts starts the API)
+    const withApiTests = project.kind === 'login' && Boolean(project.database)
     if (project.frontend)
         jobs.push(
             '    frontend:',
@@ -320,6 +323,7 @@ export function ciWorkflow(project) {
             '        defaults:',
             '            run:',
             '                working-directory: frontend',
+            ...(withApiTests ? postgresService(project.database) : []),
             '        steps:',
             ...setup('frontend'),
             '            - run: npm run format:check',
@@ -327,6 +331,17 @@ export function ciWorkflow(project) {
             '            # The Pasport design: the shell on every page, its components, icons and colour tokens only',
             '            - run: npm run check:design',
             '            - run: npm run build',
+            // The browser tests of the simple login log in through the real API, with its database
+            ...(withApiTests
+                ? [
+                      '            - name: The API for the browser tests (built, with its database)',
+                      '              working-directory: backend',
+                      '              run: |',
+                      '                  npm ci',
+                      '                  npm run build',
+                      '                  npm run db:check'
+                  ]
+                : []),
             ...(lighthouseUrls(project).length
                 ? [
                       '            # Lighthouse on the pages without login (frontend/lighthouserc.json): accessibility, best practices, speed',
@@ -336,6 +351,7 @@ export function ciWorkflow(project) {
                       '                  OIDC_CLIENT_ID: frontend',
                       '                  APP_URL: http://localhost:3000',
                       `                  AUTH_SECRET: ${'0'.repeat(64)}`,
+                      "                  E2E_TEST: '1'",
                       `              run: npx --yes @lhci/cli@${LHCI_VERSION} autorun`,
                       '            - uses: actions/upload-artifact@v4',
                       '              if: failure()',
@@ -347,6 +363,8 @@ export function ciWorkflow(project) {
                 : []),
             '            # The browser tests of the e2e skill (frontend/e2e, also the visual tests), once @playwright/test is installed',
             '            - name: Browser tests (Playwright)',
+            '              env:',
+            "                  E2E_NO_BUILD: '1'",
             '              run: |',
             '                  if [ -n "$(npm pkg get devDependencies.@playwright/test | tr -d \'{}\')" ]; then',
             '                    npx playwright install --with-deps chromium',
@@ -490,7 +508,20 @@ jobs:
  * .github/workflows/screenshots.yml: the screenshots of the knowledge base (= the visual tests) made again on Linux,
  * as in the CI, and committed to the issue branch it runs on. Only on an issue branch, never on developer or main.
  */
-export const screenshotsWorkflow = () => `name: Screenshots
+export const screenshotsWorkflow = (project = {}) => {
+    // The simple login: its browser tests start the API with its database (as in the CI)
+    const api = project.kind === 'login' && Boolean(project.database)
+    const service = api ? postgresService(project.database).join('\n') + '\n' : ''
+    const backend = api
+        ? `            - name: The API for the browser tests (built, with its database)
+              working-directory: backend
+              run: |
+                  npm ci
+                  npm run build
+                  npm run db:check
+`
+        : ''
+    return `name: Screenshots
 
 # Actions -> Screenshots -> Run workflow, on an issue branch: frontend/e2e/screens.spec.ts makes every screenshot of
 # docs/kb again (the e2e skill) and they are committed to that branch. The CI compares them on every pull request.
@@ -508,20 +539,25 @@ jobs:
         defaults:
             run:
                 working-directory: frontend
-        steps:
+${service}        steps:
+            # The write token is not left in .git/config while npm ci runs the install scripts of the packages: only
+            # the commit step below gets it
             - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
             - uses: actions/setup-node@v4
               with:
                   node-version: ${CI_NODE}
                   cache: npm
                   cache-dependency-path: frontend/package-lock.json
             - run: npm ci
-            - run: npx playwright install --with-deps chromium
+${backend}            - run: npx playwright install --with-deps chromium
             - run: npx playwright test e2e/screens.spec.ts --update-snapshots
             - name: Commit the screenshots
               run: |
                   git config user.name "github-actions[bot]"
                   git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  gh auth setup-git
                   git add ../docs/kb/screenshots
                   if git diff --cached --quiet; then echo "No screenshot changed"; exit 0; fi
                   git commit -m "Screenshots of the knowledge base (made on Linux)"
@@ -531,6 +567,7 @@ jobs:
               env:
                   GH_TOKEN: \${{ github.token }}
 `
+}
 
 /** The release of the project: when a person merges developer into main, the CI runs again and a release follows. */
 export function releaseWorkflow(project) {
@@ -667,7 +704,7 @@ export function projectClaudeFiles(project) {
         '.github/workflows/ci.yml': ciWorkflow(project),
         '.github/workflows/release.yml': releaseWorkflow(project),
         '.github/workflows/codeql.yml': codeqlWorkflow(),
-        ...(project.frontend ? { '.github/workflows/screenshots.yml': screenshotsWorkflow() } : {}),
+        ...(project.frontend ? { '.github/workflows/screenshots.yml': screenshotsWorkflow(project) } : {}),
         ...(lighthouseUrls(project).length ? { 'frontend/lighthouserc.json': lighthouseRc(project) } : {})
     }
 }

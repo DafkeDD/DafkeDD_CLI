@@ -7,6 +7,24 @@
  * in the shell (AppPage), the account in its topbar (src/components/shell/account.ts).
  */
 
+import { readFileSync } from 'node:fs'
+
+/**
+ * The browser tests of the simple login (templates/frontend-login): `playwright.config.ts` starts the built API and
+ * frontend, the specs register and log in for real (every test account is removed after the run), and open every page
+ * in every language, both themes and at 390px, checked with axe.
+ */
+export const LOGIN_E2E_FILES = [
+    'playwright.config.ts',
+    'e2e/env.ts',
+    'e2e/account.ts',
+    'e2e/global-teardown.ts',
+    'e2e/login.spec.ts',
+    'e2e/pages.spec.ts'
+]
+
+const LOGIN_TEMPLATE_DIR = new URL('../../templates/frontend-login/', import.meta.url)
+
 /** Texts of the login pages. Every language needs the same keys (checked by the tests). */
 export const AUTH_MESSAGES = {
     en: {
@@ -129,6 +147,7 @@ export const AUTH_MESSAGES = {
 
 // The login screens, the profile and the account of the shell, in the Pasport design (src/components/pasport)
 export const authFiles = () => ({
+    ...Object.fromEntries(LOGIN_E2E_FILES.map(rel => [rel, readFileSync(new URL(rel, LOGIN_TEMPLATE_DIR), 'utf8')])),
     'src/app/[locale]/login/page.tsx': `import { setRequestLocale } from 'next-intl/server'
 import { AuthForm } from '@/components/auth-form'
 
