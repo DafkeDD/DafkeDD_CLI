@@ -68,7 +68,7 @@ test('the band is shared: the offer is drawn above what the other mods draw ther
     await ui.unmount()
 })
 
-test('while a survey asks the person something, the offer stays away and only what is beneath is drawn', async ($, on) => {
+test('while a survey asks something, the offer stays away and only what is beneath is drawn', async ($, on) => {
     on('session.measure', (_, e) => ({ changed: e.changed }))
     beneath(on)
     await $.session.measure({ context: context(90), changed: ['context'], rateLimits: [] })

@@ -10,7 +10,10 @@ import type { Check, CheckState, Desk, Task } from '../types'
  * stays the only gate. The band above the prompt is shared: what the other mods draw there stays, below this line.
  */
 
-/** Every check, in the order of the commit hook. The first four are always needed; the others when they ran or approved. */
+/**
+ * Every check, in the order of the commit hook. The first four are always needed; the others when they ran or
+ * approved.
+ */
 export const CHECKS: Check[] = [
     { kind: 'review', agent: 'reviewer' },
     { kind: 'tests', agent: 'tester' },
@@ -24,7 +27,8 @@ export const CHECKS: Check[] = [
 const ALWAYS = new Set(['review', 'tests', 'docs', 'i18n'])
 /**
  * The checks whose approval of an earlier tree the commit hook may still take: OUT_OF_SCOPE of approvals.mjs (when
- * only files outside their scope changed since). The review, the tests, the docs check and qa always need the last tree.
+ * only files outside their scope changed since). The review, the tests, the docs check and qa always need the last
+ * tree.
  */
 export const EARLIER_COUNTS = new Set(['i18n', 'security', 'a11y', 'privacy'])
 /** The name of a tree (SHA-1 or SHA-256), as approvals.mjs compares them. */

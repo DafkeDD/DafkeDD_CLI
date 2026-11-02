@@ -82,7 +82,7 @@ test('without a staged tree (no git) the bar stays away', async ($, on) => {
     await ui.unmount()
 })
 
-test('an approval for an earlier tree shows as such: the commit hook decides whether it still counts', async ($, on) => {
+test('an approval for an earlier tree shows as such: the commit hook decides if it still counts', async ($, on) => {
     engine(on, [], true, ['review', 'i18n'])
     await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
     const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
@@ -97,7 +97,7 @@ test('an approval for an earlier tree shows as such: the commit hook decides whe
     await pane.unmount()
 })
 
-test('the to-do list of the session: created and updated tasks, how many are done and what is done now', async ($, on) => {
+test('the to-do list of the session: created and updated tasks, how many are done and in progress', async ($, on) => {
     engine(on, ['review'])
     on('tool.call', (_: unknown, e: any) =>
         e.tool === 'TaskCreate'
@@ -118,7 +118,7 @@ test('the to-do list of the session: created and updated tasks, how many are don
     await ui.unmount()
 })
 
-test('while a survey asks the person something, the checks stay away and only what is beneath is drawn', async ($, on) => {
+test('while a survey asks something, the checks stay away and only what is beneath is drawn', async ($, on) => {
     engine(on, ['review', 'tests'])
     await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
     const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true }, surface: 'desktop' })
