@@ -4,8 +4,9 @@ description: How to build and change the NestJS API in ./backend - controllers, 
 ---
 
 The API of this project (`./backend`, NestJS). Read `CLAUDE.md` first, then the module next to the one you change (in a
-linked app for example `backend/src/notes`) and follow its structure exactly. Some rules below only apply to the parts
-this project has (the login server, a linked app, a database): skip what does not exist.
+linked app for example `backend/src/notes`) and follow its structure; when it breaks a rule below, follow the rule and
+name the old module as Advisory. Some rules below only apply to the parts this project has (the login server, a linked
+app, a database): skip what does not exist.
 
 ## The rules
 

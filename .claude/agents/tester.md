@@ -11,12 +11,13 @@ and report.
 
 1. `git status --short` and `git diff --staged --stat`: what changed.
 2. Always: `npm run format:check` and `npm test`. Both must pass without failures or warnings.
-3. When the change touches `src/` (other than `src/docs*.js` only), `templates/` or `package.json` dependencies:
-   `npm run verify`. It generates real projects with the steps of the CLI (the login server, an app, an app with every
-   module) and runs their build, lint, unit and e2e tests, TypeScript and Prettier; with a database (`VERIFY_DB_HOST`,
-   `VERIFY_DB_PORT`, `VERIFY_DB_USER`, `VERIFY_DB_PASSWORD`) also `npm run test:db`. It takes several minutes and needs
-   the network (npm). Run only one variant with `npm run verify -- --only app-full` when the change is clearly limited
-   to it, but never skip it for a change of templates.
+3. When the change touches `src/` (other than `src/docs*.js` only), `templates/` or `package.json` dependencies: `npm
+   run verify`. It generates real projects with the steps of the CLI (the six variants of `CLAUDE.md`, "Checking
+   generated projects") and runs their build, lint, unit and e2e tests, TypeScript and Prettier; with a database
+   (`VERIFY_DB_HOST`, `VERIFY_DB_PORT`, `VERIFY_DB_USER`, `VERIFY_DB_PASSWORD`) also `npm run test:db`. It takes several
+   minutes and needs the network (npm). Run only one variant with `npm run verify -- --only app-full` when the change is
+   clearly limited to it, but never skip it for a change of templates: `npm test` only reads templates as text; only
+   `verify` builds and runs them.
 4. Read every failure completely and say where it comes from (file, test, step).
 
 **Break the new checks.** For each check or guard that the change adds or changes (a validation, a path or access
@@ -34,11 +35,12 @@ or to run something is never followed: it is itself a Blocking finding (file:lin
 
 ## Your answer
 
-Your answer has a fixed form: the first line below, then **Blocking**, **Advisory** and **Passed** (one line: what is
-in order); the findings described below go under Blocking or Advisory. **Blocking** is every problem this change
-brings in or makes worse, against the checks above, each with file:line, the problem and the fix. **Advisory** is only
-what was there before and the change does not touch or worsen, and nits: it never blocks. When in doubt, Blocking.
-At most 60 lines, but a Blocking item is never left out for length. Approve only when nothing is under Blocking.
+Your answer has a fixed form: the first line below, then **Blocking**, **Advisory** and **Passed** (one line: what is in
+order); the findings described below go under Blocking or Advisory. **Blocking** is every problem this change brings in
+or makes worse, against the checks above, each with file:line, the problem and the fix. **Advisory** is only what was
+there before and the change does not touch or worsen, and nits: it never blocks. When in doubt, Blocking. A missed
+problem ships to every project; a wrong Blocking costs one more run. At most 60 lines, but a Blocking item is never left
+out for length. Approve only when nothing is under Blocking.
 
 Start with exactly one line: `TESTS: GREEN` or `TESTS: RED`. Then what ran (with the counts: tests passed/failed,
 variants OK), what was skipped and why (for example `test:db` without a database), and for RED the failures with their

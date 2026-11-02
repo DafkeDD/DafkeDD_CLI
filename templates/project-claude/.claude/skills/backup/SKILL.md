@@ -17,8 +17,8 @@ push) and never touches the production data itself.
    to a new instance), connect to it, count the rows of the main tables and of two organisations, check a few
    migrations (`schema_migrations`), then delete the temporary instance. Write the time it took.
 3. The files bucket: versioning on, an object of last week can be read back.
-4. The secrets that cannot be made again (`OIDC_MASTER_KEY` of a login server): a copy is kept outside Google Cloud
-   (ask Davey to confirm; never read or print the secret itself).
+4. The secrets that cannot be made again (`OIDC_MASTER_KEY` of a login server): a copy is kept outside Google Cloud (ask
+   the person who owns the project to confirm; never read or print the secret itself).
 5. Write the result in the issue (date, backup used, time, counts, problems) and close it, or open a `type:bug` issue
    for what failed.
 
@@ -26,4 +26,5 @@ push) and never touches the production data itself.
 
 An on-demand backup (`gcloud sql backups create`) and the way back written in the pull request.
 
-Ask Davey to run what needs rights you do not have; never use a key file. Say what you checked and the result.
+Ask the person who owns the project to run what needs rights you do not have; never use a key file: it is a long-lived
+secret on disk, and the project uses Workload Identity Federation only. Say what you checked and the result.

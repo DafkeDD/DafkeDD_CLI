@@ -38,8 +38,8 @@ the app.
 
 1. Read `docs/kb/pages.json`, the pages that changed (`git diff`, or the whole app the first time) and their texts in
    `frontend/messages/<lang>.json`: the names you write are exactly the names on screen.
-2. Start the backend and the frontend (`npm run start:dev`, `npm run dev`) and log in with the test account Davey gave
-   you (ask for one when you have none; never create accounts on a login server of others).
+2. Start the backend and the frontend (`npm run start:dev`, `npm run dev`) and log in with the test account the person
+   who owns the project gave you (ask for one when you have none; never create accounts on a login server of others).
 3. With the Playwright MCP, go through the page in every language and theme to see every control and state. The
    screenshots themselves are made by `frontend/e2e/screens.spec.ts` (the e2e skill; also the visual tests of the
    CI): add every state you document there (`<id>-<state>`), then ask for **Actions → Screenshots → Run workflow** on

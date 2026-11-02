@@ -27,5 +27,6 @@ and health endpoints of the code).
 With `gcloud logging read` and `gcloud error-reporting` (when you have access): what happened, since when, for whom,
 the first error; then a `type:bug` issue with the evidence (without personal data) for the diagnose skill.
 
-You never run the Cloud workflow yourself. When it is built: stage it and start the checking agents (the `implement`
-skill); say what you changed and what an alert will now catch.
+You never run the Cloud workflow yourself: it changes production and its costs, so a person presses the button. When it
+is built: stage it and start the checking agents (the `implement` skill); say what you changed and what an alert will
+now catch.

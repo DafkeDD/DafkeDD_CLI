@@ -5,7 +5,8 @@ description: Find and fix a bug of this project - reproduce it, write the failin
 
 # Diagnose: from a symptom to a tested fix
 
-Read `CLAUDE.md` first. Never guess a fix before the cause is shown.
+Read `CLAUDE.md` first. Show the cause before you fix it: a guessed fix can hide the bug, and its regression test then
+proves nothing.
 
 1. **Collect the facts**: the exact error, the command or the page, what the user did, the platform. A failing CI run:
    `gh run view <id> --log-failed`.

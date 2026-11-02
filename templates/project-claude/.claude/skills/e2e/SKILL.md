@@ -34,7 +34,8 @@ run.
 - Each page in the four languages and both themes (a loop over the cookies of next-intl and the theme), and at phone
   width.
 - `@axe-core/playwright` on every page: no WCAG 2.2 AA violation.
-- Stable selectors: roles and labels (`getByRole`, `getByLabel`), never CSS classes.
+- Stable selectors: roles and labels (`getByRole`, `getByLabel`), never CSS classes: classes change with the design,
+  roles and labels are what the user and a screen reader see.
 - They must pass locally (`npm run test:e2e`) and be fast: no fixed waits (`waitForTimeout`), only waiting for what the
   user sees.
 

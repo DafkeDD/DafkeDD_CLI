@@ -20,4 +20,5 @@ Read `CLAUDE.md` first. The project is Davey's; only generic improvements go int
 4. **Report** the generic list to Davey, by priority (bugs first), each with what it fixes and where it would go.
    Nothing app-specific in the list. Ask which ones to take (AskUserQuestion, several at once).
 5. **Plan and build** the chosen ones: small ones as one ticket each, a bigger one with `plan`; then `implement`. Keep
-   the code Davey's own: never copy proprietary code (Corilus) that may have ended up in a project.
+   the code Davey's own: never copy proprietary code (Corilus) that may have ended up in a project: it would ship in
+   every project under someone else's licence. Leave it out and tell Davey where it is.

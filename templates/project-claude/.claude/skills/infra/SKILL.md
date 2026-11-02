@@ -10,9 +10,10 @@ How this project runs on Google Cloud (when `infra/` exists; otherwise say that 
 
 ## The rules
 
-- **Everything in Terraform**: no resource made by hand in the console (except what `infra/bootstrap.sh` makes once).
-  Every change goes through a pull request; run `terraform fmt` and `terraform validate`, and `terraform plan` when you
-  have access (`infra/terraform/terraform.tfvars`, never committed).
+- **Everything in Terraform**: no resource made by hand in the console (except what `infra/bootstrap.sh` makes once):
+  Terraform does not know it, so `plan`, `down`, the previews and the costs miss it. Every change goes through a pull
+  request; run `terraform fmt` and `terraform validate`, and `terraform plan` when you have access
+  (`infra/terraform/terraform.tfvars`, never committed).
 - **Costs**: Cloud Run scales to zero (`min_instance_count = 0`, `cpu_idle = true`); `enabled = false` (the action
   **down**) removes the services and stops Cloud SQL, and keeps the data, images and secrets. A new resource must follow
   the same switch, or say why it cannot and what it costs per month.
@@ -34,5 +35,6 @@ How this project runs on Google Cloud (when `infra/` exists; otherwise say that 
 - **Docker**: small images (`npm ci`, build, `npm prune --omit=dev`), `USER node`, port from `PORT` (8080), nothing
   from `.env` in the image (`.dockerignore`).
 
-You never run `deploy`, `up` or `down` yourself: that is the button of a person on GitHub. When it is built: stage it
-and start the checking agents (the `implement` skill); say what you changed, what `plan` shows, and what it costs.
+You never run `deploy`, `up` or `down` yourself: they change production and its costs, so a person presses the button on
+GitHub. When it is built: stage it and start the checking agents (the `implement` skill); say what you changed, what
+`plan` shows, and what it costs.

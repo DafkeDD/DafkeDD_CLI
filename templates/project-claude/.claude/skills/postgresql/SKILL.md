@@ -9,7 +9,7 @@ The database of this project: plain SQL through `pg`, no ORM, migrations in `bac
 ## The rules
 
 - **Migrations** run in order at start-up, each in its own transaction, under an advisory lock, with a checksum. A
-  migration that ran somewhere is **never** changed: add one with the next id.
+  migration that ran somewhere is never changed: its checksum no longer matches where it ran. Add one with the next id.
 - **Multi-tenant**: every table with data of an organisation has `tenant_id uuid NOT NULL`, an index starting with
   `tenant_id`, Row-Level Security through `isolate('<table>')` (in an app; it is exported from `migrations.ts`, the
   column defaults to `tenant_id`; on the login server it is local to `migrations.ts` and takes two arguments,

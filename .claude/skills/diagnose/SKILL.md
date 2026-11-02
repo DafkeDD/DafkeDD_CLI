@@ -5,7 +5,8 @@ description: Find and fix a bug of DafkeDD_CLI or of a project it generated - re
 
 # Diagnose: from a symptom to a tested fix
 
-Read `CLAUDE.md` first. Never guess a fix before the cause is shown.
+Read `CLAUDE.md` first. Show the cause before you fix it: a guessed fix can hide the bug, and its regression test then
+proves nothing.
 
 1. **Collect the facts.** The exact error, the command, the CLI version (`package.json`), the answers given to the
    CLI, the platform (Windows, npm version). Ask Davey for what is missing; a screenshot or the output of the failing

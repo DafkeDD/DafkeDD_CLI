@@ -66,15 +66,15 @@ const KIND_TEXT = {
 }
 
 /**
- * The rule of the first-login tour (an absolute MUST of every app with the Pasport design). The portal of the login
+ * The rule of the first-login tour (a hard rule of every app with the Pasport design). The portal of the login
  * server (Tour) and a linked app (AppTour) have the tour; a site, an API frontend and the simple login say they do not.
  */
 function firstLoginTour(project) {
     return [
-        '- **First-login tour (an absolute MUST)**: the first time a user logs in, the app shows a guided tour of **all** its',
-        '  pages (every item of the rail and the main parts of each page), and again from the user menu (not for',
-        '  superadmins). A new page or tab always gets its step in the tour, with its texts in en, nl, fr and de: a change',
-        '  without its tour step is not done.',
+        '- **First-login tour (hard rule)**: so a new user meets every page once, the first time a user logs in the app',
+        '  shows a guided tour of **all** its pages (every item of the rail and the main parts of each page), and again from',
+        '  the user menu (not for superadmins). A new page or tab always gets its step in the tour, with its texts in en, nl,',
+        '  fr and de: a change without its tour step is not done.',
         ...(project.kind === 'pasport'
             ? ['  The tour is `Tour` in `frontend/src/components/pasport/tour.tsx`.']
             : project.kind === 'app'
@@ -117,7 +117,8 @@ export function projectClaudeMd(project) {
             '',
             '- Terraform in `infra/terraform`: Cloud Run (frontend, backend; scales to zero), Cloud SQL, Secret Manager,',
             '  Artifact Registry. A person starts and stops it on GitHub: Actions → Cloud → `plan`, `deploy`, `up`, `down`',
-            '  (`down` removes Cloud Run and stops the database; the data stays). Never run them yourself.',
+            '  (`down` removes Cloud Run and stops the database; the data stays). Never run them yourself: they change what runs',
+            '  in production and what it costs, so a person presses them; you prepare the change and say what `plan` shows.',
             '- Set up once: `bash infra/bootstrap.sh <project-id> <owner/repository>` (see `infra/README.md`).',
             '- Every night it goes `down` by itself (unless the variable `AUTO_DOWN` is `off`). The label `preview` on a pull',
             '  request starts a copy of the app of that branch (`.github/workflows/preview.yml`), removed with the pull request.',
@@ -193,12 +194,18 @@ export function projectClaudeMd(project) {
         ...(project.kind === 'pasport' || project.kind === 'app'
             ? [
                   '- **Multi-tenant**: data of an organisation only through `withTenant()`; every tenant table has a `tenant_id`,',
-                  '  Row-Level Security and is in `TENANT_TABLES`. A migration that ran is never changed.'
+                  "  Row-Level Security and is in `TENANT_TABLES`: organisations never see each other's data, and RLS catches a",
+                  '  query that forgets its `WHERE`. A migration that ran is never changed: its checksum fails where it already',
+                  '  ran; add a new one.'
               ]
             : project.database
-              ? ['- **Migrations**: a migration that ran is never changed; a change is a new migration.']
+              ? [
+                    '- **Migrations**: a migration that ran is never changed (its checksum fails where it already ran); a change',
+                    '  is a new migration.'
+                ]
               : []),
-        '- **Prettier** (4 spaces, no semicolons, single quotes, width 120) and no warnings in build, lint or tests.',
+        '- **Prettier** (`.prettierrc` of each part; the hook formats every edited file) and no warnings in build, lint or',
+        '  tests.',
         '',
         '## How work is done',
         '',
