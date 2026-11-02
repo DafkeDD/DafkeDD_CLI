@@ -913,6 +913,15 @@ git switch developer
 
 ## Changelog
 
+- **0.54.22**: browser tests of the login server (#45, part of #35). Its frontend gets `frontend/e2e/` with Playwright
+  and axe (`npm run test:e2e`, also in the CI), without the API: a test logs in with a session cookie sealed with a
+  secret only for the tests (`e2e/session.ts`: an admin, a member, a superadmin). `e2e/tour.spec.ts` walks every step of
+  the first-login tour of an admin and of a member (remembered, again from the user menu, none for a superadmin);
+  `e2e/pages.spec.ts` opens every page of the rail and the user menu of the customer portal and of the superadmin panel
+  in en, nl, fr and de, light and dark, at 390px, with axe (WCAG 2.2 AA) and the login it needs; `e2e/login.spec.ts`
+  shows the login screen with the answers of the API given by the test. The steps of the tour moved to
+  `src/components/pasport/tour-steps.ts` (a design file), so the tests walk the same ones. `npm run verify` runs the
+  suite of `pasport`; `update` brings it, its packages and `.gitignore` lines to an existing login server.
 - **0.54.21**: browser tests of the simple login (#44, part of #35). Its frontend gets `frontend/e2e/` with Playwright
   and axe (`npm run test:e2e`, also in the CI): `playwright.config.ts` starts the built API (with its database) and the
   frontend, with secrets made for the run only; the tests register, log out and in again through the pages (back to the

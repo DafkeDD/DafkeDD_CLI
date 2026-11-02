@@ -301,10 +301,11 @@ export const API_MESSAGES = {
 const throughFrontend = api => Boolean(api.auth) && !api.oidc
 
 /**
- * Does this frontend get the browser tests (e2e/, playwright.config.ts, `npm run test:e2e`) from the start? A linked app
- * (the tour, every page) and the simple login (register and log in through the real API, every page).
+ * Does this frontend get the browser tests (e2e/, playwright.config.ts, `npm run test:e2e`) from the start? The login
+ * server and a linked app (the tour, every page) and the simple login (register and log in through the real API, every
+ * page). A site and an API without a login not yet.
  */
-export const hasBrowserTests = api => Boolean(api?.linked) || Boolean(api && throughFrontend(api))
+export const hasBrowserTests = api => Boolean(api?.oidc) || Boolean(api && throughFrontend(api))
 
 /** .env.local of the frontend of the simple login: the API, the secret it shares with it, the proxies in front. */
 export const loginEnvLocal = api =>
@@ -1040,8 +1041,8 @@ export const nextjs = {
                         cwd: root
                     })
             },
-            // The browser tests (e2e/, playwright.config.ts): every page, languages, themes, axe; the tour of a linked
-            // app, the login of the simple login
+            // The browser tests (e2e/, playwright.config.ts): every page, languages, themes, axe; the tour of the login
+            // server and of a linked app, the login screen of the login server, the login of the simple login
             ...(hasBrowserTests(api)
                 ? [
                       {
@@ -1144,7 +1145,8 @@ export const nextjs = {
                     if (api?.oidc && !api.linked) pkg.scripts['eid:mock'] = EID_MOCK_SCRIPT
                     // The Pasport design, checked (also in the CI): scripts/check-design.mjs
                     pkg.scripts['check:design'] = 'node scripts/check-design.mjs'
-                    // The browser tests (e2e/): a linked app and the simple login have them from the start
+                    // The browser tests (e2e/): the login server, a linked app and the simple login have them
+                    // from the start
                     if (hasBrowserTests(api)) pkg.scripts['test:e2e'] = 'playwright test'
                     await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
 

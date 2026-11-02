@@ -28,8 +28,8 @@ test('a linked app gets its browser tests: the tour, every page of APP_NAV, lang
         assert.ok(LINKED_FILES.includes(rel), rel)
         assert.ok(linked[rel], rel)
     }
-    // The login server does not get the tests of a linked app
-    assert.equal(oidcFrontendFiles()['e2e/tour.spec.ts'], undefined)
+    // The login server has a suite of its own (test/login-server-browser-tests.test.js), not that of a linked app
+    assert.notEqual(oidcFrontendFiles()['e2e/tour.spec.ts'], linked['e2e/tour.spec.ts'])
     const config = linked['playwright.config.ts']
     // Its own server on its own port, without a login server, with a secret only for the tests
     assert.match(config, /createHash\('sha256'\)\.update\('dafkedd-e2e'\)\.digest\('hex'\)/)
@@ -213,12 +213,19 @@ test('the browser tests never end up in an image', () => {
         assert.match(DOCKERIGNORE, new RegExp(`^${line.replace('.', '\\.')}$`, 'm'), line)
 })
 
-test('the frontend docs of a linked app describe its browser tests; the login server has none', () => {
+test('the frontend docs of a linked app describe its browser tests; the login server its own', () => {
     const flat = text => text.replace(/\s+/g, ' ')
     const app = flat(frontendReadme({ api: { port: 4001, oidc: true, linked: { name: 'Planner', port: 3001 } } }))
     assert.match(app, /\*\*Browser tests\*\* \(`npm run test:e2e`, Playwright, also in the CI\)/)
     assert.match(app, /`E2E_NO_BUILD=1 npm run test:e2e`/)
-    assert.ok(!flat(frontendReadme({ api: { port: 4000, oidc: true } })).includes('**Browser tests**'))
+    assert.ok(
+        app.includes(
+            '`e2e/session.ts` logs a test in with a session cookie sealed with a secret only for the tests (`USER`'
+        )
+    )
+    const server = flat(frontendReadme({ api: { port: 4000, oidc: true } }))
+    assert.ok(server.includes('(`ADMIN`, `MEMBER`, `SUPERADMIN`)'))
+    assert.ok(!server.includes('(`USER`, `SUPERADMIN`)'))
 })
 
 test('what axe found stays fixed: the API hint is not faded, the screen reader text is hidden', () => {

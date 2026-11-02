@@ -25,7 +25,7 @@ const read = rel => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8')
 const site = () => sitePages({ ...nextFiles, ...uiFiles })
 const login = withApi(site(), { port: 4000, auth: true }, { ui: true })
 
-test('the simple login gets its browser tests; a site, an API, the login server and a linked app not these', () => {
+test('the simple login gets its browser tests; a site and an API none, the login server and a linked app their own', () => {
     assert.deepEqual(LOGIN_E2E_FILES, [
         'playwright.config.ts',
         'e2e/env.ts',
@@ -39,12 +39,13 @@ test('the simple login gets its browser tests; a site, an API, the login server 
         assert.equal(login[rel], read(`templates/frontend-login/${rel}`), rel)
     }
     assert.equal(withApi(site(), { port: 4000 }, { ui: true })['e2e/login.spec.ts'], undefined)
-    assert.equal(oidcFrontendFiles()['e2e/login.spec.ts'], undefined)
+    // The login server has a login spec of its own (its login screen, without the API)
+    assert.notEqual(oidcFrontendFiles()['e2e/login.spec.ts'], login['e2e/login.spec.ts'])
     assert.equal(oidcFrontendFiles({ linked: true, appName: 'Planner' })['e2e/login.spec.ts'], undefined)
     assert.equal(hasBrowserTests(null), false)
     assert.equal(hasBrowserTests({ port: 4000 }), false)
     assert.equal(hasBrowserTests({ port: 4000, auth: true }), true)
-    assert.equal(hasBrowserTests({ port: 4000, oidc: true }), false)
+    assert.equal(hasBrowserTests({ port: 4000, oidc: true }), true)
     assert.equal(hasBrowserTests({ port: 4000, oidc: true, linked: { name: 'Planner' } }), true)
 })
 

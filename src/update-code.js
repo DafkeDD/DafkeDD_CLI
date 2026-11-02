@@ -345,11 +345,12 @@ export async function updatePackages({ projectDir, project, exec = run }) {
             {
                 scripts: {
                     'check:design': 'node scripts/check-design.mjs',
-                    ...(answers.api.linked ? { 'test:e2e': 'playwright test' } : { 'eid:mock': EID_MOCK_SCRIPT })
+                    // The browser tests (e2e/, playwright.config.ts come with the code)
+                    'test:e2e': 'playwright test',
+                    ...(answers.api.linked ? {} : { 'eid:mock': EID_MOCK_SCRIPT })
                 },
                 dependencies: [],
-                // The browser tests of a linked app (e2e/, playwright.config.ts come with the code)
-                devDependencies: answers.api.linked ? E2E_PACKAGES : []
+                devDependencies: E2E_PACKAGES
             }
         ])
     // The browser tests of the simple login (e2e/, playwright.config.ts come with the code)

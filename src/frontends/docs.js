@@ -366,6 +366,20 @@ fr and de, light and dark, and at 390px, checks it with axe (WCAG 2.2 AA) and th
 \`npx playwright install chromium\`. With a built frontend: \`E2E_NO_BUILD=1 npm run test:e2e\`.
 `
 
+/** The browser tests of the login server's frontend (templates/frontend-oidc/e2e). */
+const PORTAL_BROWSER_TESTS = `
+**Browser tests** (\`npm run test:e2e\`, Playwright, also in the CI): \`playwright.config.ts\` starts the built frontend on
+its own port (3199, \`E2E_PORT\`), without the API; \`e2e/session.ts\` logs a test in with a session cookie sealed with a
+secret only for the tests (\`ADMIN\`, \`MEMBER\`, \`SUPERADMIN\`), so the pages show what they show when the API cannot be
+reached. \`e2e/tour.spec.ts\` walks the first-login tour of an admin and of a member (the steps of
+\`src/components/pasport/tour-steps.ts\`), remembered, again from the user menu, none for a superadmin;
+\`e2e/pages.spec.ts\` opens every page of the rail and the user menu of the customer portal and of the superadmin panel
+in en, nl, fr and de, light and dark, and at 390px, checks it with axe (WCAG 2.2 AA) and that it needs a login;
+\`e2e/login.spec.ts\` shows the login screen with the answers of the API given by the test. A new page goes in the lists
+of \`e2e/pages.spec.ts\`; a new step of the tour in \`tour-steps.ts\`. Once: \`npx playwright install chromium\`. With a
+built frontend: \`E2E_NO_BUILD=1 npm run test:e2e\`.
+`
+
 /** The browser tests of the simple login (templates/frontend-login). */
 const LOGIN_BROWSER_TESTS = `
 **Browser tests** (\`npm run test:e2e\`, Playwright, also in the CI): \`playwright.config.ts\` starts the built API
@@ -490,7 +504,7 @@ next to it (\`<file>.dafkedd-new\`).
 ${link ? LINKED_FILES_TABLE : PORTAL_FILES_TABLE}| \`src/lib/brand.ts\` | \`BRAND\` (the platform, \`Pasport\`) and \`APP_NAME\` (${link ? `\`${link.name}\`` : '\`null\` on the login server'}) |
 
 ${link ? ownPage(name) : PORTAL_PAGE}
-${link ? LINKED_BROWSER_TESTS : ''}
+${link ? LINKED_BROWSER_TESTS : PORTAL_BROWSER_TESTS}
 The stylesheet of the design is not in a CSS layer, so it wins from Tailwind classes on the same element (\`.input\` is
 always 100% wide). Give such an element another size or look with the important variant (\`w-40!\`), or use the
 constants of \`src/components/account-ui.tsx\` (\`INPUT\`, \`SELECT\`: fields of the design that take a width).

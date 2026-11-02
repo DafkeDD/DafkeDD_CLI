@@ -1830,6 +1830,7 @@ export const LINKED_FILES = [
     'src/components/pasport/shell.tsx',
     'src/components/pasport/toast.tsx',
     'src/components/pasport/tour.tsx',
+    'src/components/pasport/tour-steps.ts',
     'src/components/pasport/app-tour.tsx',
     'src/components/pasport/ui.tsx',
     'src/components/pasport/widgets.tsx',

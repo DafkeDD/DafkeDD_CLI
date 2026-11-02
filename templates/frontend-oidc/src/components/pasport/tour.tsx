@@ -4,7 +4,10 @@ import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties }
 import { createPortal } from 'react-dom'
 import { usePathname, useRouter } from '@/i18n/navigation'
 import { useT } from './i18n'
+import { TOUR_STEPS, type TourStep } from './tour-steps'
 import { Btn, Icon } from './ui'
+
+export type { TourStep } from './tour-steps'
 
 /*
  * The first-login tour: it walks through the pages itself and puts a spotlight on what each step is about, with the
@@ -38,40 +41,8 @@ function isDone(storageKey: string) {
     }
 }
 
-export type TourStep = {
-    id: string
-    /** The page of the step: the tour goes there first. */
-    href: string
-    /** What it points at: the first selector that is on the page (none: a card in the middle). */
-    targets?: string[]
-}
-
 /** A step with its texts, as GuidedTour shows it. */
 export type GuidedStep = TourStep & { title: string; text: string }
-
-const ADMIN: TourStep[] = [
-    { id: 'welcome', href: '/dashboard' },
-    { id: 'apps', href: '/dashboard', targets: ['.tile-grid'] },
-    { id: 'bell', href: '/dashboard', targets: ['.notif-wrap'] },
-    { id: 'marketplace', href: '/marketplace', targets: ['.market-grid > .market-card', '.market-grid'] },
-    { id: 'demo', href: '/marketplace', targets: ['.market-grid > .market-card .market-foot', '.market-grid'] },
-    { id: 'invite', href: '/users', targets: ['.page-actions', '.page-head'] },
-    { id: 'seats', href: '/users', targets: ['.table-wrap', '.page-head'] },
-    { id: 'invoices', href: '/invoices', targets: ['[data-tour="subscriptions"]', '.table-wrap', '.page-head'] },
-    { id: 'support', href: '/support', targets: ['.page-actions', '.page-head'] },
-    { id: 'account', href: '/support', targets: ['.tb-user-wrap'] },
-    { id: 'done', href: '/dashboard' }
-]
-const MEMBER: TourStep[] = [
-    { id: 'welcome', href: '/dashboard' },
-    { id: 'apps', href: '/dashboard', targets: ['.tile-grid'] },
-    { id: 'bell', href: '/dashboard', targets: ['.notif-wrap'] },
-    { id: 'marketplace', href: '/marketplace', targets: ['.market-grid > .market-card', '.market-grid'] },
-    { id: 'demoMember', href: '/marketplace', targets: ['.market-grid > .market-card .market-foot', '.market-grid'] },
-    { id: 'support', href: '/support', targets: ['.page-actions', '.page-head'] },
-    { id: 'account', href: '/support', targets: ['.tb-user-wrap'] },
-    { id: 'done', href: '/dashboard' }
-]
 
 /** Room around the spotlight, and the width of the explanation. */
 const PAD = 8
@@ -106,7 +77,7 @@ function subscribePlace(listener: () => void) {
 export function Tour({ email, name, admin }: { email: string; name: string; admin: boolean }) {
     const t = useT('Tour')
     const first = name.split(' ')[0]
-    const steps = (admin ? ADMIN : MEMBER).map(step => ({
+    const steps = (admin ? TOUR_STEPS.admin : TOUR_STEPS.member).map(step => ({
         ...step,
         title: t(`${step.id}Title`, { name: first }),
         text: t(`${step.id}Text`)
