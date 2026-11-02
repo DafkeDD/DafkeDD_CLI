@@ -62,6 +62,8 @@ The icons of the design: \`<Icon name='globe' />\` from \`@/components/pasport/u
 icon set: \`npm run check:design\` fails on react-icons, lucide-react and the like.
 `)
     if (!api?.oidc) parts.push(siteDesign())
+    // A site and an API frontend without a login: their browser tests (the simple login describes its own below)
+    if (!api?.oidc && !api?.auth) parts.push(PUBLIC_BROWSER_TESTS)
 
     if (api) {
         parts.push(`
@@ -364,6 +366,16 @@ remembered, again from the menu, none for a superadmin); \`e2e/pages.spec.ts\` o
 fr and de, light and dark, and at 390px, checks it with axe (WCAG 2.2 AA) and that it needs a login. A new page in
 \`APP_NAV\` is tested by itself; tests of what a page does go in a spec of its own (the \`e2e\` skill). Once:
 \`npx playwright install chromium\`. With a built frontend: \`E2E_NO_BUILD=1 npm run test:e2e\`.
+`
+
+/** The browser tests of a site and of an API frontend without a login (templates/frontend-public). */
+const PUBLIC_BROWSER_TESTS = `
+**Browser tests** (\`npm run test:e2e\`, Playwright, also in the CI): \`playwright.config.ts\` starts the built frontend on
+its own port (3199, \`E2E_PORT\`); \`e2e/pages.spec.ts\` opens every page of \`APP_NAV\` in en, nl, fr and de, light and
+dark, and at 390px, checks it with axe (WCAG 2.2 AA) and that it opens without a login. A page that calls the API shows
+what it shows when the API is not there. A new page in \`APP_NAV\` is tested by itself; tests of what a page does go in
+a spec of its own (the \`e2e\` skill). Once: \`npx playwright install chromium\`. With a built frontend:
+\`E2E_NO_BUILD=1 npm run test:e2e\`.
 `
 
 /** The browser tests of the login server's frontend (templates/frontend-oidc/e2e). */

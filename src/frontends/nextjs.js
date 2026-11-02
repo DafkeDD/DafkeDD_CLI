@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { allowEidDownload, EID_MOCK_SCRIPT, EID_PACKAGE } from '../eid.js'
@@ -299,13 +300,6 @@ export const API_MESSAGES = {
 
 /** The frontend of the simple login reaches its API through /api on its own host (the session cookie is its own). */
 const throughFrontend = api => Boolean(api.auth) && !api.oidc
-
-/**
- * Does this frontend get the browser tests (e2e/, playwright.config.ts, `npm run test:e2e`) from the start? The login
- * server and a linked app (the tour, every page) and the simple login (register and log in through the real API, every
- * page). A site and an API without a login not yet.
- */
-export const hasBrowserTests = api => Boolean(api?.oidc) || Boolean(api && throughFrontend(api))
 
 /** .env.local of the frontend of the simple login: the API, the secret it shares with it, the proxies in front. */
 export const loginEnvLocal = api =>
@@ -722,6 +716,15 @@ const replaceOnce = (text, from, to) => {
     return text.replace(from, () => to)
 }
 
+/**
+ * The browser tests of a site and of an API frontend without a login (templates/frontend-public): every page of
+ * APP_NAV in every language, both themes and at 390px, checked with axe, and open without a login.
+ */
+export const PUBLIC_E2E_FILES = ['playwright.config.ts', 'e2e/pages.spec.ts']
+const PUBLIC_TEMPLATE_DIR = new URL('../../templates/frontend-public/', import.meta.url)
+const publicE2eFiles = () =>
+    Object.fromEntries(PUBLIC_E2E_FILES.map(rel => [rel, readFileSync(new URL(rel, PUBLIC_TEMPLATE_DIR), 'utf8')]))
+
 /** The texts of the Pasport design in a project without the OpenID Connect login: the shell, the login screen, Nav. */
 export const siteMessages = locale => ({
     Nav: NAV_MESSAGES[locale],
@@ -739,6 +742,8 @@ export function sitePages(fileMap, { api = null, appName = null } = {}) {
     const result = { ...fileMap }
     if (api?.oidc) return result
     Object.assign(result, siteFrontendFiles({ appName }))
+    // The browser tests of a frontend without a login (the simple login brings its own, see authFiles)
+    if (!api?.auth) Object.assign(result, publicE2eFiles())
     for (const locale of LOCALES)
         result[`messages/${locale}.json`] =
             JSON.stringify({ ...MESSAGES[locale], ...siteMessages(locale) }, null, 2) + '\n'
@@ -1041,27 +1046,24 @@ export const nextjs = {
                         cwd: root
                     })
             },
-            // The browser tests (e2e/, playwright.config.ts): every page, languages, themes, axe; the tour of the login
-            // server and of a linked app, the login screen of the login server, the login of the simple login
-            ...(hasBrowserTests(api)
-                ? [
-                      {
-                          title: 'Browsertests installeren (Playwright, axe)',
-                          weight: 2,
-                          run: async () => {
-                              await exec('npm', ['install', '--save-dev', ...E2E_PACKAGES], { cwd: root })
-                              const ignore = path.join(root, '.gitignore')
-                              const text = await fs.readFile(ignore, 'utf8').catch(() => '')
-                              const missing = E2E_IGNORED.filter(line => !text.split('\n').includes(line))
-                              if (missing.length)
-                                  await fs.writeFile(
-                                      ignore,
-                                      text.replace(/\n*$/, '\n') + '\n# Playwright\n' + missing.join('\n') + '\n'
-                                  )
-                          }
-                      }
-                  ]
-                : []),
+            // The browser tests of every frontend (e2e/, playwright.config.ts): every page, languages, themes, axe; the
+            // tour of the login server and of a linked app, the login screen of the login server, the login of the
+            // simple login
+            {
+                title: 'Browsertests installeren (Playwright, axe)',
+                weight: 2,
+                run: async () => {
+                    await exec('npm', ['install', '--save-dev', ...E2E_PACKAGES], { cwd: root })
+                    const ignore = path.join(root, '.gitignore')
+                    const text = await fs.readFile(ignore, 'utf8').catch(() => '')
+                    const missing = E2E_IGNORED.filter(line => !text.split('\n').includes(line))
+                    if (missing.length)
+                        await fs.writeFile(
+                            ignore,
+                            text.replace(/\n*$/, '\n') + '\n# Playwright\n' + missing.join('\n') + '\n'
+                        )
+                }
+            },
             {
                 title: 'next-intl configureren',
                 weight: 1,
@@ -1145,9 +1147,8 @@ export const nextjs = {
                     if (api?.oidc && !api.linked) pkg.scripts['eid:mock'] = EID_MOCK_SCRIPT
                     // The Pasport design, checked (also in the CI): scripts/check-design.mjs
                     pkg.scripts['check:design'] = 'node scripts/check-design.mjs'
-                    // The browser tests (e2e/): the login server, a linked app and the simple login have them
-                    // from the start
-                    if (hasBrowserTests(api)) pkg.scripts['test:e2e'] = 'playwright test'
+                    // The browser tests (e2e/): every frontend has them from the start
+                    pkg.scripts['test:e2e'] = 'playwright test'
                     await fs.writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
 
                     await exec('npx', ['--no-install', 'prettier', '--write', '.'], { cwd: root })

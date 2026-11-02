@@ -4,7 +4,7 @@
 // PostgreSQL. Used by the tester agent (.claude/agents/tester.md) before a commit that touches what the CLI generates.
 //
 //   npm run verify                         every variant
-//   npm run verify -- --only app-full      one variant (pasport, plain, app, app-full)
+//   npm run verify -- --only app-full      one variant (pasport, plain, app, app-full, api, site)
 //   npm run verify -- --keep               keep the projects (the folder is printed)
 //   npm run verify -- --require-db         fail when the database cannot be reached (instead of skipping test:db)
 //   npm run verify -- --lighthouse         also Lighthouse as in the CI (needs Chrome; CHROME_PATH for another one)
@@ -102,6 +102,16 @@ const VARIANTS = {
             flow: loginThroughFrontend
         }
     },
+    // An API without a login: Next.js + NestJS + PostgreSQL, the frontend shows the status card of the API
+    api: async () => {
+        const answers = { database: db('api'), auth: false, oidc: null }
+        return {
+            frontend: { answers: { ui: 'all' }, api: { ...nestjs.api, auth: false, oidc: false } },
+            backend: { part: nestjs, answers }
+        }
+    },
+    // A site: only the frontend, no backend (and so no login)
+    site: async () => ({ frontend: { answers: { ui: 'all' }, api: null }, backend: null }),
     // An app for an existing login server, without modules (one database, Row-Level Security)
     app: async () => {
         const answers = {
@@ -194,8 +204,8 @@ async function checkExtras(projectDir, project) {
     // doctor finds nothing that does not work (warnings, such as gh or Chrome, are fine here)
     const failed = (await checks({ projectDir, version: 'verify' })).filter(entry => entry.status === FAIL)
     if (failed.length) throw new Error(`doctor: ${failed.map(entry => entry.text).join(', ')}`)
-    // The backend starts as on Cloud Run: the built API on PORT 8080 answers /health
-    await startsOnPort(path.join(projectDir, 'backend'))
+    // The backend starts as on Cloud Run: the built API on PORT 8080 answers /health (a site has none)
+    if (project.backend) await startsOnPort(path.join(projectDir, 'backend'))
 }
 
 /** Starts `node dist/main` with PORT=8080 and waits for an answer of /health (any status: the database may be off). */
@@ -346,26 +356,28 @@ for (const name of names) {
         const project = describeProject({
             name,
             frontend: nextjs,
-            backend: variant.backend.part,
-            answers: variant.backend.answers
+            backend: variant.backend?.part ?? null,
+            answers: variant.backend?.answers ?? {}
         })
         project.cloud = true
         project.claude = true
         const steps = [
             ...(await nextjs.steps({ projectDir, answers: variant.frontend.answers, api: variant.frontend.api })),
-            ...(await variant.backend.part.steps({
-                projectDir,
-                answers: variant.backend.answers,
-                secrets: variant.backend.secrets
-            })),
+            ...(variant.backend
+                ? await variant.backend.part.steps({
+                      projectDir,
+                      answers: variant.backend.answers,
+                      secrets: variant.backend.secrets
+                  })
+                : []),
             docsStep({
                 projectDir,
                 parts: [
                     { dir: 'frontend', file: 'frontend.md', title: 'Next.js' },
-                    { dir: 'backend', file: 'api.md', title: 'NestJS' }
+                    ...(variant.backend ? [{ dir: 'backend', file: 'api.md', title: 'NestJS' }] : [])
                 ],
                 // Like the CLI: the Swagger of the API (the API of a linked app on its own port)
-                swagger: `http://localhost:${variant.frontend.api?.linked ? 4001 : 4000}/docs`,
+                swagger: variant.backend ? `http://localhost:${variant.frontend.api?.linked ? 4001 : 4000}/docs` : null,
                 kb: true
             }),
             ...kbSteps({ projectDir, project }),
@@ -382,9 +394,10 @@ for (const name of names) {
         const frontend = path.join(projectDir, 'frontend')
         const backend = path.join(projectDir, 'backend')
         log(`${name}: extra checks (Prettier, TypeScript, lint and the Pasport design of the frontend)`)
-        await run('npx', ['--no-install', 'tsc', '--noEmit', '-p', 'tsconfig.json'], { cwd: backend })
+        if (variant.backend)
+            await run('npx', ['--no-install', 'tsc', '--noEmit', '-p', 'tsconfig.json'], { cwd: backend })
         await run('npx', ['--no-install', 'tsc', '--noEmit'], { cwd: frontend })
-        await script(backend, 'format:check')
+        if (variant.backend) await script(backend, 'format:check')
         await script(frontend, 'format:check')
         await script(frontend, 'lint')
         await script(frontend, 'check:design')
@@ -397,10 +410,10 @@ for (const name of names) {
             await run('npm', ['run', 'test:e2e'], { cwd: frontend, env: { ...process.env, E2E_NO_BUILD: '1' } })
         }
         // Those of the simple login log in through the real API: they need its database (below)
-        const withApi = Boolean(variant.frontend.api.auth && !variant.frontend.api.oidc)
+        const withApi = Boolean(variant.frontend.api?.auth && !variant.frontend.api?.oidc)
         if (pkg.scripts?.['test:e2e'] && !withApi) await browserTests()
         log(`${name}: npm audit (high and critical, as in the CI)`)
-        for (const dir of [backend, frontend])
+        for (const dir of variant.backend ? [backend, frontend] : [frontend])
             await run('npm', ['audit', '--omit=dev', '--audit-level=high'], { cwd: dir })
         if (process.env.VERIFY_GITLEAKS) {
             log(`${name}: gitleaks (as in the CI)`)
@@ -425,7 +438,9 @@ for (const name of names) {
             const root = process.getuid?.() === 0 ? ['--collect.settings.chromeFlags=--no-sandbox'] : []
             await run('npx', ['--yes', `@lhci/cli@${LHCI_VERSION}`, 'autorun', ...root], { cwd: frontend })
         }
-        if (variant.backend.answers.database.connection === 'ok') {
+        if (!variant.backend) {
+            // A site: no API and no database
+        } else if (variant.backend.answers.database.connection === 'ok') {
             const oidc = variant.backend.answers.oidc
             if (oidc?.adminEmail) {
                 // The superadmin of the CLI exists after the first start, also when the demo data came before it
@@ -455,7 +470,7 @@ for (const name of names) {
         log(`${name}: FAILED`)
     } finally {
         // The database of the variant (the tests remove their own), with the pg of the generated backend
-        const database = variant.backend.answers.database
+        const database = variant.backend?.answers.database
         try {
             const pg = createRequire(path.join(projectDir, 'backend', 'package.json'))('pg')
             const client = new pg.Client({ ...connectionOf(database), database: 'postgres' })

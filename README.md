@@ -721,23 +721,25 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how the tests are written.
 
 ### Checking generated projects (`npm run verify`)
 
-`npm test` checks the generated files; `npm run verify` checks that they really work. It generates four projects with
-the real steps of the CLI (no questions) in a temporary folder:
+`npm test` checks the generated files; `npm run verify` checks that they really work. It generates six projects with the
+real steps of the CLI (no questions) in a temporary folder:
 
 - `pasport`: the login server, with the demo data;
 - `plain`: an API with the simple login and PostgreSQL;
 - `app`: an app without modules (one database with Row-Level Security);
-- `app-full`: an app with mail, files and a database per organisation.
+- `app-full`: an app with mail, files and a database per organisation;
+- `api`: an API without a login, with PostgreSQL;
+- `site`: only a frontend, no backend.
 
 Each one gets the build, lint, unit and e2e tests the CLI runs itself, plus TypeScript, Prettier, the lint and
 `npm run check:design` of the frontend, `npm audit` (high and critical) and, with a database, `npm run test:db`. It also
 checks the files of Claude Code, the knowledge base and Google Cloud, that `update` changes nothing on a fresh project,
-that `doctor` finds no failure, the browser tests of the frontend where it has them (`npm run test:e2e` in Chromium,
-installed by Playwright when it is missing; those of `plain` after its database tests, against the real API), and that
-the built backend answers `/health` on `PORT` 8080 as on Cloud Run; for the login server also that the superadmin exists
-after the first start and that `demo:data` and `demo:clear` work. The database comes from `VERIFY_DB_HOST`,
-`VERIFY_DB_PORT`, `VERIFY_DB_USER` and `VERIFY_DB_PASSWORD` (default `localhost:5432`, `postgres`/`postgres`; the user
-needs `CREATEDB`). Options:
+that `doctor` finds no failure, the browser tests of the frontend (`npm run test:e2e` in Chromium, installed by
+Playwright when it is missing; those of `plain` after its database tests, against the real API), and that the built
+backend answers `/health` on `PORT` 8080 as on Cloud Run (`site` has no backend, so no API, database or `/health`); for
+the login server also that the superadmin exists after the first start and that `demo:data` and `demo:clear` work. The
+database comes from `VERIFY_DB_HOST`, `VERIFY_DB_PORT`, `VERIFY_DB_USER` and `VERIFY_DB_PASSWORD` (default
+`localhost:5432`, `postgres`/`postgres`; the user needs `CREATEDB`). Options:
 
 - `-- --only app-full` runs one variant (or several: `--only app,app-full`);
 - `-- --keep` keeps the projects;
@@ -913,6 +915,13 @@ git switch developer
 
 ## Changelog
 
+- **0.54.23**: browser tests of a site and of an API frontend (#46, closes spec #35). Every frontend the CLI makes now
+  has a Playwright suite from the start: a site and an API frontend without a login get `frontend/e2e/pages.spec.ts`
+  (every page of `APP_NAV` in en, nl, fr and de, light and dark, at 390px, with axe, open without a login;
+  `templates/frontend-public`). `npm run verify` has two more variants, `api` (an API without a login) and `site` (only
+  a frontend), and runs their suites; `update` brings the suite, its packages and `.gitignore` lines to an existing site
+  or API frontend. After `update` the CI of such a project runs the suite too: a home page without its page head, or
+  with an accessibility violation, then fails it.
 - **0.54.22**: browser tests of the login server (#45, part of #35). Its frontend gets `frontend/e2e/` with Playwright
   and axe (`npm run test:e2e`, also in the CI), without the API: a test logs in with a session cookie sealed with a
   secret only for the tests (`e2e/session.ts`: an admin, a member, a superadmin). `e2e/tour.spec.ts` walks every step of

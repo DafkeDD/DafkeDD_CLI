@@ -353,8 +353,9 @@ export async function updatePackages({ projectDir, project, exec = run }) {
                 devDependencies: E2E_PACKAGES
             }
         ])
-    // The browser tests of the simple login (e2e/, playwright.config.ts come with the code)
-    if (project.frontend && answers.api?.auth && !answers.api.oidc)
+    // The browser tests of every other frontend: the simple login, an API frontend and a site (e2e/ and
+    // playwright.config.ts come with the code)
+    if (project.frontend && !answers.api?.oidc)
         parts.push([
             'frontend',
             { scripts: { 'test:e2e': 'playwright test' }, dependencies: [], devDependencies: E2E_PACKAGES }

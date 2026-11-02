@@ -4,7 +4,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { readFileSync } from 'node:fs'
-import { E2E_IGNORED, E2E_PACKAGES, hasBrowserTests, nextjs } from '../src/frontends/nextjs.js'
+import { E2E_IGNORED, E2E_PACKAGES, nextjs } from '../src/frontends/nextjs.js'
 import { DESIGN_FILES, LINKED_FILES, oidcFrontendFiles } from '../src/frontends/oidc.js'
 import { updatePackages } from '../src/update-code.js'
 import { frontendReadme } from '../src/frontends/docs.js'
@@ -15,7 +15,6 @@ const E2E = ['playwright.config.ts', 'e2e/session.ts', 'e2e/tour.spec.ts', 'e2e/
 
 test('the login server gets its browser tests, and the steps of its tour in a file of their own', () => {
     for (const rel of E2E) assert.equal(server[rel], read(`templates/frontend-oidc/${rel}`), rel)
-    assert.equal(hasBrowserTests({ port: 4000, oidc: true }), true)
     // The steps of the tour without React: tour.tsx and the browser tests read the same ones
     const steps = server['src/components/pasport/tour-steps.ts']
     assert.match(steps, /export const TOUR_STEPS = \{ admin: ADMIN, member: MEMBER \}/)

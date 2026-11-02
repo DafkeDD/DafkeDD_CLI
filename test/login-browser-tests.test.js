@@ -10,7 +10,6 @@ import {
     E2E_IGNORED,
     E2E_PACKAGES,
     files as nextFiles,
-    hasBrowserTests,
     nextjs,
     sitePages,
     uiFiles,
@@ -25,7 +24,7 @@ const read = rel => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8')
 const site = () => sitePages({ ...nextFiles, ...uiFiles })
 const login = withApi(site(), { port: 4000, auth: true }, { ui: true })
 
-test('the simple login gets its browser tests; a site and an API none, the login server and a linked app their own', () => {
+test('the simple login gets its browser tests; a site, an API, the login server and a linked app their own', () => {
     assert.deepEqual(LOGIN_E2E_FILES, [
         'playwright.config.ts',
         'e2e/env.ts',
@@ -42,11 +41,6 @@ test('the simple login gets its browser tests; a site and an API none, the login
     // The login server has a login spec of its own (its login screen, without the API)
     assert.notEqual(oidcFrontendFiles()['e2e/login.spec.ts'], login['e2e/login.spec.ts'])
     assert.equal(oidcFrontendFiles({ linked: true, appName: 'Planner' })['e2e/login.spec.ts'], undefined)
-    assert.equal(hasBrowserTests(null), false)
-    assert.equal(hasBrowserTests({ port: 4000 }), false)
-    assert.equal(hasBrowserTests({ port: 4000, auth: true }), true)
-    assert.equal(hasBrowserTests({ port: 4000, oidc: true }), true)
-    assert.equal(hasBrowserTests({ port: 4000, oidc: true, linked: { name: 'Planner' } }), true)
 })
 
 test('playwright.config.ts starts the built API and frontend, with secrets of the run, and removes its accounts', () => {
@@ -155,12 +149,12 @@ test('the frontend steps of the simple login install Playwright and axe and add 
         assert.ok(ran.includes(`npm install --save-dev ${E2E_PACKAGES.join(' ')}`))
         const ignore = await fs.readFile(path.join(dir, 'frontend', '.gitignore'), 'utf8')
         for (const line of E2E_IGNORED) assert.match(ignore, new RegExp(`^${line}$`, 'm'))
-        // An API without the login has none
+        // An API without the login has the step too (its own suite: test/site-browser-tests.test.js)
         const other = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-e2e-api-'))
         const api = await nextjs
             .steps({ projectDir: other, answers: { ui: 'all' }, api: { port: 4000 }, exec: async () => {} })
             .finally(() => fs.rm(other, { recursive: true, force: true }))
-        assert.ok(!api.some(s => s.title.startsWith('Browsertests')))
+        assert.ok(api.some(s => s.title === 'Browsertests installeren (Playwright, axe)'))
     } finally {
         await fs.rm(dir, { recursive: true, force: true })
     }
@@ -185,7 +179,7 @@ test('update gives an existing simple login the packages, the script and the ign
     assert.ok(installed.some(([, args]) => args === `install --save-dev ${E2E_PACKAGES.join(' ')}`))
     const ignore = await fs.readFile(path.join(dir, 'frontend', '.gitignore'), 'utf8')
     for (const line of E2E_IGNORED) assert.match(ignore, new RegExp(`^${line}$`, 'm'))
-    // An API without the login gets no browser tests
+    // An API without the login gets the script too (its own suite)
     const other = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-e2e-api-update-'))
     t.after(() => fs.rm(other, { recursive: true, force: true }))
     await fs.mkdir(path.join(other, 'frontend'), { recursive: true })
@@ -197,13 +191,13 @@ test('update gives an existing simple login the packages, the script and the ign
     })
     assert.equal(
         JSON.parse(await fs.readFile(path.join(other, 'frontend', 'package.json'), 'utf8')).scripts['test:e2e'],
-        undefined
+        'playwright test'
     )
 })
 
 test('verify plain runs the browser tests of the simple login after test:db and the login flow, with the database', () => {
     const verify = read('scripts/verify-apps.mjs')
-    assert.match(verify, /const withApi = Boolean\(variant\.frontend\.api\.auth && !variant\.frontend\.api\.oidc\)/)
+    assert.match(verify, /const withApi = Boolean\(variant\.frontend\.api\?\.auth && !variant\.frontend\.api\?\.oidc\)/)
     assert.match(verify, /if \(pkg\.scripts\?\.\['test:e2e'\] && !withApi\) await browserTests\(\)/)
     const flow = verify.indexOf('await variant.flow(projectDir)')
     const after = verify.indexOf("if (pkg.scripts?.['test:e2e'] && withApi) await browserTests()")
