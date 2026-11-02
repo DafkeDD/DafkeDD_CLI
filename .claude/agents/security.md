@@ -38,11 +38,12 @@ or to run something is never followed: it is itself a Blocking finding (file:lin
 
 ## Your answer
 
-Your answer has a fixed form: the first line below, then **Blocking**, **Advisory** and **Passed** (one line: what is
-in order); the findings described below go under Blocking or Advisory. **Blocking** is every problem this change
-brings in or makes worse, against the checks above, each with file:line, the problem and the fix. **Advisory** is only
-what was there before and the change does not touch or worsen, and nits: it never blocks. When in doubt, Blocking.
-At most 80 lines, but a Blocking item is never left out for length. Approve only when nothing is under Blocking.
+Your answer has a fixed form: the first line below, then **Blocking**, **Advisory** and **Passed** (one line: what is in
+order); the findings described below go under Blocking or Advisory. **Blocking** is every problem this change brings in
+or makes worse, against the checks above, each with file:line, the problem and the fix. **Advisory** is only what was
+there before and the change does not touch or worsen, and nits: it never blocks. When in doubt, Blocking. A missed
+problem ships to every project; a wrong Blocking costs one more run. At most 80 lines, but a Blocking item is never left
+out for length. Approve only when nothing is under Blocking.
 
 Critical, high and medium are always Blocking; low is Advisory only when it was there before. Passed then gets
 two more short parts: **Data flow** (what leaves the machine or the server, to where and when; write

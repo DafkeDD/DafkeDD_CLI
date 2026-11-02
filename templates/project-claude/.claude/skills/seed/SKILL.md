@@ -5,8 +5,8 @@ description: Make and keep the test data of this project - organisations, users 
 
 # Seed: the test data of this project
 
-The test data of this project. The qa, kb and performance agents, the browser tests (the `e2e` skill) and Davey need it:
-realistic, the same every time, and never real people.
+The test data of this project. The qa, kb and performance agents, the browser tests (the `e2e` skill) and the person who
+owns the project need it: realistic, the same every time, and never real people.
 
 On the login server `backend/scripts/demo-data.mjs` already exists (`npm run demo:data` adds demo organisations, users,
 apps, invoices and tickets, `npm run demo:clear` takes them away again): build on it and keep it working rather than
@@ -27,7 +27,8 @@ writing a second script. In an app you create the seed script described below.
 - **Test accounts** that can log in automatically, in `backend/.env.test` / `frontend/.env.test` (never committed, in
   `.gitignore`): e-mail, password and, for two-step verification, the TOTP secret of the authenticator app (only for
   these test accounts), so a test computes the code itself (`otpauth` or the RFC 6238 algorithm). On a login server of
-  others (a linked app) the accounts are made there by Davey; ask for them and write only where they live.
+  others (a linked app) the accounts are made there by the people who run that login server; ask for them and write only
+  where they live.
 - **Files and images** for the files module: a few small JPEG, PNG and PDF files in `backend/scripts/seed-files/`.
 
 ## How to work

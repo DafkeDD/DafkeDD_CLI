@@ -22,6 +22,7 @@ For each update:
    asks for. Then the pull request is merged into `developer` when the CI is green
    (`gh pr merge <n> --squash --delete-branch`; the hook allows it for Dependabot branches too).
 
-Never an update to a version that was published less than two weeks ago unless it fixes a security advisory; never
-`npm audit fix --force`. Group the updates of one family (all `@nestjs/*`) in one pull request. Report what was
-updated, what changed for the project and what was left and why.
+Never an update to a version that was published less than two weeks ago unless it fixes a security advisory (a fresh
+release can still be pulled or compromised); never `npm audit fix --force`: it jumps majors without their migration
+notes. Group the updates of one family (all `@nestjs/*`) in one pull request. Report what was updated, what changed for
+the project and what was left and why.

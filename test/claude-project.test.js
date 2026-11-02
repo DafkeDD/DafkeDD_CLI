@@ -131,9 +131,12 @@ test('CLAUDE.md of a project: its parts, the rules, the branch per issue, the me
         projectClaudeMd(pasport),
         /`npm run demo:data` and `npm run demo:clear` in `\.\/backend` already exist/
     )
-    // The tour of the first login is an absolute MUST of every app with the Pasport design
+    // The tour of the first login is a hard rule of every app with the Pasport design
     for (const md of [projectClaudeMd(pasport), text, projectClaudeMd(frontendOnly)])
-        assert.match(md, /\*\*First-login tour \(an absolute MUST\)\*\*: the first time a user logs in/)
+        assert.match(
+            md,
+            /\*\*First-login tour \(hard rule\)\*\*: so a new user meets every page once, the first time a user logs in/
+        )
     assert.match(projectClaudeMd(pasport), /`Tour` in `frontend\/src\/components\/pasport\/tour\.tsx`/)
     // A linked app has its tour (AppTour); a site has none, by choice, and says so (no "yet", no issue to wait for)
     assert.match(
@@ -496,7 +499,7 @@ test('the pasport-design skill of a project keeps the first-login tour, its supe
     const flat = text.replace(/\s+/g, ' ')
     assert.match(
         flat,
-        /\*\*The first-login tour is a MUST\*\*: the first time a user logs in, the app shows a guided tour of all its pages/
+        /\*\*The first-login tour \(hard rule\)\*\*: so a new user meets every page once, the first time a user logs in the app\s+shows a guided tour of all its pages/
     )
     assert.match(flat, /\(not for superadmins, the support team: the superadmin panel has no tour\)/)
     assert.match(flat, /a page without its tour step is not done/)

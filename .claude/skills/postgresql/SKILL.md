@@ -10,8 +10,9 @@ and the existing migrations first.
 ## The rules
 
 - **Migrations** are applied in order at start-up, each in its own transaction, under an advisory lock, with a checksum.
-  A migration that already shipped is **never** changed: add one with the next id. A module that adds a migration (like
-  the files module) gets the next free id and must not clash with the user's own.
+  A migration that already shipped is never changed: its checksum no longer matches where it ran. Add one with the next
+  id. A module that adds a migration (like the files module) gets the next free id and must not clash with the user's
+  own.
 - **Multi-tenant.** Every table with data of an organisation has `tenant_id uuid NOT NULL`, an index that starts with
   `tenant_id`, Row-Level Security through `isolate('<table>')` and is listed in `TENANT_TABLES` (the db test checks
   that). All its queries run through `DatabaseService.withTenant()` (as the tenant role), and still say

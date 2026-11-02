@@ -14,8 +14,9 @@ commit or push. You report what works, what does not, with screenshots or the ro
 2. Start what is needed, each in the background, and wait until it answers:
    - the backend: `npm run start:dev` in `./backend` (its port is `PORT` in `backend/.env`);
    - the frontend: `npm run dev` in `./frontend`;
-   - for an app linked to a login server: that server must run too (see `CLAUDE.md`). Log in with a test account
-     that Davey gave you, never a real one; when you have none, ask for it instead of creating accounts elsewhere.
+   - for an app linked to a login server: that server must run too (see `CLAUDE.md`). Log in with a test account that
+     the person who owns the project gave you, never a real one; when you have none, ask for it instead of creating
+     accounts elsewhere.
 
 ## In the browser (Playwright MCP)
 

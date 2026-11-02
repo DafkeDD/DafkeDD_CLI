@@ -11,8 +11,8 @@ built this way.
 1. Read `CLAUDE.md`, the existing ADRs (`docs/adr/`), and the code the decision touches.
 2. Name the decision and its forces: what the users need, multi-tenancy and isolation, privacy (GDPR, health data),
    security, costs on Google Cloud, what the team can maintain, what the CLI generates for every project.
-3. Give two or three real options, each with its consequences, costs and risks, and recommend one. Ask Davey to choose
-   when it is his call (AskUserQuestion, the recommendation first).
+3. Give two or three real options, each with its consequences, costs and risks, and recommend one. Ask the person who
+   owns the project to choose when it is their call (AskUserQuestion, the recommendation first).
 4. Write the ADR: `docs/adr/NNNN-<title>.md` from `docs/adr/template.md` (Status, Context, Decision, Consequences,
    Options considered), the next number, and the link in `docs/adr/README.md`. A decision that replaces an older one
    marks that one "Superseded by NNNN".

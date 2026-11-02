@@ -5,7 +5,7 @@ description: How to build and change the NestJS backends that DafkeDD_CLI genera
 
 The NestJS backends that DafkeDD_CLI generates: the login server (OpenID Connect, tenants, billing, eID) and the API of
 a linked app (Pasport access tokens, notes, files, mail). Read `CLAUDE.md` first, then the module next to the one you
-change: follow its structure exactly.
+change: follow its structure. When it breaks a rule below, follow the rule and name the old module as Advisory.
 
 ## The rules
 
@@ -16,7 +16,8 @@ change: follow its structure exactly.
   `i18nValidationMessage('validation.<KEY>')`; the global pipe has `whitelist` and `forbidNonWhitelisted`. Ids are
   checked (`ParseUUIDPipe`) before they reach SQL or a path.
 - **Errors.** `throw new AppException('errors.<KEY>', HttpStatus.<STATUS>, args)`, and the key exists in
-  `src/i18n/<en|nl|fr|de>/*.json` with real translations. Never a raw message string to the client.
+  `src/i18n/<en|nl|fr|de>/*.json` with real translations. Never a raw message string to the client: it reaches every
+  user in English only.
 - **Access.** Every route says who may call it (`@Public()`, `@Access(...)`, `@Roles(...)` in an app; the guards of the
   login server); data of an organisation always through `withTenant()` with the tenant from the token, never from the
   request body.
@@ -26,7 +27,7 @@ change: follow its structure exactly.
 - **Tests.** Unit specs next to the code, e2e specs over HTTP with supertest (in-memory stores, test keys), db specs
   against a real PostgreSQL for everything with SQL; plus the CLI tests in `test/*.test.js` that the generated files
   contain what matters.
-- **No warnings** in the build, oxlint or the tests; Prettier formats every file you edit.
+- **No warnings** in the build, oxlint or the tests.
 
 When it is built: stage it and start the checking agents (the `implement` skill); tell the reviewer and the security
 agent what to look at.

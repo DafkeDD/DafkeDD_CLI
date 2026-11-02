@@ -917,6 +917,14 @@ git switch developer
 
 ## Changelog
 
+- **0.54.27**: the first rule audit applied (#52): the instructions of the CLI (`CLAUDE.md`, its skills and agents) and
+  of every project (the generated `CLAUDE.md` and the project skills) keep every hard rule at its strength but now say
+  why, in plain words instead of "MUST" or bold "never" (migrations: their checksum; multi-tenant: RLS catches a
+  forgotten `WHERE`; origin: no one else's licence; the tour: a new user meets every page once; the Cloud buttons and
+  Terraform: production and its costs; "When in doubt, Blocking": a missed problem ships to every project). Two wrong
+  facts are fixed: the tester agent names the six verify variants, and the CLI `pasport-design` skill the real shell
+  paths. Project skills name the person who owns the project instead of Davey. `test/rule-audit-applied.test.js` checks
+  it.
 - **0.54.26**: Claude Code mods (#40), in every project and in the CLI itself: a marketplace `mods/` (`dafkedd-mods`)
   with `checks-desk` (a line above the prompt with every check of the staged tree and the to-do list of the session in
   counts, and `/checks`, a card per checking agent: running, approved, approved for an earlier tree, not yet; it only
