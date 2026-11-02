@@ -66,7 +66,7 @@ how the code is made testable.
 
 | Skill            | When                                                                                                          |
 | ---------------- | ------------------------------------------------------------------------------------------------------------- |
-| `plan`           | A feature or change bigger than a few lines: ask every open question, then a spec issue and ticket issues     |
+| `plan`           | A feature or change bigger than a few lines: an interview, one question at a time, then a spec and tickets    |
 | `implement`      | Build one ticket on its branch: the checking agents, commit `closes #n`, pull request, merge into `developer` |
 | `diagnose`       | An error, a failing build or test, wrong behaviour: reproduce, failing test, cause, fix                       |
 | `handoff`        | A long session or a stop halfway: `.claude/handoff.md` for the next session                                   |
@@ -101,8 +101,8 @@ once, on a line of its own, with only `\n` as line break, a known `model`); the 
 
 ## How work is done
 
-1. **Plan** with `plan`: the questions first, then a spec issue and ticket issues on GitHub (`DafkeDD/DafkeDD_CLI`,
-   labels from `npm run labels`).
+1. **Plan** with `plan`: the interview first (one question at a time), then a spec issue and ticket issues on GitHub
+   (`DafkeDD/DafkeDD_CLI`, labels from `npm run labels`).
 2. **Build** a ticket with `implement`: the main session builds, with the skills `pasport-design`, `nestjs` and
    `postgresql`, tests first.
 3. **Check**: stage the change (`git add`, as a separate command), then start the checking agents in parallel on exactly

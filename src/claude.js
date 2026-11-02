@@ -193,7 +193,7 @@ export function projectClaudeMd(project) {
         '',
         '## How work is done',
         '',
-        '1. **Plan** with the skill `plan`: the questions first, then a spec issue and ticket issues on GitHub.',
+        '1. **Plan** with the skill `plan`: an interview, one question at a time, then a spec issue and tickets on GitHub.',
         `2. **Build** an issue with \`implement\` on its own branch, \`issue/<number>-<words>\` from \`${DEVELOP_BRANCH}\`, with`,
         '   the skills `pasport-design`, `nestjs`, `postgresql`, `translator` (the four languages) and `e2e` (browser tests),',
         '   and the agent `kb` (the knowledge base with screenshots); tests first.',
