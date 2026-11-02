@@ -1,0 +1,7 @@
+{
+    "name": "handoff-offer",
+    "version": "0.1.0",
+    "author": { "name": "DafkeDD" },
+    "description": "When the chat gets full, offers to write the handoff (.claude/handoff.md) so a fresh chat can go on from there.",
+    "types": "./types/index.d.ts"
+}

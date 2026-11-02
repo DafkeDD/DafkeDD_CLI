@@ -123,6 +123,15 @@ export function projectClaudeMd(project) {
             '  request starts a copy of the app of that branch (`.github/workflows/preview.yml`), removed with the pull request.',
             ''
         )
+    lines.push(
+        '## Mods',
+        '',
+        '`mods/` holds the Claude Code mods of this project (`mods/README.md`): `checks-desk`, `handoff-offer`,',
+        '`screen-share`, `replay-theater` and `mods`. Install: `/plugin marketplace add ./mods`, then',
+        '`/plugin install <name>@dafkedd-mods`. They only draw and read; the git guard and the approvals stay in the hooks',
+        '(`docs/mods.md`: what a mod may do and why).',
+        ''
+    )
     if (project.frontend)
         lines.push(
             '## Knowledge base',
@@ -710,9 +719,13 @@ export function projectClaudeFiles(project) {
     }
 }
 
-/** The lines of the root .gitignore: the handoff of a session stays local. */
+/**
+ * The lines of the root .gitignore: the handoff of a session stays local, and so do the TypeScript types Claude Code
+ * writes beside each mod when it loads it (mods/<name>/.claude-plugin/types/).
+ */
 export const GITIGNORE_LINES = [
     '.claude/handoff.md',
+    'mods/*/.claude-plugin/types/',
     '.env.test',
     'playwright-report/',
     'test-results/',

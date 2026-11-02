@@ -1,0 +1,9 @@
+{
+    "name": "screen-share",
+    "version": "0.1.0",
+    "author": {
+        "name": "DafkeDD"
+    },
+    "description": "/screen-share on hides e-mail addresses, phone numbers, IBANs, Belgian national register and company numbers, amounts and the names you add on screen while you record a demo; Claude still works with the real data. A demo aid, not a guarantee: the prompt you type and names you did not add are not masked.",
+    "types": "./types/index.d.ts"
+}

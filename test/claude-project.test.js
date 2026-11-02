@@ -241,7 +241,7 @@ test('claudeSteps writes the files and adds the handoff to the root .gitignore o
     await step.run()
     assert.equal(
         await fs.readFile(path.join(dir, '.gitignore'), 'utf8'),
-        'node_modules\n.claude/handoff.md\n.env.test\nplaywright-report/\ntest-results/\n.lighthouseci/\n*.dafkedd-new\n'
+        'node_modules\n.claude/handoff.md\nmods/*/.claude-plugin/types/\n.env.test\nplaywright-report/\ntest-results/\n.lighthouseci/\n*.dafkedd-new\n'
     )
     assert.match(await fs.readFile(path.join(dir, 'CLAUDE.md'), 'utf8'), /^# planner/)
     assert.ok(await fs.stat(path.join(dir, '.claude', 'skills', 'pasport-design', 'SKILL.md')))

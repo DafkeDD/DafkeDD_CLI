@@ -1,0 +1,8 @@
+Replay Theater
+By Anthropic (claude-code-playground), licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Copied unchanged from https://github.com/anthropics/claude-code-playground, folder claude-code/mods/replay-theater,
+commit 569c5283d9a0a7ee7938df85bb32e4f48cbb8c86: .claude-plugin/plugin.json, hooks/hooks.json,
+hooks/replay-theater.mjs and README.md. Not copied: its .gitignore (npm never ships one; the .gitignore of the
+project ignores mods/*/.claude-plugin/types/ instead) and the screenshots README.md shows, which are in that folder of
+the source repository.

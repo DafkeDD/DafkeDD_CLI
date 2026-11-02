@@ -1,0 +1,36 @@
+{
+    "name": "dafkedd-mods",
+    "owner": {
+        "name": "DafkeDD"
+    },
+    "metadata": {
+        "description": "Claude Code mods of a DafkeDD project: the checking agents at a glance, the handoff offer, screen share, Anthropic's Replay Theater and /mods."
+    },
+    "plugins": [
+        {
+            "name": "checks-desk",
+            "source": "./checks-desk",
+            "description": "The checking agents and the to-do list at a glance: a line above the prompt and a pane per check (/checks)."
+        },
+        {
+            "name": "handoff-offer",
+            "source": "./handoff-offer",
+            "description": "When the chat gets full, offers to write the handoff and go on in a fresh chat."
+        },
+        {
+            "name": "screen-share",
+            "source": "./screen-share",
+            "description": "A demo aid that hides e-mail addresses, phone numbers, IBANs and the names you add on screen (/screen-share); Claude keeps the real data."
+        },
+        {
+            "name": "replay-theater",
+            "source": "./replay-theater",
+            "description": "Anthropic's sample (Apache 2.0): step through the file edits of the last turn (/replay)."
+        },
+        {
+            "name": "mods",
+            "source": "./mods",
+            "description": "Shows the mods of this project, which are on, and how to switch them (/mods)."
+        }
+    ]
+}
