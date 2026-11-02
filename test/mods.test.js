@@ -98,7 +98,8 @@ test('our own mods never use the network or a model, never approve or deny, and 
     // Every hook on a tool call or an agent passes the call on when it fails
     assert.equal(desk.match(/\.catch\(\(\$, e, next\) => next\(e\)\)/g)?.length, 5)
     assert.equal(desk.match(/on\('(tool\.call|agent\.spawn)'/g)?.length, 5)
-    // The desk shows "approved for an earlier tree" for exactly the checks whose earlier approval the commit hook may take
+    // The desk shows "approved for an earlier tree" for exactly the checks whose earlier approval the commit hook
+    // may take
     const { OUT_OF_SCOPE } = await import('../templates/project-claude/.claude/hooks/approvals.mjs')
     const earlier = /EARLIER_COUNTS = new Set\(\[([^\]]*)\]\)/
         .exec(desk)[1]

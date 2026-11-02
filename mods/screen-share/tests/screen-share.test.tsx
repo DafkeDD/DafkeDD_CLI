@@ -143,7 +143,7 @@ const ALL = [
     ['Pane', { title: 'Replay', isFocused: false, bodyColumns: 60, placement: 'dock', ...VIEW }]
 ] as const
 
-test('on: every other row is drawn masked too: the prompt you sent, a tool call, its result, the band, a placed tree', async ($, on) => {
+test('on: the other rows are masked: a sent prompt, a tool call and result, the band, a tree', async ($, on) => {
     rows(on)
     await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
     await $.command.run({ command: 'screen-share', args: 'on', origin: 'user' } as never)
@@ -179,7 +179,7 @@ test('on: when what is drawn beneath a pane or the band fails, it is drawn as �
     await band.unmount()
 })
 
-test('when the hook itself fails (its state is unreadable), the row is drawn as •••• and never as it was', async ($, on) => {
+test('when the hook itself fails (its state is unreadable), the row is •••• and never as it was', async ($, on) => {
     rows(on)
     // The engine answers no state: reading it throws inside the hook, before anything is masked
     on('state.get', () => ({ value: null }) as never)
@@ -212,7 +212,7 @@ test('on: a folded group of tool calls is unfolded, so its count line with paths
     await ui.unmount()
 })
 
-test('on: when only the masked drawing fails beneath, the row is •••• and never drawn again as it was', async ($, on) => {
+test('on: when only the masked drawing fails beneath, the row is •••• and never redrawn as it was', async ($, on) => {
     on('command.register', () => ({ value: { command: 'screen-share' } }))
     on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
     on('ui.status', () => ({ value: undefined }))

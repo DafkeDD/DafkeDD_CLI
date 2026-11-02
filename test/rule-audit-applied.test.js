@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
-import { projectClaudeFiles } from '../src/claude.js'
+import { describeProject, projectClaudeFiles } from '../src/claude.js'
 
 // The first rule audit (#52): hard rules keep their strength, but say why, without shouting
 const read = rel => readFileSync(rel, 'utf8').replace(/\s+/g, ' ')
@@ -17,11 +17,48 @@ const FILES = [
 ].filter(file => !file.includes('/rule-audit/'))
 
 test('no rule shouts: no "MUST" or bold "never" in CLAUDE.md, the skills and the agents', () => {
-    const project = projectClaudeFiles({ name: 'p', frontend: true, backend: true, kind: 'app', database: 'p' })
-    for (const [file, text] of [
-        ...FILES.map(file => [file, read(file)]),
-        ['project CLAUDE.md', project['CLAUDE.md']]
-    ]) {
+    // Every kind of project, as the CLI describes it: the login server, a linked app with every module, the simple
+    // login, an API, a site, and one on Google Cloud
+    const link = { issuer: 'https://auth.example.com/oidc', accountUrl: 'https://auth.example.com', clientId: 'p' }
+    const linked = describeProject({
+        name: 'p',
+        frontend: {},
+        backend: { id: 'linked' },
+        answers: { database: { database: 'p' }, link, appOptions: { mail: true, files: true, isolation: 'database' } }
+    })
+    const projects = [
+        [
+            'pasport',
+            describeProject({
+                name: 'p',
+                frontend: {},
+                backend: {},
+                answers: { oidc: true, database: { database: 'p' } }
+            })
+        ],
+        ['linked app', linked],
+        [
+            'login',
+            describeProject({
+                name: 'p',
+                frontend: {},
+                backend: {},
+                answers: { auth: true, database: { database: 'p' } }
+            })
+        ],
+        ['api', describeProject({ name: 'p', frontend: {}, backend: {}, answers: { database: { database: 'p' } } })],
+        ['site', describeProject({ name: 'p', frontend: {} })],
+        ['cloud', { ...linked, cloud: true }]
+    ].map(([label, project]) => [`${label} CLAUDE.md`, projectClaudeFiles(project)['CLAUDE.md']])
+    // The linked app has its own section (the login server, the modules), so it is scanned too
+    assert.match(projects[1][1], /## The login server/)
+    assert.match(projects[1][1], /- Mail: `MailService`/)
+    // The answers have the CLI's shape: the backend's PostgreSQL line, and the Migrations rule of the simple login and
+    // the API, are scanned too
+    for (const index of [0, 1, 2, 3])
+        assert.ok(projects[index][1].includes('with PostgreSQL (database `p`'), projects[index][0])
+    for (const index of [2, 3]) assert.match(projects[index][1], /\*\*Migrations\*\*/, projects[index][0])
+    for (const [file, text] of [...FILES.map(file => [file, read(file)]), ...projects]) {
         assert.ok(!/\bMUST\b/.test(text), `${file}: MUST`)
         assert.ok(!/\*\*never\*\*/.test(text), `${file}: **never**`)
         assert.ok(!/no exceptions/i.test(text), `${file}: no exceptions`)

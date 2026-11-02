@@ -2,8 +2,8 @@ import type { EngineInterface, Register } from 'claude-code'
 
 /*
  * /mods: the mods of this project's marketplace (mods/.claude-plugin/marketplace.json), whether each is on, and the
- * command that switches it. A mod cannot switch plugins itself (the settings are read-only to it), so the pane shows the
- * command for the person: /plugin enable or disable <name>@dafkedd-mods, then /reload-plugins.
+ * command that switches it. A mod cannot switch plugins itself (the settings are read-only to it), so the pane shows
+ * the command for the person: /plugin enable or disable <name>@dafkedd-mods, then /reload-plugins.
  */
 
 export const MARKETPLACE = 'dafkedd-mods'
