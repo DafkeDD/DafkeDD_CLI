@@ -100,18 +100,18 @@ test('the frontend steps of a linked app install Playwright and axe, pinned, and
         assert.ok(ran.includes(`npm install --save-dev ${E2E_PACKAGES.join(' ')}`))
         const ignore = await fs.readFile(path.join(dir, 'frontend', '.gitignore'), 'utf8')
         for (const line of E2E_IGNORED) assert.equal(ignore.split('\n').filter(l => l === line).length, 1, line)
-        // A site (no API) has no browser tests yet
+        // A site (no API) has them too (test/site-browser-tests.test.js)
         const other = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-e2e-site-'))
         const site = await nextjs.steps({ projectDir: other, answers: { ui: 'all' }, api: null, exec: async () => {} })
         await fs.rm(other, { recursive: true, force: true })
-        assert.ok(!site.some(s => s.title.startsWith('Browsertests')))
+        assert.ok(site.some(s => s.title === 'Browsertests installeren (Playwright, axe)'))
     } finally {
         await fs.rm(dir, { recursive: true, force: true })
     }
     // npm run test:e2e
     assert.match(
         readFileSync(new URL('../src/frontends/nextjs.js', import.meta.url), 'utf8'),
-        /if \(hasBrowserTests\(api\)\) pkg\.scripts\['test:e2e'\] = 'playwright test'/
+        /\/\/ The browser tests \(e2e\/\): every frontend has them from the start\n\s+pkg\.scripts\['test:e2e'\] = 'playwright test'/
     )
 })
 

@@ -10,9 +10,10 @@ A linked app has the suite from the start (`frontend/e2e/`: `session.ts`, `tour.
 `e2e/session.ts` to log in. The login server has its own suite too (`session.ts` with an admin, a member and a
 superadmin, `tour.spec.ts` with the steps of `src/components/pasport/tour-steps.ts`, `pages.spec.ts` with every page of
 the portal and the superadmin panel, and `login.spec.ts`: the login screen, with the answers of the API given by the
-test). The simple login has one too (`e2e/account.ts`, `login.spec.ts`, `pages.spec.ts`): it
-starts the built API with its database and logs in for real with `logIn()` of `e2e/account.ts`, a test account that
-`e2e/global-teardown.ts` removes after the run.
+test). A site and an API frontend have `pages.spec.ts` (every page of `APP_NAV`, open without a login). The simple
+login has one too (`e2e/account.ts`, `login.spec.ts`, `pages.spec.ts`): it starts the built API with its database and
+logs in for real with `logIn()` of `e2e/account.ts`, a test account that `e2e/global-teardown.ts` removes after the
+run.
 
 ## Setup (once, when `frontend/e2e/` does not exist yet)
 

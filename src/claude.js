@@ -193,7 +193,7 @@ export function projectClaudeMd(project) {
         '',
         '## How work is done',
         '',
-        '1. **Plan** with the skill `plan`: the questions first, then a spec issue and ticket issues on GitHub.',
+        '1. **Plan** with the skill `plan`: an interview, one question at a time, then a spec issue and tickets on GitHub.',
         `2. **Build** an issue with \`implement\` on its own branch, \`issue/<number>-<words>\` from \`${DEVELOP_BRANCH}\`, with`,
         '   the skills `pasport-design`, `nestjs`, `postgresql`, `translator` (the four languages) and `e2e` (browser tests),',
         '   and the agent `kb` (the knowledge base with screenshots); tests first.',
@@ -232,6 +232,7 @@ export function projectClaudeMd(project) {
         '  phone, the first-login tour), `nestjs`, `postgresql`, `translator` (the four languages), `e2e` (browser tests).',
         `- Skills to start with \`/<name>\`: \`seed\` (test data and test accounts${project.kind === 'pasport' ? '; `npm run demo:data` and `npm run demo:clear` in `./backend` already exist' : project.backend ? '; it creates a seed script in `./backend`' : ''}), \`support\` (a message`,
         '  of a user to an answer and a reproducible issue), `architect` (decisions that are hard to undo, `docs/adr`),',
+        '  `rule-audit` (the rules of `CLAUDE.md`, a skill or an agent, each with its reason; it changes nothing first),',
         '  `dependencies` (the weekly Dependabot pull requests, `.github/dependabot.yml`) and `release` (prepares the pull',
         `  request from \`${DEVELOP_BRANCH}\` into \`${RELEASE_BRANCH}\` with \`CHANGELOG.md\`; a person merges it).`,
         ...(project.cloud

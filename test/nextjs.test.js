@@ -309,6 +309,7 @@ test('steps install, configure and check in the right order', async t => {
         'next-intl installeren',
         'Lettertypen installeren (Hanken Grotesk, JetBrains Mono)',
         'Prettier installeren',
+        'Browsertests installeren (Playwright, axe)',
         'next-intl configureren',
         'DafkeDD UI ophalen',
         'DafkeDD UI installeren',

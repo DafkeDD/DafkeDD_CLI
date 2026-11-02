@@ -66,11 +66,12 @@ how the code is made testable.
 
 | Skill            | When                                                                                                          |
 | ---------------- | ------------------------------------------------------------------------------------------------------------- |
-| `plan`           | A feature or change bigger than a few lines: ask every open question, then a spec issue and ticket issues     |
+| `plan`           | A feature or change bigger than a few lines: an interview, one question at a time, then a spec and tickets    |
 | `implement`      | Build one ticket on its branch: the checking agents, commit `closes #n`, pull request, merge into `developer` |
 | `diagnose`       | An error, a failing build or test, wrong behaviour: reproduce, failing test, cause, fix                       |
 | `handoff`        | A long session or a stop halfway: `.claude/handoff.md` for the next session                                   |
 | `port-from-test` | Davey changed a generated project (`D:\test`, `D:\KidieFile`): bring the generic improvements into the CLI    |
+| `rule-audit`     | `/rule-audit <file>`: sort the rules of a CLAUDE.md, skill or agent and propose them with their reason        |
 | `pasport-design` | Any page, component, form, text on screen or style: the Pasport design, the phone, the first-login tour       |
 | `nestjs`         | Any API endpoint, backend module or server-side behaviour of a generated backend                              |
 | `postgresql`     | Any migration, table, Row-Level Security, query or db test of a generated backend                             |
@@ -101,8 +102,8 @@ once, on a line of its own, with only `\n` as line break, a known `model`); the 
 
 ## How work is done
 
-1. **Plan** with `plan`: the questions first, then a spec issue and ticket issues on GitHub (`DafkeDD/DafkeDD_CLI`,
-   labels from `npm run labels`).
+1. **Plan** with `plan`: the interview first (one question at a time), then a spec issue and ticket issues on GitHub
+   (`DafkeDD/DafkeDD_CLI`, labels from `npm run labels`).
 2. **Build** a ticket with `implement`: the main session builds, with the skills `pasport-design`, `nestjs` and
    `postgresql`, tests first.
 3. **Check**: stage the change (`git add`, as a separate command), then start the checking agents in parallel on exactly
@@ -138,9 +139,9 @@ The hooks in `.claude/settings.json` enforce this (`.claude/git-policy.json`: `i
 - When the CLI asks "Claude Code toevoegen?" and the answer is yes, a project gets `templates/project-claude/` and more:
     - the skills, agents, hooks, design and issue forms. The main session builds and runs the workflows with the skills:
       the knowledge skills `pasport-design`, `nestjs`, `postgresql`, `translator` and `e2e` load by themselves, and
-      `seed`, `release`, `backup`, `dependencies`, `infra`, `observability`, `support` and `architect` are started with
-      `/<name>`. The agents are only the independent checks (`reviewer`, `tester`, `docs`, `i18n`, `security`, `qa`,
-      `a11y`, `privacy`, `performance`) and `kb`;
+      `seed`, `release`, `backup`, `dependencies`, `infra`, `observability`, `support`, `architect` and `rule-audit` are
+      started with `/<name>`. The agents are only the independent checks (`reviewer`, `tester`, `docs`, `i18n`,
+      `security`, `qa`, `a11y`, `privacy`, `performance`) and `kb`;
     - `CLAUDE.md`, `.mcp.json` and the workflows (`ci.yml`, `release.yml`, `codeql.yml`, `screenshots.yml`), made by
       `src/claude.js`.
 - There, work happens on a branch per issue (`.claude/git-policy.json`: `issue-branches`, merge into `developer`). An
@@ -158,12 +159,14 @@ The hooks in `.claude/settings.json` enforce this (`.claude/git-policy.json`: `i
 
 ## Checking generated projects
 
-- `npm run verify` generates four variants with the real steps of the CLI, in a temporary folder, and runs their browser
-  tests (`npm run test:e2e`, Chromium of the pinned Playwright) where the frontend has them:
+- `npm run verify` generates six variants with the real steps of the CLI, in a temporary folder, and runs their browser
+  tests (`npm run test:e2e`, Chromium of the pinned Playwright):
     - `pasport`: the login server (with the demo data);
     - `plain`: an API with the simple login and PostgreSQL;
     - `app`: an app without modules (Row-Level Security);
-    - `app-full`: an app with mail, files and a database per organisation.
+    - `app-full`: an app with mail, files and a database per organisation;
+    - `api`: an API without a login, with PostgreSQL;
+    - `site`: only a frontend, no backend.
 - Options:
     - `-- --only app-full` runs one variant (a comma list runs several);
     - `-- --keep` keeps the projects;
