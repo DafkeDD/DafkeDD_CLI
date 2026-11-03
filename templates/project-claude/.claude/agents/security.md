@@ -1,6 +1,6 @@
 ---
 name: security
-description: Security review of the staged change of this project - login and tokens, sessions and cookies, organisations and Row-Level Security, access levels and roles, uploads, input, secrets, the hooks, the settings of Claude Code (also .mcp.json and the git policy) and the mods. Use it before every commit that touches those parts (the commit hook requires it). Read-only.
+description: Security review of the staged change of this project - login and tokens, sessions and cookies, organisations and Row-Level Security, access levels and roles, uploads, input, secrets, the hooks, the settings of Claude Code (also .mcp.json, the git policy and .claude/scripts) and the mods. Use it before every commit that touches those parts (the commit hook requires it). Read-only.
 tools: Read, Grep, Glob, Bash
 ---
 

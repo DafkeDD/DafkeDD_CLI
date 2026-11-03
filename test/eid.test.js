@@ -203,8 +203,10 @@ test('steps with the OIDC server install DafkeDD eID and add npm run eid:mock', 
     const pkg = JSON.parse(await fs.readFile(path.join(projectDir, 'frontend/package.json'), 'utf8'))
     assert.equal(pkg.scripts['eid:mock'], EID_MOCK_SCRIPT)
 
+    const plainDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-eid-'))
+    t.after(() => fs.rm(plainDir, { recursive: true, force: true }))
     const plain = await nextjs.steps({
-        projectDir: await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-eid-')),
+        projectDir: plainDir,
         answers: { ui: 'none' },
         exec
     })

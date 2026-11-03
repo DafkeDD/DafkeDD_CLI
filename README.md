@@ -811,7 +811,8 @@ approvals are kept in `.git/claude-approvals` and are never committed.
 - `guard-git.mjs` runs before every shell command:
     - a `git commit` needs the approvals of review, tests, docs and i18n, plus security when a staged path touches
       login, tokens, tenants, billing, uploads, the database, the hooks, the settings of Claude Code (also `.mcp.json`,
-      the git policy and `src/claude.js`, which builds them for every project) or the mods;
+      the git policy, the scripts of `.claude/scripts/` and `src/claude.js`, which builds them for every project) or the
+      mods;
     - a commit only on the branch of an issue (`issue/<n>-<words>`, made from `developer`), of a release
       (`release/<x.y.z>`) or of Dependabot (`dependabot/...`); the approvals cover every file the branch changed since
       `origin/developer`, not only the staged ones;
@@ -923,6 +924,11 @@ Apache 2.0 (its own `LICENSE` and `NOTICE`).
 
 ## Changelog
 
+- **0.54.34**: the scripts of `.claude/scripts/` (the PostgreSQL MCP server runs one, another sets the branch
+  protection) need the security agent too, and the tests of the CLI remove their temp folders again (#72):
+  `npm.test.js`, `eid.test.js` and `central-docs.test.js` left `dafkedd-*` and `docs-*` folders behind, which filled the
+  disk of a session. `test/temp-cleanup.test.js` runs those tests with an empty temp folder and fails when anything is
+  left.
 - **0.54.33**: `.mcp.json` (which MCP servers start), `.claude/git-policy.json` (the policy the guard reads) and
   `src/claude.js` of the CLI (it builds the settings, the MCP servers and the hooks of every project) need the security
   agent too (#70): `SENSITIVE` of `.claude/hooks/approvals.mjs` matches them. The docs, the implement skills and the

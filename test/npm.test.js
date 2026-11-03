@@ -5,8 +5,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { ALLOW_SCRIPTS, denyInstallScripts } from '../src/npm.js'
 
-test('npm 12+: the install scripts are denied in package.json (no warnings), choices already made stay', async () => {
+test('npm 12+: the install scripts are denied in package.json (no warnings), choices already made stay', async t => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-npm-'))
+    t.after(() => fs.rm(root, { recursive: true, force: true }))
     await fs.writeFile(
         path.join(root, 'package.json'),
         JSON.stringify({ name: 'x', scripts: { dev: 'next dev' }, allowScripts: { sharp: true } })

@@ -408,7 +408,10 @@ test('every approval has its agent, and the sensitive parts also need the securi
         'templates/project-claude/.mcp.json',
         '.claude/git-policy.json',
         'templates/project-claude/.claude/git-policy.json',
-        'src/claude.js'
+        'src/claude.js',
+        // The scripts Claude Code runs: the PostgreSQL MCP server, the branch protection (#72)
+        'templates/project-claude/.claude/scripts/postgres-mcp.mjs',
+        '.claude/scripts/protect-branches.mjs'
     ])
         assert.ok(required([file]).includes('security'), file)
     // A word that only ends in "mods" is no mod
@@ -431,6 +434,9 @@ test('every approval has its agent, and the sensitive parts also need the securi
         'xclaude/git-policy.json',
         '.claude/git-policy-json',
         'src/claude-js',
+        'scripts/postgres-mcp.mjs',
+        'x.claude/scripts/postgres-mcp.mjs',
+        '.claude/scriptsx/postgres-mcp.mjs',
         '.claude/git-policy.json.bak',
         'src/claude.js.md',
         'test/src/claude.js'
