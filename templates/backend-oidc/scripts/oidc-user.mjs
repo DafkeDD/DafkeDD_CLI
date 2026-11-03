@@ -1,7 +1,7 @@
 // Creates or updates a user and adds it to a tenant: npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme
 // Options: --password <text> (otherwise a random password is printed once), --role user|admin (default user),
 // --tenant-name "Acme", --superadmin (admin of every tenant of the platform; --tenant is then optional),
-// A superadmin without a tenant (platform management): npm run oidc:superadmin -- --email ada@example.com --name "Ada"
+// A superadmin without a tenant (platform management): npm run oidc:user -- --superadmin --email ada@example.com --name "Ada"
 // --reset-mfa (removes two-step verification: the user sets it up again at the next login, e.g. after losing the phone).
 // Start the API once first: it creates the tables.
 import { randomBytes, scrypt } from 'node:crypto'
@@ -82,7 +82,7 @@ if (
 ) {
     console.error(
         'Usage: npm run oidc:user -- --email ada@example.com --name "Ada" --tenant acme [--role user|admin] [--superadmin] [--password ...]\n' +
-            '       npm run oidc:superadmin -- --email ada@example.com --name "Ada" [--password ...]'
+            '       npm run oidc:user -- --superadmin --email ada@example.com --name "Ada" [--password ...]'
     )
     process.exit(1)
 }

@@ -387,9 +387,20 @@ reached. \`e2e/tour.spec.ts\` walks the first-login tour of an admin and of a me
 \`src/components/pasport/tour-steps.ts\`), remembered, again from the user menu, none for a superadmin;
 \`e2e/pages.spec.ts\` opens every page of the rail and the user menu of the customer portal and of the superadmin panel
 in en, nl, fr and de, light and dark, and at 390px, checks it with axe (WCAG 2.2 AA) and that it needs a login;
-\`e2e/login.spec.ts\` shows the login screen with the answers of the API given by the test. A new page goes in the lists
-of \`e2e/pages.spec.ts\`; a new step of the tour in \`tour-steps.ts\`. Once: \`npx playwright install chromium\`. With a
-built frontend: \`E2E_NO_BUILD=1 npm run test:e2e\`.
+\`e2e/login.spec.ts\` shows the login screen with the answers of the API given by the test. \`e2e/api.spec.ts\` runs
+against the real API with the demo data (\`npm run demo:data -- --password <text>\` in \`../backend\`, and a superadmin
+made with \`npm run oidc:user -- --superadmin\`, \`support@demo.example.com\` or \`E2E_SUPERADMIN_EMAIL\`, with the same
+password): it logs in through the login screen as the demo admin, a demo member and the superadmin, and opens every
+page of the rail and the user menu with its page head, without "Could not load the data." and with rows where the demo
+data has them. It runs only with \`E2E_API\` and \`E2E_DEMO_PASSWORD\`, else it is skipped. \`E2E_API\` is the API (for
+example \`http://localhost:4000\`): the frontend then logs in there and asks it for the data, so a frontend built before
+with another API needs a new build (not \`E2E_NO_BUILD\`). It must be an API on this machine (\`localhost\`,
+\`127.0.0.1\` or \`[::1]\`), never production. The spec keeps no trace, video or screenshot and sets the password without
+a step title (\`fill\` would name it in the report). The API must know this frontend on port 3199 (\`APP_URL\`,
+\`OIDC_LOGIN_UI_URL\` and the redirect of the client \`frontend\`) and run with \`OIDC_MFA=optional\` (else every account
+first sets up two-step verification). A new page goes in the lists of \`e2e/pages.spec.ts\` and \`e2e/api.spec.ts\`; a
+new step of the tour in \`tour-steps.ts\`. Once: \`npx playwright install chromium\`. With a built frontend:
+\`E2E_NO_BUILD=1 npm run test:e2e\`.
 `
 
 /** The browser tests of the simple login (templates/frontend-login). */
