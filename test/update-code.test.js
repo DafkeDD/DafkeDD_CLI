@@ -78,7 +78,9 @@ test('codeFiles: the code of the login server and its frontend, never .env, pack
         'backend/src/database/migrations.ts',
         'backend/scripts/demo-data.mjs',
         'frontend/src/components/oidc-login.tsx',
-        'frontend/src/components/pasport/customer/my-apps.tsx'
+        'frontend/src/components/pasport/customer/my-apps.tsx',
+        // The browser tests, also the one against the real API (e2e/api.spec.ts)
+        'frontend/e2e/api.spec.ts'
     ])
         assert.ok(files[rel], rel)
     for (const rel of [

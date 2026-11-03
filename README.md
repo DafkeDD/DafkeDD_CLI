@@ -402,6 +402,20 @@ No organisation is created: the superadmin logs in to the platform and creates o
   catalogue, subscriptions, invoices, support tickets and a discount code, every account `@demo.example.com` with the
   same password (`--password <text>`, otherwise a random one shown once). `npm run demo:clear` (`demo:data --remove`)
   takes it all away again. The script refuses to run with `NODE_ENV=production`.
+- **Browser tests against the real API**: `frontend/e2e/api.spec.ts` logs in through the real login screen as the demo
+  admin (`an.peeters@demo.example.com`), a demo member (`bram.janssens@demo.example.com`) and a superadmin
+  (`support@demo.example.com`, or `E2E_SUPERADMIN_EMAIL`; made with
+  `npm run oidc:user -- --superadmin --email support@demo.example.com --name Support --password <password>`), and opens
+  every page of the rail and the user menu with real data: its page head, no "Could not load the data." and rows where
+  the demo data has them. With the API and its demo data running:
+  `E2E_API=http://localhost:4000 E2E_DEMO_PASSWORD=<password> npx playwright test e2e/api.spec.ts` in `./frontend` (the
+  API must know the frontend of the tests on port 3199: `APP_URL`, `OIDC_LOGIN_UI_URL` and the redirect of the client
+  `frontend`, and run with `OIDC_MFA=optional`, else every account first sets up two-step verification; the frontend
+  then talks to `E2E_API` for the login and the data, built again unless `E2E_NO_BUILD`). Only a local API (`localhost`,
+  `127.0.0.1` or `[::1]`), never production: the test server seals its sessions with a public secret. The spec keeps no
+  trace, video or screenshot and types the password without a step title (`fill` would name it), so the password never
+  lands in a report. Without those two variables it is skipped, and `npm run test:e2e` runs the other specs without the
+  API.
 - **Tests**: unit tests (JOSE, PKCE with the RFC 7636 vector, keys, migrations, pages), end-to-end tests of the whole
   flow in memory (`npm run test:e2e`) and `npm run test:db` against the real PostgreSQL (isolation between tenants,
   codes used once, the first admin). Checked with the independent libraries `openid-client` and `jose` as client.
@@ -924,6 +938,14 @@ Apache 2.0 (its own `LICENSE` and `NOTICE`).
 
 ## Changelog
 
+- **0.54.35**: the login server gets browser tests against the real API (#67, part of #66): `frontend/e2e/api.spec.ts`
+  logs in through the real login screen as the demo admin, a demo member and a superadmin, and opens every page of the
+  rail and the user menu with real data (its page head, no `LoadError`, rows where the demo data has them). It runs with
+  `E2E_API` (an API on this machine only) and `E2E_DEMO_PASSWORD` (the frontend then logs in at that API; no trace,
+  video, screenshot or step title keeps the password) and is skipped without them, so `npm run test:e2e` stays as it
+  was; `update` brings it to an existing login server. The usage text of `scripts/oidc-user.mjs` named a script that
+  does not exist for a superadmin: it is `npm run oidc:user -- --superadmin` now. The CI job and `verify` follow in #68
+  and #69.
 - **0.54.34**: the scripts of `.claude/scripts/` (the PostgreSQL MCP server runs one, another sets the branch
   protection) need the security agent too, and the tests of the CLI remove their temp folders again (#72):
   `npm.test.js`, `eid.test.js` and `central-docs.test.js` left `dafkedd-*` and `docs-*` folders behind, which filled the
