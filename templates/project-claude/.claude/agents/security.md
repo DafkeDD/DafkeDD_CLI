@@ -1,6 +1,6 @@
 ---
 name: security
-description: Security review of the staged change of this project - login and tokens, sessions and cookies, organisations and Row-Level Security, access levels and roles, uploads, input, secrets. Use it before every commit that touches those parts (the commit hook requires it). Read-only.
+description: Security review of the staged change of this project - login and tokens, sessions and cookies, organisations and Row-Level Security, access levels and roles, uploads, input, secrets, the hooks and the mods. Use it before every commit that touches those parts (the commit hook requires it). Read-only.
 tools: Read, Grep, Glob, Bash
 ---
 

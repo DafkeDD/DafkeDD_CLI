@@ -1,6 +1,6 @@
 ---
 name: security
-description: Security review of a change of DafkeDD_CLI before it is committed - login, OpenID Connect, tokens, sessions, cookies, MFA, eID, tenants and Row-Level Security, billing, uploads, input handling and secrets. Required (by the commit hook) for changes to those parts; read-only, it never edits.
+description: Security review of a change of DafkeDD_CLI before it is committed - login, OpenID Connect, tokens, sessions, cookies, MFA, eID, tenants and Row-Level Security, billing, uploads, input handling, secrets, the hooks and the mods. Required (by the commit hook) for changes to those parts; read-only, it never edits.
 tools: Read, Grep, Glob, Bash
 ---
 
