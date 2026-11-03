@@ -398,11 +398,23 @@ test('every approval has its agent, and the sensitive parts also need the securi
         'backend/src/billing/billing.service.ts',
         // The mods run in every session and see every tool call and drawn row (#54)
         'mods/screen-share/hooks/register.tsx',
-        'templates/project-claude/mods/checks-desk/hooks/register.tsx'
+        'templates/project-claude/mods/checks-desk/hooks/register.tsx',
+        // The settings of Claude Code: the hooks, the permissions, the marketplaces (#60)
+        '.claude/settings.json',
+        '.claude/settings.local.json',
+        'templates/project-claude/.claude/settings.json'
     ])
         assert.ok(required([file]).includes('security'), file)
     // A word that only ends in "mods" is no mod
     assert.ok(!required(['src/frontends/nextjs-mods/page.js']).includes('security'))
+    // Only the settings files themselves: not a backup or another file that starts like them, not one of another folder
+    for (const file of [
+        'docs/settings.json.md',
+        '.claude/settings.json.bak',
+        '.claude/settings.jsonc',
+        'x.claude/settings.json'
+    ])
+        assert.ok(!required([file]).includes('security'), file)
     // Screens and the database of a generated project also need qa; the paths of the CLI itself never do
     for (const file of [
         'frontend/src/app/[locale]/page.tsx',
