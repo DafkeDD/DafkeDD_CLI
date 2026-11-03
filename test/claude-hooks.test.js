@@ -402,7 +402,13 @@ test('every approval has its agent, and the sensitive parts also need the securi
         // The settings of Claude Code: the hooks, the permissions, the marketplaces (#60)
         '.claude/settings.json',
         '.claude/settings.local.json',
-        'templates/project-claude/.claude/settings.json'
+        'templates/project-claude/.claude/settings.json',
+        // What starts MCP servers, the policy the guard reads, and what builds them for every project (#70)
+        '.mcp.json',
+        'templates/project-claude/.mcp.json',
+        '.claude/git-policy.json',
+        'templates/project-claude/.claude/git-policy.json',
+        'src/claude.js'
     ])
         assert.ok(required([file]).includes('security'), file)
     // A word that only ends in "mods" is no mod
@@ -412,7 +418,22 @@ test('every approval has its agent, and the sensitive parts also need the securi
         'docs/settings.json.md',
         '.claude/settings.json.bak',
         '.claude/settings.jsonc',
-        'x.claude/settings.json'
+        'x.claude/settings.json',
+        'docs/mcp.json.md',
+        'x.mcp.json',
+        '.mcp.json.bak',
+        'docs/.mcp.json.md',
+        '.mcp-json',
+        '.claude/settings-json',
+        'x.claude/git-policy.json',
+        'xmcp.json',
+        'docs/xmcp.json',
+        'xclaude/git-policy.json',
+        '.claude/git-policy-json',
+        'src/claude-js',
+        '.claude/git-policy.json.bak',
+        'src/claude.js.md',
+        'test/src/claude.js'
     ])
         assert.ok(!required([file]).includes('security'), file)
     // Screens and the database of a generated project also need qa; the paths of the CLI itself never do

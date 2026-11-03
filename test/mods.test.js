@@ -63,7 +63,7 @@ test('the CLI has the same marketplace as every project, and update keeps it in 
     assert.match(page.replace(/\s+/g, ' '), /A change to a mod needs the security agent too/)
     assert.match(
         project['CLAUDE.md'].replace(/\s+/g, ' '),
-        /uploads, the database, the settings of Claude Code \(`\.claude\/settings\.json`\) and the mods\./
+        /uploads, the database, the settings of Claude Code \(`\.claude\/settings\.json`, `\.mcp\.json`, the git policy\) and the mods\./
     )
     for (const line of ['**Draw and read, never decide.**', '**No network, no model.**', '**Shared band.**'])
         assert.ok(page.includes(line), line)
