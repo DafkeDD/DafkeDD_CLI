@@ -120,7 +120,7 @@ test('verify has a site and an API variant, and a site has no backend steps', ()
         verify,
         /api: async \(\) => \{\n\s+const answers = \{ database: db\('api'\), auth: false, oidc: null \}/
     )
-    assert.match(verify, /if \(project\.backend\) await startsOnPort\(path\.join\(projectDir, 'backend'\)\)/)
+    assert.match(verify, /if \(project\.backend\) await startsOnPort\(path\.join\(projectDir, 'backend'\), ready\)/)
     assert.match(verify, /for \(const dir of variant\.backend \? \[backend, frontend\] : \[frontend\]\)/)
     assert.match(verify, /if \(pkg\.scripts\?\.\['test:e2e'\] && !withApi\) await browserTests\(\)/)
 })
