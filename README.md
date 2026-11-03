@@ -940,6 +940,10 @@ Apache 2.0 (its own `LICENSE` and `NOTICE`).
 
 ## Changelog
 
+- **0.54.38**: a password never shows in the error of a failing step (#78): `run()` (`src/runner.js`) replaces the value
+  of `--password <value>` and `--password=<value>` by `***`, in the command and in its output (npm prints the command of
+  a script), the longest value first, and also when the command cannot start. That covers the demo data of the install
+  and of `verify`, and the superadmin of `verify`.
 - **0.54.37**: the CI of a generated login server logs in at its real API (#68, part of #66): a job `e2e-api` on every
   pull request starts PostgreSQL, builds the API, adds the demo data and then a superadmin with a password of the run
   (masked in the log, never a secret of the repository), starts the API for the frontend of the tests (port 3199,
