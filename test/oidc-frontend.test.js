@@ -427,7 +427,7 @@ test('every page is protected: the proxy sends a browser without a session to /l
     assert.match(proxy, /export const PUBLIC_PATHS = \[/)
     for (const path of ['/login', '/admin/login', '/register', '/forgot-password', '/reset-password', '/verify-email'])
         assert.ok(proxy.includes(`'${path}'`), path)
-    assert.match(proxy, /if \(!session && !isPublic\(request\.nextUrl\.pathname\)\)/)
+    assert.match(proxy, /if \(!session && !isPublic\(pathname\)\)/)
     assert.match(proxy, /new URL\('\/login', request\.url\)/)
     assert.match(proxy, /login\.searchParams\.set\('returnTo', back\)/)
     // /login hands returnTo on to the login (only a path of this app)
