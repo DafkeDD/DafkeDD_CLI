@@ -915,8 +915,16 @@ git push
 git switch developer
 ```
 
+## Licence
+
+MIT, see [`LICENSE`](LICENSE). The mods of `mods/` are MIT too, except `replay-theater`: Anthropic's sample keeps its
+Apache 2.0 (its own `LICENSE` and `NOTICE`).
+
 ## Changelog
 
+- **0.54.31**: the CLI is MIT licensed (#62): `LICENSE` at the root, `"license": "MIT"` in `package.json` and in the
+  plugin.json of our own mods (`replay-theater` keeps its Apache 2.0), and a Licence section in this README.
+  `claude plugin validate` no longer warns LICENSE_MISSING; `test/licence.test.js` checks that they agree.
 - **0.54.28**: small follow-ups of #40 and #52 (#57): the mods' test titles and comments fit the width of 120, the
   0.54.27 line names the project agents too, and `test/rule-audit-applied.test.js` checks the generated `CLAUDE.md` of
   every kind of project (login server, app, simple login, API, site, Google Cloud) for shouting rules.
