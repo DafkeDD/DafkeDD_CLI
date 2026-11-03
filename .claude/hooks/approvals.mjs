@@ -20,9 +20,12 @@ export const AGENTS = {
 }
 /** Always needed for a commit. */
 export const ALWAYS = ['review', 'tests', 'docs', 'i18n']
-/** A staged path that needs the security agent too: login, tokens, tenants, payments, uploads, the database, hooks. */
+/**
+ * A staged path that needs the security agent too: login, tokens, tenants, payments, uploads, the database, hooks, and
+ * the mods (hooks modules that run in every session and see every tool call and drawn row).
+ */
 export const SENSITIVE =
-    /(oidc|auth|pasport|passkey|mfa|eid|session|token|cookie|access|guard|tenan|billing|mollie|license|licence|files?\/|upload|database|migrat|crypto|secret|\.claude\/hooks|proxy)/i
+    /(oidc|auth|pasport|passkey|mfa|eid|session|token|cookie|access|guard|tenan|billing|mollie|license|licence|files?\/|upload|database|migrat|crypto|secret|\.claude\/hooks|(^|\/)mods\/|proxy)/i
 
 /**
  * A time from the environment that can only make `max` shorter (the tests): a whole number of ms, at least 1. Anything
@@ -112,12 +115,16 @@ export function approve(cwd, kind) {
 }
 
 /**
- * Documentation only: a markdown file, but never CLAUDE.md (also CLAUDE.local.md) or one under .claude/ (also
- * templates/project-claude/.claude), in any case (Windows does not tell Claude.md from CLAUDE.md): those are the rules
- * and the instructions of the agents, not documentation.
+ * Documentation only: a markdown file, but never CLAUDE.md (also CLAUDE.local.md), one under .claude/ (also
+ * templates/project-claude/.claude) or one of a mod under mods/, in any case (Windows does not tell Claude.md from
+ * CLAUDE.md): those are the rules and the instructions of the agents and of a plugin (its commands, agents and skills
+ * are markdown), not documentation.
  */
 const docsOnly = file =>
-    /\.md$/.test(file) && !/(^|\/)claude(\.[^/]*)?\.md$/i.test(file) && !/(^|\/)\.claude\//i.test(file)
+    /\.md$/.test(file) &&
+    !/(^|\/)claude(\.[^/]*)?\.md$/i.test(file) &&
+    !/(^|\/)\.claude\//i.test(file) &&
+    !/(^|\/)mods\//i.test(file)
 
 /** The two docs generators of the CLI: documentation of the API and the frontend (no server, no text of an app). */
 const DOCS_GENERATORS = ['src/backends/docs.js', 'src/frontends/docs.js']

@@ -59,6 +59,9 @@ test('the CLI has the same marketplace as every project, and update keeps it in 
     // The docs of a project say what a mod may do and why
     assert.match(project['CLAUDE.md'], /`docs\/mods\.md`: what a mod may do and why/)
     const page = project['docs/mods.md']
+    // A change to a mod needs the security agent (#54): the docs and the project CLAUDE.md say so
+    assert.match(page.replace(/\s+/g, ' '), /A change to a mod needs the security agent too/)
+    assert.match(project['CLAUDE.md'].replace(/\s+/g, ' '), /uploads, the database and the mods\./)
     for (const line of ['**Draw and read, never decide.**', '**No network, no model.**', '**Shared band.**'])
         assert.ok(page.includes(line), line)
     for (const name of [...OWN, 'replay-theater']) assert.match(page, new RegExp(`\\| \`${name}\` +\\|`), name)
