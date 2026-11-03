@@ -31,10 +31,13 @@ export const isPublic = (pathname: string) =>
  * session, the cookie is deleted.
  */
 export default async function proxy(request: NextRequest) {
+    const { pathname } = request.nextUrl
+    // /api has its own checks (the routes of the login, the API itself): not a page
+    if (pathname === '/api' || pathname.startsWith('/api/')) return NextResponse.next()
     const { session, cookie } = await freshSession(request.cookies.get(SESSION_COOKIE)?.value)
-    if (!session && !isPublic(request.nextUrl.pathname)) {
+    if (!session && !isPublic(pathname)) {
         const login = new URL('/login', request.url)
-        const back = request.nextUrl.pathname + request.nextUrl.search
+        const back = pathname + request.nextUrl.search
         if (back !== '/') login.searchParams.set('returnTo', back)
         const response = NextResponse.redirect(login)
         if (cookie === 'delete') response.cookies.delete(SESSION_COOKIE)
@@ -49,6 +52,8 @@ export default async function proxy(request: NextRequest) {
     return response
 }
 
+// Every request but the files of Next.js and a path with a dot (a file such as /favicon.ico): a page path never has a
+// dot, or it is not protected. /api is let through above, never by a prefix here (/apikeys is a page).
 export const config = {
-    matcher: '/((?!api|trpc|_next|_vercel|.*\\..*).*)'
+    matcher: '/((?!_next|_vercel|.*\\..*).*)'
 }

@@ -777,13 +777,13 @@ Everything Claude Code needs is in this repository; nothing has to be installed.
 **Agents (`.claude/agents/`)**: only the independent checks (they did not make the work, they run in parallel, and the
 commit hook needs their approvals); the main session builds with the skills above.
 
-| Agent      | Role                                                                                                |
-| ---------- | --------------------------------------------------------------------------------------------------- |
-| `reviewer` | Checks the staged change against the ticket and the rules (read-only)                               |
-| `tester`   | Runs `npm run format:check`, `npm test` and, for generated code, `npm run verify` (read-only)       |
-| `docs`     | Checks README, changelog, version, API docs and frontend docs (read-only)                           |
-| `i18n`     | Checks en, nl, fr and de: the same keys, real translations, no hardcoded text (read-only)           |
-| `security` | Security review of login, tokens, tenants, billing, uploads, the database and the hooks (read-only) |
+| Agent      | Role                                                                                                          |
+| ---------- | ------------------------------------------------------------------------------------------------------------- |
+| `reviewer` | Checks the staged change against the ticket and the rules (read-only)                                         |
+| `tester`   | Runs `npm run format:check`, `npm test` and, for generated code, `npm run verify` (read-only)                 |
+| `docs`     | Checks README, changelog, version, API docs and frontend docs (read-only)                                     |
+| `i18n`     | Checks en, nl, fr and de: the same keys, real translations, no hardcoded text (read-only)                     |
+| `security` | Security review of login, tokens, tenants, billing, uploads, the database, the hooks and the mods (read-only) |
 
 `docs` and `i18n` run on a cheaper model (`model: sonnet` in their front matter): they mostly compare text. `reviewer`,
 `security` and `tester` keep the default model.
@@ -810,7 +810,7 @@ approvals are kept in `.git/claude-approvals` and are never committed.
 
 - `guard-git.mjs` runs before every shell command:
     - a `git commit` needs the approvals of review, tests, docs and i18n, plus security when a staged path touches
-      login, tokens, tenants, billing, uploads, the database or the hooks;
+      login, tokens, tenants, billing, uploads, the database, the hooks or the mods;
     - a commit only on the branch of an issue (`issue/<n>-<words>`, made from `developer`), of a release
       (`release/<x.y.z>`) or of Dependabot (`dependabot/...`); the approvals cover every file the branch changed since
       `origin/developer`, not only the staged ones;
@@ -925,6 +925,17 @@ Apache 2.0 (its own `LICENSE` and `NOTICE`).
 - **0.54.31**: the CLI is MIT licensed (#62): `LICENSE` at the root, `"license": "MIT"` in `package.json` and in the
   plugin.json of our own mods (`replay-theater` keeps its Apache 2.0), and a Licence section in this README.
   `claude plugin validate` no longer warns LICENSE_MISSING; `test/licence.test.js` checks that they agree.
+- **0.54.30**: the proxy of the login server and of a linked app no longer lets pages that start with "api" or "trpc"
+  (`/apikeys`, `/api-docs`) past the login (#59): its `matcher` skips only the files of Next.js and paths with a dot, as
+  the simple login does, and the proxy itself lets `/api/` through (the routes of the login, the API). The proxy of a
+  site or an API frontend (no login) gets the same matcher, so such a page gets its language too. `update` brings it to
+  existing projects; `test/proxy-matcher.test.js` checks the matcher of every proxy and runs the proxy of the login
+  server and a linked app (`/apikeys` without a session goes to `/login`, `/api/` passes).
+- **0.54.29**: a change to a mod needs the security agent (#54): `SENSITIVE` of `.claude/hooks/approvals.mjs` (in the
+  CLI and every project) matches `mods/`, because a mod runs in every session and sees every tool call and every drawn
+  row (screen-share masks personal data), and a markdown file of a mod (a command, an agent or a skill of a plugin)
+  never counts as documentation, so an earlier security approval does not carry over. `CLAUDE.md`, the project
+  `CLAUDE.md` and `docs/mods.md` say so; `test/claude-hooks.test.js` checks it.
 - **0.54.28**: small follow-ups of #40 and #52 (#57): the mods' test titles and comments fit the width of 120, the
   0.54.27 line names the project agents too, and `test/rule-audit-applied.test.js` checks the generated `CLAUDE.md` of
   every kind of project (login server, app, simple login, API, site, Google Cloud) for shouting rules.
