@@ -8,6 +8,27 @@ export function quote(arg) {
     return /^[\w@./:=+-]+$/.test(arg) ? arg : `"${String(arg).replace(/"/g, '\\"')}"`
 }
 
+/**
+ * The values of `--password <value>` and `--password=<value>` in these arguments (the demo data, oidc:user): they are
+ * never shown in an error.
+ */
+export function secretsOf(args) {
+    const secrets = []
+    args.forEach((arg, index) => {
+        if (arg === '--password' && args[index + 1]) secrets.push(String(args[index + 1]))
+        else if (String(arg).startsWith('--password=') && arg.length > '--password='.length)
+            secrets.push(String(arg).slice('--password='.length))
+    })
+    return secrets
+}
+
+/** `text` with every secret replaced by ***: also in the output, where npm prints the command of a script. */
+export const masked = (text, secrets) =>
+    // The longest first: a password that is part of another never leaves a piece of the other one
+    [...new Set(secrets)]
+        .sort((a, b) => b.length - a.length)
+        .reduce((result, secret) => result.split(secret).join('***'), text)
+
 /** Voert een commando stil uit (in `cwd`) en gooit een fout met de output als het mislukt. */
 export function run(cmd, args, { cwd, env } = {}) {
     return new Promise((resolve, reject) => {
@@ -36,12 +57,23 @@ export function run(cmd, args, { cwd, env } = {}) {
         let out = ''
         child.stdout.on('data', d => (out += d))
         child.stderr.on('data', d => (out += d))
-        child.on('error', reject)
+        // A command that cannot start: its error (spawnargs, message) holds the arguments, so a new one without them
+        child.on('error', error => {
+            const secrets = secretsOf(args)
+            reject(
+                secrets.length ? Object.assign(new Error(masked(error.message, secrets)), { code: error.code }) : error
+            )
+        })
         child.on('close', code => {
             if (code === 0) return resolve(out)
+            // A password of the arguments is never in the error: not in the command, not in its output
+            const secrets = secretsOf(args)
             reject(
                 new Error(
-                    `"${cmd} ${args.join(' ')}" faalde (exit ${code})\n\n${out.trim().split('\n').slice(-25).join('\n')}`
+                    masked(
+                        `"${cmd} ${args.join(' ')}" faalde (exit ${code})\n\n${out.trim().split('\n').slice(-25).join('\n')}`,
+                        secrets
+                    )
                 )
             )
         })

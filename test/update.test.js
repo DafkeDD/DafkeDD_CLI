@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { describeProject, projectClaudeFiles } from '../src/claude.js'
+import { ciWorkflow, describeProject, e2eApiJob, projectClaudeFiles } from '../src/claude.js'
 import {
     buildManifest,
     inferProject,
@@ -310,6 +310,45 @@ test('update leaves the starting points of a project alone, and a deleted one do
     const next = readManifest(dir)
     assert.equal(next.files['backend/src/app.module.ts'], sha('mine, with my own modules\n'))
     assert.equal(next.files['backend/src/notes/notes.controller.ts'], sha('deleted by me\n'))
+})
+
+test('update brings the job e2e-api to the CI of an existing login server, never over your own CI', async t => {
+    const dir = await tempDir(t)
+    const pas = {
+        ...describeProject({
+            name: 'pas',
+            frontend: { id: 'nextjs' },
+            backend: { id: 'nestjs' },
+            answers: { oidc: true, database: { database: 'pas' } }
+        }),
+        claude: true,
+        cloud: false
+    }
+    const ci = '.github/workflows/ci.yml'
+    const files = managedFiles(pas)
+    assert.ok(files[ci].includes('\n    e2e-api:\n'))
+    await writeAll(dir, files)
+    await writeAll(dir, { 'frontend/package.json': '{}', 'backend/package.json': '{}' })
+    // The CI as an older CLI wrote it: without the job, unchanged since (its hash is in the manifest)
+    const old = files[ci].replace(e2eApiJob('pas').join('\n') + '\n', '')
+    assert.ok(!old.includes('e2e-api') && old !== files[ci])
+    assert.equal(old, ciWorkflow(pas).replace(e2eApiJob('pas').join('\n') + '\n', ''))
+    await fs.writeFile(path.join(dir, ci), old)
+    const manifest = await buildManifest({ projectDir: dir, project: pas, version: '0.54.36' })
+    assert.equal(manifest.files[ci], sha(old))
+    await fs.writeFile(path.join(dir, MANIFEST), JSON.stringify(manifest))
+
+    const plan = await update({ projectDir: dir, version: '0.54.37', log: silent })
+    assert.equal(plan.find(entry => entry.rel === ci).action, 'updated')
+    assert.equal(await fs.readFile(path.join(dir, ci), 'utf8'), files[ci])
+    assert.equal(readManifest(dir).files[ci], sha(files[ci]))
+
+    // A CI you changed yourself is kept: the new version lands next to it
+    await fs.writeFile(path.join(dir, ci), old + '# mine\n')
+    const mine = await update({ projectDir: dir, version: '0.54.37', log: silent })
+    assert.equal(mine.find(entry => entry.rel === ci).action, 'changed')
+    assert.equal(await fs.readFile(path.join(dir, ci), 'utf8'), old + '# mine\n')
+    assert.equal(await fs.readFile(path.join(dir, ci + NEW_SUFFIX), 'utf8'), files[ci])
 })
 
 test('update replaces what the CLI wrote, never what you changed, and remembers the new version', async t => {
