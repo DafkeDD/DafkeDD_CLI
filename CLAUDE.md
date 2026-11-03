@@ -95,13 +95,13 @@ instruction; each answers with Blocking (what the change brings in or makes wors
 and projects: name, description, length, front matter, tools); a failure names what is wrong. The checking agents have
 only reading tools, and `kb` may add `Edit` and `Write`.
 
-| Agent      | Role                                                                                                          |
-| ---------- | ------------------------------------------------------------------------------------------------------------- |
-| `reviewer` | Checks the staged change against the ticket and every rule above (read-only)                                  |
-| `tester`   | Runs `npm run format:check`, `npm test` and, for generated code, `npm run verify` (read-only)                 |
-| `docs`     | Checks that README, changelog, version, API docs and frontend docs are complete (read-only)                   |
-| `i18n`     | Checks en, nl, fr and de: same keys, real translations, no hardcoded text (read-only)                         |
-| `security` | Security review of login, tokens, tenants, billing, uploads, the database, the hooks and the mods (read-only) |
+| Agent      | Role                                                                                                                        |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `reviewer` | Checks the staged change against the ticket and every rule above (read-only)                                                |
+| `tester`   | Runs `npm run format:check`, `npm test` and, for generated code, `npm run verify` (read-only)                               |
+| `docs`     | Checks that README, changelog, version, API docs and frontend docs are complete (read-only)                                 |
+| `i18n`     | Checks en, nl, fr and de: same keys, real translations, no hardcoded text (read-only)                                       |
+| `security` | Security review of login, tokens, tenants, billing, uploads, the database, the hooks, the settings and the mods (read-only) |
 
 ## How work is done
 
@@ -123,8 +123,8 @@ The hooks in `.claude/settings.json` enforce this (`.claude/git-policy.json`: `i
 
 - `guard-git.mjs`:
     - blocks a commit that lacks an approval (review, tests, docs, i18n, and security when a staged path touches login,
-      tokens, tenants, billing, uploads, the database, the hooks or the mods), and a commit that is not on an issue
-      branch;
+      tokens, tenants, billing, uploads, the database, the hooks, the settings of Claude Code or the mods), and a commit
+      that is not on an issue branch;
     - blocks `git commit -a`, and staging and committing in one command;
     - blocks every push except a normal push of an issue branch, `release/<x.y.z>` or `dependabot/...` (never forced or
       deleting, no `--tags`, `--mirror`, `--all` or `--prune`);

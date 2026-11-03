@@ -30,8 +30,8 @@ qa, kb, the e2e tests and performance can use them.
 
 - Stage it in its own command: `git add -A` (check `git status` first: no stray files, no `.env`, no secrets).
 - Start in parallel, each with the issue text, never with your own conclusion: **reviewer**, **tester**, **docs**,
-  **i18n**, and **security** when the change touches login, tokens, organisations, billing, uploads, the database or the
-  mods (the commit hook says when it is needed).
+  **i18n**, and **security** when the change touches login, tokens, organisations, billing, uploads, the database, the
+  settings of Claude Code or the mods (the commit hook says when it is needed).
 - **a11y** for a screen, **privacy** for what is stored, **performance** for a new list, search or query (the commit
   hook asks for a11y and privacy when they are needed).
 - Then **qa** when the change touches a screen, a form, an endpoint behind a screen or the database (the commit hook

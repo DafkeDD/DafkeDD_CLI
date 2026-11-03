@@ -777,13 +777,13 @@ Everything Claude Code needs is in this repository; nothing has to be installed.
 **Agents (`.claude/agents/`)**: only the independent checks (they did not make the work, they run in parallel, and the
 commit hook needs their approvals); the main session builds with the skills above.
 
-| Agent      | Role                                                                                                          |
-| ---------- | ------------------------------------------------------------------------------------------------------------- |
-| `reviewer` | Checks the staged change against the ticket and the rules (read-only)                                         |
-| `tester`   | Runs `npm run format:check`, `npm test` and, for generated code, `npm run verify` (read-only)                 |
-| `docs`     | Checks README, changelog, version, API docs and frontend docs (read-only)                                     |
-| `i18n`     | Checks en, nl, fr and de: the same keys, real translations, no hardcoded text (read-only)                     |
-| `security` | Security review of login, tokens, tenants, billing, uploads, the database, the hooks and the mods (read-only) |
+| Agent      | Role                                                                                                                        |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `reviewer` | Checks the staged change against the ticket and the rules (read-only)                                                       |
+| `tester`   | Runs `npm run format:check`, `npm test` and, for generated code, `npm run verify` (read-only)                               |
+| `docs`     | Checks README, changelog, version, API docs and frontend docs (read-only)                                                   |
+| `i18n`     | Checks en, nl, fr and de: the same keys, real translations, no hardcoded text (read-only)                                   |
+| `security` | Security review of login, tokens, tenants, billing, uploads, the database, the hooks, the settings and the mods (read-only) |
 
 `docs` and `i18n` run on a cheaper model (`model: sonnet` in their front matter): they mostly compare text. `reviewer`,
 `security` and `tester` keep the default model.
@@ -810,7 +810,7 @@ approvals are kept in `.git/claude-approvals` and are never committed.
 
 - `guard-git.mjs` runs before every shell command:
     - a `git commit` needs the approvals of review, tests, docs and i18n, plus security when a staged path touches
-      login, tokens, tenants, billing, uploads, the database, the hooks or the mods;
+      login, tokens, tenants, billing, uploads, the database, the hooks, the settings of Claude Code or the mods;
     - a commit only on the branch of an issue (`issue/<n>-<words>`, made from `developer`), of a release
       (`release/<x.y.z>`) or of Dependabot (`dependabot/...`); the approvals cover every file the branch changed since
       `origin/developer`, not only the staged ones;
@@ -922,6 +922,10 @@ Apache 2.0 (its own `LICENSE` and `NOTICE`).
 
 ## Changelog
 
+- **0.54.32**: a change to the settings of Claude Code needs the security agent (#60): `SENSITIVE` of
+  `.claude/hooks/approvals.mjs` (in the CLI and every project) matches `.claude/settings.json` and
+  `.claude/settings.local.json`, which set up the hooks, the permissions and the marketplaces. `CLAUDE.md`, the project
+  `CLAUDE.md`, the implement skills and the security agents say so; `test/claude-hooks.test.js` checks it.
 - **0.54.31**: the CLI is MIT licensed (#62): `LICENSE` at the root, `"license": "MIT"` in `package.json` and in the
   plugin.json of our own mods (`replay-theater` keeps its Apache 2.0), and a Licence section in this README.
   `claude plugin validate` no longer warns LICENSE_MISSING; `test/licence.test.js` checks that they agree.
