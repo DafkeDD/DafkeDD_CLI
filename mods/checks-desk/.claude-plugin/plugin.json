@@ -4,6 +4,7 @@
     "author": {
         "name": "DafkeDD"
     },
+    "license": "MIT",
     "description": "The checking agents at a glance: a line above the prompt with the checks of the staged tree and the to-do list, and a pane with one card per check (running, approved, approved for an earlier tree, or not yet).",
     "types": "./types/index.d.ts"
 }

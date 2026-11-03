@@ -915,8 +915,16 @@ git push
 git switch developer
 ```
 
+## Licence
+
+MIT, see [`LICENSE`](LICENSE). The mods of `mods/` are MIT too, except `replay-theater`: Anthropic's sample keeps its
+Apache 2.0 (its own `LICENSE` and `NOTICE`).
+
 ## Changelog
 
+- **0.54.31**: the CLI is MIT licensed (#62): `LICENSE` at the root, `"license": "MIT"` in `package.json` and in the
+  plugin.json of our own mods (`replay-theater` keeps its Apache 2.0), and a Licence section in this README.
+  `claude plugin validate` no longer warns LICENSE_MISSING; `test/licence.test.js` checks that they agree.
 - **0.54.30**: the proxy of the login server and of a linked app no longer lets pages that start with "api" or "trpc"
   (`/apikeys`, `/api-docs`) past the login (#59): its `matcher` skips only the files of Next.js and paths with a dot, as
   the simple login does, and the proxy itself lets `/api/` through (the routes of the login, the API). The proxy of a

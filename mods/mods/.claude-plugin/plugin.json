@@ -2,5 +2,6 @@
     "name": "mods",
     "version": "0.1.0",
     "author": { "name": "DafkeDD" },
+    "license": "MIT",
     "description": "/mods shows the mods of this project, which are on, and how to switch one on or off."
 }
