@@ -219,6 +219,7 @@ test('the api spec logs in for real with the demo data and opens every page of t
     // How to run it: no two-step verification at the API, the superadmin made with oidc:user (a script that exists)
     assert.ok(spec.includes('OIDC_MFA=optional'))
     assert.ok(spec.includes('OIDC_LOGIN_UI_URL'))
+    assert.ok(spec.includes('CORS_ORIGIN'))
     assert.ok(spec.includes('npm run oidc:user --'))
     const readme = frontendReadme({ ui: 'all', api: { port: 4000, oidc: true }, locales: ['en', 'nl', 'fr', 'de'] })
     assert.ok(readme.includes('OIDC_MFA=optional'))

@@ -409,13 +409,13 @@ No organisation is created: the superadmin logs in to the platform and creates o
   every page of the rail and the user menu with real data: its page head, no "Could not load the data." and rows where
   the demo data has them. With the API and its demo data running:
   `E2E_API=http://localhost:4000 E2E_DEMO_PASSWORD=<password> npx playwright test e2e/api.spec.ts` in `./frontend` (the
-  API must know the frontend of the tests on port 3199: `APP_URL`, `OIDC_LOGIN_UI_URL` and the redirect of the client
-  `frontend`, and run with `OIDC_MFA=optional`, else every account first sets up two-step verification; the frontend
-  then talks to `E2E_API` for the login and the data, built again unless `E2E_NO_BUILD`). Only a local API (`localhost`,
-  `127.0.0.1` or `[::1]`), never production: the test server seals its sessions with a public secret. The spec keeps no
-  trace, video or screenshot and types the password without a step title (`fill` would name it), so the password never
-  lands in a report. Without those two variables it is skipped, and `npm run test:e2e` runs the other specs without the
-  API.
+  API must know the frontend of the tests on port 3199: `APP_URL`, `OIDC_LOGIN_UI_URL`, `CORS_ORIGIN` and the redirect
+  of the client `frontend`, and run with `OIDC_MFA=optional`, else every account first sets up two-step verification;
+  the frontend then talks to `E2E_API` for the login and the data, built again unless `E2E_NO_BUILD`). Only a local API
+  (`localhost`, `127.0.0.1` or `[::1]`), never production: the test server seals its sessions with a public secret. The
+  spec keeps no trace, video or screenshot and types the password without a step title (`fill` would name it), so the
+  password never lands in a report. Without those two variables it is skipped, and `npm run test:e2e` runs the other
+  specs without the API.
 - **Tests**: unit tests (JOSE, PKCE with the RFC 7636 vector, keys, migrations, pages), end-to-end tests of the whole
   flow in memory (`npm run test:e2e`) and `npm run test:db` against the real PostgreSQL (isolation between tenants,
   codes used once, the first admin). Checked with the independent libraries `openid-client` and `jose` as client.
@@ -752,9 +752,11 @@ checks the files of Claude Code, the knowledge base and Google Cloud, that `upda
 that `doctor` finds no failure, the browser tests of the frontend (`npm run test:e2e` in Chromium, installed by
 Playwright when it is missing; those of `plain` after its database tests, against the real API), and that the built
 backend answers `/health` on `PORT` 8080 as on Cloud Run (`site` has no backend, so no API, database or `/health`); for
-the login server also that the superadmin exists after the first start and that `demo:data` and `demo:clear` work. The
-database comes from `VERIFY_DB_HOST`, `VERIFY_DB_PORT`, `VERIFY_DB_USER` and `VERIFY_DB_PASSWORD` (default
-`localhost:5432`, `postgres`/`postgres`; the user needs `CREATEDB`). Options:
+the login server also that the superadmin exists after the first start, that `demo:data` and `demo:clear` work, and the
+browser tests against the real API (`frontend/e2e/api.spec.ts`: the demo data and a superadmin with a password of the
+run, the built API without two-step verification, and the spec must really run, not be skipped). The database comes from
+`VERIFY_DB_HOST`, `VERIFY_DB_PORT`, `VERIFY_DB_USER` and `VERIFY_DB_PASSWORD` (default `localhost:5432`,
+`postgres`/`postgres`; the user needs `CREATEDB`). Options:
 
 - `-- --only app-full` runs one variant (or several: `--only app,app-full`);
 - `-- --keep` keeps the projects;
@@ -938,6 +940,11 @@ Apache 2.0 (its own `LICENSE` and `NOTICE`).
 
 ## Changelog
 
+- **0.54.36**: `npm run verify` runs the browser tests of the login server against the real API (#69, part of #66): with
+  a database, the variant `pasport` makes the demo data and a superadmin with a password of the run, starts the built
+  API (the frontend of the tests as a client, without two-step verification) and runs `frontend/e2e/api.spec.ts`, which
+  must pass all three tests (an admin, a member, the superadmin), not skip them. Without a database it is skipped with
+  `test:db`. The steps are in `scripts/verify-api.mjs`, tested by `test/verify-api.test.js`.
 - **0.54.35**: the login server gets browser tests against the real API (#67, part of #66): `frontend/e2e/api.spec.ts`
   logs in through the real login screen as the demo admin, a demo member and a superadmin, and opens every page of the
   rail and the user menu with real data (its page head, no `LoadError`, rows where the demo data has them). It runs with

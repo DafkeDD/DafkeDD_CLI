@@ -8,9 +8,9 @@ import { ADMIN, tourSeen } from './session'
  * superadmin, then every page of the rail and the user menu, each with its page head, without LoadError, and rows
  * where the demo data has them. Only with E2E_API (the API, for example http://localhost:4000) and E2E_DEMO_PASSWORD
  * (the password of npm run demo:data -- --password <text>); without them it is skipped, and the other specs run with
- * the answers of the API given by the test. The API must know this frontend (APP_URL, OIDC_LOGIN_UI_URL and the
- * redirect of the client `frontend` on E2E_PORT) and run with OIDC_MFA=optional (else every account first sets up
- * two-step verification). Desktop and English only: the languages, the themes and the phone are in pages.spec.ts.
+ * the answers of the API given by the test. The API must know this frontend (APP_URL, OIDC_LOGIN_UI_URL, CORS_ORIGIN
+ * and the redirect of the client `frontend` on E2E_PORT) and run with OIDC_MFA=optional (else every account first sets
+ * up two-step verification). Desktop and English only: the languages, the themes and the phone are in pages.spec.ts.
  */
 const API = process.env.E2E_API ?? ''
 const PASSWORD = process.env.E2E_DEMO_PASSWORD ?? ''
