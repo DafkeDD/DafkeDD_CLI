@@ -23,10 +23,12 @@ export const ALWAYS = ['review', 'tests', 'docs', 'i18n']
 /**
  * A staged path that needs the security agent too: login, tokens, tenants, payments, uploads, the database, hooks, and
  * the mods (hooks modules that run in every session and see every tool call and drawn row), and the settings of Claude
- * Code (`.claude/settings.json` and `settings.local.json`: the hooks, the permissions, the marketplaces).
+ * Code (`.claude/settings.json` and `settings.local.json`: the hooks, the permissions, the marketplaces), `.mcp.json`
+ * (which MCP servers start, and they run commands), `.claude/git-policy.json` (the branch and merge policy the guard
+ * reads) and `src/claude.js` of the CLI (it builds the settings, the MCP servers and the hooks of every project).
  */
 export const SENSITIVE =
-    /(oidc|auth|pasport|passkey|mfa|eid|session|token|cookie|access|guard|tenan|billing|mollie|license|licence|files?\/|upload|database|migrat|crypto|secret|\.claude\/hooks|(^|\/)\.claude\/settings(\.local)?\.json$|(^|\/)mods\/|proxy)/i
+    /(oidc|auth|pasport|passkey|mfa|eid|session|token|cookie|access|guard|tenan|billing|mollie|license|licence|files?\/|upload|database|migrat|crypto|secret|\.claude\/hooks|(^|\/)\.claude\/settings(\.local)?\.json$|(^|\/)\.mcp\.json$|(^|\/)\.claude\/git-policy\.json$|^src\/claude\.js$|(^|\/)mods\/|proxy)/i
 
 /**
  * A time from the environment that can only make `max` shorter (the tests): a whole number of ms, at least 1. Anything

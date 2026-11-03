@@ -810,7 +810,8 @@ approvals are kept in `.git/claude-approvals` and are never committed.
 
 - `guard-git.mjs` runs before every shell command:
     - a `git commit` needs the approvals of review, tests, docs and i18n, plus security when a staged path touches
-      login, tokens, tenants, billing, uploads, the database, the hooks, the settings of Claude Code or the mods;
+      login, tokens, tenants, billing, uploads, the database, the hooks, the settings of Claude Code (also `.mcp.json`,
+      the git policy and `src/claude.js`, which builds them for every project) or the mods;
     - a commit only on the branch of an issue (`issue/<n>-<words>`, made from `developer`), of a release
       (`release/<x.y.z>`) or of Dependabot (`dependabot/...`); the approvals cover every file the branch changed since
       `origin/developer`, not only the staged ones;
@@ -922,6 +923,10 @@ Apache 2.0 (its own `LICENSE` and `NOTICE`).
 
 ## Changelog
 
+- **0.54.33**: `.mcp.json` (which MCP servers start), `.claude/git-policy.json` (the policy the guard reads) and
+  `src/claude.js` of the CLI (it builds the settings, the MCP servers and the hooks of every project) need the security
+  agent too (#70): `SENSITIVE` of `.claude/hooks/approvals.mjs` matches them. The docs, the implement skills and the
+  security agents say so; `test/claude-hooks.test.js` checks it.
 - **0.54.32**: a change to the settings of Claude Code needs the security agent (#60): `SENSITIVE` of
   `.claude/hooks/approvals.mjs` (in the CLI and every project) matches `.claude/settings.json` and
   `.claude/settings.local.json`, which set up the hooks, the permissions and the marketplaces. `CLAUDE.md`, the project
