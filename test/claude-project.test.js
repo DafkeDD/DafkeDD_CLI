@@ -10,6 +10,8 @@ import {
     claudeSteps,
     codeowners,
     describeProject,
+    E2E_SUPERADMIN,
+    e2eApiJob,
     lighthouseRc,
     lighthouseUrls,
     projectClaudeFiles,
@@ -170,6 +172,103 @@ test('the CI checks every part on pushes and pull requests, with PostgreSQL for 
     assert.ok(ci.includes('npm run check:design'))
     assert.ok(ciWorkflow(pasport).includes('npm run check:design'))
     assert.ok(frontendCi.includes('npm run check:design'))
+})
+
+test('the CI of a login server logs in at its real API with the demo data on every pull request (e2e-api)', async () => {
+    const pas = describeProject({
+        name: 'pas',
+        frontend: { id: 'nextjs' },
+        backend: { id: 'nestjs' },
+        answers: { oidc: true, database: { database: 'pas' } }
+    })
+    const ci = ciWorkflow(pas)
+    // A job of the CI (it runs on every pull request, like the others), between the frontend and the security
+    assert.ok(ci.indexOf('\n    frontend:\n') < ci.indexOf('\n    e2e-api:\n'))
+    assert.ok(ci.indexOf('\n    e2e-api:\n') < ci.indexOf('\n    security:\n'))
+    assert.ok(ci.includes(e2eApiJob('pas').join('\n')))
+    const lines = e2eApiJob('pas').map(line => line.trim())
+    const at = line => {
+        const index = lines.indexOf(line)
+        assert.ok(index >= 0, line)
+        return index
+    }
+    // PostgreSQL as a service, the API reads it through DATABASE_*
+    at('image: postgres:17')
+    at('DATABASE_NAME: pas')
+    // A password and a master key of this run only, masked in the log, never a secret of the repository
+    assert.ok(at('password=$(openssl rand -hex 16)') < at('echo "::add-mask::$password"'))
+    assert.ok(at('key=$(openssl rand -hex 32)') < at('echo "::add-mask::$key"'))
+    assert.ok(at('echo "::add-mask::$password"') < at('echo "E2E_DEMO_PASSWORD=$password" >> "$GITHUB_ENV"'))
+    assert.ok(at('echo "::add-mask::$key"') < at('echo "OIDC_MASTER_KEY=$key" >> "$GITHUB_ENV"'))
+    assert.ok(!ci.includes('secrets.'), 'no secret of the repository')
+    // The API for the frontend of the tests (port 3199): its login screen, its origin, no two-step verification
+    const api = at('- name: The API with the demo data and a superadmin')
+    const spec = at('- name: Browser tests against the API (frontend/e2e/api.spec.ts)')
+    const settings = lines.slice(api, at('npm ci'))
+    for (const line of [
+        'working-directory: backend',
+        'PORT: 4000',
+        'OIDC_ISSUER: http://localhost:4000/oidc',
+        'OIDC_LOGIN_UI_URL: http://localhost:3199/login',
+        'APP_URL: http://localhost:3199',
+        'CORS_ORIGIN: http://localhost:3199',
+        "OIDC_MFA: 'optional'",
+        'OIDC_CLIENTS_FILE: ${{ runner.temp }}/oidc-clients.e2e.json'
+    ])
+        assert.ok(settings.includes(line), line)
+    // Built, the demo data, then the superadmin (demo:clear would remove it: it is in the demo domain), then the API
+    const demo = at('npm run demo:data -- --password "$E2E_DEMO_PASSWORD"')
+    const superadmin = at(
+        `npm run oidc:user -- --superadmin --email ${E2E_SUPERADMIN} --name Support --password "$E2E_DEMO_PASSWORD"`
+    )
+    const clients = lines.findIndex(line => line.startsWith('jq --arg app "http://localhost:3199"'))
+    const start = at('node dist/main > "$RUNNER_TEMP/api.log" 2>&1 &')
+    const ready = at(
+        'for i in $(seq 60); do curl -s -o /dev/null http://localhost:4000/health && exit 0; sleep 2; done'
+    )
+    assert.ok(api < at('npm ci') && at('npm ci') < at('npm run build') && at('npm run build') < demo)
+    assert.ok(demo < superadmin && superadmin < clients && clients < start && start < ready && ready < spec)
+    assert.ok(lines[clients].endsWith('config/oidc-clients.json > "$OIDC_CLIENTS_FILE"'))
+    for (const part of ['/api/auth/callback', '.postLogoutRedirectUris += [$app]', '/api/auth/backchannel-logout'])
+        assert.ok(lines[clients].includes(part), part)
+    // The spec in ./frontend: it builds the frontend with that API (playwright.config.ts) and logs in there
+    assert.deepEqual(lines.slice(spec + 1, spec + 8), [
+        'working-directory: frontend',
+        'env:',
+        'E2E_API: http://localhost:4000',
+        'run: |',
+        'npm ci',
+        'npx playwright install --with-deps chromium',
+        'npx playwright test e2e/api.spec.ts'
+    ])
+    // The report on a failure: no trace, video or screenshot keeps the password (e2e/api.spec.ts)
+    assert.ok(at('path: frontend/playwright-report') > spec)
+    // ... and the log of the API and the report only then
+    const log = at('- name: The log of the API')
+    assert.deepEqual(lines.slice(log + 1, log + 3), [
+        'if: failure()',
+        'run: tail -n 200 "$RUNNER_TEMP/api.log" || true'
+    ])
+    const upload = at('name: playwright-report-api')
+    assert.deepEqual(lines.slice(upload - 3, upload), ['- uses: actions/upload-artifact@v4', 'if: failure()', 'with:'])
+    // The defaults of the spec and the API it relies on
+    const read = rel => fs.readFile(new URL(`../${rel}`, import.meta.url), 'utf8')
+    assert.ok((await read('templates/frontend-oidc/e2e/api.spec.ts')).includes(`?? '${E2E_SUPERADMIN}'`))
+    assert.match(await read('src/backends/nestjs.js'), /export const PORT = 4000\n/)
+    assert.match(await read('templates/backend-oidc/scripts/demo-data.mjs'), /The tables come from the migrations/)
+    // update brings it to an existing login server: the CI is a managed file of Claude Code
+    const { managedFiles } = await import('../src/manifest.js')
+    assert.ok(managedFiles({ ...pas, claude: true })['.github/workflows/ci.yml'].includes('\n    e2e-api:\n'))
+    // The CLAUDE.md of the project names it (only the login server)
+    assert.ok(projectClaudeMd(pas).includes('the job `e2e-api` of `.github/workflows/ci.yml`'))
+    assert.ok(!projectClaudeMd(app).includes('e2e-api'))
+    assert.ok(!projectClaudeMd({ ...pas, frontend: false }).includes('e2e-api'))
+    assert.ok(!projectClaudeMd({ ...pas, database: null }).includes('e2e-api'))
+    // Only a login server with its frontend and a database has it
+    assert.ok(!ciWorkflow(app).includes('e2e-api:'))
+    assert.ok(!ciWorkflow(frontendOnly).includes('e2e-api:'))
+    assert.ok(!ciWorkflow({ ...pas, frontend: false }).includes('e2e-api:'))
+    assert.ok(!ciWorkflow({ ...pas, database: null }).includes('e2e-api:'))
 })
 
 test('the release runs only on main, after the CI, with the version of the backend', () => {

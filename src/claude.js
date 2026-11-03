@@ -162,6 +162,13 @@ export function projectClaudeMd(project) {
         '',
         '- **Tests are mandatory**: every change gets tests (unit, e2e, and db specs for SQL); a bug fix starts with a',
         '  failing test. Nothing is merged while a check is red.',
+        ...(project.kind === 'pasport' && project.frontend && project.database
+            ? [
+                  '- **The real login in the CI**: the job `e2e-api` of `.github/workflows/ci.yml` starts the API with the demo data',
+                  '  and a superadmin (a password of the run) and runs `frontend/e2e/api.spec.ts`: the demo admin, a member and the',
+                  '  superadmin log in through the login screen and open every page with real data. A new page goes in its lists.'
+              ]
+            : []),
         '- **Documentation is mandatory**: every endpoint in `docs/api.md` (body, example, response, errors; the READMEs of',
         '  backend and frontend only point to `docs/`), every page and call of the frontend in `docs/frontend.md`, every',
         '  setting in `.env.example`.',
@@ -396,6 +403,8 @@ export function ciWorkflow(project) {
             '                  path: frontend/playwright-report',
             '                  if-no-files-found: ignore'
         )
+    // The login server against its real API: the browser tests of frontend/e2e/api.spec.ts with the demo data
+    if (project.kind === 'pasport' && project.frontend && project.database) jobs.push(...e2eApiJob(project.database))
     jobs.push(
         '    security:',
         '        name: Security (secrets, npm audit)',
@@ -443,6 +452,84 @@ export function ciWorkflow(project) {
         ...jobs,
         ''
     ].join('\n')
+}
+
+/** The superadmin of frontend/e2e/api.spec.ts (E2E_SUPERADMIN_EMAIL, by default this one; in the demo domain). */
+export const E2E_SUPERADMIN = 'support@demo.example.com'
+
+/**
+ * The job e2e-api of a login server: PostgreSQL, the built API (port 4000, the one the frontend is built for) with the
+ * demo data and a superadmin, made after the demo data, with a password of this run (masked in the log, never a
+ * secret of the repository), the frontend of the tests (port 3199) as a client, its origin for CORS and no two-step
+ * verification; then frontend/e2e/api.spec.ts logs in as the demo admin, a member and the superadmin. A failure stops
+ * the merge like every other check.
+ */
+export function e2eApiJob(database) {
+    const app = 'http://localhost:3199'
+    return [
+        '    e2e-api:',
+        '        name: Browser tests against the real API (the demo data)',
+        '        runs-on: ubuntu-latest',
+        ...postgresService(database),
+        '        steps:',
+        '            - uses: actions/checkout@v4',
+        '            - uses: actions/setup-node@v4',
+        '              with:',
+        `                  node-version: ${CI_NODE}`,
+        '                  cache: npm',
+        '                  cache-dependency-path: |',
+        '                      backend/package-lock.json',
+        '                      frontend/package-lock.json',
+        '            # A password and a master key of this run only, masked in the log',
+        '            - name: Secrets of this run',
+        '              run: |',
+        '                  password=$(openssl rand -hex 16)',
+        '                  key=$(openssl rand -hex 32)',
+        '                  echo "::add-mask::$password"',
+        '                  echo "::add-mask::$key"',
+        '                  echo "E2E_DEMO_PASSWORD=$password" >> "$GITHUB_ENV"',
+        '                  echo "OIDC_MASTER_KEY=$key" >> "$GITHUB_ENV"',
+        '            - name: The API with the demo data and a superadmin',
+        '              working-directory: backend',
+        '              env:',
+        '                  PORT: 4000',
+        '                  OIDC_ISSUER: http://localhost:4000/oidc',
+        `                  OIDC_LOGIN_UI_URL: ${app}/login`,
+        `                  APP_URL: ${app}`,
+        `                  CORS_ORIGIN: ${app}`,
+        "                  OIDC_MFA: 'optional'",
+        '                  OIDC_CLIENTS_FILE: ${{ runner.temp }}/oidc-clients.e2e.json',
+        '              run: |',
+        '                  npm ci',
+        '                  npm run build',
+        '                  # The demo data (its script makes the tables of the built migrations), then the superadmin',
+        '                  npm run demo:data -- --password "$E2E_DEMO_PASSWORD"',
+        `                  npm run oidc:user -- --superadmin --email ${E2E_SUPERADMIN} --name Support --password "$E2E_DEMO_PASSWORD"`,
+        '                  # The frontend of the tests as a client, next to the one of npm run dev',
+        '                  jq --arg app ' +
+            `"${app}"` +
+            ' \'(.clients[] | select(.clientId == "frontend")) |= (.redirectUris += [$app + "/api/auth/callback"] | .postLogoutRedirectUris += [$app] | .backchannelLogoutUri = $app + "/api/auth/backchannel-logout")\' config/oidc-clients.json > "$OIDC_CLIENTS_FILE"',
+        '                  node dist/main > "$RUNNER_TEMP/api.log" 2>&1 &',
+        '                  for i in $(seq 60); do curl -s -o /dev/null http://localhost:4000/health && exit 0; sleep 2; done',
+        '                  cat "$RUNNER_TEMP/api.log"; exit 1',
+        '            - name: Browser tests against the API (frontend/e2e/api.spec.ts)',
+        '              working-directory: frontend',
+        '              env:',
+        '                  E2E_API: http://localhost:4000',
+        '              run: |',
+        '                  npm ci',
+        '                  npx playwright install --with-deps chromium',
+        '                  npx playwright test e2e/api.spec.ts',
+        '            - name: The log of the API',
+        '              if: failure()',
+        '              run: tail -n 200 "$RUNNER_TEMP/api.log" || true',
+        '            - uses: actions/upload-artifact@v4',
+        '              if: failure()',
+        '              with:',
+        '                  name: playwright-report-api',
+        '                  path: frontend/playwright-report',
+        '                  if-no-files-found: ignore'
+    ]
 }
 
 /** The version of the Lighthouse CI and gitleaks in the pipelines: pinned, so a check does not change by itself. */
