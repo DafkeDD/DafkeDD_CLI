@@ -171,7 +171,8 @@ The hooks in `.claude/settings.json` enforce this (`.claude/git-policy.json`: `i
 
 - `npm run verify` generates six variants with the real steps of the CLI, in a temporary folder, and runs their browser
   tests (`npm run test:e2e`, Chromium of the pinned Playwright):
-    - `pasport`: the login server (with the demo data);
+    - `pasport`: the login server (with the demo data; with a database also `e2e/api.spec.ts` against the real API, as
+      the demo admin, a member and a superadmin);
     - `plain`: an API with the simple login and PostgreSQL;
     - `app`: an app without modules (Row-Level Security);
     - `app-full`: an app with mail, files and a database per organisation;

@@ -397,10 +397,10 @@ example \`http://localhost:4000\`): the frontend then logs in there and asks it 
 with another API needs a new build (not \`E2E_NO_BUILD\`). It must be an API on this machine (\`localhost\`,
 \`127.0.0.1\` or \`[::1]\`), never production. The spec keeps no trace, video or screenshot and sets the password without
 a step title (\`fill\` would name it in the report). The API must know this frontend on port 3199 (\`APP_URL\`,
-\`OIDC_LOGIN_UI_URL\` and the redirect of the client \`frontend\`) and run with \`OIDC_MFA=optional\` (else every account
-first sets up two-step verification). A new page goes in the lists of \`e2e/pages.spec.ts\` and \`e2e/api.spec.ts\`; a
-new step of the tour in \`tour-steps.ts\`. Once: \`npx playwright install chromium\`. With a built frontend:
-\`E2E_NO_BUILD=1 npm run test:e2e\`.
+\`OIDC_LOGIN_UI_URL\`, \`CORS_ORIGIN\` and the redirect of the client \`frontend\`) and run with \`OIDC_MFA=optional\`
+(else every account first sets up two-step verification). A new page goes in the lists of \`e2e/pages.spec.ts\` and
+\`e2e/api.spec.ts\`; a new step of the tour in \`tour-steps.ts\`. Once: \`npx playwright install chromium\`. With a built
+frontend: \`E2E_NO_BUILD=1 npm run test:e2e\`.
 `
 
 /** The browser tests of the simple login (templates/frontend-login). */

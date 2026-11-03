@@ -25,13 +25,14 @@ import { hashPassword } from '../src/backends/oidc.js'
 import { usersTable } from '../src/backends/auth.js'
 import { run } from '../src/runner.js'
 import { claudeSteps, describeProject, LHCI_VERSION, lighthouseUrls, projectClaudeFiles } from '../src/claude.js'
-import { MANIFEST, manifestSteps, readManifest } from '../src/manifest.js'
+import { MANIFEST, manifestSteps, parseEnvFile, readManifest } from '../src/manifest.js'
 import { update } from '../src/update.js'
 import { checks, FAIL } from '../src/doctor.js'
 import { cloudFiles, cloudSteps } from '../src/cloud.js'
 import { docsStep } from '../src/docs.js'
 import { kbFiles, kbSteps } from '../src/kb.js'
 import { spawn, spawnSync } from 'node:child_process'
+import { apiEnv, backendSteps, e2eClients, SPEC_COMMAND, specEnv, specRan } from './verify-api.mjs'
 import { existsSync } from 'node:fs'
 
 const { values: flags } = parseArgs({
@@ -237,6 +238,40 @@ async function serve(command, args, { cwd, env, url }) {
     }
     child.kill()
     throw new Error(`${command} ${args.join(' ')} did not answer on ${url}`)
+}
+
+/**
+ * frontend/e2e/api.spec.ts against the built API: the demo data and a superadmin with a password of this run, the API
+ * on the port the frontend was built for (backend/.env PORT), with the frontend of the tests as a client and without
+ * two-step verification, then the spec, which must really run (not be skipped).
+ */
+async function apiSpec(projectDir, password) {
+    const backend = path.join(projectDir, 'backend')
+    for (const [cmd, args] of backendSteps(password)) await run(cmd, args, { cwd: backend })
+    const apiPort = Number(parseEnvFile(await fs.readFile(path.join(backend, '.env'), 'utf8')).PORT ?? 4000)
+    const clientsFile = path.join(projectDir, 'oidc-clients.e2e.json')
+    await fs.writeFile(
+        clientsFile,
+        e2eClients(await fs.readFile(path.join(backend, 'config', 'oidc-clients.json'), 'utf8'))
+    )
+    let api = null
+    try {
+        api = await serve('node', ['dist/main'], {
+            cwd: backend,
+            env: apiEnv({ apiPort, clientsFile }),
+            url: `http://127.0.0.1:${apiPort}/health`
+        })
+        const [cmd, args] = SPEC_COMMAND
+        const output = await run(cmd, args, {
+            cwd: path.join(projectDir, 'frontend'),
+            env: specEnv({ apiPort, password })
+        })
+        if (!specRan(output)) throw new Error(`e2e/api.spec.ts did not run all its tests:\n${output.slice(-2000)}`)
+    } finally {
+        // Never left running: the next variant would get its health answer from this API
+        api?.kill()
+        await fs.rm(clientsFile, { force: true })
+    }
 }
 
 /**
@@ -460,6 +495,10 @@ for (const name of names) {
                 if (!demo.added) throw new Error(`The demo data was not added during the install: ${demo.error ?? ''}`)
                 for (const script of ['demo:data', 'demo:data', 'demo:clear', 'demo:data'])
                     await run('npm', ['run', script], { cwd: backend })
+            }
+            if (demo && pkg.scripts?.['test:e2e']) {
+                log(`${name}: browser tests against the real API (e2e/api.spec.ts, the demo data and a superadmin)`)
+                await apiSpec(projectDir, demo.password)
             }
         } else if (flags['require-db']) {
             throw new Error('The database cannot be reached (VERIFY_DB_*), and --require-db was given')
