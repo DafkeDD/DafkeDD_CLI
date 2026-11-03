@@ -940,6 +940,9 @@ Apache 2.0 (its own `LICENSE` and `NOTICE`).
 
 ## Changelog
 
+- **0.54.39**: `verify` no longer stops the first start of a login server too early (#79): the API answers `/health`
+  before it has made the superadmin of `.env` (that runs after the start), so under load the check after it found none.
+  The first start now waits until the superadmin is there (`waitUntil` in `scripts/verify-api.mjs`) before it stops.
 - **0.54.38**: a password never shows in the error of a failing step (#78): `run()` (`src/runner.js`) replaces the value
   of `--password <value>` and `--password=<value>` by `***`, in the command and in its output (npm prints the command of
   a script), the longest value first, and also when the command cannot start. That covers the demo data of the install

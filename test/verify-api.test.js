@@ -129,3 +129,78 @@ test('verify pasport runs the spec after the demo data, with the database only',
     )
     assert.ok(body.indexOf('try {') < body.indexOf("api = await serve('node', ['dist/main']"))
 })
+
+test('waitUntil waits until a check holds, and fails after its tries (the superadmin of the first start)', async () => {
+    const { waitUntil } = await import('../scripts/verify-api.mjs')
+    let calls = 0
+    assert.equal(await waitUntil(async () => ++calls >= 3, { tries: 5, delay: 1 }), true)
+    assert.equal(calls, 3)
+    calls = 0
+    await assert.rejects(
+        waitUntil(async () => (++calls, false), { tries: 4, delay: 1 }),
+        /did not happen/
+    )
+    assert.equal(calls, 4)
+    // A check that throws (the table is not there yet) counts as not yet
+    let tries = 0
+    assert.equal(
+        await waitUntil(
+            async () => {
+                if (++tries < 2) throw new Error('relation does not exist')
+                return true
+            },
+            { tries: 3, delay: 1 }
+        ),
+        true
+    )
+    // ... and it was asked again after the error: an error is never taken for the superadmin being there
+    assert.equal(tries, 2)
+})
+
+test('verify keeps the API of the first start running until its superadmin is there (it is made after /health)', () => {
+    const verify = read('scripts/verify-apps.mjs')
+    // The API answers /health before onApplicationBootstrap has made the superadmin (prepare() is not awaited)
+    assert.match(
+        read('templates/backend-oidc/src/oidc/oidc.service.ts'),
+        /onApplicationBootstrap\(\) \{[\s\S]*?this\.prepare\(\)\.catch/
+    )
+    const start = verify.slice(
+        verify.indexOf('async function startsOnPort'),
+        verify.indexOf('\n}\n', verify.indexOf('async function startsOnPort'))
+    )
+    // After /health, and before the kill of the finally
+    assert.ok(start.indexOf('if (answer)') < start.indexOf('if (ready) await waitUntil(ready'))
+    assert.ok(start.indexOf('if (ready) await waitUntil(ready') < start.indexOf('child.kill()'))
+    // The login server with a database waits for its superadmin
+    assert.ok(
+        verify.includes(
+            'await checkExtras(projectDir, project, firstStartReady(variant.backend?.answers, backend, superadminFound))'
+        )
+    )
+    // superadminFound compares with superadminMatches, and superadminExists throws when it finds none
+    assert.ok(verify.includes('        return superadminMatches(rows, oidc)\n'))
+    assert.match(verify, /if \(!\(await superadminFound\(dir, database, oidc\)\)\)\n\s+throw new Error\(`No superadmin/)
+})
+
+test('the first start of a login server with its database waits for the superadmin, no other variant', async () => {
+    const { firstStartReady, superadminMatches } = await import('../scripts/verify-api.mjs')
+    const oidc = { adminEmail: 'admin@example.com', adminPasswordHash: 'scrypt$1$a$b' }
+    const database = { database: 'p', connection: 'ok' }
+    const calls = []
+    const find = async (...args) => (calls.push(args), true)
+    const ready = firstStartReady({ oidc, database }, '/x/backend', find)
+    assert.equal(typeof ready, 'function')
+    assert.equal(await ready(), true)
+    assert.deepEqual(calls, [['/x/backend', database, oidc]])
+    // No login server, no superadmin in .env, or no database reached: nothing to wait for
+    assert.equal(firstStartReady(undefined, '/x', find), null)
+    assert.equal(firstStartReady({ oidc: null, database }, '/x', find), null)
+    assert.equal(firstStartReady({ oidc: { ...oidc, adminEmail: '' }, database }, '/x', find), null)
+    assert.equal(firstStartReady({ oidc, database: { ...database, connection: 'failed' } }, '/x', find), null)
+    assert.equal(firstStartReady({ oidc, database: null }, '/x', find), null)
+    // The row of the users table: only the hash of the CLI counts
+    assert.equal(superadminMatches([{ password_hash: 'scrypt$1$a$b' }], oidc), true)
+    assert.equal(superadminMatches([{ password_hash: 'scrypt$1$other' }], oidc), false)
+    assert.equal(superadminMatches([], oidc), false)
+    assert.equal(superadminMatches([{ password_hash: null }], { adminPasswordHash: null }), false)
+})

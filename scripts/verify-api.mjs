@@ -81,3 +81,35 @@ export function specRan(output) {
     const passed = Number(/(\d+) passed/.exec(output)?.[1] ?? 0)
     return passed >= 3 && !/\d+ (skipped|flaky|failed)/.test(output)
 }
+
+/**
+ * Waits until `check` holds: `tries` times, `delay` ms apart; a check that throws (a table that is not there yet)
+ * counts as not yet. Throws when it never holds.
+ */
+export async function waitUntil(check, { tries = 40, delay = 500 } = {}) {
+    for (let i = 0; i < tries; i++) {
+        if (
+            await Promise.resolve()
+                .then(check)
+                .catch(() => false)
+        )
+            return true
+        await new Promise(resolve => setTimeout(resolve, delay))
+    }
+    throw new Error(`What verify waited for did not happen (${tries} tries, ${delay} ms apart)`)
+}
+
+/** The superadmin row of the users table has the hash of the CLI (no row, or another hash: not this superadmin). */
+export const superadminMatches = (rows, oidc) =>
+    Boolean(rows[0]?.password_hash) && rows[0].password_hash === oidc.adminPasswordHash
+
+/**
+ * What the first start of a variant must have done before verify stops it: the superadmin of .env, for a login server
+ * whose database was reached (`find(backend, database, oidc)` looks for it); null for every other variant.
+ */
+export function firstStartReady(answers, backend, find) {
+    const oidc = answers?.oidc
+    const database = answers?.database
+    if (!oidc?.adminEmail || database?.connection !== 'ok') return null
+    return () => find(backend, database, oidc)
+}

@@ -32,7 +32,17 @@ import { cloudFiles, cloudSteps } from '../src/cloud.js'
 import { docsStep } from '../src/docs.js'
 import { kbFiles, kbSteps } from '../src/kb.js'
 import { spawn, spawnSync } from 'node:child_process'
-import { apiEnv, backendSteps, e2eClients, SPEC_COMMAND, specEnv, specRan } from './verify-api.mjs'
+import {
+    apiEnv,
+    backendSteps,
+    e2eClients,
+    firstStartReady,
+    SPEC_COMMAND,
+    specEnv,
+    specRan,
+    superadminMatches,
+    waitUntil
+} from './verify-api.mjs'
 import { existsSync } from 'node:fs'
 
 const { values: flags } = parseArgs({
@@ -151,7 +161,7 @@ async function script(dir, name) {
 }
 
 /** The files of Claude Code, the knowledge base and Google Cloud are in the project, and their scripts work. */
-async function checkExtras(projectDir, project) {
+async function checkExtras(projectDir, project, ready = null) {
     const expected = [
         ...Object.keys(projectClaudeFiles(project)),
         ...Object.keys(kbFiles(project)),
@@ -206,11 +216,15 @@ async function checkExtras(projectDir, project) {
     const failed = (await checks({ projectDir, version: 'verify' })).filter(entry => entry.status === FAIL)
     if (failed.length) throw new Error(`doctor: ${failed.map(entry => entry.text).join(', ')}`)
     // The backend starts as on Cloud Run: the built API on PORT 8080 answers /health (a site has none)
-    if (project.backend) await startsOnPort(path.join(projectDir, 'backend'))
+    if (project.backend) await startsOnPort(path.join(projectDir, 'backend'), ready)
 }
 
-/** Starts `node dist/main` with PORT=8080 and waits for an answer of /health (any status: the database may be off). */
-async function startsOnPort(dir) {
+/**
+ * Starts `node dist/main` with PORT=8080 and waits for an answer of /health (any status: the database may be off).
+ * `ready`: what the first start must also have done before it is stopped (the superadmin of the login server: the API
+ * answers /health before it has made it).
+ */
+async function startsOnPort(dir, ready = null) {
     const child = spawn('node', ['dist/main'], {
         cwd: dir,
         // As on Cloud Run: the test eID and the test payments are refused in production (cloud.js sets them so too)
@@ -221,7 +235,10 @@ async function startsOnPort(dir) {
         for (let i = 0; i < 40; i++) {
             await new Promise(resolve => setTimeout(resolve, 500))
             const answer = await fetch('http://127.0.0.1:8080/health').catch(() => null)
-            if (answer) return
+            if (answer) {
+                if (ready) await waitUntil(ready)
+                return
+            }
         }
         throw new Error('The built backend did not answer on PORT 8080')
     } finally {
@@ -365,8 +382,8 @@ async function loginThroughFrontend(projectDir) {
 /** How pg connects to the database of a variant (its answers also have `connection`, which pg reads as a socket). */
 const connectionOf = ({ host, port, user, password, database }) => ({ host, port, user, password, database })
 
-/** The superadmin of .env is in the users table with the hash of the CLI (the API made it at its first start). */
-async function superadminExists(dir, database, oidc) {
+/** Is the superadmin of .env in the users table, with the hash of the CLI? */
+async function superadminFound(dir, database, oidc) {
     const pg = createRequire(path.join(dir, 'package.json'))('pg')
     const client = new pg.Client(connectionOf(database))
     await client.connect()
@@ -375,11 +392,16 @@ async function superadminExists(dir, database, oidc) {
             `SELECT password_hash FROM "${usersTable(database.database)}" WHERE is_superadmin AND lower(email) = $1`,
             [oidc.adminEmail.toLowerCase()]
         )
-        if (rows[0]?.password_hash !== oidc.adminPasswordHash)
-            throw new Error(`No superadmin ${oidc.adminEmail} with the password of the CLI after the first start`)
+        return superadminMatches(rows, oidc)
     } finally {
         await client.end()
     }
+}
+
+/** The superadmin of .env is in the users table with the hash of the CLI (the API made it at its first start). */
+async function superadminExists(dir, database, oidc) {
+    if (!(await superadminFound(dir, database, oidc)))
+        throw new Error(`No superadmin ${oidc.adminEmail} with the password of the CLI after the first start`)
 }
 
 for (const name of names) {
@@ -425,9 +447,9 @@ for (const name of names) {
             await step.run()
         }
         log(`${name}: Claude Code, knowledge base and Google Cloud in the project`)
-        await checkExtras(projectDir, project)
         const frontend = path.join(projectDir, 'frontend')
         const backend = path.join(projectDir, 'backend')
+        await checkExtras(projectDir, project, firstStartReady(variant.backend?.answers, backend, superadminFound))
         log(`${name}: extra checks (Prettier, TypeScript, lint and the Pasport design of the frontend)`)
         if (variant.backend)
             await run('npx', ['--no-install', 'tsc', '--noEmit', '-p', 'tsconfig.json'], { cwd: backend })
