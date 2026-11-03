@@ -917,6 +917,12 @@ git switch developer
 
 ## Changelog
 
+- **0.54.30**: the proxy of the login server and of a linked app no longer lets pages that start with "api" or "trpc"
+  (`/apikeys`, `/api-docs`) past the login (#59): its `matcher` skips only the files of Next.js and paths with a dot, as
+  the simple login does, and the proxy itself lets `/api/` through (the routes of the login, the API). The proxy of a
+  site or an API frontend (no login) gets the same matcher, so such a page gets its language too. `update` brings it to
+  existing projects; `test/proxy-matcher.test.js` checks the matcher of every proxy and runs the proxy of the login
+  server and a linked app (`/apikeys` without a session goes to `/login`, `/api/` passes).
 - **0.54.29**: a change to a mod needs the security agent (#54): `SENSITIVE` of `.claude/hooks/approvals.mjs` (in the
   CLI and every project) matches `mods/`, because a mod runs in every session and sees every tool call and every drawn
   row (screen-share masks personal data), and a markdown file of a mod (a command, an agent or a skill of a plugin)

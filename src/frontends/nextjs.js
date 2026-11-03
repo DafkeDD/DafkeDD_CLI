@@ -173,12 +173,22 @@ export default getRequestConfig(async ({ requestLocale }) => {
 
     // Next.js 16 uses proxy.ts (formerly middleware.ts)
     'src/proxy.ts': `import createMiddleware from 'next-intl/middleware';
+import { NextResponse, type NextRequest } from 'next/server';
 import { routing } from './i18n/routing';
 
-export default createMiddleware(routing);
+const intl = createMiddleware(routing);
 
+/** Every page request gets its language (next-intl); /api is not a page and is passed on as it is. */
+export default function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  if (pathname === '/api' || pathname.startsWith('/api/')) return NextResponse.next();
+  return intl(request);
+}
+
+// Every request but the files of Next.js and a path with a dot (a file): /api is let through above, never by a prefix
+// here (/apikeys is a page).
 export const config = {
-  matcher: '/((?!api|trpc|_next|_vercel|.*\\\\..*).*)',
+  matcher: '/((?!_next|_vercel|.*\\\\..*).*)',
 };
 `,
 
