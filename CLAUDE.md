@@ -124,8 +124,8 @@ The hooks in `.claude/settings.json` enforce this (`.claude/git-policy.json`: `i
 - `guard-git.mjs`:
     - blocks a commit that lacks an approval (review, tests, docs, i18n, and security when a staged path touches login,
       tokens, tenants, billing, uploads, the database, the hooks, the settings of Claude Code (also `.mcp.json`, the git
-      policy and `src/claude.js`, which builds them for every project) or the mods), and a commit that is not on an
-      issue branch;
+      policy, the scripts of `.claude/scripts/` and `src/claude.js`, which builds them for every project) or the mods),
+      and a commit that is not on an issue branch;
     - blocks `git commit -a`, and staging and committing in one command;
     - blocks every push except a normal push of an issue branch, `release/<x.y.z>` or `dependabot/...` (never forced or
       deleting, no `--tags`, `--mirror`, `--all` or `--prune`);

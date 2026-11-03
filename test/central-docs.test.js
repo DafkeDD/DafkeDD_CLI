@@ -1,4 +1,4 @@
-import test from 'node:test'
+import test, { after } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -14,8 +14,17 @@ const parts = [
     { dir: 'backend', file: 'api.md', title: 'Backend' }
 ]
 
+/** The temp folders of these tests: removed when they are done. */
+const made = []
+after(() => Promise.all(made.map(dir => fs.rm(dir, { recursive: true, force: true }))))
+const tempDir = async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dafkedd-docs-'))
+    made.push(dir)
+    return dir
+}
+
 async function project() {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'docs-'))
+    const dir = await tempDir()
     for (const [d, text] of [
         ['frontend', '# Frontend docs'],
         ['backend', '# Backend docs']
@@ -50,7 +59,7 @@ test('docs step only documents the parts that were installed', async () => {
 })
 
 test('docs step writes nothing when no README exists', async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'docs-'))
+    const dir = await tempDir()
     await docsStep({ projectDir: dir, parts }).run()
     await assert.rejects(fs.stat(path.join(dir, DOCS_DIR)))
 })
