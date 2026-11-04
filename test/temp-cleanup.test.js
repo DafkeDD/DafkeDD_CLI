@@ -14,7 +14,8 @@ test('the tests that make temp folders remove them again', t => {
     t.after(() => rmSync(tmp, { recursive: true, force: true }))
     // A test runner inside a test runner only reports to it (NODE_TEST_CONTEXT): this one runs on its own
     const { NODE_TEST_CONTEXT, ...env } = process.env
-    const result = spawnSync(process.execPath, ['--test', ...FILES], {
+    // TAP on every Node: without a terminal Node 22 reports TAP (# pass 4), Node 24 and later spec (ℹ pass 4)
+    const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...FILES], {
         env: { ...env, TMPDIR: tmp, TEMP: tmp, TMP: tmp },
         encoding: 'utf8',
         timeout: 120000

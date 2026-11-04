@@ -940,6 +940,9 @@ Apache 2.0 (its own `LICENSE` and `NOTICE`).
 
 ## Changelog
 
+- **0.54.40**: the CI of this repository is green again (#82): `test/temp-cleanup.test.js` asks its nested test run for
+  TAP (Node 24 and later report `spec` without a terminal), and the `.Claude` case of the guard test writes a text of
+  its own (on a case-insensitive disk it is the same file as `.claude`, so the same text was no change).
 - **0.54.39**: `verify` no longer stops the first start of a login server too early (#79): the API answers `/health`
   before it has made the superadmin of `.env` (that runs after the start), so under load the check after it found none.
   The first start now waits until the superadmin is there (`waitUntil` in `scripts/verify-api.mjs`) before it stops.
